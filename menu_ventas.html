@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Menú Ventas</title>
+    <style>
+        body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+            background-color: #111;
+            color: #fff;
+        }
+        .sidebar {
+            width: 280px;
+            background-color: #000;
+            height: 100vh;
+            position: fixed;
+            overflow-y: auto;
+        }
+        .sidebar h2 {
+            background-color: #222;
+            padding: 15px;
+            text-align: center;
+            color: #ffc107;
+            margin: 0;
+            font-size: 20px;
+        }
+        .sidebar ul {
+            list-style-type: none;
+            padding: 0;
+        }
+        .sidebar ul li {
+            padding: 12px 20px;
+            border-bottom: 1px solid #333;
+        }
+        .sidebar ul li a {
+            text-decoration: none;
+            color: #fff;
+            display: block;
+        }
+        .sidebar ul li:hover {
+            background-color: #333;
+        }
+        .submenu-title {
+            color: #ffc107;
+            font-weight: bold;
+            padding-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="sidebar">
+        <h2>Ventas</h2>
+        <ul>
+            <li class="submenu-title">🥊 Protecciones</li>
+            <li><a href="agregar_proteccion.php">➕ Agregar Producto</a></li>
+            <li><a href="editar_proteccion.php">✏️ Editar / Modificar</a></li>
+            <li><a href="eliminar_proteccion.php">🗑️ Eliminar Producto</a></li>
+            <li><a href="ver_protecciones.php">👁️ Ver Productos</a></li>
+
+            <li class="submenu-title">👕 Indumentaria</li>
+            <li><a href="agregar_indumentaria.php">➕ Agregar Producto</a></li>
+            <li><a href="editar_indumentaria.php">✏️ Editar / Modificar</a></li>
+            <li><a href="eliminar_indumentaria.php">🗑️ Eliminar Producto</a></li>
+            <li><a href="ver_indumentaria.php">👁️ Ver Productos</a></li>
+
+            <li class="submenu-title">💊 Suplementos</li>
+            <li><a href="agregar_suplemento.php">➕ Agregar Producto</a></li>
+            <li><a href="editar_suplemento.php">✏️ Editar / Modificar</a></li>
+            <li><a href="eliminar_suplemento.php">🗑️ Eliminar Producto</a></li>
+            <li><a href="ver_suplementos.php">👁️ Ver Productos</a></li>
+        </ul>
+    </div>
+</body>
+</html>

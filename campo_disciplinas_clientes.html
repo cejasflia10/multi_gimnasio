@@ -1,0 +1,12 @@
+
+<label for="disciplina_id">Disciplina:</label>
+<select name="disciplina_id" required>
+  <option value="">Seleccionar disciplina</option>
+  <?php
+    include 'conexion.php';
+    $disciplinas = $conexion->query("SELECT * FROM disciplinas ORDER BY nombre");
+    while ($d = $disciplinas->fetch_assoc()) {
+      echo "<option value='{$d['id']}'>{$d['nombre']}</option>";
+    }
+  ?>
+</select>

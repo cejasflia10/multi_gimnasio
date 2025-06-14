@@ -1,0 +1,3 @@
+$id_gimnasio = $_SESSION['id_gimnasio'];
+
+$sql = "INSERT INTO clientes (nombre, apellido, dni, id_gimnasio) VALUES (?, ?, ?, ?)";

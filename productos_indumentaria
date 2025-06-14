@@ -1,0 +1,8 @@
+CREATE TABLE productos_indumentaria (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  nombre VARCHAR(100) NOT NULL,
+  talle VARCHAR(20),
+  precio_compra DECIMAL(10,2) NOT NULL,
+  precio_venta DECIMAL(10,2) NOT NULL,
+  stock INT NOT NULL DEFAULT 0
+);

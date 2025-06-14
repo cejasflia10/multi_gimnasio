@@ -1,0 +1,11 @@
+CREATE TABLE ventas_indumentaria (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  cliente_id INT NOT NULL,
+  producto_id INT NOT NULL,
+  cantidad INT NOT NULL,
+  metodo_pago VARCHAR(50) NOT NULL,
+  total DECIMAL(10,2) NOT NULL,
+  fecha TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (cliente_id) REFERENCES clientes(id),
+  FOREIGN KEY (producto_id) REFERENCES productos_indumentaria(id)
+);
