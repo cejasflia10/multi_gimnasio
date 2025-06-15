@@ -1,43 +1,52 @@
 <?php
-ini_set('display_errors', 1);
-ini_set('display_startup_errors', 1);
-error_reporting(E_ALL);
-
-// continuar con tu código normal
 session_start();
-include 'conexion.php';
-// ...
-
-if ($_SERVER["REQUEST_METHOD"] == "POST") {
-    $usuario = $_POST["usuario"];
-    $contrasena = $_POST["contrasena"];
-
-    if (empty($usuario) || empty($contrasena)) {
-        header("Location: login.php?error=1");
-        exit();
-    }
-
-    $sql = "SELECT * FROM usuarios WHERE nombre_usuario = ?";
-    $stmt = $conexion->prepare($sql);
-    $stmt->bind_param("s", $usuario);
-    $stmt->execute();
-    $resultado = $stmt->get_result();
-
-    if ($resultado->num_rows == 1) {
-        $row = $resultado->fetch_assoc();
-        if ($contrasena === $row['contrasena']) {
-            $_SESSION['usuario'] = $row['nombre_usuario'];
-            $_SESSION['rol'] = $row['rol'];
-            $_SESSION['id_gimnasio'] = $row['id_gimnasio'];
-            header("Location: index.php");
-        } else {
-            header("Location: login.php?error=2"); // Contraseña incorrecta
-        }
-    } else {
-        header("Location: login.php?error=3"); // Usuario no encontrado
-    }
-
-    $stmt->close();
-    $conexion->close();
+if (isset($_SESSION['usuario'])) {
+    header("Location: index.php");
+    exit();
 }
 ?>
+
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Ingreso al sistema</title>
+    <style>
+        body {
+            background-color: #111;
+            color: #fff;
+            font-family: Arial, sans-serif;
+            text-align: center;
+            margin-top: 100px;
+        }
+        form {
+            background-color: #222;
+            padding: 20px;
+            border-radius: 10px;
+            display: inline-block;
+        }
+        input {
+            display: block;
+            margin: 10px auto;
+            padding: 8px;
+            width: 200px;
+        }
+        .error {
+            color: red;
+        }
+    </style>
+</head>
+<body>
+    <h2>Ingreso al sistema</h2>
+    <?php
+    if (isset($_GET['error'])) {
+        echo '<p class="error">Usuario o contraseña incorrectos.</p>';
+    }
+    ?>
+    <form action="procesar_login.php" method="POST">
+        <input type="text" name="usuario" placeholder="Usuario" required>
+        <input type="password" name="contrasena" placeholder="Contraseña" required>
+        <input type="submit" value="Ingresar">
+    </form>
+</body>
+</html>
