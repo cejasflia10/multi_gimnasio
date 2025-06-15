@@ -1,9 +1,9 @@
 <?php
-$host = 'mysql.railway.internal'; // Viene de MYSQLHOST
-$db   = 'railway';                // Viene de MYSQLDATABASE
-$user = 'root';                   // Viene de MYSQLUSER
-$pass = 'hIKvNIqNeenIZNeYEuvPYczIhahGiTBR'; // Tu MYSQLPASSWORD exacto (sin espacios)
-$port = '3306';                   // Viene de MYSQLPORT
+$host = 'mysql.internal';  // ⚠️ Verificá si es 'mysql.internal' o 'mysql-railway.internal' según tu Railway
+$db   = 'railway';         // o el valor de MYSQLDATABASE
+$user = 'root';            // o el valor de MYSQLUSER
+$pass = 'hIKvNIqNeenIZNeYEuvPYczIhahGiTBR';  // Tu password de Railway
+$port = '3306';            // Puerto por defecto
 
 $conexion = new mysqli($host, $user, $pass, $db, $port);
 
