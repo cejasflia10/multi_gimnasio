@@ -1,7 +1,7 @@
 <?php
 session_start();
 if (!isset($_SESSION['id_gimnasio'])) {
-    header("Location: login_seguro.php");
+    header("Location: login.php");
     exit();
 }
 ?>
