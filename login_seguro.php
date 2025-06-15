@@ -1,4 +1,5 @@
 <?php
+ob_start();
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
@@ -14,7 +15,6 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         exit();
     }
 
-    // Cambiado a nombre_usuario y contrasena según la base de datos
     $consulta = "SELECT * FROM usuarios WHERE nombre_usuario = ?";
     $stmt = $conexion->prepare($consulta);
     $stmt->bind_param("s", $usuario);
@@ -26,29 +26,20 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 
         if (password_verify($contrasena, $row['contrasena'])) {
             $_SESSION['usuario'] = $row['nombre_usuario'];
+            $_SESSION['rol'] = $row['rol'];
             $_SESSION['id_gimnasio'] = $row['id_gimnasio'];
-
-            // Permisos específicos
-            $_SESSION['puede_ver_clientes'] = $row['puede_ver_clientes'];
-            $_SESSION['puede_ver_membresias'] = $row['puede_ver_membresias'];
-            $_SESSION['puede_ver_profesores'] = $row['puede_ver_profesores'];
-            $_SESSION['puede_ver_ventas'] = $row['puede_ver_ventas'];
-            $_SESSION['puede_ver_asistencias'] = $row['puede_ver_asistencias'];
-            $_SESSION['puede_ver_panel'] = $row['puede_ver_panel'];
-            $_SESSION['puede_ver_admin'] = $row['puede_ver_admin'];
-
-            // Redirige al panel
             header("Location: index.php");
             exit();
         } else {
-            header("Location: login.php?error=1"); // Contraseña incorrecta
+            header("Location: login.php?error=2");
             exit();
         }
     } else {
-        header("Location: login.php?error=1"); // Usuario no encontrado
+        header("Location: login.php?error=3");
         exit();
     }
 } else {
     header("Location: login.php");
     exit();
 }
+?>

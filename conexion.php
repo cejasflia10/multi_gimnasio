@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 $host = 'shuttle.proxy.rlwy.net';
 $puerto = 51676;
 $usuario = 'root';
