@@ -1,6 +1,5 @@
 FROM php:8.2-apache
 
-<<<<<<< HEAD
 # Instala extensiones necesarias para MySQL
 RUN docker-php-ext-install mysqli pdo pdo_mysql
 
