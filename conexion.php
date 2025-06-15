@@ -1,5 +1,5 @@
 <?php
-$host = 'mysql-railway.internal'; // Viene de MYSQLHOST
+$host = 'mysql.railway.internal'; // Viene de MYSQLHOST
 $db   = 'railway';                // Viene de MYSQLDATABASE
 $user = 'root';                   // Viene de MYSQLUSER
 $pass = 'hIKvNIqNeenIZNeYEuvPYczIhahGiTBR'; // Tu MYSQLPASSWORD exacto (sin espacios)
