@@ -2,17 +2,34 @@
 session_start();
 include 'conexion.php';
 
-if (!isset($_SESSION['id_gimnasio'])) {
-    die('Acceso no autorizado.');
+if (!isset($_SESSION['usuario'])) {
+    header("Location: login.php");
+    exit();
 }
 
-$id_gimnasio = $_SESSION['id_gimnasio'];
+// Obtener el usuario logueado
+$usuario = $_SESSION['usuario'];
 
-$sql = "SELECT * FROM clientes WHERE id_gimnasio = ?";
+// Obtener ID del gimnasio del usuario desde la base de datos
+$sql = "SELECT id_gimnasio FROM usuarios WHERE nombre_usuario = ?";
 $stmt = $conexion->prepare($sql);
-$stmt->bind_param("i", $id_gimnasio);
+$stmt->bind_param("s", $usuario);
 $stmt->execute();
 $resultado = $stmt->get_result();
+
+if ($resultado->num_rows === 1) {
+    $fila = $resultado->fetch_assoc();
+    $id_gimnasio = $fila['id_gimnasio'];
+} else {
+    die("No se pudo obtener el gimnasio del usuario.");
+}
+
+// Obtener los clientes asociados al gimnasio
+$sql_clientes = "SELECT * FROM clientes WHERE id_gimnasio = ?";
+$stmt = $conexion->prepare($sql_clientes);
+$stmt->bind_param("i", $id_gimnasio);
+$stmt->execute();
+$resultado_clientes = $stmt->get_result();
 ?>
 
 <!DOCTYPE html>
@@ -22,17 +39,25 @@ $resultado = $stmt->get_result();
     <title>Clientes</title>
 </head>
 <body>
-    <h2>Clientes del gimnasio</h2>
+    <h1>Clientes del gimnasio</h1>
     <table border="1">
-        <tr><th>ID</th><th>Apellido</th><th>Nombre</th><th>DNI</th></tr>
-        <?php while ($row = $resultado->fetch_assoc()) { ?>
+        <thead>
             <tr>
-                <td><?php echo $row['id']; ?></td>
-                <td><?php echo $row['apellido']; ?></td>
-                <td><?php echo $row['nombre']; ?></td>
-                <td><?php echo $row['dni']; ?></td>
+                <th>Nombre</th>
+                <th>DNI</th>
+                <th>Teléfono</th>
+                <!-- otros campos si querés -->
             </tr>
-        <?php } ?>
+        </thead>
+        <tbody>
+            <?php while ($cliente = $resultado_clientes->fetch_assoc()): ?>
+                <tr>
+                    <td><?php echo $cliente['nombre']; ?></td>
+                    <td><?php echo $cliente['dni']; ?></td>
+                    <td><?php echo $cliente['telefono']; ?></td>
+                </tr>
+            <?php endwhile; ?>
+        </tbody>
     </table>
 </body>
 </html>
