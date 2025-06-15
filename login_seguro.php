@@ -1,14 +1,20 @@
 <?php
+ob_start();
+ini_set('display_errors', 1);
+ini_set('display_startup_errors', 1);
+error_reporting(E_ALL);
+
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
+
 include "conexion.php";
 
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
     $usuario = $_POST['usuario'] ?? '';
     $contrasena = $_POST['contrasena'] ?? '';
 
-    if (!$usuario || !$contrasena) {
+    if (empty($usuario) || empty($contrasena)) {
         header("Location: login.php?error=1");
         exit();
     }
