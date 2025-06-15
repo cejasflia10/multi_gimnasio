@@ -7,54 +7,79 @@ if (session_status() === PHP_SESSION_NONE) {
 <!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="UTF-8">
-  <title>Registro Online - Fight Academy Scorpions</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Registro Online - Fight Academy</title>
   <style>
     body {
       background-color: #111;
-      color: #f1f1f1;
-      font-family: Arial, sans-serif;
+      color: #fff;
+      font-family: 'Segoe UI', sans-serif;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      justify-content: center;
+      align-items: start;
+      min-height: 100vh;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 450px;
       padding: 20px;
     }
 
     h2 {
-      color: gold;
       text-align: center;
+      color: gold;
+      margin-bottom: 20px;
     }
 
     form {
-      max-width: 500px;
-      margin: auto;
       background-color: #222;
       padding: 20px;
-      border-radius: 10px;
+      border-radius: 12px;
+      box-shadow: 0 0 10px rgba(255, 215, 0, 0.2);
     }
 
     label {
       display: block;
-      margin-top: 10px;
-      font-weight: bold;
+      margin-top: 12px;
+      font-size: 15px;
+      color: #f1f1f1;
     }
 
-    input, select {
+    input[type="text"],
+    input[type="email"],
+    input[type="date"],
+    input[type="number"] {
       width: 100%;
-      padding: 8px;
-      margin-top: 5px;
-      border-radius: 5px;
+      padding: 10px;
+      margin-top: 6px;
       border: none;
+      border-radius: 6px;
+      font-size: 16px;
+      background-color: #333;
+      color: white;
     }
 
     input[type="submit"] {
+      margin-top: 20px;
+      width: 100%;
       background-color: gold;
       color: #111;
       font-weight: bold;
-      margin-top: 20px;
+      border: none;
+      padding: 12px;
+      border-radius: 6px;
+      font-size: 18px;
       cursor: pointer;
     }
 
     .mensaje {
       text-align: center;
-      margin-top: 10px;
+      margin-top: 15px;
+      font-weight: bold;
       color: lightgreen;
     }
 
@@ -64,43 +89,45 @@ if (session_status() === PHP_SESSION_NONE) {
   </style>
 </head>
 <body>
-  <h2>Registro Online</h2>
+  <div class="container">
+    <h2>Registro Online</h2>
 
-  <?php if (isset($_SESSION['mensaje'])): ?>
-    <div class="mensaje"><?= $_SESSION['mensaje'] ?></div>
-    <?php unset($_SESSION['mensaje']); ?>
-  <?php endif; ?>
+    <?php if (isset($_SESSION['mensaje'])): ?>
+      <div class="mensaje"><?= $_SESSION['mensaje'] ?></div>
+      <?php unset($_SESSION['mensaje']); ?>
+    <?php endif; ?>
 
-  <form action="registro_online_guardar.php" method="POST">
-    <label for="apellido">Apellido:</label>
-    <input type="text" name="apellido" required>
+    <form action="registro_online_guardar.php" method="POST">
+      <label>Apellido:</label>
+      <input type="text" name="apellido" required>
 
-    <label for="nombre">Nombre:</label>
-    <input type="text" name="nombre" required>
+      <label>Nombre:</label>
+      <input type="text" name="nombre" required>
 
-    <label for="dni">DNI:</label>
-    <input type="text" name="dni" required>
+      <label>DNI:</label>
+      <input type="text" name="dni" required>
 
-    <label for="fecha_nacimiento">Fecha de nacimiento:</label>
-    <input type="date" name="fecha_nacimiento" id="fecha_nacimiento" onchange="calcularEdad()" required>
+      <label>Fecha de nacimiento:</label>
+      <input type="date" name="fecha_nacimiento" id="fecha_nacimiento" onchange="calcularEdad()" required>
 
-    <label for="edad">Edad:</label>
-    <input type="number" name="edad" id="edad" readonly required>
+      <label>Edad:</label>
+      <input type="number" name="edad" id="edad" readonly required>
 
-    <label for="domicilio">Domicilio:</label>
-    <input type="text" name="domicilio" required>
+      <label>Domicilio:</label>
+      <input type="text" name="domicilio" required>
 
-    <label for="email">Email:</label>
-    <input type="email" name="email">
+      <label>Email:</label>
+      <input type="email" name="email">
 
-    <label for="telefono">Teléfono:</label>
-    <input type="text" name="telefono">
+      <label>Teléfono:</label>
+      <input type="text" name="telefono">
 
-    <label for="rfid">RFID:</label>
-    <input type="text" name="rfid" required>
+      <label>RFID:</label>
+      <input type="text" name="rfid" required>
 
-    <input type="submit" value="Registrarse">
-  </form>
+      <input type="submit" value="Registrarse">
+    </form>
+  </div>
 
   <script>
     function calcularEdad() {
