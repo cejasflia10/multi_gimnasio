@@ -1,0 +1,6 @@
+services:
+  - type: web
+    name: multi_gimnasio
+    env: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
