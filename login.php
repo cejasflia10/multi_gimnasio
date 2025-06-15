@@ -1,44 +1,36 @@
 <?php
 session_start();
-include "conexion.php";
+include 'conexion.php';
 
-// Mostrar errores en desarrollo
-ini_set('display_errors', 1);
-ini_set('display_startup_errors', 1);
-error_reporting(E_ALL);
+$error = '';
 
-$mensaje = '';
-
-// Procesar formulario si se envió
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
-    $usuario = $_POST['usuario'] ?? '';
-    $contrasena = $_POST['contrasena'] ?? '';
+    $usuario = $_POST['usuario'];
+    $contrasena = $_POST['contrasena'];
 
-    if (!$usuario || !$contrasena) {
-        $mensaje = "Por favor complete ambos campos.";
-    } else {
-        $consulta = "SELECT * FROM usuarios WHERE nombre_usuario = ?";
-        $stmt = $conexion->prepare($consulta);
-        $stmt->bind_param("s", $usuario);
-        $stmt->execute();
-        $resultado = $stmt->get_result();
+    $stmt = $conexion->prepare("SELECT * FROM usuarios WHERE nombre_usuario = ?");
+    $stmt->bind_param("s", $usuario);
+    $stmt->execute();
+    $resultado = $stmt->get_result();
 
-        if ($resultado->num_rows === 1) {
-            $row = $resultado->fetch_assoc();
-            $contrasena_sha256 = hash('sha256', $contrasena);
-            if ($contrasena_sha256 === $row['contrasena']) {
-                $_SESSION['usuario'] = $row['nombre_usuario'];
-                $_SESSION['rol'] = $row['rol'];
-                $_SESSION['id_gimnasio'] = $row['id_gimnasio'] ?? null;
-                header("Location: index.php");
-                exit();
-            } else {
-                $mensaje = "Contraseña incorrecta.";
-            }
+    if ($resultado->num_rows == 1) {
+        $row = $resultado->fetch_assoc();
+
+        if ($contrasena === $row['contrasena']) {
+            $_SESSION['usuario'] = $row['nombre_usuario'];
+            $_SESSION['rol'] = $row['rol'];
+            $_SESSION['id_gimnasio'] = $row['id_gimnasio'];
+            header("Location: index.php");
+            exit();
         } else {
-            $mensaje = "Usuario no encontrado.";
+            $error = "Contraseña incorrecta.";
         }
+    } else {
+        $error = "Usuario no encontrado.";
     }
+
+    $stmt->close();
+    $conexion->close();
 }
 ?>
 
@@ -53,31 +45,47 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             color: #f1f1f1;
             font-family: Arial, sans-serif;
             display: flex;
-            justify-content: center;
             align-items: center;
+            justify-content: center;
             height: 100vh;
-            flex-direction: column;
         }
-        input, button {
-            margin: 5px;
-            padding: 8px;
-            font-size: 16px;
+        .login-box {
+            background-color: #222;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 0 10px #000;
+            text-align: center;
+            width: 300px;
         }
-        .mensaje {
+        input {
+            width: 100%;
+            margin-bottom: 15px;
+            padding: 10px;
+            border: none;
+            border-radius: 5px;
+        }
+        .btn {
+            background-color: #ffc107;
+            color: black;
+            font-weight: bold;
+        }
+        .error {
             color: red;
             margin-bottom: 10px;
         }
     </style>
 </head>
 <body>
+<div class="login-box">
     <h2>Ingreso al sistema</h2>
-    <?php if (!empty($mensaje)): ?>
-        <div class="mensaje"><?= htmlspecialchars($mensaje) ?></div>
+    <?php if ($error): ?>
+        <div class="error"><?php echo $error; ?></div>
     <?php endif; ?>
-    <form method="POST" action="">
-        <input type="text" name="usuario" placeholder="Usuario" required><br>
-        <input type="password" name="contrasena" placeholder="Contraseña" required><br>
-        <button type="submit">Ingresar</button>
+    <form method="post" action="login.php">
+        <input type="text" name="usuario" placeholder="Usuario" required>
+        <input type="password" name="contrasena" placeholder="Contraseña" required>
+        <input type="submit" value="Ingresar" class="btn">
     </form>
+</div>
 </body>
 </html>
