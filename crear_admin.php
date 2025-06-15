@@ -32,6 +32,8 @@ if ($resultado->num_rows > 0) {
 }
 
 $stmt_check->close();
-$stmt->close();
+if (isset($stmt) && $stmt !== null) {
+    $stmt->close();
+}
 $conexion->close();
 ?>
