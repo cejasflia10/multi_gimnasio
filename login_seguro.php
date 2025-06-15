@@ -21,7 +21,8 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 
     if ($resultado->num_rows === 1) {
         $row = $resultado->fetch_assoc();
-        if (password_verify($contrasena, $row['contrasena'])) {
+        $contrasena_sha256 = hash('sha256', $contrasena);
+        if ($contrasena_sha256 === $row['contrasena']) {
             $_SESSION['usuario'] = $row['nombre_usuario'];
             $_SESSION['rol'] = $row['rol'];
             $_SESSION['id_gimnasio'] = $row['id_gimnasio'] ?? null;

@@ -1,37 +1,52 @@
 <?php
-include 'conexion.php';
+if ($_SERVER["REQUEST_METHOD"] == "POST") {
+    include "conexion.php";
+    $usuario = $_POST['usuario'] ?? '';
+    $contrasena = $_POST['contrasena'] ?? '';
+    $rol = $_POST['rol'] ?? 'admin';
 
-$usuario = 'admin';
-$contrasena_plana = 'admin123';
-$rol = 'Admin';
+    if ($usuario && $contrasena) {
+        $contrasena_hash = hash('sha256', $contrasena);
+        $verificar = $conexion->prepare("SELECT id FROM usuarios WHERE nombre_usuario = ?");
+        $verificar->bind_param("s", $usuario);
+        $verificar->execute();
+        $resultado = $verificar->get_result();
 
-// Verificar si el usuario ya existe
-$sql_check = "SELECT * FROM usuarios WHERE nombre_usuario = ?";
-$stmt_check = $conexion->prepare($sql_check);
-$stmt_check->bind_param("s", $usuario);
-$stmt_check->execute();
-$resultado = $stmt_check->get_result();
-
-if ($resultado->num_rows > 0) {
-    echo "El usuario 'admin' ya existe.";
-} else {
-    $contrasena_hash = password_hash($contrasena_plana, PASSWORD_DEFAULT);
-    $sql = "INSERT INTO usuarios (nombre_usuario, contrasena, rol) VALUES (?, ?, ?)";
-    $stmt = $conexion->prepare($sql);
-
-    if ($stmt) {
-        $stmt->bind_param("sss", $usuario, $contrasena_hash, $rol);
-        if ($stmt->execute()) {
-            echo "✅ Usuario 'admin' creado correctamente.<br>Usuario: admin<br>Contraseña: admin123";
+        if ($resultado->num_rows > 0) {
+            echo "El usuario ya existe.";
         } else {
-            echo "❌ Error al crear el usuario: " . $stmt->error;
+            $sql = "INSERT INTO usuarios (nombre_usuario, contrasena, rol) VALUES (?, ?, ?)";
+            $stmt = $conexion->prepare($sql);
+            $stmt->bind_param("sss", $usuario, $contrasena_hash, $rol);
+            if ($stmt->execute()) {
+                echo "Usuario creado correctamente.";
+            } else {
+                echo "Error al crear el usuario: " . $stmt->error;
+            }
         }
-        $stmt->close();
     } else {
-        echo "❌ Error en la preparación del statement.";
+        echo "Debe completar todos los campos.";
     }
 }
-
-$stmt_check->close();
-$conexion->close();
 ?>
+
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Crear Admin</title>
+</head>
+<body>
+    <h2>Crear Usuario Admin</h2>
+    <form method="POST">
+        <input type="text" name="usuario" placeholder="Usuario" required><br>
+        <input type="password" name="contrasena" placeholder="Contraseña" required><br>
+        <select name="rol">
+            <option value="admin">Admin</option>
+            <option value="profesor">Profesor</option>
+            <option value="instructor">Instructor</option>
+        </select><br>
+        <button type="submit">Crear Usuario</button>
+    </form>
+</body>
+</html>
