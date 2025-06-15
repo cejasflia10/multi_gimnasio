@@ -1,9 +1,9 @@
 <?php
-$host = 'mysql.railway.internal'; // Host real desde Railway
-$db = 'railway'; // Base de datos real
+$host = 'shuttle.proxy.rlwy.net';
+$db = 'railway';
 $user = 'root';
 $pass = 'bZwtwptDJTaiWydjpfMWTBGwcwMzSKTt';
-$port = '3306'; // Puerto desde Railway
+$port = '51676';
 
 $conexion = new mysqli($host, $user, $pass, $db, $port);
 if ($conexion->connect_error) {
