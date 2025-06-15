@@ -1,11 +1,12 @@
+
 <?php
 $host = 'shuttle.proxy.rlwy.net';
-$db = 'railway';
-$user = 'root';
-$pass = 'bZwtwptDJTaiWydjpfMWTBGwcwMzSKTt';
-$port = '51676';
+$puerto = 51676;
+$usuario = 'root';
+$contrasena = 'bZwtwptDJTaiWydjpfMWTBGwcwMzSKTt';
+$basedatos = 'railway';
 
-$conexion = new mysqli($host, $user, $pass, $db, $port);
+$conexion = new mysqli($host, $usuario, $contrasena, $basedatos, $puerto);
 if ($conexion->connect_error) {
     die("Error de conexión: " . $conexion->connect_error);
 }
