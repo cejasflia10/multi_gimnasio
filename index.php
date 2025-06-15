@@ -42,6 +42,7 @@ $vencimientos = $conexion->query("SELECT c.nombre, c.apellido, m.fecha_vencimien
     </style>
 </head>
 <body>
+<?php include 'menu.php'; ?>
     <h1>📊 Panel de Control</h1>
     <div class="panel">
         <div class="card">
