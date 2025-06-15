@@ -5,7 +5,7 @@ $usuario = $_POST['usuario'] ?? '';
 $contrasena_plana = $_POST['contrasena'] ?? '';
 $rol = $_POST['rol'] ?? 'admin';
 
-$contrasena_hash = password_hash($contrasena_plana, PASSWORD_DEFAULT);
+$contrasena_hash = hash('sha256', $contrasena_plana);
 
 $verificar = $conexion->prepare("SELECT id FROM usuarios WHERE nombre_usuario = ?");
 $verificar->bind_param("s", $usuario);
