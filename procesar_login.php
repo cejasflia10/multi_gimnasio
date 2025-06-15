@@ -25,3 +25,4 @@ if ($resultado->num_rows == 1) {
 } else {
     header("Location: login.php?error=1");
 }
+
