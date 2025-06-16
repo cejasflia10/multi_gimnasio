@@ -1,18 +1,24 @@
 <?php
-include 'conexion.php';
-$q = $_GET['q'] ?? '';
-$q = $conexion->real_escape_string($q);
+include '../conexion.php'; // o ajustá según tu estructura
 
-$result = $conexion->query("
-  SELECT id, nombre, apellido, dni 
-  FROM clientes 
-  WHERE dni LIKE '%$q%' OR apellido LIKE '%$q%' OR rfid_uid LIKE '%$q%'
-  LIMIT 10
-");
+$busqueda = $_GET['q'] ?? '';
+$sql = "SELECT id, apellido, nombre, dni, rfid_uid FROM clientes 
+        WHERE dni LIKE ? OR apellido LIKE ? OR rfid_uid LIKE ?
+        LIMIT 10";
+
+$stmt = $conexion->prepare($sql);
+$like = "%$busqueda%";
+$stmt->bind_param("sss", $like, $like, $like);
+$stmt->execute();
+$resultado = $stmt->get_result();
 
 $clientes = [];
-while ($row = $result->fetch_assoc()) {
-  $clientes[] = $row;
+while ($fila = $resultado->fetch_assoc()) {
+    $clientes[] = [
+        "id" => $fila["id"],
+        "text" => "{$fila['apellido']} {$fila['nombre']} - {$fila['dni']} / {$fila['rfid_uid']}"
+    ];
 }
 
-echo json_encode($clientes);
+echo json_encode(["results" => $clientes]);
+?>
