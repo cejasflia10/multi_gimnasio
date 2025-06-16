@@ -55,6 +55,18 @@ $resultado = $conexion->query($consulta);
     }
   </style>
 </head>
+<script>
+document.getElementById('buscador').addEventListener('keyup', function () {
+    let filtro = this.value.toLowerCase();
+    let filas = document.querySelectorAll('table tbody tr');
+
+    filas.forEach(function (fila) {
+        let texto = fila.textContent.toLowerCase();
+        fila.style.display = texto.includes(filtro) ? '' : 'none';
+    });
+});
+</script>
+
 <body>
 
 <h1>Clientes registrados</h1>
