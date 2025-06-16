@@ -3,10 +3,16 @@
 include 'conexion.php';
 include 'menu.php';
 
+if (isset($_GET['id'])) {
+  $id = $_GET['id'];
+  $consulta = $conexion->query("SELECT * FROM clientes WHERE id=$id");
+  $cliente = $consulta->fetch_assoc();
+}
+
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
+  $id = $_POST['id'];
   $apellido = $_POST['apellido'];
   $nombre = $_POST['nombre'];
-  $dni = $_POST['dni'];
   $fecha_nacimiento = $_POST['fecha_nacimiento'];
   $edad = $_POST['edad'];
   $domicilio = $_POST['domicilio'];
@@ -15,13 +21,15 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
   $rfid = $_POST['rfid'];
   $gimnasio = $_POST['gimnasio'];
 
-  $sql = "INSERT INTO clientes (apellido, nombre, dni, fecha_nacimiento, edad, domicilio, telefono, email, rfid, gimnasio)
-          VALUES ('$apellido', '$nombre', '$dni', '$fecha_nacimiento', '$edad', '$domicilio', '$telefono', '$email', '$rfid', '$gimnasio')";
+  $sql = "UPDATE clientes SET apellido='$apellido', nombre='$nombre',
+          fecha_nacimiento='$fecha_nacimiento', edad='$edad', domicilio='$domicilio',
+          telefono='$telefono', email='$email', rfid='$rfid', gimnasio='$gimnasio'
+          WHERE id=$id";
 
   if ($conexion->query($sql) === TRUE) {
-    echo "<script>alert('Cliente registrado exitosamente'); window.location.href='clientes.php';</script>";
+    echo "<script>alert('Datos actualizados correctamente'); window.location.href='ver_clientes.php';</script>";
   } else {
-    echo "Error: " . $sql . "<br>" . $conexion->error;
+    echo "Error al actualizar: " . $conexion->error;
   }
 }
 ?>
@@ -31,7 +39,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Agregar Cliente</title>
+  <title>Editar Cliente</title>
   <style>
     body { background-color: #111; color: gold; font-family: Arial, sans-serif; padding: 20px; }
     label { display: block; margin-top: 10px; }
@@ -40,39 +48,41 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
   </style>
 </head>
 <body>
-  <h2>Agregar Cliente</h2>
+  <h2>Editar Cliente</h2>
   <form method="POST">
+    <input type="hidden" name="id" value="<?php echo $cliente['id']; ?>">
+
     <label>Apellido:</label>
-    <input type="text" name="apellido" required>
+    <input type="text" name="apellido" value="<?php echo $cliente['apellido']; ?>" required>
 
     <label>Nombre:</label>
-    <input type="text" name="nombre" required>
+    <input type="text" name="nombre" value="<?php echo $cliente['nombre']; ?>" required>
 
-    <label>DNI:</label>
-    <input type="text" name="dni" required>
+    <label>DNI (no editable):</label>
+    <input type="text" value="<?php echo $cliente['dni']; ?>" disabled>
 
     <label>Fecha de Nacimiento:</label>
-    <input type="date" name="fecha_nacimiento" onchange="calcularEdad()" required>
+    <input type="date" name="fecha_nacimiento" value="<?php echo $cliente['fecha_nacimiento']; ?>" onchange="calcularEdad()" required>
 
     <label>Edad:</label>
-    <input type="number" name="edad" id="edad" readonly required>
+    <input type="number" name="edad" id="edad" value="<?php echo $cliente['edad']; ?>" readonly required>
 
     <label>Domicilio:</label>
-    <input type="text" name="domicilio" required>
+    <input type="text" name="domicilio" value="<?php echo $cliente['domicilio']; ?>" required>
 
     <label>Teléfono:</label>
-    <input type="text" name="telefono" required>
+    <input type="text" name="telefono" value="<?php echo $cliente['telefono']; ?>" required>
 
     <label>Email:</label>
-    <input type="email" name="email" required>
+    <input type="email" name="email" value="<?php echo $cliente['email']; ?>" required>
 
     <label>RFID:</label>
-    <input type="text" name="rfid">
+    <input type="text" name="rfid" value="<?php echo $cliente['rfid']; ?>">
 
     <label>Gimnasio:</label>
-    <input type="text" name="gimnasio" required>
+    <input type="text" name="gimnasio" value="<?php echo $cliente['gimnasio']; ?>" required>
 
-    <button type="submit" class="btn">Guardar</button>
+    <button type="submit" class="btn">Guardar Cambios</button>
   </form>
 
   <script>
