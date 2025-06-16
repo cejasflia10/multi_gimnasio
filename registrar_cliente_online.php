@@ -15,9 +15,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     // Validar que los campos obligatorios estén completos
     if ($apellido === '' || $nombre === '' || $dni === '' || $fecha_nacimiento === '' || $domicilio === '' || $telefono === '' || $email === '') {
-        echo json_encode(['success' => false, 'message' => 'Faltan datos obligatorios.']);
-        exit;
-    }
+        echo json_encode(["success" => false, "message" => "Este endpoint requiere método POST para funcionar."]);
+    // ⚠️ Elimina la línea exit; si querés permitir seguir cargando desde navegador
+    // exit;
+}
 
     // Calcular edad automáticamente
     $fecha_nac = new DateTime($fecha_nacimiento);
