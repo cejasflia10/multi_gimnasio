@@ -12,6 +12,10 @@ if (session_status() === PHP_SESSION_NONE) {
   <title>Registro Online - Fight Academy</title>
   <style>
     body {
+        <div style="text-align:center; margin-bottom: 20px;">
+  <img src="img/logo.png" alt="Fight Academy Scorpions" style="max-width: 200px;">
+</div>
+
       background-color: #111;
       color: #fff;
       font-family: 'Segoe UI', sans-serif;
