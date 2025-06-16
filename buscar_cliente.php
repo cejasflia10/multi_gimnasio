@@ -1,9 +1,10 @@
 <?php
-include '../conexion.php'; // o ajustá según tu estructura
+include 'conexion.php'; // asegurate que esta ruta esté bien
 
 $busqueda = $_GET['q'] ?? '';
+
 $sql = "SELECT id, apellido, nombre, dni, rfid_uid FROM clientes 
-        WHERE dni LIKE ? OR apellido LIKE ? OR rfid_uid LIKE ?
+        WHERE dni LIKE ? OR apellido LIKE ? OR rfid_uid LIKE ? 
         LIMIT 10";
 
 $stmt = $conexion->prepare($sql);
@@ -16,7 +17,7 @@ $clientes = [];
 while ($fila = $resultado->fetch_assoc()) {
     $clientes[] = [
         "id" => $fila["id"],
-        "text" => "{$fila['apellido']} {$fila['nombre']} - {$fila['dni']} / {$fila['rfid_uid']}"
+        "text" => "{$fila['apellido']} {$fila['nombre']} - DNI: {$fila['dni']} - RFID: {$fila['rfid_uid']}"
     ];
 }
 
