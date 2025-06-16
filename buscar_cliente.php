@@ -24,3 +24,4 @@ while ($fila = $resultado->fetch_assoc()) {
 
 echo json_encode(["results" => $clientes]);
 ?>
+git add nueva_membresia.php
