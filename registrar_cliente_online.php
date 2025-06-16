@@ -1,86 +1,41 @@
-<!DOCTYPE html>
-<html lang="es">
-<head>
-  <meta charset="UTF-8">
-  <title>Registro Online - Fight Academy</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <style>
-    body {
-      background-color: #000;
-      color: gold;
-      font-family: Arial, sans-serif;
-      padding: 20px;
-    }
-    .container {
-      max-width: 500px;
-      margin: auto;
-      background-color: #111;
-      padding: 20px;
-      border-radius: 10px;
-    }
-    input, select {
-      width: 100%;
-      padding: 10px;
-      margin-top: 10px;
-      border: none;
-      border-radius: 5px;
-    }
-    button {
-      background-color: gold;
-      color: black;
-      padding: 10px;
-      border: none;
-      margin-top: 20px;
-      width: 100%;
-      font-weight: bold;
-    }
-  </style>
-</head>
-<body>
-  <div class="container">
-    <h2>Registro de Cliente</h2>
-    <form id="formRegistro">
-      <input type="text" name="apellido" placeholder="Apellido" required>
-      <input type="text" name="nombre" placeholder="Nombre" required>
-      <input type="text" name="dni" placeholder="DNI" required>
-      <input type="date" name="fecha_nacimiento" id="fecha_nacimiento" required>
-      <input type="number" name="edad" id="edad" placeholder="Edad" readonly>
-      <input type="text" name="domicilio" placeholder="Domicilio" required>
-      <input type="text" name="telefono" placeholder="Teléfono" required>
-      <input type="email" name="email" placeholder="Email" required>
-      <input type="text" name="rfid" placeholder="RFID (opcional)">
-      <button type="submit">Registrar</button>
-    </form>
-    <div id="respuesta"></div>
-  </div>
+<?php
+include "conexion.php";
 
-  <script>
-    document.getElementById('fecha_nacimiento').addEventListener('change', function () {
-      const fecha = new Date(this.value);
-      const hoy = new Date();
-      let edad = hoy.getFullYear() - fecha.getFullYear();
-      const m = hoy.getMonth() - fecha.getMonth();
-      if (m < 0 || (m === 0 && hoy.getDate() < fecha.getDate())) {
-        edad--;
-      }
-      document.getElementById('edad').value = edad;
-    });
+// Verificar que se recibió una petición POST
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    // Obtener y sanitizar los datos
+    $apellido = trim($_POST['apellido'] ?? '');
+    $nombre = trim($_POST['nombre'] ?? '');
+    $dni = trim($_POST['dni'] ?? '');
+    $fecha_nacimiento = trim($_POST['fecha_nacimiento'] ?? '');
+    $domicilio = trim($_POST['domicilio'] ?? '');
+    $telefono = trim($_POST['telefono'] ?? '');
+    $email = trim($_POST['email'] ?? '');
+    $rfid_uid = trim($_POST['rfid_uid'] ?? null);
 
-    document.getElementById('formRegistro').addEventListener('submit', function (e) {
-      e.preventDefault();
-      const datos = new FormData(this);
-      fetch('registrar_cliente_online.php', {
-        method: 'POST',
-        body: datos
-      })
-      .then(res => res.json())
-      .then(data => {
-        document.getElementById('respuesta').innerText = data.message;
-      })
-      .catch(() => {
-        document.getElementById('respuesta').innerText = "Error de conexión.";
-      });
-    });
-  </script>
-</body>
-</html>
+    // Validar que los campos obligatorios estén completos
+    if ($apellido === '' || $nombre === '' || $dni === '' || $fecha_nacimiento === '' || $domicilio === '' || $telefono === '' || $email === '') {
+        echo json_encode(['success' => false, 'message' => 'Faltan datos obligatorios.']);
+        exit;
+    }
+
+    // Calcular edad automáticamente
+    $fecha_nac = new DateTime($fecha_nacimiento);
+    $hoy = new DateTime();
+    $edad = $fecha_nac->diff($hoy)->y;
+
+    // Insertar datos en la base de datos
+    $stmt = $conexion->prepare("INSERT INTO clientes (apellido, nombre, dni, fecha_nacimiento, edad, domicilio, telefono, email, rfid_uid) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)");
+    $stmt->bind_param("ssssissss", $apellido, $nombre, $dni, $fecha_nacimiento, $edad, $domicilio, $telefono, $email, $rfid_uid);
+
+    if ($stmt->execute()) {
+        echo json_encode(['success' => true, 'message' => 'Registro exitoso.']);
+    } else {
+        echo json_encode(['success' => false, 'message' => 'Error al guardar en la base de datos.']);
+    }
+
+    $stmt->close();
+    $conexion->close();
+} else {
+    echo json_encode(['success' => false, 'message' => 'Acceso no permitido.']);
+}
