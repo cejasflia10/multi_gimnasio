@@ -1,0 +1,17 @@
+
+.tabla-clientes {
+  width: 100%;
+  border-collapse: collapse;
+  color: #f1c40f;
+}
+.tabla-clientes th, .tabla-clientes td {
+  padding: 10px;
+  border-bottom: 1px solid #444;
+  text-align: left;
+  white-space: nowrap;
+}
+@media (max-width: 768px) {
+  .tabla-clientes {
+    font-size: 14px;
+  }
+}
