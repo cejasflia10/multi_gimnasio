@@ -1,15 +1,16 @@
 <?php
-include 'conexion.php'; // asegurate que esta ruta esté bien
+include 'conexion.php'; // Asegurate de que esta ruta sea correcta
 
 $busqueda = $_GET['q'] ?? '';
 
 $sql = "SELECT id, apellido, nombre, dni, rfid_uid FROM clientes 
-        WHERE dni LIKE ? OR apellido LIKE ? OR rfid_uid LIKE ? 
+        WHERE apellido LIKE ? 
+        ORDER BY apellido ASC 
         LIMIT 10";
 
 $stmt = $conexion->prepare($sql);
 $like = "%$busqueda%";
-$stmt->bind_param("sss", $like, $like, $like);
+$stmt->bind_param("s", $like);
 $stmt->execute();
 $resultado = $stmt->get_result();
 
