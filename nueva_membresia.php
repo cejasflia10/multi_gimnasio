@@ -1,185 +1,108 @@
 <?php
 include 'conexion.php';
-date_default_timezone_set('America/Argentina/Buenos_Aires');
-
-// Obtener planes
-$planes = $conexion->query("SELECT id, nombre, precio FROM planes ORDER BY nombre ASC");
-
-// Obtener adicionales
-$adicionales = $conexion->query("SELECT id, nombre, precio FROM planes_adicionales ORDER BY nombre ASC");
+include 'menu.php';
+$planes = mysqli_query($conexion, "SELECT * FROM planes");
+$adicionales = mysqli_query($conexion, "SELECT * FROM planes_adicionales");
 ?>
 
 <!DOCTYPE html>
 <html lang="es">
 <head>
   <meta charset="UTF-8">
-  <title>Nueva Membresía</title>
+  <title>Registrar Nueva Membresía</title>
   <style>
-    body {
-      background-color: #111;
-      color: #f1f1f1;
-      font-family: Arial, sans-serif;
-      padding: 20px;
-    }
-    h2 {
-      color: #ffc107;
-      text-align: center;
-    }
-    .formulario {
-      max-width: 700px;
-      margin: auto;
-      background-color: #222;
-      padding: 20px;
-      border-radius: 10px;
-    }
-    label {
-      display: block;
-      margin-top: 10px;
-    }
+    body { background-color: #111; color: #f1c40f; font-family: Arial, sans-serif; margin: 0; }
+    .contenido { margin-left: 240px; padding: 20px; max-width: 700px; }
+    label { font-weight: bold; margin-top: 10px; display: block; }
     input, select {
-      width: 100%;
-      padding: 10px;
-      margin-top: 5px;
-      background-color: #333;
-      color: white;
-      border: none;
-      border-radius: 5px;
+      width: 100%; padding: 10px; margin-top: 5px;
+      background-color: #222; color: #fff; border: 1px solid #f1c40f; border-radius: 4px;
     }
-    .resultado {
-      background-color: #333;
-      color: #ffc107;
-      padding: 5px;
-      margin-top: 5px;
-      cursor: pointer;
-    }
-    .total {
-      margin-top: 15px;
-      text-align: right;
-      font-size: 18px;
-      color: #ffc107;
-    }
-    .btn {
-      background-color: #ffc107;
-      color: #111;
-      padding: 12px;
-      margin-top: 20px;
-      width: 100%;
-      font-size: 16px;
-      cursor: pointer;
-      border: none;
-      border-radius: 5px;
-    }
-    .advertencia {
-      background-color: #ff4444;
-      color: white;
-      padding: 10px;
+    #resultado_cliente {
       margin-top: 10px;
-      text-align: center;
-      font-weight: bold;
+      padding: 10px;
+      background: #1c1c1c;
+      border: 1px solid #f1c40f;
       display: none;
     }
+    button {
+      margin-top: 20px;
+      background: #f1c40f;
+      color: #111;
+      border: none;
+      padding: 10px 20px;
+      font-weight: bold;
+      border-radius: 5px;
+      cursor: pointer;
+    }
+    button:hover { background-color: #d4ac0d; }
   </style>
+  <script>
+    function buscarCliente() {
+      const valor = document.getElementById('buscar_cliente').value;
+      if (valor.length < 3) return;
+
+      fetch('buscar_cliente_ajax.php?query=' + valor)
+        .then(response => response.json())
+        .then(data => {
+          if (data && data.id) {
+            document.getElementById('cliente_id').value = data.id;
+            document.getElementById('disciplina_id').value = data.disciplina_id;
+            document.getElementById('resultado_cliente').style.display = 'block';
+            document.getElementById('resultado_cliente').innerHTML =
+              '<strong>Cliente:</strong> ' + data.apellido + ', ' + data.nombre + '<br>' +
+              '<strong>DNI:</strong> ' + data.dni + '<br>' +
+              '<strong>Disciplina:</strong> ' + data.disciplina;
+          } else {
+            document.getElementById('resultado_cliente').innerHTML = 'No encontrado';
+            document.getElementById('resultado_cliente').style.display = 'block';
+          }
+        });
+    }
+  </script>
 </head>
 <body>
+<div class="contenido">
+  <h2>Registrar Nueva Membresía</h2>
+  <form action="guardar_membresia.php" method="POST">
+    <label>Buscar cliente (DNI / RFID / Apellido)</label>
+    <input type="text" id="buscar_cliente" onkeyup="buscarCliente()" placeholder="Escriba DNI, apellido o RFID...">
 
-<h2>Registrar Nueva Membresía</h2>
-<div class="formulario">
-  <form method="post" action="guardar_membresia.php">
-    <label for="buscar">Buscar cliente (DNI / RFID / Apellido)</label>
-    <input type="text" id="buscar" autocomplete="off" placeholder="Escriba DNI, apellido o RFID...">
-    <div id="resultados"></div>
+    <div id="resultado_cliente"></div>
 
-    <input type="hidden" name="cliente_id" id="cliente_id" required>
+    <input type="hidden" name="cliente_id" id="cliente_id">
+    <input type="hidden" name="disciplina_id" id="disciplina_id">
 
-    <div id="advertencia" class="advertencia"></div>
-
-    <label>Plan</label>
-    <select name="plan_id" id="plan" onchange="calcularTotal()" required>
+    <label>Plan:</label>
+    <select name="plan_id" required>
       <option value="">-- Seleccionar plan --</option>
-      <?php while ($p = $planes->fetch_assoc()): ?>
-        <option value="<?= $p['id'] ?>" data-precio="<?= $p['precio'] ?>">
-          <?= $p['nombre'] ?> - $<?= $p['precio'] ?>
-        </option>
-      <?php endwhile; ?>
+      <?php while ($plan = mysqli_fetch_assoc($planes)) { ?>
+        <option value="<?php echo $plan['id']; ?>"><?php echo $plan['nombre'] . ' - $' . $plan['precio']; ?></option>
+      <?php } ?>
     </select>
 
-    <label>Adicionales</label>
-    <select name="adicional_id" id="adicional" onchange="calcularTotal()">
-      <option value="0" data-precio="0">-- Ninguno --</option>
-      <?php while ($a = $adicionales->fetch_assoc()): ?>
-        <option value="<?= $a['id'] ?>" data-precio="<?= $a['precio'] ?>">
-          <?= $a['nombre'] ?> - $<?= $a['precio'] ?>
-        </option>
-      <?php endwhile; ?>
+    <label>Adicionales:</label>
+    <select name="adicional_id">
+      <option value="">-- Ninguno --</option>
+      <?php while ($a = mysqli_fetch_assoc($adicionales)) { ?>
+        <option value="<?php echo $a['id']; ?>"><?php echo $a['nombre'] . ' - $' . $a['precio']; ?></option>
+      <?php } ?>
     </select>
 
-    <label>Fecha de inicio</label>
-    <input type="date" name="fecha_inicio" value="<?= date('Y-m-d') ?>" required>
+    <label>Fecha de inicio:</label>
+    <input type="date" name="fecha_inicio" required>
 
-    <label>Método de pago</label>
+    <label>Método de pago:</label>
     <select name="metodo_pago" required>
-      <option value="Efectivo">Efectivo</option>
-      <option value="Transferencia">Transferencia</option>
-      <option value="Débito">Tarjeta Débito</option>
-      <option value="Crédito">Tarjeta Crédito</option>
-      <option value="Cuenta Corriente">Cuenta Corriente</option>
+      <option value="efectivo">Efectivo</option>
+      <option value="transferencia">Transferencia</option>
+      <option value="tarjeta_debito">Tarjeta Débito</option>
+      <option value="tarjeta_credito">Tarjeta Crédito</option>
+      <option value="cuenta_corriente">Cuenta Corriente</option>
     </select>
 
-    <div class="total">Total: $<span id="total">0</span></div>
-
-    <button type="submit" class="btn">Registrar Membresía</button>
+    <button type="submit">Guardar Membresía</button>
   </form>
 </div>
-
-<script>
-function calcularTotal() {
-  const plan = document.querySelector("#plan option:checked");
-  const adicional = document.querySelector("#adicional option:checked");
-
-  const precioPlan = parseFloat(plan.dataset.precio || 0);
-  const precioAdicional = parseFloat(adicional.dataset.precio || 0);
-
-  document.getElementById("total").innerText = (precioPlan + precioAdicional).toFixed(2);
-}
-
-// Buscar cliente automáticamente
-const inputBuscar = document.getElementById('buscar');
-const resultados = document.getElementById('resultados');
-const advertencia = document.getElementById('advertencia');
-
-inputBuscar.addEventListener('keyup', function () {
-  const valor = this.value.trim();
-  resultados.innerHTML = '';
-  advertencia.style.display = 'none';
-
-  if (valor.length > 2) {
-    fetch('buscar_cliente.php?q=' + valor)
-      .then(res => res.json())
-      .then(data => {
-        data.forEach(cliente => {
-          const div = document.createElement('div');
-          div.classList.add('resultado');
-          div.innerText = `${cliente.apellido}, ${cliente.nombre} - DNI: ${cliente.dni}`;
-          div.onclick = () => {
-            document.getElementById('buscar').value = `${cliente.apellido}, ${cliente.nombre}`;
-            document.getElementById('cliente_id').value = cliente.id;
-            resultados.innerHTML = '';
-            // Verificar membresía
-            fetch(`verificar_membresia.php?id=${cliente.id}`)
-              .then(resp => resp.json())
-              .then(info => {
-                if (!info.valida) {
-                  advertencia.innerText = 'Este cliente no tiene una membresía activa o ya está vencida';
-                  advertencia.style.display = 'block';
-                }
-              });
-          };
-          resultados.appendChild(div);
-        });
-      });
-  }
-});
-</script>
-
 </body>
 </html>
