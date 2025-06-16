@@ -1,83 +1,90 @@
 <?php
-session_start();
 include 'conexion.php';
+include 'menu.php';
 
-if (!isset($_SESSION['id_gimnasio'])) {
-    die('Acceso no autorizado');
-}
-$id_gimnasio = $_SESSION['id_gimnasio'];
+$consulta = "SELECT m.*, c.nombre AS nombre_cliente, c.apellido AS apellido_cliente, d.nombre AS disciplina, p.nombre AS plan
+             FROM membresias m
+             JOIN clientes c ON m.cliente_id = c.id
+             JOIN disciplinas d ON m.disciplina_id = d.id
+             JOIN planes p ON m.plan_id = p.id
+             ORDER BY m.fecha_inicio DESC";
 
-$sql = "SELECT m.*, c.nombre AS cliente_nombre, c.apellido, p.nombre AS plan_nombre 
-        FROM membresias m
-        JOIN clientes c ON m.cliente_id = c.id
-        JOIN planes p ON m.plan_id = p.id
-        WHERE m.id_gimnasio = ?";
-$stmt = $conexion->prepare($sql);
-$stmt->bind_param("i", $id_gimnasio);
-$stmt->execute();
-$resultado = $stmt->get_result();
+$resultado = mysqli_query($conexion, $consulta);
 ?>
 
 <!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>Ver Membresías</title>
+    <title>Membresías</title>
     <style>
-        body {
-            background-color: #111;
+        body { background-color: #111; color: #f1c40f; font-family: Arial, sans-serif; margin: 0; }
+        .contenido { margin-left: 240px; padding: 20px; }
+        h2 { color: #f1c40f; }
+        input[type="text"] {
+            width: 300px;
+            padding: 10px;
+            margin-bottom: 15px;
+            border: 1px solid #f1c40f;
+            background-color: #1a1a1a;
             color: #fff;
-            font-family: Arial, sans-serif;
-            padding: 20px;
-        }
-        h1 {
-            color: #ffc107;
-            text-align: center;
         }
         table {
             width: 100%;
-            background-color: #222;
-            color: #fff;
             border-collapse: collapse;
-            margin-top: 20px;
+            background-color: #1a1a1a;
+            color: white;
         }
         th, td {
             padding: 10px;
-            border: 1px solid #555;
-            text-align: center;
+            text-align: left;
+            border-bottom: 1px solid #f1c40f;
         }
         th {
-            background-color: #333;
-            color: #ffc107;
-        }
-        tr:hover {
-            background-color: #444;
+            background-color: #222;
+            color: #f1c40f;
         }
     </style>
+    <script>
+        function filtrarTabla() {
+            let input = document.getElementById("buscador").value.toLowerCase();
+            let filas = document.querySelectorAll("tbody tr");
+            filas.forEach(fila => {
+                let texto = fila.textContent.toLowerCase();
+                fila.style.display = texto.includes(input) ? "" : "none";
+            });
+        }
+    </script>
 </head>
 <body>
-    <h1>Membresías Actuales</h1>
+<div class="contenido">
+    <h2>Listado de Membresías</h2>
+    <input type="text" id="buscador" onkeyup="filtrarTabla()" placeholder="Buscar cliente, disciplina o pago...">
+
     <table>
-        <tr>
-            <th>Cliente</th>
-            <th>Plan</th>
-            <th>Fecha Inicio</th>
-            <th>Vencimiento</th>
-            <th>Clases Restantes</th>
-            <th>Monto</th>
-            <th>Método de Pago</th>
-        </tr>
-        <?php while ($row = $resultado->fetch_assoc()): ?>
-        <tr>
-            <td><?php echo $row['apellido'] . ', ' . $row['cliente_nombre']; ?></td>
-            <td><?php echo $row['plan_nombre']; ?></td>
-            <td><?php echo $row['fecha_inicio']; ?></td>
-            <td><?php echo $row['fecha_vencimiento']; ?></td>
-            <td><?php echo $row['clases_restantes']; ?></td>
-            <td>$<?php echo $row['monto_pagado']; ?></td>
-            <td><?php echo $row['metodo_pago']; ?></td>
-        </tr>
-        <?php endwhile; ?>
+        <thead>
+            <tr>
+                <th>Cliente</th>
+                <th>Disciplina</th>
+                <th>Plan</th>
+                <th>Inicio</th>
+                <th>Vencimiento</th>
+                <th>Método de Pago</th>
+            </tr>
+        </thead>
+        <tbody>
+            <?php while ($row = mysqli_fetch_assoc($resultado)) { ?>
+                <tr>
+                    <td><?php echo $row['apellido_cliente'] . ', ' . $row['nombre_cliente']; ?></td>
+                    <td><?php echo $row['disciplina']; ?></td>
+                    <td><?php echo $row['plan']; ?></td>
+                    <td><?php echo $row['fecha_inicio']; ?></td>
+                    <td><?php echo $row['fecha_vencimiento']; ?></td>
+                    <td><?php echo ucfirst($row['metodo_pago']); ?></td>
+                </tr>
+            <?php } ?>
+        </tbody>
     </table>
+</div>
 </body>
 </html>
