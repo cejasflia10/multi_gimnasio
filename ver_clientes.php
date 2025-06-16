@@ -75,17 +75,16 @@ $resultado = $conexion->query($consulta);
     <th>Gimnasio</th>
   </tr>
   <?php while ($fila = $resultado->fetch_assoc()) { ?>
-    <tr>
-      <td><?php echo htmlspecialchars($fila['apellido']); ?></td>
-      <td><?php echo htmlspecialchars($fila['nombre']); ?></td>
-      <td><?php echo htmlspecialchars($fila['dni']); ?></td>
-      <td><?php echo htmlspecialchars($fila['fecha_nacimiento']); ?></td>
-      <td><?php echo htmlspecialchars($fila['edad']); ?></td>
-      <td><?php echo htmlspecialchars($fila['domicilio']); ?></td>
-      <td><?php echo htmlspecialchars($fila['telefono']); ?></td>
-      <td><?php echo htmlspecialchars($fila['email']); ?></td>
-      <td><?php echo htmlspecialchars($fila['rfid']); ?></td>
-      <td><?php echo htmlspecialchars($fila['gimnasio']); ?></td>
+    <tr><td><?= htmlspecialchars($cliente['apellido'] ?? '') ?></td>
+<td><?= htmlspecialchars($cliente['nombre'] ?? '') ?></td>
+<td><?= htmlspecialchars($cliente['dni'] ?? '') ?></td>
+<td><?= htmlspecialchars($cliente['fecha_nacimiento'] ?? '') ?></td>
+<td><?= htmlspecialchars($cliente['edad'] ?? '') ?></td>
+<td><?= htmlspecialchars($cliente['domicilio'] ?? '') ?></td>
+<td><?= htmlspecialchars($cliente['telefono'] ?? '') ?></td>
+<td><?= htmlspecialchars($cliente['email'] ?? '') ?></td>
+<td><?= htmlspecialchars($cliente['rfid'] ?? '') ?></td>
+
     </tr>
   <?php } ?>
 </table>
