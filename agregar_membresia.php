@@ -1,47 +1,111 @@
 <?php
 include 'conexion.php';
+include 'menu.php';
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $cliente_id = $_POST['cliente_id'];
-    $plan_id = $_POST['plan_id'];
-    $adicional_id = $_POST['adicional_id'] ?? null;
-    $fecha_inicio = $_POST['fecha_inicio'];
-    $metodo_pago = $_POST['metodo_pago'];
-
-    // Obtener precio del plan
-    $stmt = $conexion->prepare("SELECT precio FROM planes WHERE id = ?");
-    $stmt->bind_param("i", $plan_id);
-    $stmt->execute();
-    $resultado = $stmt->get_result();
-    $fila = $resultado->fetch_assoc();
-    $precio_plan = $fila ? $fila['precio'] : 0;
-
-    // Obtener precio del adicional
-    $precio_adicional = 0;
-    if ($adicional_id) {
-        $stmt = $conexion->prepare("SELECT precio FROM planes_adicionales WHERE id = ?");
-        $stmt->bind_param("i", $adicional_id);
-        $stmt->execute();
-        $resultado = $stmt->get_result();
-        $fila = $resultado->fetch_assoc();
-        $precio_adicional = $fila ? $fila['precio'] : 0;
-    }
-
-    $total = $precio_plan + $precio_adicional;
-
-    // Calcular fecha de vencimiento (30 días desde inicio)
-    $fecha_vencimiento = date('Y-m-d', strtotime($fecha_inicio . ' +30 days'));
-
-    // Insertar en base de datos
-    $stmt = $conexion->prepare("INSERT INTO membresias (cliente_id, plan_id, adicional_id, fecha_inicio, fecha_vencimiento, metodo_pago, total) VALUES (?, ?, ?, ?, ?, ?, ?)");
-    $stmt->bind_param("iiisssd", $cliente_id, $plan_id, $adicional_id, $fecha_inicio, $fecha_vencimiento, $metodo_pago, $total);
-
-    if ($stmt->execute()) {
-        echo "<script>alert('Membresía registrada exitosamente'); window.location.href = 'nueva_membresia.php';</script>";
-    } else {
-        echo "<script>alert('Error al registrar la membresía'); window.history.back();</script>";
-    }
-} else {
-    echo "<script>alert('Acceso no permitido'); window.history.back();</script>";
-}
+// Consultar clientes y disciplinas
+$clientes = mysqli_query($conexion, "SELECT * FROM clientes");
+$planes = mysqli_query($conexion, "SELECT * FROM planes");
+$disciplinas = mysqli_query($conexion, "SELECT * FROM disciplinas");
 ?>
+
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Agregar Membresía</title>
+    <style>
+        body {
+            background-color: #111;
+            color: #f1c40f;
+            font-family: Arial, sans-serif;
+            margin: 0;
+        }
+        .formulario {
+            margin-left: 240px;
+            padding: 20px;
+            max-width: 700px;
+        }
+        h2 {
+            color: #f1c40f;
+        }
+        label {
+            display: block;
+            margin-top: 15px;
+            font-weight: bold;
+        }
+        input, select {
+            width: 100%;
+            padding: 10px;
+            margin-top: 5px;
+            background-color: #222;
+            color: white;
+            border: 1px solid #f1c40f;
+            border-radius: 4px;
+        }
+        button {
+            margin-top: 20px;
+            background: #f1c40f;
+            color: #111;
+            border: none;
+            padding: 10px 20px;
+            font-weight: bold;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #d4ac0d;
+        }
+    </style>
+</head>
+<body>
+<div class="formulario">
+    <h2>Agregar Membresía</h2>
+    <form action="guardar_membresia.php" method="POST">
+
+        <label>Cliente:</label>
+        <select name="cliente_id" required>
+            <option value="">Seleccionar cliente</option>
+            <?php while ($cliente = mysqli_fetch_assoc($clientes)) { ?>
+                <option value="<?php echo $cliente['id']; ?>">
+                    <?php echo $cliente['apellido'] . ', ' . $cliente['nombre'] . ' - DNI: ' . $cliente['dni']; ?>
+                </option>
+            <?php } ?>
+        </select>
+
+        <label>Disciplina:</label>
+        <select name="disciplina_id" required>
+            <option value="">Seleccionar disciplina</option>
+            <?php while ($disciplina = mysqli_fetch_assoc($disciplinas)) { ?>
+                <option value="<?php echo $disciplina['id']; ?>">
+                    <?php echo $disciplina['nombre']; ?>
+                </option>
+            <?php } ?>
+        </select>
+
+        <label>Plan:</label>
+        <select name="plan_id" required>
+            <option value="">Seleccionar plan</option>
+            <?php while ($plan = mysqli_fetch_assoc($planes)) { ?>
+                <option value="<?php echo $plan['id']; ?>">
+                    <?php echo $plan['nombre'] . ' - $' . $plan['precio']; ?>
+                </option>
+            <?php } ?>
+        </select>
+
+        <label>Fecha de inicio:</label>
+        <input type="date" name="fecha_inicio" required>
+
+        <label>Método de pago:</label>
+        <select name="metodo_pago" required>
+            <option value="efectivo">Efectivo</option>
+            <option value="transferencia">Transferencia</option>
+            <option value="tarjeta_debito">Tarjeta Débito</option>
+            <option value="tarjeta_credito">Tarjeta Crédito</option>
+            <option value="cuenta_corriente">Cuenta Corriente</option>
+        </select>
+
+        <button type="submit">Guardar Membresía</button>
+    </form>
+</div>
+</body>
+</html>
