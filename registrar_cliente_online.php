@@ -1,11 +1,17 @@
 <?php
 include 'conexion.php';
 
-// if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-//     echo json_encode(["success" => false, "message" => "Acceso no permitido."]);
-//     exit;
-// }
+// Solo mostrar errores con claridad
+error_reporting(E_ALL);
+ini_set('display_errors', 1);
 
+// Mostrar datos recibidos
+echo "<pre>";
+echo "POST recibido:\n";
+var_dump($_POST);
+echo "</pre>";
+
+// Validar campos clave
 $apellido = isset($_POST['apellido']) ? trim($_POST['apellido']) : '';
 $nombre = isset($_POST['nombre']) ? trim($_POST['nombre']) : '';
 $dni = isset($_POST['dni']) ? trim($_POST['dni']) : '';
@@ -16,9 +22,8 @@ $telefono = isset($_POST['telefono']) ? trim($_POST['telefono']) : '';
 $email = isset($_POST['email']) ? trim($_POST['email']) : '';
 $rfid_uid = isset($_POST['rfid_uid']) ? trim($_POST['rfid_uid']) : '';
 
-// Requiere solo los campos esenciales
 if ($apellido === '' || $nombre === '' || $dni === '' || $fecha_nacimiento === '') {
-    echo json_encode(['success' => false, 'message' => 'Debe completar apellido, nombre, DNI y fecha de nacimiento.']);
+    echo "⚠️ Faltan datos obligatorios (apellido, nombre, DNI, fecha nacimiento)";
     exit;
 }
 
@@ -27,18 +32,24 @@ try {
     $hoy = new DateTime();
     $edad = $fecha_nac->diff($hoy)->y;
 } catch (Exception $e) {
-    echo json_encode(['success' => false, 'message' => 'Fecha inválida.']);
+    echo "⚠️ Fecha inválida: " . $e->getMessage();
     exit;
 }
 
 $stmt = $conexion->prepare("INSERT INTO clientes (apellido, nombre, dni, fecha_nacimiento, edad, domicilio, telefono, email, rfid_uid)
                             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)");
+
+if (!$stmt) {
+    echo "❌ Error al preparar statement: " . $conexion->error;
+    exit;
+}
+
 $stmt->bind_param("ssssissss", $apellido, $nombre, $dni, $fecha_nacimiento, $edad, $domicilio, $telefono, $email, $rfid_uid);
 
 if ($stmt->execute()) {
-    echo json_encode(['success' => true, 'message' => 'Cliente registrado exitosamente.']);
+    echo "✅ Cliente registrado exitosamente.";
 } else {
-    echo json_encode(['success' => false, 'message' => 'Error al registrar cliente: ' . $stmt->error]);
+    echo "❌ Error al ejecutar: " . $stmt->error;
 }
 
 $stmt->close();
