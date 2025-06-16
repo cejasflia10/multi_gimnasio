@@ -7,14 +7,14 @@ include 'conexion.php';
 //     exit;
 // }
 
-$apellido = trim($_POST['apellido'] ?? '');
-$nombre = trim($_POST['nombre'] ?? '');
-$dni = trim($_POST['dni'] ?? '');
-$fecha_nacimiento = trim($_POST['fecha_nacimiento'] ?? '');
-$domicilio = trim($_POST['domicilio'] ?? '');
-$telefono = trim($_POST['telefono'] ?? '');
-$email = trim($_POST['email'] ?? '');
-$rfid_uid = trim($_POST['rfid'] ?? null);
+$apellido = isset($_POST['apellido']) ? trim($_POST['apellido']) : '';
+$nombre = isset($_POST['nombre']) ? trim($_POST['nombre']) : '';
+$dni = isset($_POST['dni']) ? trim($_POST['dni']) : '';
+$fecha_nacimiento = isset($_POST['fecha_nacimiento']) ? trim($_POST['fecha_nacimiento']) : '';
+$domicilio = isset($_POST['domicilio']) ? trim($_POST['domicilio']) : '';
+$telefono = isset($_POST['telefono']) ? trim($_POST['telefono']) : '';
+$email = isset($_POST['email']) ? trim($_POST['email']) : '';
+$rfid_uid = isset($_POST['rfid_uid']) ? trim($_POST['rfid_uid']) : '';
 
 if ($apellido === '' || $nombre === '' || $dni === '' || $fecha_nacimiento === '') {
     echo json_encode(['success' => false, 'message' => 'Faltan datos obligatorios.']);
