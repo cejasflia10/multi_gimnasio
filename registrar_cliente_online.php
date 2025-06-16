@@ -1,134 +1,52 @@
 <?php
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    include 'conexion.php';
+if ($_SERVER["REQUEST_METHOD"] == "POST") {
+    include("conexion.php");
 
-    $nombre = $_POST['nombre'] ?? '';
-    $apellido = $_POST['apellido'] ?? '';
-    $dni = $_POST['dni'] ?? '';
-    $telefono = $_POST['telefono'] ?? '';
-    $correo = $_POST['correo'] ?? '';
+    $nombre = trim($_POST['nombre'] ?? '');
+    $apellido = trim($_POST['apellido'] ?? '');
+    $dni = trim($_POST['dni'] ?? '');
+    $telefono = trim($_POST['telefono'] ?? '');
+    $email = trim($_POST['correo'] ?? '');
     $fecha_nacimiento = $_POST['fecha_nacimiento'] ?? '';
-    $rfid_uid = $_POST['rfid_uid'] ?? null;
+    $rfid_uid = trim($_POST['rfid_uid'] ?? '');
 
-    if (empty($nombre) || empty($apellido) || empty($dni) || empty($fecha_nacimiento)) {
-        $mensaje = "Faltan campos obligatorios.";
-    } else {
-        $stmt = $conexion->prepare("SELECT id FROM clientes WHERE dni = ?");
-        $stmt->bind_param("s", $dni);
-        $stmt->execute();
-        $stmt->store_result();
-
-        if ($stmt->num_rows > 0) {
-            $mensaje = "El cliente ya está registrado.";
-        } else {
-            $stmt->close();
-            $stmt = $conexion->prepare("INSERT INTO clientes (nombre, apellido, dni, telefono, correo, fecha_nacimiento, rfid_uid) VALUES (?, ?, ?, ?, ?, ?, ?)");
-            $stmt->bind_param("sssssss", $nombre, $apellido, $dni, $telefono, $correo, $fecha_nacimiento, $rfid_uid);
-            if ($stmt->execute()) {
-                $mensaje = "Cliente registrado exitosamente.";
-            } else {
-                $mensaje = "Error al registrar cliente.";
-            }
-        }
-        $stmt->close();
-        $conexion->close();
+    // Validar campos obligatorios
+    if (empty($nombre) || empty($apellido) || empty($dni) || empty($telefono) || empty($email) || empty($fecha_nacimiento)) {
+        echo json_encode(["success" => false, "message" => "Todos los campos son obligatorios, excepto el RFID."]);
+        exit;
     }
+
+    // Calcular edad
+    $edad = 0;
+    if ($fecha_nacimiento != '') {
+        $fecha_nacimiento_dt = new DateTime($fecha_nacimiento);
+        $hoy = new DateTime();
+        $edad = $hoy->diff($fecha_nacimiento_dt)->y;
+    }
+
+    // Verificar que el DNI no exista
+    $stmt = $conexion->prepare("SELECT id FROM clientes WHERE dni = ?");
+    $stmt->bind_param("s", $dni);
+    $stmt->execute();
+    $stmt->store_result();
+    if ($stmt->num_rows > 0) {
+        echo json_encode(["success" => false, "message" => "El cliente con ese DNI ya está registrado."]);
+        exit;
+    }
+
+    // Insertar nuevo cliente
+    $stmt = $conexion->prepare("INSERT INTO clientes (nombre, apellido, dni, telefono, email, fecha_nacimiento, edad, rfid_uid) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
+    $stmt->bind_param("ssssssis", $nombre, $apellido, $dni, $telefono, $email, $fecha_nacimiento, $edad, $rfid_uid);
+
+    if ($stmt->execute()) {
+        echo json_encode(["success" => true, "message" => "Cliente registrado correctamente."]);
+    } else {
+        echo json_encode(["success" => false, "message" => "Error al registrar cliente."]);
+    }
+
+    $stmt->close();
+    $conexion->close();
+} else {
+    echo json_encode(["success" => false, "message" => "Acceso no permitido."]);
 }
 ?>
-
-<!DOCTYPE html>
-<html lang="es">
-<head>
-    <meta charset="UTF-8">
-    <title>Registro de Cliente</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <style>
-        body {
-            background-color: #111;
-            color: #fff;
-            font-family: Arial, sans-serif;
-            padding: 20px;
-        }
-        .form-container {
-            background-color: #222;
-            max-width: 500px;
-            margin: auto;
-            padding: 20px;
-            border-radius: 12px;
-            box-shadow: 0 0 12px rgba(255, 215, 0, 0.3);
-        }
-        .form-container h2 {
-            color: #FFD700;
-            text-align: center;
-        }
-        label {
-            display: block;
-            margin-top: 12px;
-            font-weight: bold;
-        }
-        input {
-            width: 100%;
-            padding: 8px;
-            margin-top: 6px;
-            border-radius: 6px;
-            border: none;
-        }
-        button {
-            background-color: #FFD700;
-            color: #111;
-            padding: 10px 20px;
-            border: none;
-            border-radius: 6px;
-            font-weight: bold;
-            margin-top: 20px;
-            width: 100%;
-            cursor: pointer;
-        }
-        .mensaje {
-            margin-top: 20px;
-            padding: 10px;
-            background-color: #333;
-            border-left: 4px solid #FFD700;
-        }
-        @media screen and (max-width: 600px) {
-            .form-container {
-                padding: 15px;
-                width: 100%;
-            }
-        }
-    </style>
-</head>
-<body>
-
-<div class="form-container">
-    <h2>Registrar Cliente</h2>
-    <?php if (!empty($mensaje)) echo "<div class='mensaje'>$mensaje</div>"; ?>
-
-    <form method="POST" action="">
-        <label for="nombre">Nombre*</label>
-        <input type="text" name="nombre" required>
-
-        <label for="apellido">Apellido*</label>
-        <input type="text" name="apellido" required>
-
-        <label for="dni">DNI*</label>
-        <input type="text" name="dni" required>
-
-        <label for="fecha_nacimiento">Fecha de nacimiento*</label>
-        <input type="date" name="fecha_nacimiento" required>
-
-        <label for="telefono">Teléfono</label>
-        <input type="text" name="telefono">
-
-        <label for="correo">Correo</label>
-        <input type="email" name="correo">
-
-        <label for="rfid_uid">RFID (opcional)</label>
-        <input type="text" name="rfid_uid">
-
-        <button type="submit">Registrar</button>
-    </form>
-</div>
-
-</body>
-</html>
