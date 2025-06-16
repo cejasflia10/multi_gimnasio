@@ -56,6 +56,9 @@ function calcularEdad($fechaNacimiento) {
     }
   </style>
 </head>
+<div style="text-align: center; margin: 20px;">
+  <input type="text" id="buscador" placeholder="Buscar por apellido o DNI..." style="width: 80%; padding: 10px; font-size: 16px;">
+</div>
 <body>
 <div class="formulario-container">
     <h2>Editar Cliente</h2>
