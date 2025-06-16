@@ -1,9 +1,10 @@
 <?php
-include 'conexion.php'; // Asegurate de que esta ruta sea correcta
+include 'conexion.php';
 
 $busqueda = $_GET['q'] ?? '';
 
-$sql = "SELECT id, apellido, nombre, dni, rfid_uid FROM clientes 
+$sql = "SELECT id, apellido, nombre, dni, rfid_uid 
+        FROM clientes 
         WHERE apellido LIKE ? 
         ORDER BY apellido ASC 
         LIMIT 10";
@@ -24,4 +25,3 @@ while ($fila = $resultado->fetch_assoc()) {
 
 echo json_encode(["results" => $clientes]);
 ?>
-git add nueva_membresia.php
