@@ -38,5 +38,5 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $stmt->close();
     $conexion->close();
 } else {
-    echo json_encode(['success' => false, 'message' => 'Acceso no permitido.']);
+    echo json_encode(["success" => false, "message" => "Este endpoint requiere método POST para funcionar."]);
 }
