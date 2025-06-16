@@ -2,39 +2,35 @@
 include 'conexion.php';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $id = $_POST['id'];
     $apellido = $_POST['apellido'];
     $nombre = $_POST['nombre'];
     $dni = $_POST['dni'];
     $fecha_nacimiento = $_POST['fecha_nacimiento'];
-    $edad = $_POST['edad'];
     $domicilio = $_POST['domicilio'];
     $telefono = $_POST['telefono'];
     $email = $_POST['email'];
-    $rfid = !empty($_POST['rfid']) ? $_POST['rfid'] : null;
-    $gimnasio = $_POST['gimnasio'];
+    $rfid_uid = $_POST['rfid_uid'];
+    $fecha_vencimiento = $_POST['fecha_vencimiento'];
+    $dias_disponibles = $_POST['dias_disponibles'];
 
-    // Verificar si el cliente ya existe por DNI
-    $check = $conexion->query("SELECT * FROM clientes WHERE dni = '$dni'");
-    if ($check->num_rows > 0) {
-        echo "<script>alert('El cliente ya está registrado.'); window.location.href='agregar_cliente.php';</script>";
-        exit;
-    }
+    $consulta = "UPDATE clientes SET 
+        apellido='$apellido',
+        nombre='$nombre',
+        dni='$dni',
+        fecha_nacimiento='$fecha_nacimiento',
+        domicilio='$domicilio',
+        telefono='$telefono',
+        email='$email',
+        rfid_uid='$rfid_uid',
+        fecha_vencimiento='$fecha_vencimiento',
+        dias_disponibles='$dias_disponibles'
+        WHERE id=$id";
 
-    // Insertar nuevo cliente
-    $stmt = $conexion->prepare("INSERT INTO clientes 
-        (apellido, nombre, dni, fecha_nacimiento, edad, domicilio, telefono, email, rfid, gimnasio) 
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
-
-    $stmt->bind_param("ssssisssss", 
-        $apellido, $nombre, $dni, $fecha_nacimiento, $edad, 
-        $domicilio, $telefono, $email, $rfid, $gimnasio);
-
-    if ($stmt->execute()) {
-        echo "<script>alert('Cliente registrado correctamente'); window.location.href='ver_clientes.php';</script>";
+    if (mysqli_query($conexion, $consulta)) {
+        header("Location: ver_clientes.php?mensaje=editado");
     } else {
-        echo "<script>alert('Error al registrar cliente'); window.location.href='agregar_cliente.php';</script>";
+        echo "Error al actualizar cliente: " . mysqli_error($conexion);
     }
-
-    $stmt->close();
 }
 ?>
