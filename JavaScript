@@ -1,0 +1,28 @@
+$(document).ready(function () {
+  $('#buscar_cliente').select2({
+    placeholder: "Escriba apellido...",
+    ajax: {
+      url: 'buscar_cliente.php',
+      type: 'POST',
+      dataType: 'json',
+      delay: 250,
+      data: function (params) {
+        return {
+          search: params.term
+        };
+      },
+      processResults: function (data) {
+        return {
+          results: $.map(data, function (item) {
+            return {
+              id: item.id,
+              text: item.apellido + ", " + item.nombre + " (" + item.dni + ")"
+            };
+          })
+        };
+      },
+      cache: true
+    },
+    minimumInputLength: 1
+  });
+});
