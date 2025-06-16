@@ -14,7 +14,7 @@ $fecha_nacimiento = trim($_POST['fecha_nacimiento'] ?? '');
 $domicilio = trim($_POST['domicilio'] ?? '');
 $telefono = trim($_POST['telefono'] ?? '');
 $email = trim($_POST['email'] ?? '');
-$rfid_uid = trim($_POST['rfid_uid'] ?? null);
+$rfid_uid = trim($_POST['rfid'] ?? null);
 
 if ($apellido === '' || $nombre === '' || $dni === '' || $fecha_nacimiento === '') {
     echo json_encode(['success' => false, 'message' => 'Faltan datos obligatorios.']);
