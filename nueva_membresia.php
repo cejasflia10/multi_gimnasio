@@ -2,6 +2,7 @@
 <?php
 include 'conexion.php';
 $profesores = $conexion->query("SELECT id, nombre, apellido FROM profesores");
+$adicionales = $conexion->query("SELECT id, nombre, precio FROM planes_adicionales");
 ?>
 
 <!DOCTYPE html>
@@ -29,6 +30,14 @@ $profesores = $conexion->query("SELECT id, nombre, apellido FROM profesores");
         <option value="">(Opcional) Seleccionar profesor</option>
         <?php while ($profe = $profesores->fetch_assoc()): ?>
           <option value="<?= $profe['id'] ?>"><?= $profe['apellido'] ?> <?= $profe['nombre'] ?></option>
+        <?php endwhile; ?>
+      </select>
+
+      <label>Plan Adicional:</label>
+      <select name="adicional_id">
+        <option value="">(Opcional) Seleccionar adicional</option>
+        <?php while ($ad = $adicionales->fetch_assoc()): ?>
+          <option value="<?= $ad['id'] ?>"><?= $ad['nombre'] ?> ($<?= $ad['precio'] ?>)</option>
         <?php endwhile; ?>
       </select>
 
