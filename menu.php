@@ -89,10 +89,40 @@
     <li><a href="ver_clientes.php">👤 Ver Clientes</a></li>
     <li><a href="disciplinas.php">🥋 Disciplinas</a></li>
     <li><a href="exportar.php">📤 Exportar</a></li>
-  </ul>
+  
+<li class="nav-item">
+  <a class="nav-link collapsed" href="#" data-bs-toggle="collapse" data-bs-target="#collapseUsuarios" aria-expanded="false" aria-controls="collapseUsuarios">
+    <i class="fas fa-user-shield"></i>
+    <span>Usuarios</span>
+  </a>
+  <div id="collapseUsuarios" class="collapse" aria-labelledby="headingUsuarios" data-bs-parent="#accordionSidebar">
+    <div class="bg-dark py-2 collapse-inner rounded">
+      <a class="collapse-item" href="ver_usuarios.php">Ver Usuarios</a>
+      <a class="collapse-item" href="agregar_usuario.php">Agregar Usuario</a>
+      <a class="collapse-item" href="editar_permisos.php?usuario_id=1">Permisos por Gimnasio</a>
+    </div>
+  </div>
+</li>
+
+</ul>
 <div class="section-title toggle" onclick="toggleMenu('registros')">Registros Online</div>
 <ul id="registros" class="submenu">
   <li><a href="registrar_cliente_online.php">📝 Registrar Cliente</a></li>
+
+<li class="nav-item">
+  <a class="nav-link collapsed" href="#" data-bs-toggle="collapse" data-bs-target="#collapseUsuarios" aria-expanded="false" aria-controls="collapseUsuarios">
+    <i class="fas fa-user-shield"></i>
+    <span>Usuarios</span>
+  </a>
+  <div id="collapseUsuarios" class="collapse" aria-labelledby="headingUsuarios" data-bs-parent="#accordionSidebar">
+    <div class="bg-dark py-2 collapse-inner rounded">
+      <a class="collapse-item" href="ver_usuarios.php">Ver Usuarios</a>
+      <a class="collapse-item" href="agregar_usuario.php">Agregar Usuario</a>
+      <a class="collapse-item" href="editar_permisos.php?usuario_id=1">Permisos por Gimnasio</a>
+    </div>
+  </div>
+</li>
+
 </ul>
 <!-- ... dentro del menú ya existente ... -->
 <li><a href="exportar_datos.php">📤 Exportar</a></li>
@@ -104,7 +134,22 @@
     <li><a href="ver_membresias.php">🗂 Ver Membresías</a></li>
     <li><a href="planes.php">📋 Planes</a></li>
     <li><a href="planes_adicionales.php">➕ Planes Adicionales</a></li>
-  </ul>
+  
+<li class="nav-item">
+  <a class="nav-link collapsed" href="#" data-bs-toggle="collapse" data-bs-target="#collapseUsuarios" aria-expanded="false" aria-controls="collapseUsuarios">
+    <i class="fas fa-user-shield"></i>
+    <span>Usuarios</span>
+  </a>
+  <div id="collapseUsuarios" class="collapse" aria-labelledby="headingUsuarios" data-bs-parent="#accordionSidebar">
+    <div class="bg-dark py-2 collapse-inner rounded">
+      <a class="collapse-item" href="ver_usuarios.php">Ver Usuarios</a>
+      <a class="collapse-item" href="agregar_usuario.php">Agregar Usuario</a>
+      <a class="collapse-item" href="editar_permisos.php?usuario_id=1">Permisos por Gimnasio</a>
+    </div>
+  </div>
+</li>
+
+</ul>
 
   <div class="section-title toggle" onclick="toggleMenu('profesores')">Profesores</div>
   <ul id="profesores" class="submenu">
@@ -112,8 +157,38 @@
     <li><a href="ver_profesores.php">👨‍🏫 Ver Profesores</a></li>
     <li><a href="asistencia_profesor.php">🕒 Asistencia</a></li>
     <li><a href="pagos_profesor.php">💵 Pagos</a></li>
-  </ul>
-  </ul>
+  
+<li class="nav-item">
+  <a class="nav-link collapsed" href="#" data-bs-toggle="collapse" data-bs-target="#collapseUsuarios" aria-expanded="false" aria-controls="collapseUsuarios">
+    <i class="fas fa-user-shield"></i>
+    <span>Usuarios</span>
+  </a>
+  <div id="collapseUsuarios" class="collapse" aria-labelledby="headingUsuarios" data-bs-parent="#accordionSidebar">
+    <div class="bg-dark py-2 collapse-inner rounded">
+      <a class="collapse-item" href="ver_usuarios.php">Ver Usuarios</a>
+      <a class="collapse-item" href="agregar_usuario.php">Agregar Usuario</a>
+      <a class="collapse-item" href="editar_permisos.php?usuario_id=1">Permisos por Gimnasio</a>
+    </div>
+  </div>
+</li>
+
+</ul>
+  
+<li class="nav-item">
+  <a class="nav-link collapsed" href="#" data-bs-toggle="collapse" data-bs-target="#collapseUsuarios" aria-expanded="false" aria-controls="collapseUsuarios">
+    <i class="fas fa-user-shield"></i>
+    <span>Usuarios</span>
+  </a>
+  <div id="collapseUsuarios" class="collapse" aria-labelledby="headingUsuarios" data-bs-parent="#accordionSidebar">
+    <div class="bg-dark py-2 collapse-inner rounded">
+      <a class="collapse-item" href="ver_usuarios.php">Ver Usuarios</a>
+      <a class="collapse-item" href="agregar_usuario.php">Agregar Usuario</a>
+      <a class="collapse-item" href="editar_permisos.php?usuario_id=1">Permisos por Gimnasio</a>
+    </div>
+  </div>
+</li>
+
+</ul>
 <div class="section-title toggle" onclick="toggleMenu('productos')">Productos y Ventas</div>
 <ul id="productos" class="submenu">
   <!-- Protecciones -->
@@ -132,12 +207,42 @@
   <li><a href="ventas_protecciones.php">💰 Venta de Protecciones</a></li>
   <li><a href="ventas_indumentaria.php">💰 Venta de Indumentaria</a></li>
   <li><a href="ventas_suplementos.php">💰 Venta de Suplementos</a></li>
+
+<li class="nav-item">
+  <a class="nav-link collapsed" href="#" data-bs-toggle="collapse" data-bs-target="#collapseUsuarios" aria-expanded="false" aria-controls="collapseUsuarios">
+    <i class="fas fa-user-shield"></i>
+    <span>Usuarios</span>
+  </a>
+  <div id="collapseUsuarios" class="collapse" aria-labelledby="headingUsuarios" data-bs-parent="#accordionSidebar">
+    <div class="bg-dark py-2 collapse-inner rounded">
+      <a class="collapse-item" href="ver_usuarios.php">Ver Usuarios</a>
+      <a class="collapse-item" href="agregar_usuario.php">Agregar Usuario</a>
+      <a class="collapse-item" href="editar_permisos.php?usuario_id=1">Permisos por Gimnasio</a>
+    </div>
+  </div>
+</li>
+
 </ul>
 
   <div class="section-title toggle" onclick="toggleMenu('general')">General</div>
   <ul id="general" class="submenu">
     <li><a href="registrar_asistencia.php">📲 Registrar Asistencia</a></li>
-  </ul>
+  
+<li class="nav-item">
+  <a class="nav-link collapsed" href="#" data-bs-toggle="collapse" data-bs-target="#collapseUsuarios" aria-expanded="false" aria-controls="collapseUsuarios">
+    <i class="fas fa-user-shield"></i>
+    <span>Usuarios</span>
+  </a>
+  <div id="collapseUsuarios" class="collapse" aria-labelledby="headingUsuarios" data-bs-parent="#accordionSidebar">
+    <div class="bg-dark py-2 collapse-inner rounded">
+      <a class="collapse-item" href="ver_usuarios.php">Ver Usuarios</a>
+      <a class="collapse-item" href="agregar_usuario.php">Agregar Usuario</a>
+      <a class="collapse-item" href="editar_permisos.php?usuario_id=1">Permisos por Gimnasio</a>
+    </div>
+  </div>
+</li>
+
+</ul>
   <!-- NUEVO BLOQUE PARA GIMNASIOS -->
 <div class="section-title toggle" onclick="toggleMenu('gimnasios')">Gimnasios</div>
 <ul id="gimnasios" class="submenu">
@@ -145,11 +250,41 @@
   <li><a href="ver_gimnasios.php">🏢 Ver Gimnasios</a></li>
   <li><a href="usuarios_gimnasio.php">👥 Usuarios</a></li>
   <li><a href="estadisticas_gimnasio.php">📊 Estadísticas</a></li>
+
+<li class="nav-item">
+  <a class="nav-link collapsed" href="#" data-bs-toggle="collapse" data-bs-target="#collapseUsuarios" aria-expanded="false" aria-controls="collapseUsuarios">
+    <i class="fas fa-user-shield"></i>
+    <span>Usuarios</span>
+  </a>
+  <div id="collapseUsuarios" class="collapse" aria-labelledby="headingUsuarios" data-bs-parent="#accordionSidebar">
+    <div class="bg-dark py-2 collapse-inner rounded">
+      <a class="collapse-item" href="ver_usuarios.php">Ver Usuarios</a>
+      <a class="collapse-item" href="agregar_usuario.php">Agregar Usuario</a>
+      <a class="collapse-item" href="editar_permisos.php?usuario_id=1">Permisos por Gimnasio</a>
+    </div>
+  </div>
+</li>
+
 </ul>
 <div class="section-title toggle" onclick="toggleMenu('admin')">Administración</div>
 <ul id="admin" class="submenu">
   <li><a href="ver_gimnasios.php">🏢 Ver Gimnasios</a></li>
   <li><a href="planes_gimnasio.php">📆 Planes de Uso</a></li>
+
+<li class="nav-item">
+  <a class="nav-link collapsed" href="#" data-bs-toggle="collapse" data-bs-target="#collapseUsuarios" aria-expanded="false" aria-controls="collapseUsuarios">
+    <i class="fas fa-user-shield"></i>
+    <span>Usuarios</span>
+  </a>
+  <div id="collapseUsuarios" class="collapse" aria-labelledby="headingUsuarios" data-bs-parent="#accordionSidebar">
+    <div class="bg-dark py-2 collapse-inner rounded">
+      <a class="collapse-item" href="ver_usuarios.php">Ver Usuarios</a>
+      <a class="collapse-item" href="agregar_usuario.php">Agregar Usuario</a>
+      <a class="collapse-item" href="editar_permisos.php?usuario_id=1">Permisos por Gimnasio</a>
+    </div>
+  </div>
+</li>
+
 </ul>
 <div class="section-title toggle" onclick="toggleMenu('sesion')">Cuenta</div>
 <ul id="sesion" class="submenu">
