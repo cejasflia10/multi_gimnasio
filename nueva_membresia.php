@@ -86,6 +86,48 @@ $profesores = $conexion->query("SELECT id, apellido, nombre FROM profesores ORDE
       document.getElementById('total').textContent = '$' + total;
     }
   </script>
+  <script>
+async function buscarCliente(valor) {
+  if (valor.length < 2) {
+    document.getElementById('resumen_cliente').innerHTML = '';
+    return;
+  }
+
+  const res = await fetch('buscar_cliente.php?q=' + encodeURIComponent(valor));
+  const datos = await res.json();
+
+  const contenedor = document.getElementById('resumen_cliente');
+  contenedor.innerHTML = '';
+
+  if (!datos.length) {
+    contenedor.innerHTML = '<span style="color: #ffc107;">Cliente no encontrado</span>';
+    document.getElementById('cliente_id').value = '';
+    return;
+  }
+
+  const lista = document.createElement('ul');
+  lista.style.listStyle = 'none';
+  lista.style.padding = 0;
+
+  datos.forEach(cliente => {
+    const item = document.createElement('li');
+    item.style.cursor = 'pointer';
+    item.style.marginBottom = '5px';
+    item.style.padding = '5px';
+    item.style.border = '1px dashed #ffc107';
+    item.textContent = `${cliente.apellido}, ${cliente.nombre} - DNI: ${cliente.dni}`;
+    item.onclick = () => {
+      contenedor.innerHTML = `<strong>Cliente:</strong> ${cliente.apellido}, ${cliente.nombre}<br>
+                               <strong>DNI:</strong> ${cliente.dni}<br>
+                               <strong>RFID:</strong> ${cliente.rfid ?? 'No registrado'}`;
+      document.getElementById('cliente_id').value = cliente.id;
+    };
+    lista.appendChild(item);
+  });
+
+  contenedor.appendChild(lista);
+}
+  </script>
 </head>
 <body>
   <div style="width: 100%; max-width: 800px;">
