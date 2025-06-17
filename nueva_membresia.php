@@ -4,10 +4,10 @@ include 'menu.php';
 
 // Obtener planes y adicionales
 $planes = $conexion->query("SELECT id, nombre, precio FROM planes");
-$adicionales = $conexion-&gt;query("SELECT id, nombre, precio FROM planes_adicionales");
-$disciplinas = $conexion-&gt;query("SELECT id, nombre FROM disciplinas ORDER BY nombre");
-$profesores = $conexion-&gt;query("SELECT id, apellido, nombre FROM profesores ORDER BY apellido");
-?&gt;
+$adicionales = $conexion->query("SELECT id, nombre, precio FROM planes_adicionales");
+$disciplinas = $conexion->query("SELECT id, nombre FROM disciplinas ORDER BY nombre");
+$profesores = $conexion->query("SELECT id, apellido, nombre FROM profesores ORDER BY apellido");
+?>
 <!DOCTYPE html>
 
 <html lang="es">
@@ -141,29 +141,29 @@ async function buscarCliente(valor) {
 <label>Asignar disciplina (si no está cargada):</label>
 <select name="disciplina_id">
 <option value="">-- Seleccionar disciplina --</option>
-<?php while ($row = $disciplinas->fetch_assoc()): ?&gt;
-        <option value="&lt;?= $row['id'] ?&gt;"><?= $row['nombre'] ?></option>
+<?php while ($row = $disciplinas->fetch_assoc()): ?>
+        <option value="<?= $row['id'] ?>"><?= $row['nombre'] ?></option>
 <?php endwhile; ?>
 </select>
 <label>Asignar profesor (opcional):</label>
 <select name="profesor_id">
 <option value="">-- Sin profesor --</option>
-<?php while ($row = $profesores->fetch_assoc()): ?&gt;
-        <option value="&lt;?= $row['id'] ?&gt;"><?= $row['apellido'] ?>, <?= $row['nombre'] ?></option>
+<?php while ($row = $profesores->fetch_assoc()): ?>
+        <option value="<?= $row['id'] ?>"><?= $row['apellido'] ?>, <?= $row['nombre'] ?></option>
 <?php endwhile; ?>
 </select>
 <label>Plan:</label>
 <select id="plan" name="plan_id" onchange="actualizarTotal()">
 <option value="">-- Seleccionar plan --</option>
-<?php while ($row = $planes->fetch_assoc()): ?&gt;
-        <option data-precio="&lt;?= $row['precio'] ?&gt;" value="&lt;?= $row['id'] ?&gt;"><?= $row['nombre'] ?> ($<?= $row['precio'] ?>)</option>
+<?php while ($row = $planes->fetch_assoc()): ?>
+        <option data-precio="<?= $row['precio'] ?>" value="<?= $row['id'] ?>"><?= $row['nombre'] ?> ($<?= $row['precio'] ?>)</option>
 <?php endwhile; ?>
 </select>
 <label>Adicionales:</label>
 <select id="adicional" name="adicional_id" onchange="actualizarTotal()">
 <option value="">-- Ninguno --</option>
-<?php while ($row = $adicionales->fetch_assoc()): ?&gt;
-        <option data-precio="&lt;?= $row['precio'] ?&gt;" value="&lt;?= $row['id'] ?&gt;"><?= $row['nombre'] ?> ($<?= $row['precio'] ?>)</option>
+<?php while ($row = $adicionales->fetch_assoc()): ?>
+        <option data-precio="<?= $row['precio'] ?>" value="<?= $row['id'] ?>"><?= $row['nombre'] ?> ($<?= $row['precio'] ?>)</option>
 <?php endwhile; ?>
 </select>
 <label>Fecha de inicio:</label>
