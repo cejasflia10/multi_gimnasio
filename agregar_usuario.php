@@ -1,8 +1,12 @@
 <?php
-session_start();
-if (!isset($_SESSION['gimnasio_id'])) {
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+
+if (!isset($_SESSION['perm_admin']) || $_SESSION['perm_admin'] != 1) {
     die("Acceso denegado.");
 }
+
 include 'conexion.php';
 
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
@@ -11,11 +15,11 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     $rol = $_POST["rol"];
     $gimnasio_id = $_SESSION["gimnasio_id"];
 
-    $stmt = $conexion->prepare("INSERT INTO usuarios (usuario, clave, rol, gimnasio_id) VALUES (?, ?, ?, ?)");
+    $stmt = $conexion->prepare("INSERT INTO usuarios (nombre_usuario, contrasena, rol, id_gimnasio) VALUES (?, ?, ?, ?)");
     $stmt->bind_param("sssi", $usuario, $clave, $rol, $gimnasio_id);
 
     if ($stmt->execute()) {
-        echo "<script>alert('Usuario creado exitosamente'); window.location.href='usuarios.php';</script>";
+        echo "<script>alert('Usuario creado exitosamente'); window.location.href='usuarios_gimnasio.php';</script>";
     } else {
         echo "Error: " . $stmt->error;
     }
@@ -41,12 +45,19 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             margin: 10px;
             padding: 10px;
             width: 250px;
+            background-color: #222;
+            border: 1px solid #ffc107;
+            color: #fff;
         }
         button {
             padding: 10px 20px;
             background-color: #ffc107;
             color: #000;
             border: none;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #e0a800;
         }
     </style>
 </head>
