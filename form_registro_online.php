@@ -36,7 +36,7 @@
 </head>
 <body>
   <h2 style="text-align:center;">Registro Online de Cliente</h2>
-  <form action="registrar_cliente_online.php" method="POST">
+  <form action="https://multi-gimnasio-1.onrender.com/registrar_cliente_online.php" method="POST">
     <input type="text" name="apellido" placeholder="Apellido" required>
     <input type="text" name="nombre" placeholder="Nombre" required>
     <input type="text" name="dni" placeholder="DNI" required>
