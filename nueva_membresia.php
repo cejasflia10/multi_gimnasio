@@ -5,7 +5,6 @@ $profesores = $conexion->query("SELECT id, nombre, apellido FROM profesores");
 $adicionales = $conexion->query("SELECT id, nombre, precio FROM planes_adicionales");
 $disciplinas = $conexion->query("SELECT id, nombre FROM disciplinas");
 $planes = $conexion->query("SELECT id, nombre, precio FROM planes");
-$clientes = $conexion->query("SELECT id, nombre, apellido FROM clientes");
 ?>
 
 <!DOCTYPE html>
@@ -13,44 +12,35 @@ $clientes = $conexion->query("SELECT id, nombre, apellido FROM clientes");
 <head>
   <meta charset="UTF-8">
   <title>Nueva Membresía</title>
-  <style>
-    body { background-color: #111; color: #f1f1f1; font-family: Arial, sans-serif; }
-    .form-container { width: 90%; max-width: 900px; margin: 40px auto; padding: 20px; background-color: #222; border-radius: 10px; }
-    input, select, button { width: 100%; padding: 10px; margin-top: 10px; border: none; border-radius: 5px; }
-    label { display: block; margin-top: 20px; font-weight: bold; }
-    button { background-color: gold; color: #000; font-weight: bold; cursor: pointer; }
-  </style>
+  <link rel="stylesheet" href="style.css">
 </head>
-<body>
-  <div class="form-container">
-    <h2>Registrar Nueva Membresía</h2>
+<body style="background-color:#111; color:#f1f1f1;">
+  <div class="container" style="margin-left:260px; padding:20px;">
+    <h2 style="color:gold;">Registrar Nueva Membresía</h2>
     <form action="guardar_membresia.php" method="POST">
 
-      <label>Cliente:</label>
-      <select name="cliente_id" required>
-        <option value="">Seleccionar cliente</option>
-        <?php while ($cli = $clientes->fetch_assoc()): ?>
-          <option value="<?= $cli['id'] ?>"><?= $cli['apellido'] ?> <?= $cli['nombre'] ?></option>
-        <?php endwhile; ?>
-      </select>
+      <label for="dni_buscar">Buscar Cliente por DNI:</label>
+      <input type="text" name="dni_buscar" id="dni_buscar" placeholder="Escriba DNI..." autocomplete="off">
 
-      <label>Plan de Membresía:</label>
+      <div id="resultado_cliente"></div>
+
+      <label for="plan_id">Plan de Membresía:</label>
       <select name="plan_id" required>
         <option value="">Seleccionar plan</option>
         <?php while ($plan = $planes->fetch_assoc()): ?>
-          <option value="<?= $plan['id'] ?>"><?= $plan['nombre'] ?> ($<?= $plan['precio'] ?>)</option>
+          <option value="<?= $plan['id'] ?>"><?= $plan['nombre'] ?> - $<?= $plan['precio'] ?></option>
         <?php endwhile; ?>
       </select>
 
-      <label>Plan Adicional:</label>
+      <label for="adicional_id">Adicional (opcional):</label>
       <select name="adicional_id">
-        <option value="">(Opcional) Seleccionar adicional</option>
+        <option value="">Seleccionar adicional</option>
         <?php while ($ad = $adicionales->fetch_assoc()): ?>
-          <option value="<?= $ad['id'] ?>"><?= $ad['nombre'] ?> ($<?= $ad['precio'] ?>)</option>
+          <option value="<?= $ad['id'] ?>"><?= $ad['nombre'] ?> - $<?= $ad['precio'] ?></option>
         <?php endwhile; ?>
       </select>
 
-      <label>Disciplina:</label>
+      <label for="disciplina_id">Disciplina:</label>
       <select name="disciplina_id" required>
         <option value="">Seleccionar disciplina</option>
         <?php while ($dis = $disciplinas->fetch_assoc()): ?>
@@ -58,19 +48,34 @@ $clientes = $conexion->query("SELECT id, nombre, apellido FROM clientes");
         <?php endwhile; ?>
       </select>
 
-      <label>Profesor:</label>
+      <label for="profesor_id">Profesor (opcional):</label>
       <select name="profesor_id">
-        <option value="">(Opcional) Seleccionar profesor</option>
+        <option value="">Seleccionar profesor</option>
         <?php while ($profe = $profesores->fetch_assoc()): ?>
           <option value="<?= $profe['id'] ?>"><?= $profe['apellido'] ?> <?= $profe['nombre'] ?></option>
         <?php endwhile; ?>
       </select>
 
-      <label>Fecha de Inicio:</label>
+      <label for="fecha_inicio">Fecha de Inicio:</label>
       <input type="date" name="fecha_inicio" value="<?= date('Y-m-d') ?>">
 
-      <button type="submit">Guardar Membresía</button>
+      <button type="submit" style="background-color:gold; color:#000; font-weight:bold;">Guardar Membresía</button>
     </form>
   </div>
+
+  <script>
+    document.getElementById("dni_buscar").addEventListener("input", function() {
+      let dni = this.value;
+      if (dni.length >= 3) {
+        fetch("buscar_cliente.php?dni=" + dni)
+          .then(response => response.text())
+          .then(data => {
+            document.getElementById("resultado_cliente").innerHTML = data;
+          });
+      } else {
+        document.getElementById("resultado_cliente").innerHTML = "";
+      }
+    });
+  </script>
 </body>
 </html>
