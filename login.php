@@ -1,103 +1,55 @@
 <?php
-if (session_status() === PHP_SESSION_NONE) {
-    session_start();
-}
-include "conexion.php";
+session_start();
+include 'conexion.php';
 
-if ($_SERVER["REQUEST_METHOD"] === "POST") {
-    $usuario = $_POST["usuario"] ?? '';
-    $contrasena = $_POST["contrasena"] ?? '';
+if ($_SERVER["REQUEST_METHOD"] == "POST") {
+    $usuario = trim($_POST["usuario"]);
+    $clave = trim($_POST["clave"]);
 
-    if (empty($usuario) || empty($contrasena)) {
-        header("Location: login.php?error=1");
-        exit();
-    }
-
-    $consulta = "SELECT * FROM usuarios WHERE nombre_usuario = ?";
-    $stmt = $conexion->prepare($consulta);
+    $stmt = $conexion->prepare("SELECT id, usuario, contrasena, rol, debe_cambiar_contrasena FROM usuarios WHERE usuario = ?");
     $stmt->bind_param("s", $usuario);
     $stmt->execute();
     $resultado = $stmt->get_result();
 
-    if ($resultado->num_rows === 1) {
+    if ($resultado->num_rows == 1) {
         $row = $resultado->fetch_assoc();
 
-        // Verificación de contraseña (soporte para hash o texto plano)
-        if (
-            $contrasena === $row['contrasena'] || 
-            password_verify($contrasena, $row['contrasena'])
-        ) {
-            $_SESSION['usuario'] = $row['nombre_usuario'];
-            $_SESSION['rol'] = $row['rol'];
-            $_SESSION['id_gimnasio'] = $row['id_gimnasio'];
-            header("Location: index.php");
-            exit();
-        } else {
-            header("Location: login.php?error=2"); // Contraseña incorrecta
-            exit();
+        if (password_verify($clave, $row["contrasena"])) {
+            $_SESSION["usuario_id"] = $row["id"];
+            $_SESSION["usuario"] = $row["usuario"];
+            $_SESSION["rol"] = $row["rol"];
+
+            if ($row["debe_cambiar_contrasena"]) {
+                header("Location: cambiar_contrasena.php");
+            } else {
+                header("Location: index.php");
+            }
+            exit;
         }
-    } else {
-        header("Location: login.php?error=3"); // Usuario no encontrado
-        exit();
     }
+    $error = "Usuario o contraseña incorrectos";
 }
 ?>
 <!DOCTYPE html>
 <html lang="es">
 <head>
-    <meta charset="UTF-8">
-    <title>Ingreso - Multi Gimnasio</title>
-    <style>
-        body {
-            background-color: #111;
-            color: #f1f1f1;
-            font-family: Arial, sans-serif;
-            text-align: center;
-            margin-top: 100px;
-        }
-        .login-box {
-            background: #222;
-            padding: 30px;
-            border-radius: 10px;
-            display: inline-block;
-            box-shadow: 0 0 15px #000;
-        }
-        input {
-            width: 250px;
-            padding: 10px;
-            margin: 10px;
-            font-size: 16px;
-            border: none;
-            border-radius: 5px;
-        }
-        button {
-            background-color: gold;
-            border: none;
-            padding: 10px 20px;
-            font-size: 16px;
-            border-radius: 5px;
-            cursor: pointer;
-        }
-        .error {
-            color: red;
-            font-weight: bold;
-            margin-bottom: 10px;
-        }
-    </style>
+  <meta charset="UTF-8">
+  <title>Login - Fight Academy</title>
+  <style>
+    body { background-color: #111; color: white; font-family: Arial; text-align: center; padding-top: 100px; }
+    form { background: #222; padding: 20px; display: inline-block; border-radius: 10px; }
+    input { display: block; margin: 10px auto; padding: 10px; background: #333; color: white; border: none; border-radius: 5px; width: 200px; }
+    button { padding: 10px 20px; background: gold; border: none; font-weight: bold; border-radius: 5px; }
+    h2 { color: gold; }
+  </style>
 </head>
 <body>
-    <div class="login-box">
-        <h2>Ingreso al sistema</h2>
-        <?php if (isset($_GET["error"])) {
-            if ($_GET["error"] == 1) echo "<p class='error'>Complete todos los campos.</p>";
-            if ($_GET["error"] == 2) echo "<p class='error'>Contraseña incorrecta.</p>";
-            if ($_GET["error"] == 3) echo "<p class='error'>Usuario no encontrado.</p>";
-        } ?>
-        <form method="post" action="login.php">
-            <input type="text" name="usuario" placeholder="Usuario" required><br>
-            <input type="password" name="contrasena" placeholder="Contraseña" required><br>
-            <button type="submit">Ingresar</button>
-        </form>
-    </div>
+  <h2>Login - Fight Academy</h2>
+  <?php if (!empty($error)) echo "<p style='color:red;'>$error</p>"; ?>
+  <form method="post">
+    <input type="text" name="usuario" placeholder="Usuario" required>
+    <input type="password" name="clave" placeholder="Contraseña" required>
+    <button type="submit">Ingresar</button>
+  </form>
 </body>
 </html>
