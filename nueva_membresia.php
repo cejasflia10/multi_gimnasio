@@ -147,6 +147,7 @@ async function buscarCliente(valor) {
 </select>
 <label>Asignar profesor (opcional):</label>
 <select name="profesor_id">
+<option value="">(Opcional) Seleccionar profesor</option>
 <option value="">-- Sin profesor --</option>
 <?php while ($row = $profesores->fetch_assoc()): ?>
         <option value="<?= $row['id'] ?>"><?= $row['apellido'] ?>, <?= $row['nombre'] ?></option>
