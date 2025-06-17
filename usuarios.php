@@ -71,7 +71,7 @@ $resultado = $conexion->query($consulta);
   <tbody>
     <?php while ($usuario = $resultado->fetch_assoc()): ?>
       <tr>
-        <td><?= $usuario['nombre_usuario'] ?></td>
+        <td><?= $usuario['usuario'] ?></td>
         <td><?= $usuario['rol'] ?></td>
         <td><?= $usuario['nombre_gimnasio'] ?? 'Sin asignar' ?></td>
         <td>
