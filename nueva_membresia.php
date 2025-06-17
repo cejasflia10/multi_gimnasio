@@ -15,6 +15,12 @@ $profesores = $conexion->query("SELECT id, apellido, nombre FROM profesores ORDE
   <title>Nueva Membresía</title>
   <style>
     body {
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  min-height: 100vh;
+  margin: 0;
+
       background-color: #111;
       color: #ffc107;
       font-family: Arial, sans-serif;
@@ -82,6 +88,7 @@ $profesores = $conexion->query("SELECT id, apellido, nombre FROM profesores ORDE
   </script>
 </head>
 <body>
+  <div style="width: 100%; max-width: 800px;">
   <h2>Registrar Nueva Membresía</h2>
 
   <form action="guardar_membresia.php" method="POST">
@@ -138,5 +145,6 @@ $profesores = $conexion->query("SELECT id, apellido, nombre FROM profesores ORDE
 
     <button type="submit">Registrar Membresía</button>
   </form>
+  </div>
 </body>
 </html>
