@@ -2,77 +2,90 @@
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
-
-if (!isset($_SESSION['perm_admin']) || $_SESSION['perm_admin'] != 1) {
+if (!isset($_SESSION['gimnasio_id'])) {
     die("Acceso denegado.");
 }
-
 include 'conexion.php';
-
-if ($_SERVER["REQUEST_METHOD"] == "POST") {
-    $usuario = trim($_POST["usuario"]);
-    $clave = password_hash(trim($_POST["clave"]), PASSWORD_BCRYPT);
-    $rol = $_POST["rol"];
-    $gimnasio_id = $_SESSION["gimnasio_id"];
-
-    $stmt = $conexion->prepare("INSERT INTO usuarios (nombre_usuario, contrasena, rol, id_gimnasio) VALUES (?, ?, ?, ?)");
-    $stmt->bind_param("sssi", $usuario, $clave, $rol, $gimnasio_id);
-
-    if ($stmt->execute()) {
-        echo "<script>alert('Usuario creado exitosamente'); window.location.href='usuarios_gimnasio.php';</script>";
-    } else {
-        echo "Error: " . $stmt->error;
-    }
-
-    $stmt->close();
-}
 ?>
 
 <!DOCTYPE html>
 <html lang="es">
 <head>
-    <meta charset="UTF-8">
-    <title>Agregar Usuario</title>
-    <style>
-        body {
-            background-color: #111;
-            color: #ffc107;
-            font-family: Arial;
-            text-align: center;
-            padding-top: 60px;
-        }
-        input, select {
-            margin: 10px;
-            padding: 10px;
-            width: 250px;
-            background-color: #222;
-            border: 1px solid #ffc107;
-            color: #fff;
-        }
-        button {
-            padding: 10px 20px;
-            background-color: #ffc107;
-            color: #000;
-            border: none;
-            cursor: pointer;
-        }
-        button:hover {
-            background-color: #e0a800;
-        }
-    </style>
+  <meta charset="UTF-8">
+  <title>Agregar Usuario</title>
+  <style>
+    body {
+      background-color: #111;
+      color: #f1f1f1;
+      font-family: Arial, sans-serif;
+      padding: 20px;
+    }
+    h2 {
+      color: gold;
+    }
+    form {
+      background-color: #222;
+      padding: 20px;
+      border-radius: 10px;
+      max-width: 500px;
+    }
+    label {
+      display: block;
+      margin-top: 15px;
+      color: #f1f1f1;
+    }
+    input, select {
+      width: 100%;
+      padding: 10px;
+      margin-top: 5px;
+      background-color: #333;
+      border: none;
+      color: white;
+      border-radius: 5px;
+    }
+    button {
+      margin-top: 20px;
+      padding: 10px 20px;
+      background-color: gold;
+      color: black;
+      font-weight: bold;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+    }
+    a {
+      color: #ccc;
+      display: inline-block;
+      margin-top: 10px;
+    }
+  </style>
 </head>
 <body>
-    <h2>Agregar Nuevo Usuario</h2>
-    <form method="POST">
-        <input type="text" name="usuario" placeholder="Nombre de usuario" required><br>
-        <input type="password" name="clave" placeholder="Contraseña" required><br>
-        <select name="rol" required>
-            <option value="">Seleccionar rol</option>
-            <option value="admin">Administrador</option>
-            <option value="profesor">Profesor</option>
-            <option value="instructor">Instructor</option>
-        </select><br>
-        <button type="submit">Crear Usuario</button>
-    </form>
+  <h2>Agregar Nuevo Usuario</h2>
+  <form action="guardar_usuario.php" method="post">
+    <label for="usuario">Nombre de Usuario:</label>
+    <input type="text" name="usuario" id="usuario" required>
+
+    <label for="clave">Contraseña:</label>
+    <input type="password" name="clave" id="clave" required>
+
+    <label for="rol">Rol:</label>
+    <select name="rol" id="rol" required>
+      <option value="admin">Administrador</option>
+      <option value="profesor">Profesor</option>
+      <option value="instructor">Instructor</option>
+    </select>
+
+    <label>Permisos del Usuario:</label>
+    <label><input type="checkbox" name="permiso_clientes" value="1"> Ver Clientes</label>
+    <label><input type="checkbox" name="permiso_membresias" value="1"> Ver Membresías</label>
+    <label><input type="checkbox" name="permiso_ventas" value="1"> Ver Ventas</label>
+    <label><input type="checkbox" name="permiso_profesores" value="1"> Ver Profesores</label>
+    <label><input type="checkbox" name="permiso_panel" value="1"> Ver Panel</label>
+    <label><input type="checkbox" name="permiso_asistencias" value="1"> Ver Asistencias</label>
+
+    <button type="submit">Guardar Usuario</button>
+    <a href="usuarios.php">← Volver al listado</a>
+  </form>
 </body>
 </html>
