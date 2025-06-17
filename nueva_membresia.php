@@ -1,40 +1,57 @@
 <?php
 include 'conexion.php';
+include 'menu.php';
 
-// Obtener disciplinas
+// Obtener planes y adicionales
+$planes = $conexion->query("SELECT id, nombre, precio FROM planes");
+$adicionales = $conexion->query("SELECT id, nombre, precio FROM planes_adicionales");
 $disciplinas = $conexion->query("SELECT id, nombre FROM disciplinas ORDER BY nombre");
-
-// Obtener profesores
 $profesores = $conexion->query("SELECT id, apellido, nombre FROM profesores ORDER BY apellido");
 ?>
 <!DOCTYPE html>
 <html lang="es">
 <head>
   <meta charset="UTF-8">
-  <title>Registrar Nueva Membresía</title>
+  <title>Nueva Membresía</title>
   <style>
     body {
       background-color: #111;
       color: #ffc107;
       font-family: Arial, sans-serif;
-      padding: 30px;
+      margin-left: 220px;
+      padding: 20px;
     }
-    label, select, input {
+    h2 {
+      color: #ffc107;
+      margin-bottom: 20px;
+    }
+    label {
       display: block;
-      margin: 10px 0;
+      margin-top: 10px;
+      font-weight: bold;
     }
     input, select {
-      padding: 8px;
-      width: 100%;
+      width: 100%%;
       max-width: 400px;
-      background: #222;
+      padding: 8px;
+      margin-top: 5px;
+      background-color: #222;
       color: #ffc107;
       border: 1px solid #ffc107;
     }
-    .cliente-info {
+    .resumen-cliente {
       margin-top: 10px;
       padding: 10px;
       border: 1px dashed #ffc107;
+    }
+    button {
+      margin-top: 20px;
+      background-color: #ffc107;
+      color: #111;
+      border: none;
+      padding: 10px 20px;
+      cursor: pointer;
+      font-weight: bold;
     }
   </style>
   <script>
@@ -43,15 +60,24 @@ $profesores = $conexion->query("SELECT id, apellido, nombre FROM profesores ORDE
       const res = await fetch('obtener_cliente_id.php?q=' + encodeURIComponent(valor));
       const data = await res.json();
       if (data && data.id) {
-        document.getElementById('cliente_info').innerHTML =
+        document.getElementById('resumen_cliente').innerHTML =
           `<strong>Cliente:</strong> ${data.apellido}, ${data.nombre}<br>
            <strong>DNI:</strong> ${data.dni}<br>
            <strong>Disciplina:</strong> ${data.disciplina ?? 'No asignada'}`;
         document.getElementById('cliente_id').value = data.id;
       } else {
-        document.getElementById('cliente_info').innerHTML = 'Cliente no encontrado';
+        document.getElementById('resumen_cliente').innerHTML = 'Cliente no encontrado';
         document.getElementById('cliente_id').value = '';
       }
+    }
+
+    function actualizarTotal() {
+      const plan = document.querySelector('#plan');
+      const adicional = document.querySelector('#adicional');
+      let total = 0;
+      if (plan && plan.selectedOptions[0]) total += parseFloat(plan.selectedOptions[0].dataset.precio || 0);
+      if (adicional && adicional.selectedOptions[0]) total += parseFloat(adicional.selectedOptions[0].dataset.precio || 0);
+      document.getElementById('total').textContent = '$' + total;
     }
   </script>
 </head>
@@ -59,29 +85,56 @@ $profesores = $conexion->query("SELECT id, apellido, nombre FROM profesores ORDE
   <h2>Registrar Nueva Membresía</h2>
 
   <form action="guardar_membresia.php" method="POST">
-    <label for="buscar">Buscar cliente (DNI / Apellido / RFID):</label>
-    <input type="text" id="buscar" onkeyup="buscarCliente(this.value)" autocomplete="off">
-    <div id="cliente_info" class="cliente-info"></div>
+    <label>Buscar cliente (DNI / Apellido / RFID):</label>
+    <input type="text" onkeyup="buscarCliente(this.value)">
+    <div id="resumen_cliente" class="resumen-cliente"></div>
     <input type="hidden" name="cliente_id" id="cliente_id">
 
-    <label for="disciplina">Asignar disciplina (si no está cargada):</label>
-    <select name="disciplina_id" id="disciplina">
+    <label>Asignar disciplina (si no está cargada):</label>
+    <select name="disciplina_id">
       <option value="">-- Seleccionar disciplina --</option>
       <?php while ($row = $disciplinas->fetch_assoc()): ?>
         <option value="<?= $row['id'] ?>"><?= $row['nombre'] ?></option>
       <?php endwhile; ?>
     </select>
 
-    <label for="profesor">Asignar profesor (opcional):</label>
-    <select name="profesor_id" id="profesor">
+    <label>Asignar profesor (opcional):</label>
+    <select name="profesor_id">
       <option value="">-- Sin profesor --</option>
       <?php while ($row = $profesores->fetch_assoc()): ?>
         <option value="<?= $row['id'] ?>"><?= $row['apellido'] ?>, <?= $row['nombre'] ?></option>
       <?php endwhile; ?>
     </select>
 
-    <label for="fecha_inicio">Fecha de inicio:</label>
+    <label>Plan:</label>
+    <select name="plan_id" id="plan" onchange="actualizarTotal()">
+      <option value="">-- Seleccionar plan --</option>
+      <?php while ($row = $planes->fetch_assoc()): ?>
+        <option value="<?= $row['id'] ?>" data-precio="<?= $row['precio'] ?>"><?= $row['nombre'] ?> ($<?= $row['precio'] ?>)</option>
+      <?php endwhile; ?>
+    </select>
+
+    <label>Adicionales:</label>
+    <select name="adicional_id" id="adicional" onchange="actualizarTotal()">
+      <option value="">-- Ninguno --</option>
+      <?php while ($row = $adicionales->fetch_assoc()): ?>
+        <option value="<?= $row['id'] ?>" data-precio="<?= $row['precio'] ?>"><?= $row['nombre'] ?> ($<?= $row['precio'] ?>)</option>
+      <?php endwhile; ?>
+    </select>
+
+    <label>Fecha de inicio:</label>
     <input type="date" name="fecha_inicio" required>
+
+    <label>Método de pago:</label>
+    <select name="metodo_pago" required>
+      <option value="Efectivo">Efectivo</option>
+      <option value="Transferencia">Transferencia</option>
+      <option value="Débito">Débito</option>
+      <option value="Crédito">Crédito</option>
+      <option value="Cuenta Corriente">Cuenta Corriente</option>
+    </select>
+
+    <p><strong>Total:</strong> <span id="total">$0</span></p>
 
     <button type="submit">Registrar Membresía</button>
   </form>
