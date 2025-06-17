@@ -31,7 +31,7 @@ include 'menu.php';
                     echo "<td>" . htmlspecialchars($fila['email']) . "</td>";
                     echo "<td>
                             <a href='editar_usuario.php?id=" . $fila['id'] . "' class='btn btn-warning btn-sm'>Editar</a>
-                            <a href='eliminar_usuario.php?id=" . $fila['id'] . "' class='btn btn-danger btn-sm' onclick="return confirm('¿Estás seguro de eliminar este usuario?')">Eliminar</a>
+                            <a href='eliminar_usuario.php?id=" . $fila['id'] . "' class='btn btn-danger btn-sm' onclick=\"return confirm('¿Estás seguro de eliminar este usuario?')\">Eliminar</a>
                           </td>";
                     echo "</tr>";
                 }
