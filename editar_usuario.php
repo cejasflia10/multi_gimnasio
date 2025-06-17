@@ -15,14 +15,14 @@ $usuario = $resultado->fetch_assoc();
 $usuario_nombre = $usuario['usuario'] ?? '';
 $usuario_email = $usuario['email'] ?? '';
 $usuario_rol = $usuario['rol'] ?? '';
-$usuario_gimnasio_id = $usuario['gimnasio_id'] ?? 0;
+$usuario_gimnasio_id = $usuario['id_gimnasio'] ?? 0;
 
 $permiso_clientes = $usuario['permiso_clientes'] ?? 0;
 $permiso_membresias = $usuario['permiso_membresias'] ?? 0;
-$permiso_ventas = $usuario['permiso_ventas'] ?? 0;
-$permiso_profesores = $usuario['permiso_profesores'] ?? 0;
-$permiso_panel = $usuario['permiso_panel'] ?? 0;
-$permiso_asistencias = $usuario['permiso_asistencias'] ?? 0;
+$permiso_profesores = $usuario['perm_profesores'] ?? 0;
+$permiso_ventas = $usuario['perm_ventas'] ?? 0;
+$permiso_panel = $usuario['puede_ver_panel'] ?? 0;
+$permiso_asistencias = $usuario['puede_ver_asistencias'] ?? 0;
 
 if ($_SERVER["REQUEST_METHOD"] === "POST") {
     $nombre = $_POST["usuario"];
@@ -32,13 +32,13 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
 
     $permiso_clientes = isset($_POST['permiso_clientes']) ? 1 : 0;
     $permiso_membresias = isset($_POST['permiso_membresias']) ? 1 : 0;
-    $permiso_ventas = isset($_POST['permiso_ventas']) ? 1 : 0;
     $permiso_profesores = isset($_POST['permiso_profesores']) ? 1 : 0;
+    $permiso_ventas = isset($_POST['permiso_ventas']) ? 1 : 0;
     $permiso_panel = isset($_POST['permiso_panel']) ? 1 : 0;
     $permiso_asistencias = isset($_POST['permiso_asistencias']) ? 1 : 0;
 
-    $stmt = $conexion->prepare("UPDATE usuarios SET usuario=?, email=?, rol=?, gimnasio_id=?, permiso_clientes=?, permiso_membresias=?, permiso_ventas=?, permiso_profesores=?, permiso_panel=?, permiso_asistencias=? WHERE id=?");
-    $stmt->bind_param("sssiiiiiiii", $nombre, $email, $rol, $gimnasio_id, $permiso_clientes, $permiso_membresias, $permiso_ventas, $permiso_profesores, $permiso_panel, $permiso_asistencias, $id);
+    $stmt = $conexion->prepare("UPDATE usuarios SET usuario=?, email=?, rol=?, id_gimnasio=?, permiso_clientes=?, permiso_membresias=?, perm_profesores=?, perm_ventas=?, puede_ver_panel=?, puede_ver_asistencias=? WHERE id=?");
+    $stmt->bind_param("sssiiiiiiii", $nombre, $email, $rol, $gimnasio_id, $permiso_clientes, $permiso_membresias, $permiso_profesores, $permiso_ventas, $permiso_panel, $permiso_asistencias, $id);
     $stmt->execute();
 
     header("Location: usuarios.php");
