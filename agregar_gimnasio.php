@@ -1,98 +1,91 @@
-<?php
-if (session_status() === PHP_SESSION_NONE) {
-    session_start();
-}
-include 'conexion.php';
-?>
-
+<?php include 'menu.php'; ?>
 <!DOCTYPE html>
 <html lang="es">
 <head>
-    <meta charset="UTF-8">
-    <title>Agregar Gimnasio</title>
-    <style>
-        body {
-            background-color: #111;
-            color: #ffc107;
-            font-family: Arial, sans-serif;
-            text-align: center;
-            margin: 0;
-            padding: 50px;
-        }
-
-        form {
-            background-color: #222;
-            padding: 30px;
-            border-radius: 10px;
-            display: inline-block;
-            text-align: left;
-            color: #fff;
-        }
-
-        input, button {
-            width: 100%;
-            padding: 10px;
-            margin-top: 10px;
-            background-color: #333;
-            color: #fff;
-            border: 1px solid #555;
-            border-radius: 5px;
-        }
-
-        button {
-            background-color: #ffc107;
-            color: #111;
-            font-weight: bold;
-        }
-
-        .mensaje {
-            margin-top: 20px;
-            font-weight: bold;
-            color: #0f0;
-        }
-
-        .error {
-            color: red;
-        }
-    </style>
+  <meta charset="UTF-8">
+  <title>Agregar Nuevo Gimnasio</title>
+  <style>
+    body {
+      background-color: #111;
+      color: #ffc107;
+      font-family: 'Segoe UI', sans-serif;
+      text-align: center;
+      padding: 50px;
+    }
+    form {
+      background-color: #222;
+      padding: 30px;
+      border-radius: 10px;
+      display: inline-block;
+      max-width: 500px;
+      width: 100%;
+    }
+    input, select {
+      width: 100%;
+      padding: 10px;
+      margin: 10px 0;
+      border: none;
+      border-radius: 5px;
+      background-color: #333;
+      color: #fff;
+    }
+    label {
+      display: block;
+      text-align: left;
+      margin-top: 15px;
+      font-weight: bold;
+    }
+    button {
+      background-color: #ffc107;
+      color: black;
+      border: none;
+      padding: 12px 20px;
+      font-weight: bold;
+      margin-top: 15px;
+      cursor: pointer;
+      width: 100%;
+    }
+    button:hover {
+      background-color: #ffb100;
+    }
+  </style>
 </head>
 <body>
-    <h1>Agregar Nuevo Gimnasio</h1>
 
-    <form method="POST" action="">
-        <label>Nombre del gimnasio:</label>
-        <input type="text" name="nombre" required>
+<h2>Agregar Nuevo Gimnasio</h2>
 
-        <label>Dirección:</label>
-        <input type="text" name="direccion" required>
+<form action="guardar_gimnasio.php" method="POST" enctype="multipart/form-data">
+  <label for="nombre">Nombre del gimnasio:</label>
+  <input type="text" name="nombre" required>
 
-        <label>Email:</label>
-        <input type="email" name="email">
+  <label for="logo">Logo del gimnasio:</label>
+  <input type="file" name="logo" accept="image/*">
 
-        <button type="submit" name="guardar">Guardar Gimnasio</button>
-    </form>
+  <label for="direccion">Dirección:</label>
+  <input type="text" name="direccion" required>
 
-    <?php
-    if (isset($_POST['guardar'])) {
-        $nombre = trim($_POST['nombre']);
-        $direccion = trim($_POST['direccion']);
-        $email = trim($_POST['email']);
+  <label for="telefono">Teléfono:</label>
+  <input type="text" name="telefono" required>
 
-        if ($nombre != '' && $direccion != '') {
-            $stmt = $conexion->prepare("INSERT INTO gimnasios (nombre, direccion, email) VALUES (?, ?, ?)");
-            $stmt->bind_param("sss", $nombre, $direccion, $email);
+  <label for="email">Email:</label>
+  <input type="email" name="email" required>
 
-            if ($stmt->execute()) {
-                echo "<div class='mensaje'>✅ Gimnasio registrado correctamente.</div>";
-            } else {
-                echo "<div class='error'>❌ Error al registrar gimnasio: " . $stmt->error . "</div>";
-            }
+  <label for="plan">Plan de gimnasio:</label>
+  <select name="plan" required>
+    <option value="">-- Seleccionar plan --</option>
+    <option value="basico">Básico (30 días)</option>
+    <option value="intermedio">Intermedio (60 días)</option>
+    <option value="avanzado">Avanzado (90 días)</option>
+  </select>
 
-            $stmt->close();
-        } else {
-            echo "<div class='error'>⚠️ Todos los campos son obligatorios.</div>";
-        }
-    }
-    ?>
+  <label for="monto">Monto a pagar:</label>
+  <input type="number" name="monto" min="0" step="0.01" required>
+
+  <label for="vencimiento">Fecha de vencimiento:</label>
+  <input type="date" name="vencimiento" required>
+
+  <button type="submit">Guardar Gimnasio</button>
+</form>
+
 </body>
 </html>
