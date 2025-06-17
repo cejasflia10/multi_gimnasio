@@ -1,16 +1,9 @@
-<?php include 'verificar_sesion.php'; ?>
 <?php
 include 'conexion.php';
-
-$id = $_GET['id'] ?? null;
-if (!$id) {
-    echo "ID no válido";
-    exit();
+if (isset($_GET['id'])) {
+    $id = $_GET['id'];
+    $conexion->query("DELETE FROM gimnasios WHERE id = $id");
 }
-
-// Eliminar registro
-$conexion->query("DELETE FROM gimnasios WHERE id = $id");
-
 header("Location: gimnasios.php");
-exit();
+exit;
 ?>
