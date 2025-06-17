@@ -19,9 +19,13 @@ $clientes = [];
 while ($fila = $resultado->fetch_assoc()) {
     $clientes[] = [
         "id" => $fila["id"],
-        "text" => "{$fila['apellido']} {$fila['nombre']} - DNI: {$fila['dni']} - RFID: {$fila['rfid_uid']}"
+        "apellido" => $fila["apellido"],
+        "nombre" => $fila["nombre"],
+        "dni" => $fila["dni"],
+        "rfid" => $fila["rfid_uid"]
     ];
 }
 
-echo json_encode(["results" => $clientes]);
+header('Content-Type: application/json');
+echo json_encode($clientes);
 ?>
