@@ -1,59 +1,38 @@
 <?php
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+if (!isset($_SESSION['gimnasio_id'])) {
+    die("Acceso denegado.");
+}
 include 'conexion.php';
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $nombre_usuario = $_POST['nombre_usuario'];
-    $rol = $_POST['rol'];
-    $id_gimnasio = $_POST['id_gimnasio'];
-    $contrasena = $_POST['contrasena'];
-    $confirmar = $_POST['confirmar_contrasena'];
+if ($_SERVER["REQUEST_METHOD"] == "POST") {
+    $usuario = trim($_POST["usuario"]);
+    $clave = password_hash(trim($_POST["clave"]), PASSWORD_BCRYPT);
+    $rol = $_POST["rol"];
+    $gimnasio_id = $_SESSION["gimnasio_id"];
 
-    // Validar contraseñas
-    if ($contrasena !== $confirmar) {
-        echo "⚠️ Error: Las contraseñas no coinciden.";
-        exit();
-    }
+    // Verificar si ya existe
+    $verifica = $conexion->prepare("SELECT id FROM usuarios WHERE usuario = ?");
+    $verifica->bind_param("s", $usuario);
+    $verifica->execute();
+    $verifica->store_result();
 
-    // Validar existencia del gimnasio
-    $verificar = $conexion->prepare("SELECT id FROM gimnasios WHERE id = ?");
-    $verificar->bind_param("i", $id_gimnasio);
-    $verificar->execute();
-    $resultado = $verificar->get_result();
-
-    if ($resultado->num_rows === 0) {
-        echo "⚠️ Error: El gimnasio seleccionado no existe.";
-        exit();
-    }
-
-    // Generar hash seguro
-    $contrasena_hash = password_hash($contrasena, PASSWORD_DEFAULT);
-
-    // Permisos
-    $puede_ver_clientes     = isset($_POST['puede_ver_clientes']) ? 1 : 0;
-    $puede_ver_membresias   = isset($_POST['puede_ver_membresias']) ? 1 : 0;
-    $puede_ver_profesores   = isset($_POST['puede_ver_profesores']) ? 1 : 0;
-    $puede_ver_ventas       = isset($_POST['puede_ver_ventas']) ? 1 : 0;
-    $puede_ver_asistencias  = isset($_POST['puede_ver_asistencias']) ? 1 : 0;
-    $puede_ver_panel        = isset($_POST['puede_ver_panel']) ? 1 : 0;
-    $puede_ver_admin        = isset($_POST['puede_ver_admin']) ? 1 : 0;
-
-    // Insertar usuario
-    $sql = "INSERT INTO usuarios (
-                nombre_usuario, contrasena, rol, id_gimnasio,
-                puede_ver_clientes, puede_ver_membresias, puede_ver_profesores,
-                puede_ver_ventas, puede_ver_asistencias, puede_ver_panel, puede_ver_admin
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
-
-    $stmt = $conexion->prepare($sql);
-    $stmt->bind_param("sssiiiiiiii", $nombre_usuario, $contrasena_hash, $rol, $id_gimnasio,
-        $puede_ver_clientes, $puede_ver_membresias, $puede_ver_profesores,
-        $puede_ver_ventas, $puede_ver_asistencias, $puede_ver_panel, $puede_ver_admin);
-
-    if ($stmt->execute()) {
-        header("Location: usuarios.php?mensaje=creado");
-        exit();
+    if ($verifica->num_rows > 0) {
+        echo "<script>alert('El usuario ya existe'); window.location.href='usuarios.php';</script>";
     } else {
-        echo "❌ Error al guardar el usuario. Detalles: " . $stmt->error;
+        $stmt = $conexion->prepare("INSERT INTO usuarios (usuario, clave, rol, gimnasio_id) VALUES (?, ?, ?, ?)");
+        $stmt->bind_param("sssi", $usuario, $clave, $rol, $gimnasio_id);
+
+        if ($stmt->execute()) {
+            echo "<script>alert('Usuario creado exitosamente'); window.location.href='usuarios.php';</script>";
+        } else {
+            echo "Error: " . $stmt->error;
+        }
+
+        $stmt->close();
     }
+    $verifica->close();
 }
 ?>
