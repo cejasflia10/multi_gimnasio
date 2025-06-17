@@ -1,7 +1,7 @@
 <?php
 session_start();
 if (!isset($_SESSION['rol']) || $_SESSION['rol'] !== 'admin') {
-    die(".");
+    die("Acceso denegado.");
 }
 include 'conexion.php';
 
