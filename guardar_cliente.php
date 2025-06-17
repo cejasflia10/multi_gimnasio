@@ -10,18 +10,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $domicilio = $_POST['domicilio'];
     $telefono = $_POST['telefono'];
     $email = $_POST['email'];
-    $rfid_uid = $_POST['rfid_uid'];
+    $rfid = $_POST['rfid'];
     $fecha_vencimiento = $_POST['fecha_vencimiento'];
     $dias_disponibles = $_POST['dias_disponibles'];
     $gimnasio_id = $_SESSION['gimnasio_id'];
 
-    if (!$apellido || !$nombre || !$dni || !$rfid_uid) {
+    if (!$apellido || !$nombre || !$dni || !$rfid) {
         echo "Faltan datos obligatorios.";
         exit;
     }
 
-    $stmt = $conexion->prepare("INSERT INTO clientes (apellido, nombre, dni, fecha_nacimiento, domicilio, telefono, email, rfid_uid, fecha_vencimiento, dias_disponibles) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
-    $stmt->bind_param("sssssssssi", $apellido, $nombre, $dni, $fecha_nacimiento, $domicilio, $telefono, $email, $rfid_uid, $fecha_vencimiento, $dias_disponibles);
+    $stmt = $conexion->prepare("INSERT INTO clientes (apellido, nombre, dni, fecha_nacimiento, domicilio, telefono, email, rfid, fecha_vencimiento, dias_disponibles) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+    $stmt->bind_param("sssssssssi", $apellido, $nombre, $dni, $fecha_nacimiento, $domicilio, $telefono, $email, $rfid, $fecha_vencimiento, $dias_disponibles);
 
     if ($stmt->execute()) {
         $cliente_id = $stmt->insert_id;
