@@ -85,14 +85,7 @@
 
   <div class="section-title toggle" onclick="toggleMenu('clientes')">Clientes</div>
   <ul id="clientes" class="submenu">
-    <li><a href="agregar_cliente.php">➕ Agregar Cliente</a></li>
-    <li><a href="ver_clientes.php">👤 Ver Clientes</a></li>
-    <li><a href="disciplinas.php">🥋 Disciplinas</a></li>
-    <li><a href="exportar.php">📤 Exportar</a></li>
-  </ul>
-<div class="section-title toggle" onclick="toggleMenu('registros')">Registros Online</div>
-<ul id="registros" class="submenu">
-  <li><a href="registrar_cliente_online.php">📝 Registrar Cliente</a></li>
+    
 </ul>
 <!-- ... dentro del menú ya existente ... -->
 <li><a href="exportar_datos.php">📤 Exportar</a></li>
