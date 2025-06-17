@@ -1,39 +1,39 @@
+
 <?php
 include 'conexion.php';
 
-$cliente_id = $_POST['cliente_id'];
-$plan_id = $_POST['plan_id'];
-$adicional_id = $_POST['adicional_id'] ?? null;
-$fecha_inicio = $_POST['fecha_inicio'];
-$disciplina_id = $_POST['disciplina_id'] ?? null;
-$profesor_id = $_POST['profesor_id'] ?? null;
-$metodos = $_POST['metodo_pago'];
-$montos = $_POST['monto_pago'];
-$detalles = $_POST['detalle_otro'];
+if ($_SERVER["REQUEST_METHOD"] === "POST") {
+    $cliente_id = $_POST['cliente_id'] ?? null;
+    $plan_id = $_POST['plan_id'] ?? null;
+    $adicional_id = $_POST['adicional_id'] ?? null;
+    $disciplina_id = $_POST['disciplina_id'] ?? null;
+    $profesor_id = $_POST['profesor_id'] ?? null;
+    $fecha_inicio = $_POST['fecha_inicio'] ?? date('Y-m-d');
 
-// Validación
-if (!$cliente_id || !$plan_id || !$fecha_inicio || empty($metodos) || empty($montos)) {
-    die("Faltan datos obligatorios.");
+    // Compatibilidad con campos viejos y nuevos
+    $monto_efectivo = $_POST['monto_efectivo'] ?? ($_POST['metodo_pago'] === 'Efectivo' ? $_POST['monto_pago'] ?? 0 : 0);
+    $monto_transferencia = $_POST['monto_transferencia'] ?? ($_POST['metodo_pago'] === 'Transferencia' ? $_POST['monto_pago'] ?? 0 : 0);
+    $total = $_POST['total'] ?? $_POST['monto_pago'] ?? 0;
+
+    if (!$cliente_id || !$plan_id) {
+        echo json_encode(['success' => false, 'message' => 'Faltan datos obligatorios.']);
+        exit;
+    }
+
+    $stmt = $conexion->prepare("INSERT INTO membresias 
+        (cliente_id, plan_id, adicional_id, disciplina_id, profesor_id, fecha_inicio, monto_efectivo, monto_transferencia, total)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)");
+
+    $stmt->bind_param("iiiiissdd", $cliente_id, $plan_id, $adicional_id, $disciplina_id, $profesor_id, $fecha_inicio, $monto_efectivo, $monto_transferencia, $total);
+
+    if ($stmt->execute()) {
+        echo json_encode(['success' => true, 'message' => 'Membresía guardada correctamente.']);
+    } else {
+        echo json_encode(['success' => false, 'message' => 'Error al guardar: ' . $stmt->error]);
+    }
+
+    $stmt->close();
+} else {
+    echo json_encode(['success' => false, 'message' => 'Acceso denegado.']);
 }
-
-// Insertar membresía
-$stmt = $conexion->prepare("INSERT INTO membresias (cliente_id, plan_id, adicional_id, fecha_inicio, disciplina_id, profesor_id)
-                            VALUES (?, ?, ?, ?, ?, ?)");
-$stmt->bind_param("iiisii", $cliente_id, $plan_id, $adicional_id, $fecha_inicio, $disciplina_id, $profesor_id);
-$stmt->execute();
-$id_membresia = $conexion->insert_id;
-
-// Insertar pagos
-for ($i = 0; $i < count($metodos); $i++) {
-    $metodo = $metodos[$i];
-    $monto = floatval($montos[$i]);
-    $detalle = $metodo === "Otro" ? trim($detalles[$i]) : $metodo;
-
-    $stmt_pago = $conexion->prepare("INSERT INTO pagos_membresia (membresia_id, metodo_pago, monto)
-                                     VALUES (?, ?, ?)");
-    $stmt_pago->bind_param("isd", $id_membresia, $detalle, $monto);
-    $stmt_pago->execute();
-}
-
-echo "Membresía y pagos registrados correctamente.";
 ?>
