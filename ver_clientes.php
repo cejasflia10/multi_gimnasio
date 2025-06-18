@@ -1,119 +1,124 @@
 <?php
+session_start();
+if (!isset($_SESSION["gimnasio_id"])) {
+    die("⚠️ No has iniciado sesión correctamente.");
+}
+$gimnasio_id = $_SESSION["gimnasio_id"];
 include 'conexion.php';
-include 'menu.php';
-
-$consulta = "SELECT * FROM clientes";
-$resultado = mysqli_query($conexion, $consulta);
 ?>
 
 <!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>Clientes registrados</title>
+    <title>Clientes del Gimnasio</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
     <style>
         body {
+            font-family: Arial, sans-serif;
             background-color: #111;
             color: #f1c40f;
-            font-family: Arial, sans-serif;
             margin: 0;
             padding: 0;
         }
-        .contenido {
-            margin-left: 240px;
+        .container {
             padding: 20px;
         }
         h2 {
+            text-align: center;
             color: #f1c40f;
         }
-        input[type="text"] {
-            width: 300px;
-            padding: 10px;
-            margin-bottom: 15px;
-            border: 1px solid #f1c40f;
-            background-color: #1a1a1a;
-            color: #fff;
+        .btn {
+            background-color: #f1c40f;
+            color: black;
+            padding: 10px 15px;
+            margin: 5px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            text-decoration: none;
+            font-weight: bold;
+        }
+        .btn:hover {
+            background-color: #ffd700;
+        }
+        .table-responsive {
+            overflow-x: auto;
         }
         table {
             width: 100%;
             border-collapse: collapse;
-            background-color: #1a1a1a;
-            color: #fff;
+            margin-top: 15px;
+            min-width: 600px;
         }
         th, td {
-            padding: 10px;
-            text-align: left;
-            border-bottom: 1px solid #f1c40f;
+            border: 1px solid #f1c40f;
+            padding: 8px;
+            text-align: center;
         }
         th {
             background-color: #222;
+        }
+        a.action {
             color: #f1c40f;
-        }
-        a.btn-editar {
-            background-color: #f1c40f;
-            color: #111;
-            padding: 5px 10px;
-            border-radius: 4px;
             text-decoration: none;
-            font-weight: bold;
+            margin: 0 5px;
         }
-        a.btn-editar:hover {
-            background-color: #d4ac0d;
+        .top-bar {
+            display: flex;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 10px;
         }
     </style>
-    <script>
-        function filtrarClientes() {
-            let input = document.getElementById("buscador").value.toLowerCase();
-            let filas = document.querySelectorAll("#tabla-clientes tbody tr");
-            filas.forEach(fila => {
-                let texto = fila.textContent.toLowerCase();
-                fila.style.display = texto.includes(input) ? "" : "none";
-            });
-        }
-    </script>
 </head>
 <body>
-<div class="contenido">
-    <h2>Clientes registrados</h2>
-    <input type="text" id="buscador" onkeyup="filtrarClientes()" placeholder="Buscar por nombre, apellido, DNI, email...">
+    <div class="container">
+        <div class="top-bar">
+            <a href="agregar_cliente.php" class="btn">➕ Agregar Cliente</a>
+            <a href="index.php" class="btn">🏠 Volver al Panel</a>
+        </div>
+        <h2>Clientes del Gimnasio</h2>
+        <div class="table-responsive">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Apellido</th>
+                        <th>Nombre</th>
+                        <th>DNI</th>
+                        <th>Teléfono</th>
+                        <th>Email</th>
+                        <th>Disciplina</th>
+                        <th>Vencimiento</th>
+                        <th>Acciones</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php
+                    $stmt = $conexion->prepare("SELECT apellido, nombre, dni, telefono, email, disciplina, fecha_vencimiento, id FROM clientes WHERE gimnasio_id = ?");
+                    $stmt->bind_param("i", $gimnasio_id);
+                    $stmt->execute();
+                    $resultado = $stmt->get_result();
 
-    <table id="tabla-clientes">
-        <thead>
-            <tr>
-                <th>DNI</th>
-                <th>Nombre</th>
-                <th>Apellido</th>
-                <th>Fecha Nac.</th>
-                <th>Edad</th>
-                <th>Domicilio</th>
-                <th>Teléfono</th>
-                <th>Email</th>
-                <th>RFID</th>
-                <th>Gimnasio</th>
-                <th>Acciones</th>
-            </tr>
-        </thead>
-        <tbody>
-            <?php while ($cliente = mysqli_fetch_assoc($resultado)) {
-                $fecha_nac = new DateTime($cliente['fecha_nacimiento']);
-                $hoy = new DateTime();
-                $edad = $hoy->diff($fecha_nac)->y;
-                echo "<tr>
-                    <td>{$cliente['dni']}</td>
-                    <td>{$cliente['nombre']}</td>
-                    <td>{$cliente['apellido']}</td>
-                    <td>{$cliente['fecha_nacimiento']}</td>
-                    <td>$edad</td>
-                    <td>{$cliente['domicilio']}</td>
-                    <td>{$cliente['telefono']}</td>
-                    <td>{$cliente['email']}</td>
-                    <td>{$cliente['rfid_uid']}</td>
-                    <td>{$cliente['gimnasio']}</td>
-                    <td><a class='btn-editar' href='editar_cliente.php?id={$cliente['id']}'>Editar</a></td>
-                </tr>";
-            } ?>
-        </tbody>
-    </table>
-</div>
+                    while ($row = $resultado->fetch_assoc()) {
+                        echo "<tr>
+                            <td>{$row['apellido']}</td>
+                            <td>{$row['nombre']}</td>
+                            <td>{$row['dni']}</td>
+                            <td>{$row['telefono']}</td>
+                            <td>{$row['email']}</td>
+                            <td>{$row['disciplina']}</td>
+                            <td>{$row['fecha_vencimiento']}</td>
+                            <td>
+                                <a class='action' href='editar_cliente.php?id={$row['id']}'>✏️</a>
+                                <a class='action' href='eliminar_cliente.php?id={$row['id']}' onclick='return confirm("¿Eliminar este cliente?")'>🗑️</a>
+                            </td>
+                        </tr>";
+                    }
+                    ?>
+                </tbody>
+            </table>
+        </div>
+    </div>
 </body>
 </html>
