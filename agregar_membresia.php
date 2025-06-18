@@ -1,123 +1,68 @@
-
 <?php
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
-if (!isset($_SESSION['gimnasio_id'])) {
+if (!isset($_SESSION["gimnasio_id"])) {
     die("Acceso denegado.");
 }
+$gimnasio_id = $_SESSION["gimnasio_id"];
 include 'conexion.php';
-$gimnasio_id = $_SESSION['gimnasio_id'];
 ?>
-
-<!DOCTYPE html>
+<!-- Resto del formulario aquí -->
 <html lang="es">
 <head>
     <meta charset="UTF-8">
     <title>Nueva Membresía</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1">
     <style>
         body {
             background-color: #111;
-            color: gold;
+            color: #FFD700;
             font-family: Arial, sans-serif;
             padding: 20px;
         }
-        h2 {
-            color: gold;
-        }
-        .form-container {
-            background: #222;
+        .container {
+            background-color: #222;
             padding: 20px;
             border-radius: 10px;
             max-width: 600px;
             margin: auto;
-            border: 1px solid gold;
-        }
-        label {
-            display: block;
-            margin-top: 10px;
-            color: gold;
         }
         input, select {
             width: 100%;
             padding: 10px;
-            margin-top: 5px;
-            border: 1px solid gold;
-            background: #333;
-            color: white;
+            margin: 10px 0;
+            background-color: #333;
+            color: #fff;
+            border: 1px solid #FFD700;
+            border-radius: 5px;
         }
-        .btn {
-            margin-top: 20px;
-            padding: 10px;
-            background: gold;
-            color: black;
+        button {
+            background-color: #FFD700;
+            color: #111;
+            padding: 10px 20px;
             border: none;
-            cursor: pointer;
-            width: 100%;
+            border-radius: 5px;
             font-weight: bold;
-        }
-        .btn:hover {
-            background: #ffd700;
         }
     </style>
 </head>
 <body>
-
-<h2>Nueva Membresía</h2>
-
-<div class="form-container">
+<div class="container">
+    <h2>Nueva Membresía</h2>
     <form method="POST" action="guardar_membresia.php">
-        <label for="busqueda_cliente">Buscar Cliente (DNI, Nombre, RFID):</label>
+        <label>Buscar Cliente (DNI, Nombre, RFID):</label>
         <input type="text" name="busqueda_cliente" placeholder="Escriba DNI, nombre o RFID" required>
 
-        <label for="plan_id">Seleccionar Plan:</label>
+        <label>Seleccionar Plan:</label>
         <select name="plan_id" required>
             <option value="">Seleccione un plan</option>
-            <?php
-            $query_planes = $conexion->query("SELECT id, nombre FROM planes WHERE gimnasio_id = $gimnasio_id");
-            while ($row = $query_planes->fetch_assoc()) {
-                echo "<option value='{$row['id']}'>{$row['nombre']}</option>";
-            }
-            ?>
+            <!-- Cargar desde la BD -->
         </select>
 
-        <label for="fecha_pago">Fecha de Inicio:</label>
-        <input type="date" name="fecha_pago" value="<?php echo date('Y-m-d'); ?>" required>
+        <!-- Más campos pueden agregarse aquí como fecha, adicionales, métodos de pago, etc. -->
 
-        <label for="adicional_id">Plan Adicional:</label>
-        <select name="adicional_id">
-            <option value="">Sin adicional</option>
-            <?php
-            $query_adicionales = $conexion->query("SELECT id, nombre FROM planes_adicionales WHERE gimnasio_id = $gimnasio_id");
-            while ($row = $query_adicionales->fetch_assoc()) {
-                echo "<option value='{$row['id']}'>{$row['nombre']}</option>";
-            }
-            ?>
-        </select>
-
-        <label for="monto_pago">Monto:</label>
-        <input type="number" step="0.01" name="monto_pago" required>
-
-        <label for="monto_efectivo">Pago en Efectivo:</label>
-        <input type="number" step="0.01" name="monto_efectivo">
-
-        <label for="monto_transferencia">Pago por Transferencia:</label>
-        <input type="number" step="0.01" name="monto_transferencia">
-
-        <label for="total">Total a Pagar:</label>
-        <input type="number" step="0.01" name="total" readonly>
-
-        <label for="metodo_pago">Método de Pago Principal:</label>
-        <select name="metodo_pago" required>
-            <option value="efectivo">Efectivo</option>
-            <option value="transferencia">Transferencia</option>
-            <option value="cuenta_corriente">Cuenta Corriente</option>
-        </select>
-
-        <button type="submit" class="btn">Guardar Membresía</button>
+        <button type="submit">Guardar Membresía</button>
     </form>
 </div>
-
 </body>
 </html>
