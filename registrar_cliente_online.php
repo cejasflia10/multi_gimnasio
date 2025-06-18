@@ -1,15 +1,62 @@
 
 <?php
 include 'conexion.php';
-session_start();
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+
+function calcularEdad($fecha_nacimiento) {
+    $hoy = new DateTime();
+    $nacimiento = new DateTime($fecha_nacimiento);
+    $edad = $hoy->diff($nacimiento);
+    return $edad->y;
+}
+
+$mensaje = "";
+
+if ($_SERVER["REQUEST_METHOD"] == "POST") {
+    $apellido = trim($_POST["apellido"] ?? '');
+    $nombre = trim($_POST["nombre"] ?? '');
+    $dni = trim($_POST["dni"] ?? '');
+    $fecha_nacimiento = $_POST["fecha_nacimiento"] ?? '';
+    $domicilio = trim($_POST["domicilio"] ?? '');
+    $telefono = trim($_POST["telefono"] ?? '');
+    $email = trim($_POST["email"] ?? '');
+    $rfid = trim($_POST["rfid"] ?? '');
+    $disciplina = trim($_POST["disciplina"] ?? '');
+    $fecha_vencimiento = $_POST["fecha_vencimiento"] ?? '';
+    $dias_disponibles = intval($_POST["dias_disponibles"] ?? 0);
+    $edad = calcularEdad($fecha_nacimiento);
+    $fecha_ingreso = date("Y-m-d");
+
+    $check = $conexion->prepare("SELECT id FROM clientes WHERE dni = ?");
+    $check->bind_param("s", $dni);
+    $check->execute();
+    $check->store_result();
+
+    if ($check->num_rows > 0) {
+        $mensaje = "<p style='color: orange;'>⚠️ Ya existe un cliente con ese DNI.</p>";
+    } else {
+        $stmt = $conexion->prepare("INSERT INTO clientes (apellido, nombre, dni, fecha_nacimiento, edad, domicilio, telefono, email, rfid, disciplina, fecha_vencimiento, dias_disponibles, fecha_ingreso) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+        $stmt->bind_param("ssssissssssss", $apellido, $nombre, $dni, $fecha_nacimiento, $edad, $domicilio, $telefono, $email, $rfid, $disciplina, $fecha_vencimiento, $dias_disponibles, $fecha_ingreso);
+
+        if ($stmt->execute()) {
+            $mensaje = "<p style='color: lime;'>✅ Registro exitoso.</p>";
+        } else {
+            $mensaje = "<p style='color: red;'>❌ Error: " . $stmt->error . "</p>";
+        }
+        $stmt->close();
+    }
+    $check->close();
+}
 ?>
 
 <!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Registro Online</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
     <style>
         body {
             background-color: #111;
@@ -18,96 +65,82 @@ session_start();
             margin: 0;
             padding: 0;
         }
-        .container {
+        .form-container {
             max-width: 500px;
-            margin: 40px auto;
+            margin: 60px auto;
             padding: 20px;
             background-color: #222;
-            border-radius: 12px;
-            box-shadow: 0 0 10px #000;
+            border-radius: 10px;
+            box-shadow: 0 0 15px #000;
         }
-        h1 {
+        h2 {
             text-align: center;
-            margin-bottom: 20px;
             color: #FFD700;
         }
         label {
             display: block;
             margin-top: 10px;
-            font-weight: bold;
             color: #FFD700;
         }
         input[type="text"],
-        input[type="date"] {
+        input[type="date"],
+        input[type="email"],
+        input[type="number"] {
             width: 100%;
             padding: 10px;
             margin-top: 5px;
+            background-color: #333;
+            color: white;
             border: none;
             border-radius: 5px;
-            background-color: #333;
-            color: #fff;
         }
         button {
             margin-top: 20px;
-            width: 100%;
-            padding: 12px;
             background-color: #FFD700;
+            color: black;
             border: none;
-            border-radius: 8px;
-            font-size: 16px;
+            padding: 12px;
+            width: 100%;
             font-weight: bold;
-            color: #000;
+            border-radius: 6px;
         }
         .mensaje {
-            text-align: center;
             margin-top: 15px;
-            font-size: 14px;
+            text-align: center;
         }
     </style>
 </head>
 <body>
-    <div class="container">
-        <h1>Registro Online</h1>
-        <form method="POST" action="registrar_cliente_online.php">
-            <label for="apellido">Apellido:</label>
-            <input type="text" name="apellido" id="apellido" required>
+    <div class="form-container">
+        <h2>Registro de Cliente</h2>
+        <form method="POST">
+            <label>Apellido:</label>
+            <input type="text" name="apellido" required>
+            <label>Nombre:</label>
+            <input type="text" name="nombre" required>
+            <label>DNI:</label>
+            <input type="text" name="dni" required>
+            <label>Fecha de Nacimiento:</label>
+            <input type="date" name="fecha_nacimiento" required>
+            <label>Domicilio:</label>
+            <input type="text" name="domicilio" required>
+            <label>Teléfono:</label>
+            <input type="text" name="telefono">
+            <label>Email:</label>
+            <input type="email" name="email">
+            <label>RFID:</label>
+            <input type="text" name="rfid" required>
+            <label>Disciplina:</label>
+            <input type="text" name="disciplina" required>
+            <label>Fecha de Vencimiento del Plan:</label>
+            <input type="date" name="fecha_vencimiento" required>
+            <label>Días disponibles:</label>
+            <input type="number" name="dias_disponibles" required>
 
-            <label for="nombre">Nombre:</label>
-            <input type="text" name="nombre" id="nombre" required>
-
-            <label for="dni">DNI:</label>
-            <input type="text" name="dni" id="dni" required>
-
-            <label for="fecha_nacimiento">Fecha de Nacimiento:</label>
-            <input type="date" name="fecha_nacimiento" id="fecha_nacimiento" required>
-
-            <button type="submit">Registrar</button>
+            <button type="submit">Registrar Cliente</button>
         </form>
-
         <div class="mensaje">
-            <?php
-            if ($_SERVER["REQUEST_METHOD"] == "POST") {
-                $apellido = trim($_POST["apellido"]);
-                $nombre = trim($_POST["nombre"]);
-                $dni = trim($_POST["dni"]);
-                $fecha_nacimiento = $_POST["fecha_nacimiento"];
-                $fecha_ingreso = date("Y-m-d");
-
-                if (!empty($apellido) && !empty($nombre) && !empty($dni) && !empty($fecha_nacimiento)) {
-                    $stmt = $conexion->prepare("INSERT INTO clientes (apellido, nombre, dni, fecha_nacimiento, fecha_ingreso) VALUES (?, ?, ?, ?, ?)");
-                    $stmt->bind_param("sssss", $apellido, $nombre, $dni, $fecha_nacimiento, $fecha_ingreso);
-
-                    if ($stmt->execute()) {
-                        echo "<span style='color: lime;'>✅ Registro exitoso</span>";
-                    } else {
-                        echo "<span style='color: red;'>❌ Error al registrar: " . $stmt->error . "</span>";
-                    }
-                    $stmt->close();
-                } else {
-                    echo "<span style='color: orange;'>⚠️ Faltan datos obligatorios</span>";
-                }
-            }
-            ?>
+            <?php echo $mensaje; ?>
         </div>
     </div>
 </body>
