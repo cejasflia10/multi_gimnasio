@@ -1,146 +1,157 @@
 <?php
-include 'conexion.php';
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
+include 'conexion.php';
 
-function calcularEdad($fecha_nacimiento) {
-    $hoy = new DateTime();
-    $nacimiento = new DateTime($fecha_nacimiento);
-    $edad = $hoy->diff($nacimiento);
-    return $edad->y;
-}
-
-$mensaje = "";
-
-if ($_SERVER["REQUEST_METHOD"] == "POST") {
-    $apellido = trim($_POST["apellido"] ?? '');
-    $nombre = trim($_POST["nombre"] ?? '');
-    $dni = trim($_POST["dni"] ?? '');
-    $fecha_nacimiento = $_POST["fecha_nacimiento"] ?? '';
-    $domicilio = trim($_POST["domicilio"] ?? '');
-    $telefono = trim($_POST["telefono"] ?? '');
-    $email = trim($_POST["email"] ?? '');
-    $rfid = trim($_POST["rfid"] ?? '');
-    $disciplina = trim($_POST["disciplina"] ?? '');
-    $fecha_vencimiento = $_POST["fecha_vencimiento"] ?? '';
-    $dias_disponibles = intval($_POST["dias_disponibles"] ?? 0);
-    $edad = calcularEdad($fecha_nacimiento);
-    $fecha_ingreso = date("Y-m-d");
-
-    $check = $conexion->prepare("SELECT id FROM clientes WHERE dni = ?");
-    $check->bind_param("s", $dni);
-    $check->execute();
-    $check->store_result();
-
-    if ($check->num_rows > 0) {
-        $mensaje = "<p style='color: orange;'>⚠️ Ya existe un cliente con ese DNI.</p>";
-    } else {
-        $stmt = $conexion->prepare("INSERT INTO clientes (apellido, nombre, dni, fecha_nacimiento, edad, domicilio, telefono, email, rfid, disciplina, fecha_vencimiento, dias_disponibles, fecha_ingreso) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
-        $stmt->bind_param("ssssissssssss", $apellido, $nombre, $dni, $fecha_nacimiento, $edad, $domicilio, $telefono, $email, $rfid, $disciplina, $fecha_vencimiento, $dias_disponibles, $fecha_ingreso);
-
-        if ($stmt->execute()) {
-            $mensaje = "<p style='color: lime;'>✅ Registro exitoso.</p>";
-        } else {
-            $mensaje = "<p style='color: red;'>❌ Error: " . $stmt->error . "</p>";
-        }
-        $stmt->close();
-    }
-    $check->close();
-}
+$disciplinas = $conexion->query("SELECT id, nombre FROM disciplinas");
+$academias = $conexion->query("SELECT id, nombre FROM gimnasios");
 ?>
 
 <!DOCTYPE html>
 <html lang="es">
 <head>
-    <meta charset="UTF-8">
-    <title>Registro Online</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <style>
-        body {
-            background-color: #111;
-            color: #FFD700;
-            font-family: Arial, sans-serif;
-            margin: 0;
-            padding: 0;
-        }
-        .form-container {
-            max-width: 500px;
-            margin: 60px auto;
-            padding: 20px;
-            background-color: #222;
-            border-radius: 10px;
-            box-shadow: 0 0 15px #000;
-        }
-        h2 {
-            text-align: center;
-            color: #FFD700;
-        }
-        label {
-            display: block;
-            margin-top: 10px;
-            color: #FFD700;
-        }
-        input[type="text"],
-        input[type="date"],
-        input[type="email"],
-        input[type="number"] {
-            width: 100%;
-            padding: 10px;
-            margin-top: 5px;
-            background-color: #333;
-            color: white;
-            border: none;
-            border-radius: 5px;
-        }
-        button {
-            margin-top: 20px;
-            background-color: #FFD700;
-            color: black;
-            border: none;
-            padding: 12px;
-            width: 100%;
-            font-weight: bold;
-            border-radius: 6px;
-        }
-        .mensaje {
-            margin-top: 15px;
-            text-align: center;
-        }
-    </style>
+  <meta charset="UTF-8">
+  <title>Registro de Cliente</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      background-color: #111;
+      color: gold;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+    }
+
+    .form-container {
+      background-color: #222;
+      padding: 20px;
+      border-radius: 15px;
+      width: 90%;
+      max-width: 400px;
+      box-shadow: 0 0 15px rgba(255, 215, 0, 0.3);
+    }
+
+    h2 {
+      text-align: center;
+      color: gold;
+      margin-bottom: 20px;
+    }
+
+    label {
+      color: gold;
+      display: block;
+      margin-top: 10px;
+      margin-bottom: 5px;
+    }
+
+    input, select {
+      width: 100%;
+      padding: 10px;
+      border: none;
+      border-radius: 10px;
+      background-color: #333;
+      color: white;
+      margin-bottom: 10px;
+    }
+
+    input:invalid {
+      border: 1px solid red;
+    }
+
+    .btn {
+      width: 100%;
+      background-color: gold;
+      color: black;
+      border: none;
+      border-radius: 10px;
+      padding: 12px;
+      font-size: 16px;
+      font-weight: bold;
+      cursor: pointer;
+      margin-top: 10px;
+    }
+
+    .btn:hover {
+      background-color: #e0c100;
+    }
+
+    .small {
+      font-size: 12px;
+      color: #aaa;
+      margin-top: -8px;
+      margin-bottom: 10px;
+    }
+  </style>
 </head>
 <body>
-    <div class="form-container">
-        <h2>Registro de Cliente</h2>
-        <form method="POST">
-            <label>Apellido:</label>
-            <input type="text" name="apellido" required>
-            <label>Nombre:</label>
-            <input type="text" name="nombre" required>
-            <label>DNI:</label>
-            <input type="text" name="dni" required>
-            <label>Fecha de Nacimiento:</label>
-            <input type="date" name="fecha_nacimiento" required>
-            <label>Domicilio:</label>
-            <input type="text" name="domicilio" required>
-            <label>Teléfono:</label>
-            <input type="text" name="telefono">
-            <label>Email:</label>
-            <input type="email" name="email">
-            <label>RFID:</label>
-            <input type="text" name="rfid" required>
-            <label>Disciplina:</label>
-            <input type="text" name="disciplina" required>
-            <label>Fecha de Vencimiento del Plan:</label>
-            <input type="date" name="fecha_vencimiento" required>
-            <label>Días disponibles:</label>
-            <input type="number" name="dias_disponibles" required>
 
-            <button type="submit">Registrar Cliente</button>
-        </form>
-        <div class="mensaje">
-            <?php echo $mensaje; ?>
-        </div>
-    </div>
+<div class="form-container">
+  <h2>Registro de Cliente</h2>
+  <form action="guardar_cliente_online.php" method="POST">
+    <label for="apellido">Apellido:</label>
+    <input type="text" name="apellido" id="apellido" required>
+
+    <label for="nombre">Nombre:</label>
+    <input type="text" name="nombre" id="nombre" required>
+
+    <label for="dni">DNI:</label>
+    <input type="text" name="dni" id="dni" required>
+
+    <label for="fecha_nacimiento">Fecha de Nacimiento:</label>
+    <input type="date" name="fecha_nacimiento" id="fecha_nacimiento" required>
+
+    <label for="edad">Edad:</label>
+    <input type="number" name="edad" id="edad" readonly>
+
+    <label for="domicilio">Domicilio:</label>
+    <input type="text" name="domicilio" id="domicilio" required>
+
+    <label for="telefono">Teléfono:</label>
+    <input type="tel" name="telefono" id="telefono" required>
+
+    <label for="email">Email:</label>
+    <input type="email" name="email" id="email" required>
+
+    <label for="rfid_uid">RFID:</label>
+    <input type="text" name="rfid_uid" id="rfid_uid" required>
+
+    <label for="disciplina">Disciplina:</label>
+    <select name="disciplina_id" id="disciplina_id" required>
+      <option value="">Seleccione una disciplina</option>
+      <?php while ($d = $disciplinas->fetch_assoc()) { ?>
+        <option value="<?= $d['id'] ?>"><?= $d['nombre'] ?></option>
+      <?php } ?>
+    </select>
+
+    <label for="gimnasio_id">Academia:</label>
+    <select name="gimnasio_id" id="gimnasio_id" required>
+      <option value="">Seleccione una academia</option>
+      <?php while ($g = $academias->fetch_assoc()) { ?>
+        <option value="<?= $g['id'] ?>"><?= $g['nombre'] ?></option>
+      <?php } ?>
+    </select>
+
+    <button type="submit" class="btn">Registrar</button>
+  </form>
+</div>
+
+<script>
+  // Edad automática
+  document.getElementById('fecha_nacimiento').addEventListener('change', function () {
+    const fechaNacimiento = new Date(this.value);
+    const hoy = new Date();
+    let edad = hoy.getFullYear() - fechaNacimiento.getFullYear();
+    const m = hoy.getMonth() - fechaNacimiento.getMonth();
+    if (m < 0 || (m === 0 && hoy.getDate() < fechaNacimiento.getDate())) {
+      edad--;
+    }
+    document.getElementById('edad').value = edad;
+  });
+</script>
+
 </body>
 </html>
