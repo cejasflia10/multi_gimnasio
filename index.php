@@ -1,6 +1,6 @@
 <?php
 session_start();
-if !isset($_SESSION["gimnasio_id"]) {
+if (!isset($_SESSION["gimnasio_id"])) {
     die("⚠️ No has iniciado sesión correctamente.");
 }
 $gimnasio_id = $_SESSION["gimnasio_id"];
