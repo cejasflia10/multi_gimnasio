@@ -13,12 +13,16 @@ h1 {
 }
 .boton {
     display: inline-block;
-    margin: 10px 0;
+    margin: 10px 10px 10px 0;
     padding: 10px 15px;
     background: #FFD700;
     color: #111;
     border-radius: 6px;
     text-decoration: none;
+}
+.volver {
+    background: #333;
+    color: #FFD700;
 }
 table {
     width: 100%;
@@ -35,12 +39,29 @@ th, td {
 .tabla-responsive {
     overflow-x: auto;
 }
+.accion {
+    margin: 0 5px;
+    text-decoration: none;
+    font-size: 18px;
+}
+.editar {
+    color: #00FF00;
+}
+.eliminar {
+    color: #FF3333;
+}
 @media screen and (max-width: 768px) {
     .contenido {
         margin-left: 0;
         padding: 10px;
     }
     table, thead, tbody, th, td, tr {
-        font-size: 14px;
+        font-size: 13px;
+    }
+    .boton, .volver {
+        display: block;
+        width: 100%;
+        margin: 5px 0;
+        text-align: center;
     }
 }
