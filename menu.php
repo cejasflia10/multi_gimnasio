@@ -84,6 +84,26 @@
   </a>
 </li>
 
+
+    <li>
+      <button class="dropdown-btn">🕓 Asistencias ▾</button>
+      <div class="dropdown-container">
+        <a href="registrar_asistencia.php">Registrar Asistencia</a>
+        <a href="registrar_asistencia_qr.php">Registrar Asistencia por QR</a>
+        <a href="ver_asistencias.php">Ver Asistencias</a>
+      </div>
+    </li>
+
+
+    <li>
+      <button class="dropdown-btn">📑 Planes ▾</button>
+      <div class="dropdown-container">
+        <a href="crear_plan.php">Crear Plan</a>
+        <a href="crear_plan_adicional.php">Crear Plan Adicional</a>
+        <a href="crear_disciplina.php">Crear Disciplina</a>
+      </div>
+    </li>
+
 </ul>
 </nav>
 <script>
