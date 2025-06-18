@@ -1,37 +1,47 @@
 <?php
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+
 include 'conexion.php';
 
-$dni = $_POST['dni'];
-$nombre = $_POST['nombre'];
-$apellido = $_POST['apellido'];
-$telefono = $_POST['telefono'];
-$email = $_POST['email'];
-$domicilio = $_POST['domicilio'];
-$fecha_nacimiento = $_POST['fecha_nacimiento'];
-$rfid = $_POST['rfid'];
-$gimnasio_id = $_POST['gimnasio_id'];
+if ($_SERVER["REQUEST_METHOD"] == "POST") {
+    $apellido = trim($_POST["apellido"]);
+    $nombre = trim($_POST["nombre"]);
+    $dni = trim($_POST["dni"]);
+    $fecha_nacimiento = $_POST["fecha_nacimiento"];
+    $edad = $_POST["edad"];
+    $domicilio = trim($_POST["domicilio"]);
+    $telefono = trim($_POST["telefono"]);
+    $email = trim($_POST["email"]);
+    $rfid_uid = trim($_POST["rfid_uid"]);
+    $disciplina_id = $_POST["disciplina_id"];
+    $gimnasio_id = $_POST["gimnasio_id"];
 
-// Calcular edad automáticamente
-$fecha_nac = new DateTime($fecha_nacimiento);
-$hoy = new DateTime();
-$edad = $hoy->diff($fecha_nac)->y;
+    // Validar que el DNI no esté registrado
+    $stmt = $conexion->prepare("SELECT id FROM clientes WHERE dni = ?");
+    $stmt->bind_param("s", $dni);
+    $stmt->execute();
+    $stmt->store_result();
 
-// Verificar si ya existe ese DNI
-$verificar = $conexion->query("SELECT id FROM clientes WHERE dni = '$dni'");
-if ($verificar->num_rows > 0) {
-    echo "<script>alert('Ya existe un cliente con ese DNI.'); window.history.back();</script>";
-    exit;
+    if ($stmt->num_rows > 0) {
+        echo "<script>alert('Este DNI ya está registrado.'); window.history.back();</script>";
+        exit;
+    }
+    $stmt->close();
+
+    // Insertar nuevo cliente
+    $stmt = $conexion->prepare("INSERT INTO clientes (apellido, nombre, dni, fecha_nacimiento, edad, domicilio, telefono, email, rfid_uid, disciplina_id, gimnasio_id)
+                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+    $stmt->bind_param("ssssissssii", $apellido, $nombre, $dni, $fecha_nacimiento, $edad, $domicilio, $telefono, $email, $rfid_uid, $disciplina_id, $gimnasio_id);
+
+    if ($stmt->execute()) {
+        echo "<script>alert('Registro exitoso. Bienvenido a la academia.'); window.location.href='index.php';</script>";
+    } else {
+        echo "<script>alert('Error al registrar.'); window.history.back();</script>";
+    }
+
+    $stmt->close();
+    $conexion->close();
 }
-
-// Insertar nuevo cliente
-$sql = "INSERT INTO clientes (apellido, nombre, dni, fecha_nacimiento, edad, domicilio, telefono, email, rfid, gimnasio_id)
-        VALUES ('$apellido', '$nombre', '$dni', '$fecha_nacimiento', '$edad', '$domicilio', '$telefono', '$email', '$rfid', '$gimnasio_id')";
-
-if ($conexion->query($sql) === TRUE) {
-    echo "<script>alert('Cliente registrado correctamente.'); window.location.href='registrar_cliente_online.php';</script>";
-} else {
-    echo "<script>alert('Error al registrar cliente.'); window.history.back();</script>";
-}
-
-$conexion->close();
 ?>
