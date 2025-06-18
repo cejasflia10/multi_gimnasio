@@ -2,9 +2,9 @@
 include 'conexion.php';
 
 $usuario = "admin";
-$clave = password_hash("admin123", PASSWORD_BCRYPT);
+$contrasena = password_hash("admin123", PASSWORD_BCRYPT);
 $rol = "admin";
-$gimnasio_id = 1; // o el ID correspondiente
+$gimnasio_id = 1; // Ajustar al gimnasio deseado
 
 // Verificar si ya existe
 $stmt = $conexion->prepare("SELECT id FROM usuarios WHERE usuario = ?");
@@ -13,11 +13,12 @@ $stmt->execute();
 $stmt->store_result();
 
 if ($stmt->num_rows > 0) {
-    echo "⚠️ El usuario ya existe.";
+    echo "⚠️ El usuario administrador ya existe.";
 } else {
     $stmt->close();
-    $stmt = $conexion->prepare("INSERT INTO usuarios (usuario, clave, rol, gimnasio_id) VALUES (?, ?, ?, ?)");
-    $stmt->bind_param("sssi", $usuario, $clave, $rol, $gimnasio_id);
+    $stmt = $conexion->prepare("INSERT INTO usuarios (usuario, contrasena, rol, gimnasio_id) VALUES (?, ?, ?, ?)");
+    $stmt->bind_param("sssi", $usuario, $contrasena, $rol, $gimnasio_id);
+    
     if ($stmt->execute()) {
         echo "✅ Usuario administrador creado correctamente.";
     } else {
