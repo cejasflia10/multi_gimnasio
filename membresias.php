@@ -2,156 +2,126 @@
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
-if (!isset($_SESSION['gimnasio_id'])) {
+if (!isset($_SESSION["gimnasio_id"])) {
     die("Acceso denegado.");
 }
+$gimnasio_id = $_SESSION["gimnasio_id"];
+
 include 'conexion.php';
 
-$gimnasio_id = $_SESSION['gimnasio_id'];
+$sql = "SELECT m.id, CONCAT(c.apellido, ', ', c.nombre) AS cliente, d.nombre AS disciplina,
+        p.nombre AS plan, m.fecha_inicio, m.fecha_vencimiento, m.metodo_pago, m.total
+        FROM membresias m
+        INNER JOIN clientes c ON m.cliente_id = c.id
+        INNER JOIN disciplinas d ON m.disciplina_id = d.id
+        INNER JOIN planes p ON m.plan_id = p.id
+        WHERE m.gimnasio_id = $gimnasio_id
+        ORDER BY m.fecha_inicio DESC";
 
-// Obtener planes
-$planes = [];
-$res_planes = $conexion->query("SELECT id, nombre, clases, precio FROM planes WHERE gimnasio_id = $gimnasio_id");
-while ($row = $res_planes->fetch_assoc()) {
-    $planes[] = $row;
-}
-
-// Obtener planes adicionales
-$adicionales = [];
-$res_adic = $conexion->query("SELECT id, nombre, precio FROM planes_adicionales WHERE gimnasio_id = $gimnasio_id");
-while ($row = $res_adic->fetch_assoc()) {
-    $adicionales[] = $row;
-}
-
-// Obtener clientes
-$clientes = [];
-$res_cli = $conexion->query("SELECT id, apellido, nombre, dni FROM clientes WHERE gimnasio_id = $gimnasio_id");
-while ($row = $res_cli->fetch_assoc()) {
-    $clientes[] = $row;
-}
+$resultado = $conexion->query($sql);
 ?>
 <!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Membresías</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1">
     <style>
         body {
-            background: #111;
-            color: gold;
             font-family: Arial, sans-serif;
+            background-color: #111;
+            color: #FFD700;
             margin: 0;
-            padding: 1rem;
+            padding: 20px;
         }
-        h2 {
-            color: gold;
+        h1 {
             text-align: center;
+            color: #FFD700;
         }
-        form, table {
-            width: 100%;
-            margin: auto;
-            max-width: 600px;
-        }
-        label {
-            display: block;
-            margin: 0.5rem 0 0.2rem;
-        }
-        input, select {
-            width: 100%;
-            padding: 0.5rem;
-            border: none;
-            border-radius: 5px;
-            margin-bottom: 1rem;
-        }
-        .adicionales label {
-            display: block;
-        }
-        .btn {
-            background: gold;
-            color: #111;
-            padding: 0.5rem;
-            width: 100%;
-            border: none;
-            border-radius: 5px;
-            font-weight: bold;
-        }
-        .tabla {
-            margin-top: 2rem;
+        table {
             width: 100%;
             border-collapse: collapse;
+            margin-top: 15px;
         }
-        .tabla th, .tabla td {
-            border: 1px solid gold;
-            padding: 0.5rem;
-            text-align: center;
+        th, td {
+            border: 1px solid #FFD700;
+            padding: 10px;
+            text-align: left;
         }
-        .tabla th {
-            background: #222;
+        th {
+            background-color: #222;
+        }
+        tr:nth-child(even) {
+            background-color: #1c1c1c;
+        }
+        .boton-volver {
+            background-color: #FFD700;
+            border: none;
+            color: black;
+            padding: 10px 20px;
+            text-decoration: none;
+            margin: 10px 0;
+            display: inline-block;
+            font-weight: bold;
+            border-radius: 5px;
+        }
+        .acciones a {
+            margin-right: 10px;
+            color: #00f;
+            text-decoration: underline;
+        }
+        @media screen and (max-width: 600px) {
+            table, thead, tbody, th, td, tr {
+                display: block;
+            }
+            th, td {
+                text-align: right;
+                padding-left: 50%;
+                position: relative;
+            }
+            th::before, td::before {
+                content: attr(data-label);
+                position: absolute;
+                left: 10px;
+                text-align: left;
+                font-weight: bold;
+            }
         }
     </style>
-    <script>
-        function actualizarTotal() {
-            const plan = JSON.parse(document.getElementById('plan').selectedOptions[0].dataset.info);
-            const adicionales = document.querySelectorAll('input[name="adicionales[]"]:checked');
-            let total = parseFloat(plan.precio);
-            adicionales.forEach(a => {
-                total += parseFloat(a.dataset.precio);
-            });
-            document.getElementById('total').value = total.toFixed(2);
-            document.getElementById('clases').value = plan.clases;
-        }
-    </script>
 </head>
 <body>
-    <h2>Registrar Nueva Membresía</h2>
-    <form method="POST" action="guardar_membresia.php">
-        <label>Cliente</label>
-        <select name="cliente_id" required>
-            <option value="">Seleccionar cliente</option>
-            <?php foreach ($clientes as $c): ?>
-                <option value="<?= $c['id'] ?>"><?= $c['apellido'] . ', ' . $c['nombre'] ?> - DNI: <?= $c['dni'] ?></option>
-            <?php endforeach; ?>
-        </select>
-
-        <label>Plan</label>
-        <select name="plan_id" id="plan" onchange="actualizarTotal()" required>
-            <option value="">Seleccionar plan</option>
-            <?php foreach ($planes as $p): ?>
-                <option value="<?= $p['id'] ?>" data-info='<?= json_encode($p) ?>'>
-                    <?= $p['nombre'] ?> - $<?= $p['precio'] ?>
-                </option>
-            <?php endforeach; ?>
-        </select>
-
-        <label>Fecha de inicio</label>
-        <input type="date" name="fecha_inicio" value="<?= date('Y-m-d') ?>" required>
-
-        <label>Clases disponibles</label>
-        <input type="number" id="clases" name="clases_restantes" readonly>
-
-        <label>Planes adicionales</label>
-        <div class="adicionales">
-            <?php foreach ($adicionales as $a): ?>
-                <label>
-                    <input type="checkbox" name="adicionales[]" value="<?= $a['id'] ?>" data-precio="<?= $a['precio'] ?>">
-                    <?= $a['nombre'] ?> ($<?= $a['precio'] ?>)
-                </label>
-            <?php endforeach; ?>
-        </div>
-
-        <label>Método de pago</label>
-        <select name="metodo_pago" required>
-            <option value="Efectivo">Efectivo</option>
-            <option value="Transferencia">Transferencia</option>
-            <option value="Tarjeta">Tarjeta</option>
-            <option value="Cuenta Corriente">Cuenta Corriente</option>
-        </select>
-
-        <label>Total a pagar</label>
-        <input type="text" id="total" name="total" readonly>
-
-        <button class="btn" type="submit">Registrar Membresía</button>
-    </form>
+    <h1>Listado de Membresías</h1>
+    <a href="index.php" class="boton-volver">← Volver al Panel</a>
+    <table>
+        <thead>
+            <tr>
+                <th>Cliente</th>
+                <th>Disciplina</th>
+                <th>Plan</th>
+                <th>Inicio</th>
+                <th>Vencimiento</th>
+                <th>Método de Pago</th>
+                <th>Total</th>
+                <th>Acciones</th>
+            </tr>
+        </thead>
+        <tbody>
+            <?php while ($fila = $resultado->fetch_assoc()) { ?>
+                <tr>
+                    <td data-label="Cliente"><?= $fila["cliente"] ?></td>
+                    <td data-label="Disciplina"><?= $fila["disciplina"] ?></td>
+                    <td data-label="Plan"><?= $fila["plan"] ?></td>
+                    <td data-label="Inicio"><?= $fila["fecha_inicio"] ?></td>
+                    <td data-label="Vencimiento"><?= $fila["fecha_vencimiento"] ?></td>
+                    <td data-label="Método de Pago"><?= $fila["metodo_pago"] ?></td>
+                    <td data-label="Total">$<?= number_format($fila["total"], 2, ',', '.') ?></td>
+                    <td class="acciones">
+                        <a href="editar_membresia.php?id=<?= $fila["id"] ?>">Editar</a>
+                        <a href="eliminar_membresia.php?id=<?= $fila["id"] ?>" onclick="return confirm('¿Eliminar esta membresía?')">Eliminar</a>
+                    </td>
+                </tr>
+            <?php } ?>
+        </tbody>
+    </table>
 </body>
 </html>
