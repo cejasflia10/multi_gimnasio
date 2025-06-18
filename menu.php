@@ -1,44 +1,77 @@
 <nav id="sidebar">
-    <div class="sidebar-header">
-        <h3>🥋 Fight Academy</h3>
-    </div>
-    <ul class="components">
-        <li><a href="index.php">🏠 Dashboard</a></li>
-        <li>
-            <button class="dropdown-btn">👤 Clientes ▾</button>
-            <div class="dropdown-container">
-                <a href="clientes.php">Ver Clientes</a>
-                <a href="agregar_cliente.php">Agregar Cliente</a>
-            </div>
-        </li>
-        <li>
-            <button class="dropdown-btn">📋 Membresías ▾</button>
-            <div class="dropdown-container">
-                <a href="membresias.php">Ver Membresías</a>
-                <a href="agregar_membresia.php">Agregar Membresía</a>
-            </div>
-        </li>
-        <li><a href="profesores.php">👨‍🏫 Profesores</a></li>
-        <li><a href="asistencias.php">🕒 Asistencias</a></li>
-        <li><a href="ventas.php">💵 Ventas</a></li>
-        <li>
-            <button class="dropdown-btn">⚙️ Configuración ▾</button>
-            <div class="dropdown-container">
-                <a href="cambiar_contrasena.php">🔐 Cambiar Contraseña</a>
-                <a href="logout.php">🚪 Cerrar Sesión</a>
-                <a href="ver_gimnasios.php">🏢 Ver Gimnasios</a>
-                <a href="crear_gimnasio.php">➕ Crear Gimnasio</a>
-            </div>
-        </li>
-    </ul>
+  <div class="sidebar-header">
+    <h3>🏋️‍♂️ Fight Academy</h3>
+  </div>
+  <ul class="components">
+    <li><a href="index.php">🏠 Dashboard</a></li>
+
+    <li>
+      <button class="dropdown-btn">👤 Clientes ▾</button>
+      <div class="dropdown-container">
+        <a href="clientes.php">Ver Clientes</a>
+        <a href="agregar_cliente.php">Agregar Cliente</a>
+      </div>
+    </li>
+
+    <li>
+      <button class="dropdown-btn">📋 Membresías ▾</button>
+      <div class="dropdown-container">
+        <a href="membresias.php">Ver Membresías</a>
+        <a href="agregar_membresia.php">Agregar Membresía</a>
+      </div>
+    </li>
+
+    <li>
+      <button class="dropdown-btn">👨‍🏫 Profesores ▾</button>
+      <div class="dropdown-container">
+        <a href="profesores.php">Ver Profesores</a>
+        <a href="agregar_profesor.php">Agregar Profesor</a>
+      </div>
+    </li>
+
+    <li>
+      <button class="dropdown-btn">🕒 Asistencias ▾</button>
+      <div class="dropdown-container">
+        <a href="asistencias.php">Registrar Asistencia</a>
+        <a href="ver_asistencias.php">Ver Asistencias</a>
+      </div>
+    </li>
+
+    <li>
+      <button class="dropdown-btn">💵 Ventas ▾</button>
+      <div class="dropdown-container">
+        <a href="ventas.php">Registrar Venta</a>
+        <a href="ver_ventas.php">Ver Ventas</a>
+      </div>
+    </li>
+
+    <li>
+      <button class="dropdown-btn">🏢 Gimnasios ▾</button>
+      <div class="dropdown-container">
+        <a href="ver_gimnasios.php">Ver Gimnasios</a>
+        <a href="crear_gimnasio.php">Crear Gimnasio</a>
+      </div>
+    </li>
+
+    <li>
+      <button class="dropdown-btn">⚙️ Configuración ▾</button>
+      <div class="dropdown-container">
+        <a href="usuarios.php">Ver Usuarios</a>
+        <a href="agregar_usuario.php">Agregar Usuario</a>
+        <a href="permisos.php">Asignar Permisos</a>
+        <a href="cambiar_contrasena.php">Cambiar Contraseña</a>
+        <a href="logout.php">Cerrar Sesión</a>
+      </div>
+    </li>
+  </ul>
 </nav>
 <script>
-    const dropdowns = document.querySelectorAll(".dropdown-btn");
-    dropdowns.forEach(btn => {
-        btn.addEventListener("click", function () {
-            this.classList.toggle("active");
-            const container = this.nextElementSibling;
-            container.style.display = container.style.display === "block" ? "none" : "block";
-        });
+  const dropdowns = document.querySelectorAll(".dropdown-btn");
+  dropdowns.forEach(btn => {
+    btn.addEventListener("click", function () {
+      this.classList.toggle("active");
+      const container = this.nextElementSibling;
+      container.style.display = container.style.display === "block" ? "none" : "block";
     });
+  });
 </script>
