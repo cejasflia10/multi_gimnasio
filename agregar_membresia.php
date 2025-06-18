@@ -24,6 +24,8 @@ include 'conexion.php';
         input, select { width: 100%; padding: 8px; margin-top: 5px; background: #333; color: #FFD700; border: 1px solid #FFD700; border-radius: 4px; }
         .grupo { margin-bottom: 15px; }
         .boton { background: #FFD700; color: #000; font-weight: bold; cursor: pointer; }
+        .acciones { text-align: center; margin-top: 20px; }
+        .acciones button, .acciones a { margin: 5px; padding: 10px 15px; background: #FFD700; color: #000; border: none; text-decoration: none; border-radius: 5px; font-weight: bold; }
     </style>
 </head>
 <body>
@@ -103,6 +105,11 @@ while ($extra = $adicionales->fetch_assoc()) {
     </div>
 </form>
 
+<div class="acciones">
+    <a href="index.php">Volver al Panel</a>
+    <a href="membresias.php">Ver Membresías</a>
+</div>
+
 <script>
 document.getElementById('plan_id').addEventListener('change', function () {
     const option = this.options[this.selectedIndex];
@@ -140,7 +147,7 @@ function calcularTotal() {
     total += otros;
 
     if (document.getElementById('metodo_pago').value === 'cuenta_corriente') {
-        total *= -1; // saldo negativo
+        total *= -1;
     }
 
     document.getElementById('total').value = total.toFixed(2);
