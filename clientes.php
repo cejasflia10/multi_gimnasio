@@ -1,96 +1,31 @@
 <?php
-include 'conexion.php';
 session_start();
-
-if (!isset($_SESSION['gimnasio_id'])) {
-    echo "<script>alert('Debe iniciar sesión.'); window.location.href='login.php';</script>";
-    exit;
+if (!isset($_SESSION["gimnasio_id"])) {
+    die("Acceso denegado.");
 }
+$gimnasio_id = $_SESSION["gimnasio_id"];
+include 'conexion.php';
 
-$gimnasio_id = $_SESSION['gimnasio_id'];
-$resultado = $conexion->query("SELECT * FROM clientes WHERE gimnasio_id = $gimnasio_id");
+$query = "SELECT apellido, nombre, dni, telefono, email, fecha_nacimiento, domicilio, disciplina, rfid_uid, fecha_vencimiento FROM clientes WHERE gimnasio_id = ?";
+$stmt = $conexion->prepare($query);
+$stmt->bind_param("i", $gimnasio_id);
+$stmt->execute();
+$resultado = $stmt->get_result();
 ?>
-
 <!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Clientes</title>
-    <style>
-        body {
-            background-color: #111;
-            color: gold;
-            font-family: Arial, sans-serif;
-            margin: 0;
-            padding: 0;
-        }
-        .container {
-            max-width: 1000px;
-            margin: auto;
-            padding: 20px;
-        }
-        h1 {
-            text-align: center;
-            color: gold;
-        }
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 20px;
-        }
-        th, td {
-            border: 1px solid gold;
-            padding: 8px;
-            text-align: center;
-        }
-        th {
-            background-color: #222;
-        }
-        tr:nth-child(even) {
-            background-color: #1a1a1a;
-        }
-        .btn {
-            display: inline-block;
-            margin: 10px 5px;
-            padding: 10px;
-            background-color: gold;
-            color: black;
-            border: none;
-            border-radius: 8px;
-            text-decoration: none;
-            font-weight: bold;
-        }
-        @media (max-width: 600px) {
-            table, thead, tbody, th, td, tr {
-                display: block;
-            }
-            td {
-                text-align: right;
-                padding-left: 50%;
-                position: relative;
-            }
-            td::before {
-                position: absolute;
-                left: 10px;
-                width: 45%;
-                white-space: nowrap;
-                text-align: left;
-                font-weight: bold;
-                color: #ccc;
-            }
-            td:nth-of-type(1)::before { content: "Apellido"; }
-            td:nth-of-type(2)::before { content: "Nombre"; }
-            td:nth-of-type(3)::before { content: "DNI"; }
-            td:nth-of-type(4)::before { content: "Teléfono"; }
-            td:nth-of-type(5)::before { content: "Disciplina"; }
-        }
-    </style>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="stylesheet" href="clientes.css">
 </head>
 <body>
-    <div class="container">
+    <?php include 'menu.php'; ?>
+    <div class="contenido">
         <h1>Clientes del Gimnasio</h1>
-        <a class="btn" href="agregar_cliente.php">Agregar Cliente</a>
+        <a href="agregar_cliente.php" class="boton">Agregar Cliente</a>
+        <div class="tabla-responsive">
         <table>
             <thead>
                 <tr>
@@ -98,21 +33,36 @@ $resultado = $conexion->query("SELECT * FROM clientes WHERE gimnasio_id = $gimna
                     <th>Nombre</th>
                     <th>DNI</th>
                     <th>Teléfono</th>
+                    <th>Email</th>
+                    <th>F. Nacimiento</th>
+                    <th>Edad</th>
+                    <th>Domicilio</th>
                     <th>Disciplina</th>
+                    <th>RFID</th>
+                    <th>Vencimiento</th>
                 </tr>
             </thead>
             <tbody>
-                <?php while ($fila = $resultado->fetch_assoc()) { ?>
+                <?php while($row = $resultado->fetch_assoc()):
+                    $edad = floor((time() - strtotime($row["fecha_nacimiento"])) / 31556926);
+                ?>
                 <tr>
-                    <td><?= htmlspecialchars($fila['apellido']) ?></td>
-                    <td><?= htmlspecialchars($fila['nombre']) ?></td>
-                    <td><?= htmlspecialchars($fila['dni']) ?></td>
-                    <td><?= htmlspecialchars($fila['telefono']) ?></td>
-                    <td><?= htmlspecialchars($fila['disciplina']) ?></td>
+                    <td><?= $row["apellido"] ?></td>
+                    <td><?= $row["nombre"] ?></td>
+                    <td><?= $row["dni"] ?></td>
+                    <td><?= $row["telefono"] ?></td>
+                    <td><?= $row["email"] ?></td>
+                    <td><?= $row["fecha_nacimiento"] ?></td>
+                    <td><?= $edad ?></td>
+                    <td><?= $row["domicilio"] ?></td>
+                    <td><?= $row["disciplina"] ?></td>
+                    <td><?= $row["rfid_uid"] ?></td>
+                    <td><?= $row["fecha_vencimiento"] ?></td>
                 </tr>
-                <?php } ?>
+                <?php endwhile; ?>
             </tbody>
         </table>
+        </div>
     </div>
 </body>
 </html>
