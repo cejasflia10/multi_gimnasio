@@ -2,19 +2,21 @@
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
-
 include 'conexion.php';
 
+// Variables
 $mensaje = "";
 $nombre = "";
+$apellido = "";
+$clases = "";
 $disciplina = "";
-$clases_restantes = "";
 $fecha_vencimiento = "";
 
-if ($_SERVER["REQUEST_METHOD"] == "POST") {
+// Procesar si se recibe un DNI
+if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST["dni"])) {
     $dni = trim($_POST["dni"]);
 
-    $stmt = $conexion->prepare("SELECT id, nombre, apellido, clases_restantes, disciplina, fecha_vencimiento FROM clientes WHERE dni = ?");
+    $stmt = $conexion->prepare("SELECT id, nombre, apellido, clases_restantes, disciplina, fecha_vencimiento, gimnasio_id FROM clientes WHERE dni = ?");
     $stmt->bind_param("s", $dni);
     $stmt->execute();
     $resultado = $stmt->get_result();
@@ -22,26 +24,36 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     if ($resultado->num_rows > 0) {
         $cliente = $resultado->fetch_assoc();
         $id_cliente = $cliente["id"];
-        $nombre = $cliente["apellido"] . " " . $cliente["nombre"];
+        $nombre = $cliente["nombre"];
+        $apellido = $cliente["apellido"];
+        $clases = $cliente["clases_restantes"];
         $disciplina = $cliente["disciplina"];
-        $clases_restantes = $cliente["clases_restantes"];
         $fecha_vencimiento = $cliente["fecha_vencimiento"];
+        $gimnasio_id = $cliente["gimnasio_id"];
 
+        // Validar vencimiento y clases disponibles
         $fecha_actual = date("Y-m-d");
-
-        if ($fecha_actual > $fecha_vencimiento) {
-            $mensaje = "⚠️ Plan vencido.";
-        } elseif ($clases_restantes <= 0) {
-            $mensaje = "⚠️ No tiene clases disponibles.";
+        if ($fecha_vencimiento < $fecha_actual) {
+            $mensaje = "El plan está vencido.";
+        } elseif ($clases <= 0) {
+            $mensaje = "No tiene clases disponibles.";
         } else {
-            $conexion->query("INSERT INTO asistencias (id_cliente, fecha_hora) VALUES ($id_cliente, NOW())");
-            $conexion->query("UPDATE clientes SET clases_restantes = clases_restantes - 1 WHERE id = $id_cliente");
-            $mensaje = "✅ Asistencia registrada correctamente.";
+            // Descontar una clase
+            $nuevas_clases = $clases - 1;
+            $stmt_update = $conexion->prepare("UPDATE clientes SET clases_restantes = ? WHERE id = ?");
+            $stmt_update->bind_param("ii", $nuevas_clases, $id_cliente);
+            $stmt_update->execute();
+            $stmt_update->close();
+
+            // Registrar asistencia
+            $conexion->query("INSERT INTO asistencias (id_cliente, gimnasio_id, fecha_hora) VALUES ($id_cliente, $gimnasio_id, NOW())");
+
+            $mensaje = "Asistencia registrada correctamente.";
+            $clases = $nuevas_clases;
         }
     } else {
-        $mensaje = "❌ Cliente no encontrado.";
+        $mensaje = "Cliente no encontrado.";
     }
-
     $stmt->close();
 }
 ?>
@@ -50,77 +62,55 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>Registrar Asistencia QR</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Asistencia QR</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
         body {
-            margin: 0; padding: 0;
+            background-color: #111;
+            color: #fff;
             font-family: Arial, sans-serif;
-            background-color: #000;
-            color: #ffd700;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: flex-start;
-            height: 100vh;
-        }
-        img.logo {
-            width: 200px;
-            margin-top: 20px;
-        }
-        form {
-            margin-top: 20px;
             text-align: center;
+            margin: 0;
+            padding: 20px;
         }
         input[type="text"] {
-            font-size: 24px;
-            padding: 10px;
-            width: 80vw;
-            max-width: 400px;
-            border: none;
-            border-radius: 8px;
-            margin-bottom: 20px;
-        }
-        button {
-            background-color: #ffd700;
-            color: #000;
+            padding: 12px;
             font-size: 18px;
-            padding: 10px 20px;
-            border: none;
-            border-radius: 8px;
-            cursor: pointer;
+            width: 80%;
+            margin: 10px auto;
+            display: block;
         }
-        .resultado {
-            margin-top: 30px;
+        .info {
+            margin-top: 20px;
             font-size: 20px;
-            text-align: center;
         }
-        .info-cliente {
+        .mensaje {
+            margin-top: 15px;
+            font-weight: bold;
+            font-size: 18px;
+        }
+        img.logo {
+            width: 120px;
             margin-top: 10px;
         }
     </style>
 </head>
 <body>
     <img src="logo.png" alt="Logo" class="logo">
-
     <form method="POST">
-        <input type="text" name="dni" placeholder="Escaneá o escribí el DNI" autofocus required>
-        <br>
-        <button type="submit">Registrar Asistencia</button>
+        <input type="text" name="dni" placeholder="Escanear QR o ingresar DNI" autofocus>
     </form>
 
-    <?php if (!empty($mensaje)): ?>
-        <div class="resultado">
-            <p><?= $mensaje ?></p>
-            <?php if ($mensaje === "✅ Asistencia registrada correctamente.") : ?>
-                <div class="info-cliente">
-                    <p><strong>Nombre:</strong> <?= $nombre ?></p>
-                    <p><strong>Disciplina:</strong> <?= $disciplina ?></p>
-                    <p><strong>Clases restantes:</strong> <?= $clases_restantes - 1 ?></p>
-                    <p><strong>Vence:</strong> <?= $fecha_vencimiento ?></p>
-                </div>
-            <?php endif; ?>
-        </div>
-    <?php endif; ?>
+    <div class="info">
+        <?php if ($nombre): ?>
+            <p><strong>Nombre:</strong> <?php echo $apellido . ", " . $nombre; ?></p>
+            <p><strong>Disciplina:</strong> <?php echo $disciplina; ?></p>
+            <p><strong>Clases restantes:</strong> <?php echo $clases; ?></p>
+            <p><strong>Vencimiento:</strong> <?php echo date("d/m/Y", strtotime($fecha_vencimiento)); ?></p>
+        <?php endif; ?>
+        <?php if ($mensaje): ?>
+            <div class="mensaje"><?php echo $mensaje; ?></div>
+        <?php endif; ?>
+    </div>
 </body>
 </html>
