@@ -63,7 +63,28 @@
         <a href="logout.php">Cerrar Sesión</a>
       </div>
     </li>
-  </ul>
+  
+<li class="nav-item">
+  <a class="nav-link collapsed" href="#" data-toggle="collapse" data-target="#collapseQR" aria-expanded="false" aria-controls="collapseQR">
+    <i class="fas fa-qrcode"></i>
+    <span>QR</span>
+  </a>
+  <div id="collapseQR" class="collapse" aria-labelledby="headingQR" data-parent="#accordionSidebar">
+    <div class="bg-dark py-2 collapse-inner rounded">
+      <a class="collapse-item" href="ver_qr_clientes.php">Ver QR generados</a>
+      <a class="collapse-item" href="imprimir_qr.php">Imprimir QR</a>
+    </div>
+  </div>
+</li>
+
+<li class="nav-item">
+  <a class="nav-link" href="registrar_asistencia_qr.php">
+    <i class="fas fa-user-check"></i>
+    <span>Asistencia por QR</span>
+  </a>
+</li>
+
+</ul>
 </nav>
 <script>
   const dropdowns = document.querySelectorAll(".dropdown-btn");
