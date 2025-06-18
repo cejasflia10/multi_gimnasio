@@ -8,6 +8,10 @@ if (!isset($_SESSION["gimnasio_id"])) {
 }
 $gimnasio_id = $_SESSION["gimnasio_id"];
 include 'conexion.php';
+
+// Cargar planes desde BD
+$planes = $conexion->query("SELECT id, nombre, precio, clases FROM planes WHERE gimnasio_id = $gimnasio_id");
+$adicionales = $conexion->query("SELECT id, nombre, precio FROM planes_adicionales WHERE gimnasio_id = $gimnasio_id");
 ?>
 
 <!DOCTYPE html>
@@ -70,9 +74,13 @@ include 'conexion.php';
     <input type="text" name="cliente_busqueda" placeholder="Buscar por nombre, DNI o RFID" required />
 
     <label for="plan_id">Seleccionar Plan:</label>
-    <select name="plan_id" required>
-      <option value="">Seleccione un plan</option>
-      <!-- Opciones desde BD -->
+    <select name="plan_id" id="plan_id" onchange="actualizarTotal()" required>
+      <option value="" data-precio="0" data-clases="0">Seleccione un plan</option>
+      <?php while($row = $planes->fetch_assoc()): ?>
+        <option value="<?php echo $row['id']; ?>" data-precio="<?php echo $row['precio']; ?>" data-clases="<?php echo $row['clases']; ?>">
+          <?php echo $row['nombre'] . ' - $' . $row['precio']; ?>
+        </option>
+      <?php endwhile; ?>
     </select>
 
     <label for="fecha_inicio">Fecha de Inicio:</label>
@@ -82,16 +90,20 @@ include 'conexion.php';
     <input type="date" name="fecha_vencimiento" required />
 
     <label for="clases_disponibles">Clases Disponibles:</label>
-    <input type="number" name="clases_disponibles" required />
+    <input type="number" name="clases_disponibles" id="clases_disponibles" readonly />
 
     <label for="plan_adicional">Planes Adicionales:</label>
-    <select name="plan_adicional">
-      <option value="">Ninguno</option>
-      <!-- Opciones desde BD -->
+    <select name="plan_adicional" id="plan_adicional" onchange="actualizarTotal()">
+      <option value="" data-precio="0">Ninguno</option>
+      <?php while($row = $adicionales->fetch_assoc()): ?>
+        <option value="<?php echo $row['id']; ?>" data-precio="<?php echo $row['precio']; ?>">
+          <?php echo $row['nombre'] . ' - $' . $row['precio']; ?>
+        </option>
+      <?php endwhile; ?>
     </select>
 
-    <label for="otros_pagos">Otros Pagos (opcional):</label>
-    <input type="number" name="otros_pagos" step="0.01" value="0">
+    <label for="otros_pagos">Otros Pagos:</label>
+    <input type="number" name="otros_pagos" id="otros_pagos" value="0" step="0.01" oninput="actualizarTotal()" />
 
     <label for="forma_pago">Forma de Pago:</label>
     <select name="forma_pago" required>
@@ -102,7 +114,7 @@ include 'conexion.php';
     </select>
 
     <label for="total">Total a Pagar:</label>
-    <input type="number" name="total" step="0.01" required />
+    <input type="number" name="total" id="total" step="0.01" readonly />
 
     <div class="button-group">
       <button type="submit">Guardar</button>
@@ -110,5 +122,22 @@ include 'conexion.php';
     </div>
   </form>
 </div>
+
+<script>
+function actualizarTotal() {
+    const plan = document.getElementById('plan_id');
+    const adicional = document.getElementById('plan_adicional');
+    const otros = parseFloat(document.getElementById('otros_pagos').value) || 0;
+
+    const planPrecio = parseFloat(plan.options[plan.selectedIndex].getAttribute('data-precio')) || 0;
+    const clases = parseInt(plan.options[plan.selectedIndex].getAttribute('data-clases')) || 0;
+    const adicionalPrecio = parseFloat(adicional.options[adicional.selectedIndex].getAttribute('data-precio')) || 0;
+
+    const total = planPrecio + adicionalPrecio + otros;
+
+    document.getElementById('total').value = total.toFixed(2);
+    document.getElementById('clases_disponibles').value = clases;
+}
+</script>
 </body>
 </html>
