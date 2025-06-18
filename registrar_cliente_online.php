@@ -1,3 +1,41 @@
+
+<style>
+body {
+    background-color: #111;
+    color: gold;
+    font-family: Arial, sans-serif;
+    margin: 0;
+    padding: 0;
+}
+.container {
+    max-width: 500px;
+    margin: auto;
+    padding: 20px;
+}
+input, select, button {
+    width: 100%;
+    padding: 12px;
+    margin: 8px 0;
+    box-sizing: border-box;
+    font-size: 16px;
+    border-radius: 5px;
+    border: none;
+}
+button {
+    background-color: gold;
+    color: #111;
+    font-weight: bold;
+    cursor: pointer;
+}
+button:hover {
+    background-color: #e0b000;
+}
+@media (max-width: 600px) {
+    .container {
+        padding: 10px;
+    }
+}
+</style>
 <?php
 include 'conexion.php';
 
