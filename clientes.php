@@ -1,3 +1,4 @@
+
 <?php
 session_start();
 if (!isset($_SESSION["gimnasio_id"])) {
@@ -60,6 +61,15 @@ $resultado = $stmt->get_result();
         th {
             background-color: #333;
         }
+        .acciones a {
+            margin: 0 5px;
+            color: #FFD700;
+            text-decoration: none;
+            font-weight: bold;
+        }
+        .acciones a:hover {
+            color: #fff;
+        }
         @media (max-width: 768px) {
             th, td {
                 font-size: 12px;
@@ -69,11 +79,10 @@ $resultado = $stmt->get_result();
     </style>
 </head>
 <body>
-    <?php include 'menu.php'; ?>
     <div class="contenido">
         <h1>Clientes del Gimnasio</h1>
-        <a href="agregar_cliente.php" class="boton">Agregar Cliente</a>
-        <a href="index.php" class="boton">Volver al Panel</a>
+        <a href="agregar_cliente.php" class="boton">➕ Agregar Cliente</a>
+        <a href="index.php" class="boton">🏠 Volver al Panel</a>
         <div class="tabla-responsive">
         <table>
             <thead>
@@ -88,6 +97,7 @@ $resultado = $stmt->get_result();
                     <th>Disciplina</th>
                     <th>RFID</th>
                     <th>Vencimiento</th>
+                    <th>Acciones</th>
                 </tr>
             </thead>
             <tbody>
@@ -103,6 +113,10 @@ $resultado = $stmt->get_result();
                     <td><?= $row["disciplina"] ?></td>
                     <td><?= $row["rfid_uid"] ?></td>
                     <td><?= $row["fecha_vencimiento"] ?></td>
+                    <td class="acciones">
+                        <a href="editar_cliente.php?id=<?= $row['id'] ?>">✏️</a>
+                        <a href="eliminar_cliente.php?id=<?= $row['id'] ?>" onclick="return confirm('¿Eliminar este cliente?')">🗑️</a>
+                    </td>
                 </tr>
             <?php } ?>
             </tbody>
