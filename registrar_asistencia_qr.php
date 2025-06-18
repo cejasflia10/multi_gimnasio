@@ -1,44 +1,76 @@
 <?php
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
 include 'conexion.php';
 
-$dni = $_POST['dni'] ?? '';
-$gimnasio_id = $_POST['gimnasio_id'] ?? 0;
-
-if (!$dni || !$gimnasio_id) {
-    echo "Datos inválidos.";
-    exit;
-}
-
-$stmt = $conexion->prepare("SELECT id, apellido, nombre, clases_restantes, fecha_vencimiento FROM clientes WHERE dni = ? AND gimnasio_id = ?");
-$stmt->bind_param("si", $dni, $gimnasio_id);
-$stmt->execute();
-$resultado = $stmt->get_result();
-
-if ($resultado->num_rows > 0) {
-    $cliente = $resultado->fetch_assoc();
-
-    $hoy = date("Y-m-d");
-    $vencimiento = $cliente['fecha_vencimiento'];
-
-    if ($vencimiento < $hoy) {
-        echo "Cuota vencida: " . $vencimiento;
-        exit;
-    }
-
-    if ($cliente['clases_restantes'] <= 0) {
-        echo "Sin clases disponibles.";
-        exit;
-    }
-
-    $nuevas_clases = $cliente['clases_restantes'] - 1;
-    $conexion->query("UPDATE clientes SET clases_restantes = $nuevas_clases WHERE id = " . $cliente['id']);
-
-    $stmt = $conexion->prepare("INSERT INTO asistencias (cliente_id, fecha, gimnasio_id) VALUES (?, NOW(), ?)");
-    $stmt->bind_param("ii", $cliente['id'], $gimnasio_id);
-    $stmt->execute();
-
-    echo "Asistencia registrada<br>Nombre: " . $cliente['apellido'] . ", " . $cliente['nombre'] . "<br>Clases restantes: " . $nuevas_clases;
-} else {
-    echo "Cliente no encontrado.";
-}
 ?>
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Asistencia por QR</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body {
+            background-color: #000;
+            color: gold;
+            font-family: Arial, sans-serif;
+            text-align: center;
+            padding: 20px;
+        }
+        #reader {
+            width: 100%;
+            margin: 0 auto;
+        }
+        .info-box {
+            border: 2px solid gold;
+            padding: 15px;
+            margin-top: 20px;
+            border-radius: 10px;
+        }
+        img.logo {
+            max-width: 150px;
+            margin-bottom: 20px;
+        }
+    </style>
+    <script src="https://unpkg.com/html5-qrcode"></script>
+</head>
+<body>
+    <img src="logo.png" alt="Logo Fight Academy" class="logo">
+    <h1>Registro de Asistencia por QR</h1>
+    <div id="reader"></div>
+    <div id="resultado" class="info-box"></div>
+
+    <script>
+        function registrarAsistencia(dato) {
+            fetch('procesar_asistencia_qr.php?dato=' + encodeURIComponent(dato))
+                .then(response => response.text())
+                .then(data => {
+                    document.getElementById('resultado').innerHTML = data;
+                })
+                .catch(error => {
+                    document.getElementById('resultado').innerHTML = 'Error: ' + error;
+                });
+        }
+
+        const html5QrCode = new Html5Qrcode("reader");
+        const qrConfig = { fps: 10, qrbox: 250 };
+
+        html5QrCode.start(
+            { facingMode: "environment" },
+            qrConfig,
+            qrCodeMessage => {
+                html5QrCode.stop().then(() => {
+                    registrarAsistencia(qrCodeMessage);
+                });
+            },
+            errorMessage => {
+                // Puedes mostrar errores si quieres
+            }
+        ).catch(err => {
+            document.getElementById('resultado').innerHTML = 'No se pudo acceder a la cámara: ' + err;
+        });
+    </script>
+</body>
+</html>
