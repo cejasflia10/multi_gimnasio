@@ -1,11 +1,13 @@
-<?php
-include 'conexion.php';
-include 'menu.php';
 
-// Consultar clientes y disciplinas
-$clientes = mysqli_query($conexion, "SELECT * FROM clientes");
-$planes = mysqli_query($conexion, "SELECT * FROM planes");
-$disciplinas = mysqli_query($conexion, "SELECT * FROM disciplinas");
+<?php
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+if (!isset($_SESSION['gimnasio_id'])) {
+    die("Acceso denegado.");
+}
+$gimnasio_id = $_SESSION['gimnasio_id'];
+include 'conexion.php';
 ?>
 
 <!DOCTYPE html>
@@ -13,99 +15,136 @@ $disciplinas = mysqli_query($conexion, "SELECT * FROM disciplinas");
 <head>
     <meta charset="UTF-8">
     <title>Agregar Membresía</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
-        body {
-            background-color: #111;
-            color: #f1c40f;
-            font-family: Arial, sans-serif;
-            margin: 0;
-        }
-        .formulario {
-            margin-left: 240px;
-            padding: 20px;
-            max-width: 700px;
-        }
-        h2 {
-            color: #f1c40f;
-        }
-        label {
-            display: block;
-            margin-top: 15px;
-            font-weight: bold;
-        }
-        input, select {
-            width: 100%;
-            padding: 10px;
-            margin-top: 5px;
-            background-color: #222;
-            color: white;
-            border: 1px solid #f1c40f;
-            border-radius: 4px;
-        }
-        button {
-            margin-top: 20px;
-            background: #f1c40f;
-            color: #111;
-            border: none;
-            padding: 10px 20px;
-            font-weight: bold;
-            border-radius: 5px;
-            cursor: pointer;
-        }
-        button:hover {
-            background-color: #d4ac0d;
-        }
+        body { background: #111; color: #FFD700; font-family: Arial; margin: 0; padding: 20px; }
+        h1 { text-align: center; }
+        form { max-width: 600px; margin: auto; background: #222; padding: 20px; border-radius: 8px; }
+        label { display: block; margin-top: 10px; }
+        input, select { width: 100%; padding: 8px; margin-top: 5px; background: #333; color: #FFD700; border: 1px solid #FFD700; border-radius: 4px; }
+        .grupo { margin-bottom: 15px; }
+        .boton { background: #FFD700; color: #000; font-weight: bold; cursor: pointer; }
     </style>
 </head>
 <body>
-<div class="formulario">
-    <h2>Agregar Membresía</h2>
-    <form action="guardar_membresia.php" method="POST">
+<h1>Nueva Membresía</h1>
+<form method="POST" action="guardar_membresia.php">
+    <div class="grupo">
+        <label for="busqueda_cliente">Buscar Cliente (DNI, Nombre, RFID):</label>
+        <input type="text" id="busqueda_cliente" placeholder="Escriba DNI, nombre o RFID">
+        <input type="hidden" name="cliente_id" id="cliente_id">
+        <div id="datos_cliente" style="margin-top: 10px;"></div>
+    </div>
 
-        <label>Cliente:</label>
-        <select name="cliente_id" required>
-            <option value="">Seleccionar cliente</option>
-            <?php while ($cliente = mysqli_fetch_assoc($clientes)) { ?>
-                <option value="<?php echo $cliente['id']; ?>">
-                    <?php echo $cliente['apellido'] . ', ' . $cliente['nombre'] . ' - DNI: ' . $cliente['dni']; ?>
-                </option>
-            <?php } ?>
+    <div class="grupo">
+        <label for="plan_id">Seleccionar Plan:</label>
+        <select name="plan_id" id="plan_id" required>
+            <option value="">Seleccione un plan</option>
+<?php
+$planes = $conexion->query("SELECT id, nombre, clases, duracion_dias, precio FROM planes WHERE gimnasio_id = $gimnasio_id");
+while ($plan = $planes->fetch_assoc()) {
+    echo "<option value='{$plan['id']}' data-clases='{$plan['clases']}' data-dias='{$plan['duracion_dias']}' data-precio='{$plan['precio']}'>{$plan['nombre']} ({$plan['clases']} clases - \${$plan['precio']})</option>";
+}
+?>
         </select>
+    </div>
 
-        <label>Disciplina:</label>
-        <select name="disciplina_id" required>
-            <option value="">Seleccionar disciplina</option>
-            <?php while ($disciplina = mysqli_fetch_assoc($disciplinas)) { ?>
-                <option value="<?php echo $disciplina['id']; ?>">
-                    <?php echo $disciplina['nombre']; ?>
-                </option>
-            <?php } ?>
-        </select>
+    <div class="grupo">
+        <label for="fecha_inicio">Fecha de Inicio:</label>
+        <input type="date" name="fecha_inicio" id="fecha_inicio" value="<?= date('Y-m-d') ?>" required>
+    </div>
 
-        <label>Plan:</label>
-        <select name="plan_id" required>
-            <option value="">Seleccionar plan</option>
-            <?php while ($plan = mysqli_fetch_assoc($planes)) { ?>
-                <option value="<?php echo $plan['id']; ?>">
-                    <?php echo $plan['nombre'] . ' - $' . $plan['precio']; ?>
-                </option>
-            <?php } ?>
-        </select>
+    <div class="grupo">
+        <label for="fecha_vencimiento">Fecha de Vencimiento:</label>
+        <input type="date" name="fecha_vencimiento" id="fecha_vencimiento" readonly>
+    </div>
 
-        <label>Fecha de inicio:</label>
-        <input type="date" name="fecha_inicio" required>
+    <div class="grupo">
+        <label for="clases_disponibles">Clases Disponibles:</label>
+        <input type="number" name="clases_disponibles" id="clases_disponibles" readonly>
+    </div>
 
-        <label>Método de pago:</label>
-        <select name="metodo_pago" required>
+    <div class="grupo">
+        <label for="metodo_pago">Método de Pago:</label>
+        <select name="metodo_pago" id="metodo_pago" required>
             <option value="efectivo">Efectivo</option>
             <option value="transferencia">Transferencia</option>
             <option value="tarjeta_debito">Tarjeta Débito</option>
             <option value="tarjeta_credito">Tarjeta Crédito</option>
             <option value="cuenta_corriente">Cuenta Corriente</option>
         </select>
+    </div>
 
-        <button type="submit">Guardar Membresía</button>
-    </form>
-</div>
+    <div class="grupo">
+        <label for="adicionales">Planes Adicionales:</label>
+        <select name="adicionales[]" id="adicionales" multiple>
+<?php
+$adicionales = $conexion->query("SELECT id, nombre, precio FROM planes_adicionales WHERE gimnasio_id = $gimnasio_id");
+while ($extra = $adicionales->fetch_assoc()) {
+    echo "<option value='{$extra['id']}' data-precio='{$extra['precio']}'>{$extra['nombre']} (\${$extra['precio']})</option>";
+}
+?>
+        </select>
+    </div>
+
+    <div class="grupo">
+        <label for="otros_pagos">Otros Pagos (Descripción y Monto):</label>
+        <input type="text" name="otros_descripcion" placeholder="Ej: Matrícula">
+        <input type="number" name="otros_monto" step="0.01" placeholder="Monto">
+    </div>
+
+    <div class="grupo">
+        <label for="total">Total a Pagar:</label>
+        <input type="text" id="total" name="total" readonly>
+    </div>
+
+    <div class="grupo">
+        <button type="submit" class="boton">Registrar Membresía</button>
+    </div>
+</form>
+
+<script>
+document.getElementById('plan_id').addEventListener('change', function () {
+    const option = this.options[this.selectedIndex];
+    const clases = option.getAttribute('data-clases');
+    const dias = option.getAttribute('data-dias');
+    const precio = parseFloat(option.getAttribute('data-precio')) || 0;
+    const fechaInicio = document.getElementById('fecha_inicio').value;
+
+    document.getElementById('clases_disponibles').value = clases;
+
+    if (fechaInicio) {
+        const fecha = new Date(fechaInicio);
+        fecha.setDate(fecha.getDate() + parseInt(dias));
+        document.getElementById('fecha_vencimiento').value = fecha.toISOString().split('T')[0];
+    }
+
+    calcularTotal();
+});
+
+document.getElementById('adicionales').addEventListener('change', calcularTotal);
+document.getElementById('fecha_inicio').addEventListener('change', () => {
+    document.getElementById('plan_id').dispatchEvent(new Event('change'));
+});
+
+function calcularTotal() {
+    let total = 0;
+
+    const planPrecio = parseFloat(document.querySelector('#plan_id option:checked')?.getAttribute('data-precio')) || 0;
+    total += planPrecio;
+
+    const seleccionados = document.querySelectorAll('#adicionales option:checked');
+    seleccionados.forEach(opt => total += parseFloat(opt.getAttribute('data-precio')) || 0);
+
+    const otros = parseFloat(document.querySelector('input[name="otros_monto"]').value) || 0;
+    total += otros;
+
+    if (document.getElementById('metodo_pago').value === 'cuenta_corriente') {
+        total *= -1; // saldo negativo
+    }
+
+    document.getElementById('total').value = total.toFixed(2);
+}
+</script>
 </body>
 </html>
