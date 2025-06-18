@@ -1,38 +1,44 @@
-<div id="sidebar" style="width: 250px; background: #000; color: #FFD700; height: 100vh; position: fixed; overflow-y: auto; padding-top: 20px;">
-    <h2 style="text-align: center; font-size: 20px;">🥊 Fight Academy</h2>
-    <ul style="list-style: none; padding-left: 10px;">
-        <li><a href="index.php" style="color: #FFD700; text-decoration: none;">📊 Dashboard</a></li>
+<nav id="sidebar">
+    <div class="sidebar-header">
+        <h3>🥋 Fight Academy</h3>
+    </div>
+    <ul class="components">
+        <li><a href="index.php">🏠 Dashboard</a></li>
         <li>
-            <details>
-                <summary style="cursor: pointer;">👤 Clientes</summary>
-                <ul>
-                    <li><a href="clientes.php" style="color: #FFD700;">Ver Clientes</a></li>
-                    <li><a href="agregar_cliente.php" style="color: #FFD700;">Agregar Cliente</a></li>
-                </ul>
-            </details>
+            <button class="dropdown-btn">👤 Clientes ▾</button>
+            <div class="dropdown-container">
+                <a href="clientes.php">Ver Clientes</a>
+                <a href="agregar_cliente.php">Agregar Cliente</a>
+            </div>
         </li>
         <li>
-            <details>
-                <summary style="cursor: pointer;">📄 Membresías</summary>
-                <ul>
-                    <li><a href="membresias.php" style="color: #FFD700;">Ver Membresías</a></li>
-                    <li><a href="agregar_membresia.php" style="color: #FFD700;">Agregar Membresía</a></li>
-                </ul>
-            </details>
+            <button class="dropdown-btn">📋 Membresías ▾</button>
+            <div class="dropdown-container">
+                <a href="membresias.php">Ver Membresías</a>
+                <a href="agregar_membresia.php">Agregar Membresía</a>
+            </div>
         </li>
-        <li><a href="profesores.php" style="color: #FFD700;">🧑‍🏫 Profesores</a></li>
-        <li><a href="asistencias.php" style="color: #FFD700;">🕒 Asistencias</a></li>
-        <li><a href="ventas.php" style="color: #FFD700;">💰 Ventas</a></li>
+        <li><a href="profesores.php">👨‍🏫 Profesores</a></li>
+        <li><a href="asistencias.php">🕒 Asistencias</a></li>
+        <li><a href="ventas.php">💵 Ventas</a></li>
         <li>
-            <details>
-                <summary style="cursor: pointer;">⚙️ Configuración</summary>
-                <ul>
-                    <li><a href="cambiar_contrasena.php" style="color: #FFD700;">🔒 Cambiar Contraseña</a></li>
-                    <li><a href="logout.php" style="color: #FFD700;">🚪 Cerrar Sesión</a></li>
-                    <li><a href="ver_gimnasios.php" style="color: #FFD700;">🏢 Ver Gimnasios</a></li>
-                    <li><a href="crear_gimnasio.php" style="color: #FFD700;">➕ Crear Gimnasio</a></li>
-                </ul>
-            </details>
+            <button class="dropdown-btn">⚙️ Configuración ▾</button>
+            <div class="dropdown-container">
+                <a href="cambiar_contrasena.php">🔐 Cambiar Contraseña</a>
+                <a href="logout.php">🚪 Cerrar Sesión</a>
+                <a href="ver_gimnasios.php">🏢 Ver Gimnasios</a>
+                <a href="crear_gimnasio.php">➕ Crear Gimnasio</a>
+            </div>
         </li>
     </ul>
-</div>
+</nav>
+<script>
+    const dropdowns = document.querySelectorAll(".dropdown-btn");
+    dropdowns.forEach(btn => {
+        btn.addEventListener("click", function () {
+            this.classList.toggle("active");
+            const container = this.nextElementSibling;
+            container.style.display = container.style.display === "block" ? "none" : "block";
+        });
+    });
+</script>
