@@ -1,4 +1,4 @@
- <?php
+<?php
 session_start();
 if (!isset($_SESSION["gimnasio_id"])) {
     die("Acceso denegado.");
