@@ -1,75 +1,127 @@
 <?php
-if (session_status() === PHP_SESSION_NONE) { session_start(); }
-if (!isset($_SESSION['gimnasio_id'])) {
-    die("Acceso denegado.");
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
 }
-$gimnasio_id = $_SESSION['gimnasio_id'];
 include 'conexion.php';
+
+$gimnasio_id = $_SESSION["gimnasio_id"] ?? 0;
+
+// Obtener planes
+$planes = [];
+$result = $conexion->query("SELECT * FROM planes WHERE gimnasio_id = $gimnasio_id");
+while ($row = $result->fetch_assoc()) {
+    $planes[] = $row;
+}
+
+// Obtener planes adicionales
+$adicionales = [];
+$result2 = $conexion->query("SELECT * FROM planes_adicionales WHERE gimnasio_id = $gimnasio_id");
+while ($row2 = $result2->fetch_assoc()) {
+    $adicionales[] = $row2;
+}
 ?>
 <!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="UTF-8">
-  <title>Agregar Membresía</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <link rel="stylesheet" href="buscador_cliente.css">
+    <meta charset="UTF-8">
+    <title>Registrar Membresía</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        body {
+            background-color: #111;
+            color: #FFD700;
+            font-family: Arial, sans-serif;
+            padding: 20px;
+        }
+        .form-container {
+            max-width: 600px;
+            margin: auto;
+            background-color: #222;
+            padding: 20px;
+            border-radius: 10px;
+        }
+        input, select {
+            width: 100%;
+            padding: 8px;
+            margin: 6px 0 12px;
+            background-color: #333;
+            color: #fff;
+            border: 1px solid #FFD700;
+            border-radius: 5px;
+        }
+        label {
+            font-weight: bold;
+        }
+        .btn {
+            background-color: #FFD700;
+            color: black;
+            font-weight: bold;
+            border: none;
+            padding: 10px;
+            width: 100%;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+    </style>
+    <script>
+        function calcularTotal() {
+            const planSelect = document.getElementById("plan");
+            const adicionalSelect = document.getElementById("adicional");
+            const otrosPagos = parseFloat(document.getElementById("otros_pagos").value) || 0;
+            const metodo = planSelect.options[planSelect.selectedIndex].dataset.precio || 0;
+            const adicional = adicionalSelect.options[adicionalSelect.selectedIndex].dataset.precio || 0;
+
+            const total = parseFloat(metodo) + parseFloat(adicional) + otrosPagos;
+            document.getElementById("total").value = total.toFixed(2);
+        }
+    </script>
 </head>
 <body>
-  <div class="container">
-    <h2>Agregar Membresía</h2>
+    <div class="form-container">
+        <h2>Registrar Nueva Membresía</h2>
+        <form action="guardar_membresia.php" method="POST">
+            <label for="dni">Buscar Cliente (DNI):</label>
+            <input type="text" name="dni" required>
 
-    <!-- Buscador de cliente -->
-    <label for="buscar">Buscar Cliente (DNI, Nombre, Apellido):</label>
-    <input type="text" id="buscar" placeholder="Escriba para buscar..." autocomplete="off">
-    <div id="resultado_busqueda"></div>
+            <label for="plan">Seleccionar Plan:</label>
+            <select name="plan_id" id="plan" onchange="calcularTotal()" required>
+                <option value="">Seleccione un plan</option>
+                <?php foreach ($planes as $p): ?>
+                    <option value="<?= $p['id'] ?>" data-precio="<?= $p['precio'] ?>">
+                        <?= $p['nombre'] ?> - $<?= number_format($p['precio'], 2) ?>
+                    </option>
+                <?php endforeach; ?>
+            </select>
 
-    <form id="formulario_membresia" action="guardar_membresia.php" method="POST">
-      <input type="hidden" name="cliente_id" id="cliente_id_seleccionado" required>
+            <label for="fecha_inicio">Fecha de Inicio:</label>
+            <input type="date" name="fecha_inicio" value="<?= date('Y-m-d') ?>" required>
 
-      <label for="plan">Plan:</label>
-      <select name="plan" id="plan">
-        <?php
-          $planes = $conexion->query("SELECT id, nombre FROM planes WHERE gimnasio_id = $gimnasio_id");
-          while($p = $planes->fetch_assoc()){
-              echo "<option value='{$p['id']}'>{$p['nombre']}</option>";
-          }
-        ?>
-      </select>
+            <label for="adicional">Planes Adicionales:</label>
+            <select name="adicional_id" id="adicional" onchange="calcularTotal()">
+                <option value="">Ninguno</option>
+                <?php foreach ($adicionales as $a): ?>
+                    <option value="<?= $a['id'] ?>" data-precio="<?= $a['precio'] ?>">
+                        <?= $a['nombre'] ?> - $<?= number_format($a['precio'], 2) ?>
+                    </option>
+                <?php endforeach; ?>
+            </select>
 
-      <label for="plan_adicional">Plan Adicional:</label>
-      <select name="plan_adicional" id="plan_adicional">
-        <option value="">Ninguno</option>
-        <?php
-          $adicionales = $conexion->query("SELECT id, nombre FROM planes_adicionales WHERE gimnasio_id = $gimnasio_id");
-          while($a = $adicionales->fetch_assoc()){
-              echo "<option value='{$a['id']}'>{$a['nombre']}</option>";
-          }
-        ?>
-      </select>
+            <label for="otros_pagos">Otros Pagos:</label>
+            <input type="number" step="0.01" id="otros_pagos" name="otros_pagos" oninput="calcularTotal()">
 
-      <label for="fecha_inicio">Fecha de Inicio:</label>
-      <input type="date" name="fecha_inicio" value="<?php echo date('Y-m-d'); ?>" required>
+            <label for="metodo">Método de Pago:</label>
+            <select name="metodo_pago" required>
+                <option value="efectivo">Efectivo</option>
+                <option value="transferencia">Transferencia</option>
+                <option value="cuenta_corriente">Cuenta Corriente</option>
+                <option value="tarjeta">Tarjeta</option>
+            </select>
 
-      <label for="metodo_pago">Método de Pago:</label>
-      <select name="metodo_pago" required>
-        <option value="efectivo">Efectivo</option>
-        <option value="transferencia">Transferencia</option>
-        <option value="tarjeta">Tarjeta</option>
-        <option value="cuenta_corriente">Cuenta Corriente</option>
-      </select>
+            <label for="total">Total a Pagar:</label>
+            <input type="text" id="total" name="total" readonly>
 
-      <label for="otros_pagos">Otros Pagos:</label>
-      <input type="number" name="otros_pagos" value="0">
-
-      <label for="total">Total a Pagar:</label>
-      <input type="number" name="total" id="total" readonly>
-
-      <button type="submit">Registrar Membresía</button>
-    </form>
-    <br>
-    <a href="index.php" class="boton-volver">Volver al Panel</a>
-  </div>
-
-  <script src="buscador_cliente.js"></script>
+            <button type="submit" class="btn">Registrar Membresía</button>
+        </form>
+    </div>
 </body>
 </html>
