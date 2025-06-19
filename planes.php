@@ -39,7 +39,6 @@ $planes = $conexion->query("SELECT * FROM planes ORDER BY id DESC");
   </style>
 </head>
 <body>
-<?php include 'menu.php'; ?>
 <div class="container">
   <h1>Planes</h1>
   <form method="POST" style="margin-bottom: 20px;">
