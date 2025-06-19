@@ -138,5 +138,28 @@ function actualizarTotal() {
     document.getElementById('clases_disponibles').value = clases;
 }
 </script>
+
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script>
+$(document).ready(function(){
+    $("#buscadorCliente").on("keyup", function(){
+        var valor = $(this).val();
+        if(valor.length > 2){
+            $.ajax({
+                url: "buscar_clientes.php",
+                method: "POST",
+                data: {query: valor},
+                success: function(data){
+                    $("#resultadoBusqueda").html(data);
+                }
+            });
+        } else {
+            $("#resultadoBusqueda").empty();
+        }
+    });
+});
+</script>
+<div id="resultadoBusqueda" style="margin-top:10px;"></div>
+
 </body>
 </html>
