@@ -1,23 +1,33 @@
 
-.resultado-busqueda {
-    background: #111;
-    border: 1px solid #ffd700;
-    max-height: 200px;
-    overflow-y: auto;
-    position: absolute;
-    z-index: 999;
-    width: 100%;
-    margin-top: 2px;
+.busqueda-container {
+  margin-bottom: 20px;
 }
 
-.cliente-sugerido {
-    padding: 10px;
-    cursor: pointer;
-    color: #ffd700;
-    border-bottom: 1px solid #333;
-    background-color: #222;
+#buscarCliente {
+  width: 100%;
+  padding: 10px;
+  font-size: 16px;
 }
 
-.cliente-sugerido:hover {
-    background-color: #333;
+#resultadosBusqueda {
+  background: #1a1a1a;
+  border: 1px solid #444;
+  color: gold;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.resultado {
+  padding: 10px;
+  border-bottom: 1px solid #333;
+  cursor: pointer;
+}
+
+.resultado:hover {
+  background-color: #333;
+}
+
+.sin-resultado {
+  padding: 10px;
+  color: #999;
 }

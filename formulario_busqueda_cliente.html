@@ -1,34 +1,38 @@
 
-<!-- Campo de búsqueda -->
-<div class="form-group">
-  <label for="busqueda_cliente">Buscar Cliente (DNI, Nombre, RFID):</label>
-  <input type="text" id="busqueda_cliente" class="input-estilo" placeholder="Escriba DNI, nombre o RFID" autocomplete="off">
-  <div id="resultado_busqueda" class="resultado-busqueda"></div>
-  <input type="hidden" name="cliente_id" id="cliente_id">
+<!-- Formulario de búsqueda de cliente -->
+<link rel="stylesheet" href="buscador_cliente.css">
+<div class="busqueda-container">
+    <label for="buscarCliente">Buscar cliente (DNI, nombre, apellido o RFID):</label>
+    <input type="text" id="buscarCliente" name="buscarCliente" placeholder="Buscar...">
+    <div id="resultadosBusqueda"></div>
 </div>
-
-<!-- Script del buscador -->
 <script>
-document.getElementById('busqueda_cliente').addEventListener('keyup', function() {
-    const query = this.value;
-    if (query.length >= 2) {
-        fetch('buscar_cliente.php?q=' + query)
+document.getElementById('buscarCliente').addEventListener('input', function() {
+    var query = this.value;
+    if (query.length > 1) {
+        fetch('buscar_cliente.php?q=' + encodeURIComponent(query))
             .then(response => response.json())
             .then(data => {
-                let resultado = document.getElementById('resultado_busqueda');
-                resultado.innerHTML = '';
-                data.forEach(cliente => {
-                    let div = document.createElement('div');
-                    div.textContent = `${cliente.nombre} ${cliente.apellido} - DNI: ${cliente.dni}`;
-                    div.classList.add('cliente-sugerido');
-                    div.onclick = function() {
-                        document.getElementById('busqueda_cliente').value = `${cliente.nombre} ${cliente.apellido}`;
-                        document.getElementById('cliente_id').value = cliente.id;
-                        resultado.innerHTML = '';
-                    };
-                    resultado.appendChild(div);
-                });
+                var resultados = document.getElementById('resultadosBusqueda');
+                resultados.innerHTML = '';
+                if (data.length === 0) {
+                    resultados.innerHTML = '<div class="sin-resultado">No se encontraron resultados</div>';
+                } else {
+                    data.forEach(cliente => {
+                        var div = document.createElement('div');
+                        div.className = 'resultado';
+                        div.textContent = cliente.nombre + ' ' + cliente.apellido + ' - DNI: ' + cliente.dni;
+                        div.onclick = () => {
+                            document.getElementById('buscarCliente').value = cliente.nombre + ' ' + cliente.apellido;
+                            resultados.innerHTML = '';
+                            // Aquí podés autocompletar los campos del formulario con los datos del cliente
+                        };
+                        resultados.appendChild(div);
+                    });
+                }
             });
+    } else {
+        document.getElementById('resultadosBusqueda').innerHTML = '';
     }
 });
 </script>
