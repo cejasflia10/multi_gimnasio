@@ -1,31 +1,23 @@
 <?php
 include 'conexion.php';
+session_start();
 
-$busqueda = $_GET['q'] ?? '';
+$gimnasio_id = $_SESSION['gimnasio_id'];
+$q = isset($_GET['q']) ? $conexion->real_escape_string($_GET['q']) : '';
 
-$sql = "SELECT id, apellido, nombre, dni, rfid_uid 
-        FROM clientes 
-        WHERE apellido LIKE ? 
-        ORDER BY apellido ASC 
+$sql = "SELECT id, nombre, apellido, dni FROM clientes 
+        WHERE gimnasio_id = ? AND (dni LIKE ? OR nombre LIKE ? OR apellido LIKE ? OR rfid_uid LIKE ?)
         LIMIT 10";
-
 $stmt = $conexion->prepare($sql);
-$like = "%$busqueda%";
-$stmt->bind_param("s", $like);
+$search = "%$q%";
+$stmt->bind_param("sssss", $gimnasio_id, $search, $search, $search, $search);
 $stmt->execute();
 $resultado = $stmt->get_result();
 
 $clientes = [];
 while ($fila = $resultado->fetch_assoc()) {
-    $clientes[] = [
-        "id" => $fila["id"],
-        "apellido" => $fila["apellido"],
-        "nombre" => $fila["nombre"],
-        "dni" => $fila["dni"],
-        "rfid" => $fila["rfid_uid"]
-    ];
+    $clientes[] = $fila;
 }
 
-header('Content-Type: application/json');
 echo json_encode($clientes);
 ?>
