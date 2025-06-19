@@ -1,17 +1,18 @@
+
 <?php
-include 'conexion.php';
-session_start();
-$gimnasio_id = $_SESSION['gimnasio_id'];
+include "conexion.php";
+$q = $_GET['q'] ?? '';
+$gimnasio_id = $_SESSION['gimnasio_id'] ?? 1;
 
-$term = mysqli_real_escape_string($conexion, $_GET['term']);
-$sql = "SELECT id, nombre, apellido, dni FROM clientes 
-        WHERE (dni LIKE '%$term%' OR nombre LIKE '%$term%' OR apellido LIKE '%$term%') 
-        AND gimnasio_id = $gimnasio_id 
-        LIMIT 10";
-$result = $conexion->query($sql);
+$stmt = $conexion->prepare("SELECT id, nombre, apellido, dni FROM clientes WHERE (dni LIKE ? OR nombre LIKE ? OR apellido LIKE ?) AND gimnasio_id = ?");
+$q = "%$q%";
+$stmt->bind_param("sssi", $q, $q, $q, $gimnasio_id);
+$stmt->execute();
+$res = $stmt->get_result();
 
-$clientes = [];
-while ($row = $result->fetch_assoc()) {
-    $clientes[] = $row;
+$data = [];
+while ($row = $res->fetch_assoc()) {
+    $data[] = ['id' => $row['id'], 'text' => $row['apellido'] . ', ' . $row['nombre'] . ' - ' . $row['dni']];
 }
-echo json_encode($clientes);
+echo json_encode($data);
+?>
