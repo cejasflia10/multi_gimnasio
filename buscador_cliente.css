@@ -1,0 +1,23 @@
+
+.resultado-busqueda {
+    background: #111;
+    border: 1px solid #ffd700;
+    max-height: 200px;
+    overflow-y: auto;
+    position: absolute;
+    z-index: 999;
+    width: 100%;
+    margin-top: 2px;
+}
+
+.cliente-sugerido {
+    padding: 10px;
+    cursor: pointer;
+    color: #ffd700;
+    border-bottom: 1px solid #333;
+    background-color: #222;
+}
+
+.cliente-sugerido:hover {
+    background-color: #333;
+}

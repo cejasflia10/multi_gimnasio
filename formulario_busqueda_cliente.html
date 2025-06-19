@@ -1,0 +1,34 @@
+
+<!-- Campo de búsqueda -->
+<div class="form-group">
+  <label for="busqueda_cliente">Buscar Cliente (DNI, Nombre, RFID):</label>
+  <input type="text" id="busqueda_cliente" class="input-estilo" placeholder="Escriba DNI, nombre o RFID" autocomplete="off">
+  <div id="resultado_busqueda" class="resultado-busqueda"></div>
+  <input type="hidden" name="cliente_id" id="cliente_id">
+</div>
+
+<!-- Script del buscador -->
+<script>
+document.getElementById('busqueda_cliente').addEventListener('keyup', function() {
+    const query = this.value;
+    if (query.length >= 2) {
+        fetch('buscar_cliente.php?q=' + query)
+            .then(response => response.json())
+            .then(data => {
+                let resultado = document.getElementById('resultado_busqueda');
+                resultado.innerHTML = '';
+                data.forEach(cliente => {
+                    let div = document.createElement('div');
+                    div.textContent = `${cliente.nombre} ${cliente.apellido} - DNI: ${cliente.dni}`;
+                    div.classList.add('cliente-sugerido');
+                    div.onclick = function() {
+                        document.getElementById('busqueda_cliente').value = `${cliente.nombre} ${cliente.apellido}`;
+                        document.getElementById('cliente_id').value = cliente.id;
+                        resultado.innerHTML = '';
+                    };
+                    resultado.appendChild(div);
+                });
+            });
+    }
+});
+</script>
