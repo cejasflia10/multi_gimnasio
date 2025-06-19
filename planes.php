@@ -1,59 +1,93 @@
 <?php
 session_start();
-include 'conexion.php';
-
 if (!isset($_SESSION['gimnasio_id'])) {
     die("Acceso denegado.");
 }
+include 'conexion.php';
 
-$gimnasio_id = $_SESSION['gimnasio_id'];
-
-// Insertar nuevo plan
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $nombre = $_POST['nombre'];
-    $precio = $_POST['precio'];
-    $dias_disponibles = $_POST['dias_disponibles'];
-    $duracion_meses = $_POST['duracion_meses'];
+$mensaje = '';
+if ($_SERVER["REQUEST_METHOD"] == "POST") {
+    $nombre = $_POST["nombre"] ?? '';
+    $precio = $_POST["precio"] ?? '';
+    $dias = $_POST["dias_disponibles"] ?? '';
+    $duracion = $_POST["duracion_meses"] ?? '';
+    $gimnasio_id = $_SESSION['gimnasio_id'];
 
     $stmt = $conexion->prepare("INSERT INTO planes (nombre, precio, dias_disponibles, duracion_meses, gimnasio_id) VALUES (?, ?, ?, ?, ?)");
-    $stmt->bind_param("sddii", $nombre, $precio, $dias_disponibles, $duracion_meses, $gimnasio_id);
-    $stmt->execute();
+    $stmt->bind_param("sdsii", $nombre, $precio, $dias, $duracion, $gimnasio_id);
+    if ($stmt->execute()) {
+        $mensaje = "Plan agregado correctamente.";
+    } else {
+        $mensaje = "Error al agregar plan: " . $stmt->error;
+    }
+    $stmt->close();
 }
 
-// Eliminar plan
-if (isset($_GET['eliminar'])) {
-    $id = $_GET['eliminar'];
-    $stmt = $conexion->prepare("DELETE FROM planes WHERE id = ? AND gimnasio_id = ?");
-    $stmt->bind_param("ii", $id, $gimnasio_id);
-    $stmt->execute();
-}
-
-$planes = [];
+$gimnasio_id = $_SESSION['gimnasio_id'];
 $resultado = $conexion->query("SELECT * FROM planes WHERE gimnasio_id = $gimnasio_id");
-while ($row = $resultado->fetch_assoc()) {
-    $planes[] = $row;
-}
-?>
 
+?>
 <!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">
     <title>Planes</title>
-    <link rel="stylesheet" href="style.css">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        body {
+            background-color: #111;
+            color: #FFD700;
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+        }
+        h1 { text-align: center; }
+        .formulario, .tabla {
+            max-width: 600px;
+            margin: auto;
+        }
+        input, select, button {
+            width: 100%;
+            margin: 5px 0;
+            padding: 10px;
+            border: 1px solid #FFD700;
+            background-color: #222;
+            color: #FFD700;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+        }
+        th, td {
+            border: 1px solid #FFD700;
+            padding: 8px;
+            text-align: center;
+        }
+        .acciones button {
+            padding: 5px 10px;
+            background-color: #FFD700;
+            color: #111;
+            border: none;
+            cursor: pointer;
+        }
+    </style>
 </head>
-<body style="background-color: #111; color: gold; font-family: Arial, sans-serif;">
-    <div style="padding: 20px;">
-        <h1>Planes</h1>
+<body>
+    <h1>Planes</h1>
+    <div class="formulario">
         <form method="POST">
             <input type="text" name="nombre" placeholder="Nombre del plan" required>
-            <input type="number" name="precio" step="0.01" placeholder="Precio" required>
-            <input type="number" name="dias_disponibles" placeholder="Días disponibles" required>
-            <input type="number" name="duracion_meses" placeholder="Duración en meses" required>
+            <input type="number" step="0.01" name="precio" placeholder="Precio" required>
+            <input type="text" name="dias_disponibles" placeholder="Días disponibles" required>
+            <input type="number" name="duracion_meses" placeholder="Duración (meses)" required>
             <button type="submit">Agregar Plan</button>
         </form>
-        <table border="1" cellpadding="10" cellspacing="0" style="margin-top: 20px; color: white; width: 100%;">
-            <thead style="background-color: #222;">
+        <?php if ($mensaje) echo "<p>$mensaje</p>"; ?>
+    </div>
+    <div class="tabla">
+        <table>
+            <thead>
                 <tr>
                     <th>Nombre</th>
                     <th>Precio</th>
@@ -63,15 +97,15 @@ while ($row = $resultado->fetch_assoc()) {
                 </tr>
             </thead>
             <tbody>
-                <?php foreach ($planes as $plan): ?>
-                <tr>
-                    <td><?= htmlspecialchars($plan['nombre']) ?></td>
-                    <td>$<?= number_format($plan['precio'], 2) ?></td>
-                    <td><?= $plan['dias_disponibles'] ?></td>
-                    <td><?= $plan['duracion_meses'] ?></td>
-                    <td><a href="?eliminar=<?= $plan['id'] ?>" onclick="return confirm('¿Eliminar este plan?')">Eliminar</a></td>
-                </tr>
-                <?php endforeach; ?>
+                <?php while ($row = $resultado->fetch_assoc()): ?>
+                    <tr>
+                        <td><?= htmlspecialchars($row['nombre']) ?></td>
+                        <td>$<?= number_format($row['precio'], 2) ?></td>
+                        <td><?= htmlspecialchars($row['dias_disponibles']) ?></td>
+                        <td><?= htmlspecialchars($row['duracion_meses']) ?></td>
+                        <td class="acciones"><button onclick="location.href='eliminar_plan.php?id=<?= $row['id'] ?>'">Eliminar</button></td>
+                    </tr>
+                <?php endwhile; ?>
             </tbody>
         </table>
     </div>
