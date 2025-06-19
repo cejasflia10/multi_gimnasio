@@ -1,25 +1,17 @@
-
 <?php
 include 'conexion.php';
+session_start();
+$gimnasio_id = $_SESSION['gimnasio_id'];
 
-$gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
-$busqueda = $_GET['q'] ?? '';
-
-if (!$busqueda || !$gimnasio_id) {
-    echo json_encode([]);
-    exit;
-}
-
-$stmt = $conexion->prepare("SELECT id, nombre, apellido, dni, rfid FROM clientes WHERE gimnasio_id = ? AND (dni LIKE ? OR nombre LIKE ? OR apellido LIKE ? OR rfid LIKE ?) LIMIT 10");
-$param = "%" . $busqueda . "%";
-$stmt->bind_param("issss", $gimnasio_id, $param, $param, $param, $param);
-$stmt->execute();
-$resultado = $stmt->get_result();
+$term = mysqli_real_escape_string($conexion, $_GET['term']);
+$sql = "SELECT id, nombre, apellido, dni FROM clientes 
+        WHERE (dni LIKE '%$term%' OR nombre LIKE '%$term%' OR apellido LIKE '%$term%') 
+        AND gimnasio_id = $gimnasio_id 
+        LIMIT 10";
+$result = $conexion->query($sql);
 
 $clientes = [];
-while ($fila = $resultado->fetch_assoc()) {
-    $clientes[] = $fila;
+while ($row = $result->fetch_assoc()) {
+    $clientes[] = $row;
 }
-
 echo json_encode($clientes);
-?>
