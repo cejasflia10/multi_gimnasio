@@ -1,35 +1,41 @@
-
 <?php
-error_reporting(E_ALL & ~E_DEPRECATED & ~E_WARNING);
-require_once "phpqrcode/qrlib.php";
+require 'phpqrcode/qrlib.php';
 
-if ($_SERVER["REQUEST_METHOD"] == "POST") {
-    $dni = $_POST["dni"];
-    $cliente_id = $_POST["cliente_id"];
+$id = $_POST['id'] ?? '';
+$dni = $_POST['dni'] ?? '';
+$nombre = $_POST['nombre'] ?? '';
 
-    if (!$dni || !$cliente_id) {
-        die("Datos incompletos.");
-    }
-
-    $contenido = "ID:$cliente_id | DNI:$dni";
-
-    // Crear carpeta si no existe
-    $directorio = "qrs/";
-    if (!file_exists($directorio)) {
-        mkdir($directorio, 0777, true);
-    }
-
-    $archivo = $directorio . "cliente_" . $cliente_id . ".png";
-    QRcode::png($contenido, $archivo, QR_ECLEVEL_L, 10);
-
-    echo "<body style='background-color:#111; color:#FFD700; font-family:Arial; text-align:center; padding:20px'>";
-    echo "<h1>QR generado correctamente</h1>";
-    echo "<p>DNI: $dni</p>";
-    echo "<p>ID Cliente: $cliente_id</p>";
-    echo "<img src='$archivo' alt='QR del Cliente'><br><br>";
-    echo "<a href='generar_qr.php' style='color:#FFD700'>← Volver</a>";
-    echo "</body>";
-} else {
-    echo "Acceso inválido.";
+if (!$id || !$dni || !$nombre) {
+    die("Faltan datos");
 }
+
+$contenido = "ID:$id | DNI:$dni | $nombre";
+
+// Ruta de guardado
+$ruta_qr = "qrs/cliente_" . $id . ".png";
+if (!file_exists('qrs')) {
+    mkdir('qrs');
+}
+
+// Generar el código QR (sin GD, usa directamente PNG desde QRlib)
+QRcode::png($contenido, $ruta_qr, QR_ECLEVEL_L, 4);
+
+echo "<!DOCTYPE html>
+<html lang='es'>
+<head>
+<meta charset='UTF-8'>
+<title>QR generado</title>
+<style>
+    body { background-color: #111; color: gold; font-family: Arial; text-align: center; padding-top: 50px; }
+    img { margin-top: 20px; border: 4px solid gold; padding: 10px; background: #222; }
+</style>
+</head>
+<body>
+<h1>QR generado correctamente</h1>
+<p>$contenido</p>
+<img src='$ruta_qr' alt='Código QR'>
+<br><br>
+<a href='generar_qr.php' style='color: gold;'>← Volver</a>
+</body>
+</html>";
 ?>
