@@ -97,42 +97,28 @@ include 'conexion.php';
                     INNER JOIN clientes c ON m.cliente_id = c.id
                     INNER JOIN disciplinas d ON m.disciplina_id = d.id
                     INNER JOIN planes p ON m.plan_id = p.id
-                    WHERE m.id_gimnasio = $gimnasio_id
+                    WHERE m.gimnasio_id = $gimnasio_id
                     ORDER BY m.fecha_inicio DESC";
 
             $resultado = $conexion->query($sql);
             while ($row = $resultado->fetch_assoc()) {
                 echo "<tr>";
-                echo "<td>" . htmlspecialchars($row['cliente']) . "</td>";
-                echo "<td>" . htmlspecialchars($row['disciplina']) . "</td>";
-                echo "<td>" . htmlspecialchars($row['plan']) . "</td>";
-                echo "<td>" . htmlspecialchars($row['fecha_inicio']) . "</td>";
-                echo "<td>" . htmlspecialchars($row['fecha_vencimiento']) . "</td>";
-                echo "<td>" . htmlspecialchars($row['metodo_pago']) . "</td>";
-                echo "<td>$" . number_format($row['total'], 2) . "</td>";
+                echo "<td>{$row['cliente']}</td>";
+                echo "<td>{$row['disciplina']}</td>";
+                echo "<td>{$row['plan']}</td>";
+                echo "<td>{$row['fecha_inicio']}</td>";
+                echo "<td>{$row['fecha_vencimiento']}</td>";
+                echo "<td>{$row['metodo_pago']}</td>";
+                echo "<td>\${$row['total']}</td>";
                 echo "<td class='acciones'>
-                        <a href='editar_membresia.php?id=" . $row['id'] . "'>Editar</a>
-                        <a href='eliminar_membresia.php?id=" . $row['id'] . "' onclick=\"return confirm('¿Eliminar esta membresía?');\">Eliminar</a>
-                    </td>";
+                        <a href='editar_membresia.php?id={$row['id']}'>Editar</a>
+                        <a href='eliminar_membresia.php?id={$row['id']}' onclick='return confirm("¿Seguro que deseas eliminar esta membresía?")'>Eliminar</a>
+                      </td>";
                 echo "</tr>";
             }
             ?>
             </tbody>
         </table>
     </div>
-
-    <script>
-        const buscador = document.getElementById('buscador');
-        const tabla = document.getElementById('tabla').getElementsByTagName('tbody')[0];
-
-        buscador.addEventListener('keyup', function () {
-            const filtro = this.value.toLowerCase();
-            const filas = tabla.getElementsByTagName('tr');
-            for (let i = 0; i < filas.length; i++) {
-                const textoFila = filas[i].innerText.toLowerCase();
-                filas[i].style.display = textoFila.includes(filtro) ? '' : 'none';
-            }
-        });
-    </script>
 </body>
 </html>
