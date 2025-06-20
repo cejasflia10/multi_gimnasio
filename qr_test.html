@@ -1,44 +1,51 @@
-
 <!DOCTYPE html>
 <html lang="es">
 <head>
   <meta charset="UTF-8">
-  <title>Prueba Escáner QR</title>
-  <script src="https://unpkg.com/html5-qrcode@2.3.8/minified/html5-qrcode.min.js"></script>
+  <title>Prueba de Escáner QR</title>
+  <script src="https://unpkg.com/html5-qrcode"></script>
   <style>
     body {
-      background-color: #000;
-      color: #FFD700;
-      font-family: Arial, sans-serif;
+      background-color: black;
+      color: gold;
+      font-family: Arial;
       text-align: center;
-      padding: 20px;
+      padding-top: 20px;
     }
     #reader {
       width: 300px;
-      margin: 0 auto;
+      margin: auto;
     }
   </style>
 </head>
 <body>
-  <h1>Prueba de Escáner QR</h1>
+  <h2>Prueba de Escáner QR</h2>
   <div id="reader"></div>
 
   <script>
-    const qrCode = new Html5Qrcode("reader");
+    function onScanSuccess(decodedText, decodedResult) {
+      alert("QR leído: " + decodedText);
+      // Aquí podrías redirigir o enviar el valor por POST
+    }
+
+    function onScanFailure(error) {
+      console.warn(`Error al escanear: ${error}`);
+    }
+
+    const html5QrCode = new Html5Qrcode("reader");
     Html5Qrcode.getCameras().then(devices => {
       if (devices && devices.length) {
-        qrCode.start(
-          devices[0].id,
+        html5QrCode.start(
+          { facingMode: "environment" },
           { fps: 10, qrbox: 250 },
-          qr => {
-            alert("QR Detectado: " + qr);
-            qrCode.stop();
-          },
-          err => {}
+          onScanSuccess,
+          onScanFailure
         );
+      } else {
+        alert("No se encontraron cámaras.");
       }
     }).catch(err => {
-      document.body.innerHTML += "<p style='color:red;'>Error accediendo a la cámara: " + err + "</p>";
+      alert("Error accediendo a la cámara: " + err);
     });
   </script>
 </body>
