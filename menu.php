@@ -123,7 +123,15 @@
         <li class="nav-item"><a href="clientes.php" class="nav-link"><i class="far fa-circle nav-icon"></i><p>Ver Clientes</p></a></li>
         <li class="nav-item"><a href="agregar_cliente.php" class="nav-link"><i class="far fa-circle nav-icon"></i><p>Agregar Cliente</p></a></li>
         <li class="nav-item"><a href="importar_clientes.php" class="nav-link"><i class="far fa-circle nav-icon"></i><p>Importar Clientes</p></a></li>
-    </ul>
+    
+    <li>
+      <button class="dropdown-btn">📷 QR ▾</button>
+      <div class="dropdown-container">
+        <a href="generar_qr.php">Generar QR</a>
+        <a href="registrar_asistencia_qr.php">Asistencia por QR</a>
+      </div>
+    </li>
+</ul>
 </li>
 <li class="nav-item has-treeview">
     <a href="#" class="nav-link">
@@ -138,8 +146,24 @@
         <li class="nav-item"><a href="ver_qr.php" class="nav-link"><i class="far fa-circle nav-icon"></i><p>Ver QR Generados</p></a></li>
         <li class="nav-item"><a href="imprimir_qr.php" class="nav-link"><i class="far fa-circle nav-icon"></i><p>Imprimir QR</p></a></li>
         <li class="nav-item"><a href="registrar_asistencia_qr.php" class="nav-link"><i class="far fa-circle nav-icon"></i><p>Asistencia por QR</p></a></li>
-    </ul>
+    
+    <li>
+      <button class="dropdown-btn">📷 QR ▾</button>
+      <div class="dropdown-container">
+        <a href="generar_qr.php">Generar QR</a>
+        <a href="registrar_asistencia_qr.php">Asistencia por QR</a>
+      </div>
+    </li>
+</ul>
 </li>
+
+    <li>
+      <button class="dropdown-btn">📷 QR ▾</button>
+      <div class="dropdown-container">
+        <a href="generar_qr.php">Generar QR</a>
+        <a href="registrar_asistencia_qr.php">Asistencia por QR</a>
+      </div>
+    </li>
 </ul>
 </nav>
 <script>
