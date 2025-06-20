@@ -1,65 +1,64 @@
 <?php
-session_start();
-if (!isset($_SESSION['gimnasio_id'])) {
-    die("Acceso denegado.");
+error_reporting(E_ALL & ~E_DEPRECATED & ~E_WARNING); // Oculta warnings y deprecated
+include "phpqrcode/qrlib.php";
+
+if ($_SERVER["REQUEST_METHOD"] == "POST" && !empty($_POST["dni"])) {
+    $dni = trim($_POST["dni"]);
+    $nombre = trim($_POST["nombre"]);
+    $id = trim($_POST["id"]);
+
+    $textoQR = $dni . "|" . $nombre . "|" . $id;
+
+    // Ruta donde se guardará el QR
+    $filename = "temp_qr/qr_" . $dni . ".png";
+    if (!file_exists("temp_qr")) {
+        mkdir("temp_qr");
+    }
+
+    QRcode::png($textoQR, $filename, QR_ECLEVEL_H, 6);
+    echo "<h3 style='color: gold;'>QR generado correctamente</h3>";
+    echo "<img src='$filename' alt='QR generado'><br><br>";
 }
-$gimnasio_id = $_SESSION['gimnasio_id'];
-include 'conexion.php';
-include 'phpqrcode/qrlib.php';
 ?>
 
 <!DOCTYPE html>
 <html lang="es">
 <head>
-    <meta charset="UTF-8">
-    <title>Generar QR - Clientes</title>
-    <style>
-        body { background-color: #111; color: #FFD700; font-family: Arial; padding: 20px; }
-        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-        th, td { border: 1px solid #FFD700; padding: 8px; text-align: center; }
-        th { background-color: #000; }
-        .btn { padding: 6px 12px; background-color: #FFD700; color: #000; font-weight: bold; text-decoration: none; border-radius: 4px; }
-        img { width: 60px; height: 60px; }
-    </style>
+  <meta charset="UTF-8">
+  <title>Generar QR</title>
+  <style>
+    body {
+      background-color: #111;
+      color: gold;
+      font-family: Arial, sans-serif;
+      padding: 30px;
+    }
+    input, button {
+      padding: 10px;
+      margin: 5px;
+      border: none;
+      border-radius: 5px;
+    }
+    button {
+      background-color: gold;
+      color: black;
+      cursor: pointer;
+    }
+    button:hover {
+      background-color: orange;
+    }
+  </style>
 </head>
 <body>
-    <h2>Generar QR para Clientes</h2>
-    <table>
-        <tr>
-            <th>Apellido y Nombre</th>
-            <th>DNI</th>
-            <th>QR</th>
-            <th>Acción</th>
-        </tr>
-        <?php
-        $sql = "SELECT id, apellido, nombre, dni FROM clientes WHERE gimnasio_id = ?";
-        $stmt = $conexion->prepare($sql);
-        $stmt->bind_param("i", $gimnasio_id);
-        $stmt->execute();
-        $res = $stmt->get_result();
-
-        while ($row = $res->fetch_assoc()) {
-            $dni = $row['dni'];
-            $qr_file = "temp_qr/" . $dni . ".png";
-            if (!file_exists($qr_file)) {
-                QRcode::png($dni, $qr_file, QR_ECLEVEL_L, 4);
-            }
-            echo "<tr>";
-            echo "<td>{$row['apellido']}, {$row['nombre']}</td>";
-            echo "<td>{$row['dni']}</td>";
-            echo "<td><img src='$qr_file'></td>";
-            echo "<td><a class='btn' href='generar_qr.php?regenerar={$row['dni']}'>Regenerar</a></td>";
-            echo "</tr>";
-        }
-
-        // Forzar regeneración de QR si se solicita por GET
-        if (isset($_GET['regenerar'])) {
-            $dni = $_GET['regenerar'];
-            $qr_file = "temp_qr/" . $dni . ".png";
-            QRcode::png($dni, $qr_file, QR_ECLEVEL_L, 4);
-            echo "<script>alert('QR regenerado correctamente'); window.location.href='generar_qr.php';</script>";
-        }
-        ?>
-    </table>
+  <h2>Generar código QR para cliente</h2>
+  <form method="POST">
+    <label>DNI:</label><br>
+    <input type="text" name="dni" required><br>
+    <label>Nombre y Apellido:</label><br>
+    <input type="text" name="nombre" required><br>
+    <label>ID del Cliente:</label><br>
+    <input type="text" name="id" required><br>
+    <button type="submit">Generar QR</button>
+  </form>
 </body>
 </html>
