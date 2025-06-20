@@ -1,19 +1,53 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="UTF-8">
-  <title>Generar QR</title>
+    <meta charset="UTF-8">
+    <title>Generar código QR</title>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <style>
+        body { background-color: #111; color: #fff; font-family: Arial; text-align: center; padding: 50px; }
+        input, button { margin: 10px; padding: 10px; width: 300px; }
+        #sugerencias { background: #222; border: 1px solid #555; width: 300px; margin: 0 auto; color: #fff; position: absolute; z-index: 9999; }
+        #sugerencias div:hover { background: #444; cursor: pointer; }
+    </style>
 </head>
-<body style="background-color:#111; color:#f1f1f1; text-align:center; font-family:sans-serif;">
-  <h2>Generar código QR para cliente</h2>
-  <form action="generar_qr_final.php" method="get">
-    <label>ID del cliente:</label><br>
-    <input type="text" name="id" required><br><br>
-    <label>DNI del cliente:</label><br>
-    <input type="text" name="dni" required><br><br>
-    <label>Nombre y apellido:</label><br>
-    <input type="text" name="nombre" required><br><br>
-    <input type="submit" value="Generar QR">
-  </form>
+<body>
+    <h2>Generar código QR para cliente</h2>
+    <input type="text" id="buscador" placeholder="Buscar cliente por nombre, DNI o RFID">
+    <div id="sugerencias"></div><br>
+    <form method="POST" action="generar_qr_final.php">
+        <input type="text" name="id" id="id" placeholder="ID del cliente" readonly><br>
+        <input type="text" name="dni" id="dni" placeholder="DNI del cliente" readonly><br>
+        <input type="text" name="nombre" id="nombre" placeholder="Nombre y apellido" readonly><br>
+        <button type="submit">Generar QR</button>
+    </form>
+
+    <script>
+    $(document).ready(function(){
+        $("#buscador").keyup(function(){
+            var query = $(this).val();
+            if (query.length > 1) {
+                $.ajax({
+                    url: "buscar_cliente_qr.php",
+                    method: "POST",
+                    data: {query: query},
+                    success: function(data){
+                        $("#sugerencias").fadeIn().html(data);
+                    }
+                });
+            } else {
+                $("#sugerencias").fadeOut();
+            }
+        });
+
+        $(document).on("click", "#sugerencias div", function(){
+            var cliente = $(this).data("cliente");
+            $("#id").val(cliente.id);
+            $("#dni").val(cliente.dni);
+            $("#nombre").val(cliente.nombre);
+            $("#sugerencias").fadeOut();
+        });
+    });
+    </script>
 </body>
 </html>
