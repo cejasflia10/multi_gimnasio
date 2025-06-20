@@ -1,61 +1,83 @@
-
 <?php
-session_start();
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+include "conexion.php";
 ?>
+
 <!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="UTF-8">
-  <title>Escanear QR - Asistencia</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <style>
-    body {
-      background-color: black;
-      color: gold;
-      text-align: center;
-      font-family: Arial, sans-serif;
-      margin: 0;
-      padding: 0;
-    }
-    #preview {
-      width: 100%;
-      max-width: 600px;
-      margin: 20px auto;
-      border: 3px solid gold;
-      border-radius: 8px;
-    }
-  </style>
+    <meta charset="UTF-8">
+    <title>Escaneo de QR - Ingreso al Gimnasio</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body {
+            background-color: black;
+            color: gold;
+            font-family: Arial, sans-serif;
+            text-align: center;
+            padding-top: 20px;
+        }
+        #qr-video {
+            width: 90%%;
+            max-width: 600px;
+            border: 5px solid gold;
+            border-radius: 10px;
+            margin-top: 20px;
+        }
+        #resultado {
+            margin-top: 20px;
+            font-size: 20px;
+            font-weight: bold;
+            color: white;
+        }
+    </style>
 </head>
 <body>
-  <h2>📷 Escaneo de QR - Ingreso al Gimnasio</h2>
-  <video id="preview"></video>
+    <h1>📷 Escaneo de QR - Ingreso al Gimnasio</h1>
+    <video id="qr-video"></video>
+    <div id="resultado"></div>
 
-  <form id="formulario" method="POST" action="registrar_asistencia_qr.php">
-    <input type="hidden" name="dni" id="dni">
-  </form>
+    <script src="https://unpkg.com/html5-qrcode"></script>
+    <script>
+        const videoElem = document.getElementById("qr-video");
+        const resultadoElem = document.getElementById("resultado");
 
-  <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
-  <script>
-    function onScanSuccess(decodedText, decodedResult) {
-      document.getElementById("dni").value = decodedText;
-      document.getElementById("formulario").submit();
-    }
+        function procesarQR(dato) {
+            fetch("registrar_asistencia_qr.php", {
+                method: "POST",
+                headers: { "Content-Type": "application/x-www-form-urlencoded" },
+                body: "dni=" + encodeURIComponent(dato)
+            })
+            .then(response => response.text())
+            .then(data => {
+                resultadoElem.innerHTML = data;
+                html5QrCode.stop();
+            });
+        }
 
-    function startQRScanner() {
-      const html5QrCode = new Html5Qrcode("preview");
-      html5QrCode.start(
-        { facingMode: "environment" },
-        {
-          fps: 10,
-          qrbox: 250
-        },
-        onScanSuccess
-      ).catch(err => {
-        console.error("Error al iniciar cámara:", err);
-      });
-    }
-
-    window.onload = startQRScanner;
-  </script>
+        const html5QrCode = new Html5Qrcode("qr-video");
+        Html5Qrcode.getCameras().then(devices => {
+            if (devices && devices.length) {
+                html5QrCode.start(
+                    { facingMode: "environment" },
+                    {
+                        fps: 10,
+                        qrbox: 250
+                    },
+                    qrCodeMessage => {
+                        procesarQR(qrCodeMessage);
+                    }
+                ).catch(err => {
+                    resultadoElem.innerHTML = "Error iniciando cámara: " + err;
+                });
+            } else {
+                resultadoElem.innerHTML = "No se encontraron cámaras.";
+            }
+        }).catch(err => {
+            resultadoElem.innerHTML = "Error al obtener cámaras: " + err;
+        });
+    </script>
 </body>
 </html>
