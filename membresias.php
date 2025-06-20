@@ -43,6 +43,10 @@ include 'conexion.php';
         th {
             background-color: #000;
         }
+        .vencida {
+            background-color: #550000 !important;
+            color: #FFD700;
+        }
         .buscar {
             width: 100%;
             padding: 10px;
@@ -51,33 +55,28 @@ include 'conexion.php';
             color: #FFD700;
             border: 1px solid #FFD700;
         }
-        .acciones {
-            display: flex;
-            justify-content: center;
-            gap: 10px;
-        }
         .acciones a {
             padding: 5px 10px;
             background-color: #FFD700;
             color: #000;
             text-decoration: none;
             border-radius: 5px;
+            margin: 0 2px;
         }
     </style>
 </head>
 <body>
     <h1>Listado de Membresías</h1>
     <div class="container">
-        <input type="text" id="buscador" class="buscar" placeholder="Buscar cliente, disciplina o pago...">
+        <input type="text" id="buscador" class="buscar" placeholder="Buscar cliente, plan o pago...">
         <table id="tabla">
             <thead>
                 <tr>
                     <th>Cliente</th>
-                    <th>Disciplina</th>
                     <th>Plan</th>
                     <th>Inicio</th>
                     <th>Vencimiento</th>
-                    <th>Método de Pago</th>
+                    <th>Días Restantes</th>
                     <th>Total</th>
                     <th>Acciones</th>
                 </tr>
@@ -86,29 +85,30 @@ include 'conexion.php';
             <?php
             $sql = "SELECT 
                         m.id, 
-                        CONCAT(c.apellido, ', ', c.nombre) AS cliente,
-                        d.nombre AS disciplina,
-                        p.nombre AS plan,
                         m.fecha_inicio,
                         m.fecha_vencimiento,
-                        m.metodo_pago,
-                        m.total
+                        m.total,
+                        p.nombre AS plan,
+                        CONCAT(c.apellido, ', ', c.nombre) AS cliente
                     FROM membresias m
                     INNER JOIN clientes c ON m.cliente_id = c.id
-                    INNER JOIN disciplinas d ON m.disciplina_id = d.id
                     INNER JOIN planes p ON m.plan_id = p.id
                     WHERE m.gimnasio_id = $gimnasio_id
                     ORDER BY m.fecha_inicio DESC";
-
             $resultado = $conexion->query($sql);
+            $hoy = new DateTime();
+
             while ($row = $resultado->fetch_assoc()) {
-                echo "<tr>";
+                $vencimiento = new DateTime($row['fecha_vencimiento']);
+                $dias = (int)$hoy->diff($vencimiento)->format('%r%a');
+                $clase = $dias < 0 ? 'vencida' : '';
+                $texto_dias = $dias < 0 ? "Vencida hace " . abs($dias) . " días" : "$dias días";
+                echo "<tr class='$clase'>";
                 echo "<td>{$row['cliente']}</td>";
-                echo "<td>{$row['disciplina']}</td>";
                 echo "<td>{$row['plan']}</td>";
                 echo "<td>{$row['fecha_inicio']}</td>";
                 echo "<td>{$row['fecha_vencimiento']}</td>";
-                echo "<td>{$row['metodo_pago']}</td>";
+                echo "<td>$texto_dias</td>";
                 echo "<td>\${$row['total']}</td>";
                 echo "<td class='acciones'>
                         <a href='editar_membresia.php?id={$row['id']}'>Editar</a>
