@@ -104,7 +104,43 @@
       </div>
     </li>
 
-</ul>
+
+    <li class="nav-item has-treeview">
+        <a href="#" class="nav-link">
+            <i class="nav-icon fas fa-qrcode"></i>
+            <p>
+                QR
+                <i class="right fas fa-angle-left"></i>
+            </p>
+        </a>
+        <ul class="nav nav-treeview">
+            <li class="nav-item">
+                <a href="generar_qr.php" class="nav-link">
+                    <i class="far fa-circle nav-icon"></i>
+                    <p>Generar QR</p>
+                </a>
+            </li>
+            <li class="nav-item">
+                <a href="ver_qr.php" class="nav-link">
+                    <i class="far fa-circle nav-icon"></i>
+                    <p>Ver QR generados</p>
+                </a>
+            </li>
+            <li class="nav-item">
+                <a href="imprimir_qr.php" class="nav-link">
+                    <i class="far fa-circle nav-icon"></i>
+                    <p>Imprimir QR</p>
+                </a>
+            </li>
+            <li class="nav-item">
+                <a href="asistencia_qr.php" class="nav-link">
+                    <i class="far fa-circle nav-icon"></i>
+                    <p>Asistencia por QR</p>
+                </a>
+            </li>
+        </ul>
+    </li>
+    </ul>
 </nav>
 <script>
   const dropdowns = document.querySelectorAll(".dropdown-btn");
