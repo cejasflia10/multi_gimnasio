@@ -112,7 +112,7 @@ include 'conexion.php';
                 echo "<td>\${$row['total']}</td>";
                 echo "<td class='acciones'>
                         <a href='editar_membresia.php?id={$row['id']}'>Editar</a>
-                        <a href='eliminar_membresia.php?id={$row['id']}' onclick="return confirm('¿Seguro que deseas eliminar esta membresía?')">Eliminar</a>
+                        <a href='eliminar_membresia.php?id={$row['id']}' onclick=\"return confirm('¿Seguro que deseas eliminar esta membresía?')\">Eliminar</a>
                       </td>";
                 echo "</tr>";
             }
