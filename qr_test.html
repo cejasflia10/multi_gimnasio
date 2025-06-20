@@ -1,0 +1,45 @@
+
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Prueba Escáner QR</title>
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/minified/html5-qrcode.min.js"></script>
+  <style>
+    body {
+      background-color: #000;
+      color: #FFD700;
+      font-family: Arial, sans-serif;
+      text-align: center;
+      padding: 20px;
+    }
+    #reader {
+      width: 300px;
+      margin: 0 auto;
+    }
+  </style>
+</head>
+<body>
+  <h1>Prueba de Escáner QR</h1>
+  <div id="reader"></div>
+
+  <script>
+    const qrCode = new Html5Qrcode("reader");
+    Html5Qrcode.getCameras().then(devices => {
+      if (devices && devices.length) {
+        qrCode.start(
+          devices[0].id,
+          { fps: 10, qrbox: 250 },
+          qr => {
+            alert("QR Detectado: " + qr);
+            qrCode.stop();
+          },
+          err => {}
+        );
+      }
+    }).catch(err => {
+      document.body.innerHTML += "<p style='color:red;'>Error accediendo a la cámara: " + err + "</p>";
+    });
+  </script>
+</body>
+</html>
