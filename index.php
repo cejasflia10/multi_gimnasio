@@ -87,5 +87,19 @@ $vencimientos = ["Pedro Gómez - 3 días", "Lucía Díaz - 7 días"];
         <?php endforeach; ?>
     </div>
   </div>
+
+<script>
+  document.addEventListener('DOMContentLoaded', function () {
+    var dropdowns = document.getElementsByClassName("dropdown-btn");
+    for (let i = 0; i < dropdowns.length; i++) {
+      dropdowns[i].addEventListener("click", function () {
+        this.classList.toggle("active");
+        var container = this.nextElementSibling;
+        container.style.display = container.style.display === "block" ? "none" : "block";
+      });
+    }
+  });
+</script>
+
 </body>
 </html>
