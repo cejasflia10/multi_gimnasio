@@ -2,54 +2,100 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="UTF-8">
-  <title>Escanear QR - Registro de Ingreso</title>
-  <script src="https://unpkg.com/html5-qrcode@2.3.8/minified/html5-qrcode.min.js"></script>
-  <style>
-    body {
-      background-color: #000;
-      color: #ffd700;
-      font-family: Arial, sans-serif;
-      text-align: center;
-      padding-top: 30px;
-    }
-    #logo {
-      width: 80px;
-      margin-bottom: 20px;
-    }
-    #reader {
-      width: 100%;
-      max-width: 400px;
-      margin: 0 auto;
-    }
-    #result {
-      margin-top: 20px;
-      font-size: 18px;
-    }
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Asistencia por QR</title>
+    <style>
+        body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+            background-color: #000;
+            color: #FFD700;
+        }
+        .menu {
+            width: 250px;
+            background-color: #111;
+            position: fixed;
+            top: 0;
+            bottom: 0;
+            left: 0;
+            overflow-y: auto;
+            padding: 20px;
+        }
+        .menu h2 {
+            color: #FFD700;
+            font-size: 20px;
+            margin-bottom: 20px;
+        }
+        .menu a {
+            display: block;
+            color: #FFD700;
+            text-decoration: none;
+            margin: 10px 0;
+        }
+        .menu a:hover {
+            text-decoration: underline;
+        }
+        .contenido {
+            margin-left: 260px;
+            padding: 20px;
+        }
+        .scanner-box {
+            text-align: center;
+            margin-top: 50px;
+        }
+        input[type="text"] {
+            width: 90%;
+            max-width: 400px;
+            padding: 10px;
+            font-size: 18px;
+            margin-bottom: 20px;
+        }
+        button {
+            padding: 10px 20px;
+            font-size: 18px;
+            background-color: #FFD700;
+            border: none;
+            color: #000;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #e6c200;
+        }
+        @media screen and (max-width: 768px) {
+            .menu {
+                position: relative;
+                width: 100%;
+                height: auto;
+            }
+            .contenido {
+                margin-left: 0;
+            }
+        }
+    </style>
 </head>
 <body>
-  <img id="logo" src="logo.png" alt="Logo" />
-  <h2>Escanear QR del Cliente</h2>
-  <div id="reader"></div>
-  <div id="result"></div>
 
-  <script>
-    function onScanSuccess(qrCodeMessage) {
-      document.getElementById("result").innerHTML = `<strong>DNI detectado:</strong> ${qrCodeMessage}`;
-      // Redirigir al script PHP con el DNI
-      setTimeout(() => {
-        window.location.href = `registrar_asistencia_qr.php?dni=${encodeURIComponent(qrCodeMessage)}`;
-      }, 1000);
-    }
+    <div class="menu">
+        <h2>🏋️ Fight Academy Scorpions</h2>
+        <a href="index.php">🏠 Panel</a>
+        <a href="ver_clientes.php">👥 Ver Clientes</a>
+        <a href="membresias.php">💳 Membresías</a>
+        <a href="asistencias.php">📅 Asistencias</a>
+        <a href="registrar_asistencia_qr_con_menu.html"><strong>📲 Asistencia por QR</strong></a>
+        <a href="ventas.php">💰 Ventas</a>
+    </div>
 
-    function onScanError(errorMessage) {
-      // Ignorar errores de escaneo
-    }
+    <div class="contenido">
+        <div class="scanner-box">
+            <h1>📲 Registrar Asistencia con QR</h1>
+            <form action="procesar_qr.php" method="POST">
+                <input type="text" name="dni" placeholder="Escanear DNI o QR" autofocus required>
+                <br>
+                <button type="submit">Registrar Ingreso</button>
+            </form>
+        </div>
+    </div>
 
-    const html5QrcodeScanner = new Html5QrcodeScanner(
-      "reader", { fps: 10, qrbox: 250 }, false);
-    html5QrcodeScanner.render(onScanSuccess, onScanError);
-  </script>
 </body>
 </html>
