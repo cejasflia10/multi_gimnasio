@@ -1,6 +1,9 @@
 services:
   - type: web
-    name: multi_gimnasio
+    name: multi-gimnasio
     env: docker
     plan: free
-    dockerfilePath: ./Dockerfile
+    dockerfilePath: Dockerfile
+    buildCommand: ""
+    startCommand: ""
+    autoDeploy: true
