@@ -1,13 +1,21 @@
-FROM php:8.2-apache
+FROM php:8.1-apache
 
-# Instala extensiones necesarias para MySQL
-RUN docker-php-ext-install mysqli pdo pdo_mysql
+# Instalar extensiones necesarias
+RUN apt-get update && apt-get install -y \
+    libfreetype6-dev \
+    libjpeg62-turbo-dev \
+    libpng-dev \
+    && docker-php-ext-configure gd --with-freetype --with-jpeg \
+    && docker-php-ext-install gd
 
-# Copia todos los archivos del proyecto al directorio público de Apache
+# Habilitar módulos de Apache si es necesario
+RUN a2enmod rewrite
+
+# Copiar el código fuente al contenedor
 COPY . /var/www/html/
 
-# Permisos y habilita mod_rewrite para URLs amigables
-RUN chown -R www-data:www-data /var/www/html && a2enmod rewrite
+# Cambiar permisos si es necesario (opcional)
+RUN chown -R www-data:www-data /var/www/html
 
-# Expone el puerto 80 para Render
+# Puerto expuesto por Apache
 EXPOSE 80
