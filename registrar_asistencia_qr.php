@@ -1,94 +1,112 @@
+<?php
+include 'conexion.php';
+session_start();
+?>
 
 <!DOCTYPE html>
 <html lang="es">
 <head>
   <meta charset="UTF-8">
-  <title>Registrar Asistencia</title>
-  <script src="https://unpkg.com/html5-qrcode@2.3.8/minified/html5-qrcode.min.js"></script>
+  <title>Escaneo QR - Registrar Asistencia</title>
+  <script src="https://unpkg.com/html5-qrcode"></script>
   <style>
     body {
-      background-color: #000;
-      color: #FFD700;
+      background-color: black;
+      color: gold;
       font-family: Arial, sans-serif;
       text-align: center;
       padding: 20px;
     }
-    h1 {
-      margin-bottom: 20px;
-    }
-    #logo {
-      width: 100px;
-      margin-bottom: 10px;
-    }
-    button {
-      background-color: #FFD700;
-      color: #000;
-      border: none;
-      padding: 10px 20px;
-      font-size: 18px;
-      margin: 10px;
-      cursor: pointer;
-    }
     #reader {
-      width: 90%;
-      max-width: 400px;
-      margin: 0 auto;
-      display: none;
+      width: 300px;
+      margin: auto;
     }
-    #manual-input {
-      display: none;
+    #resultado {
       margin-top: 20px;
-    }
-    input[type="text"] {
-      padding: 10px;
-      font-size: 16px;
-      width: 200px;
-    }
-    #result {
-      margin-top: 20px;
+      font-size: 18px;
     }
   </style>
 </head>
 <body>
-  <img id="logo" src="logo.png" alt="Logo">
-  <h1>Registrar Asistencia</h1>
-
-  <button onclick="usarQR()">📲 Escanear QR</button>
-  <button onclick="usarDNI()">📝 Ingresar DNI</button>
-
+  <h2>Escaneo QR para Ingreso</h2>
   <div id="reader"></div>
-
-  <div id="manual-input">
-    <form method="GET" action="registrar_asistencia_qr.php">
-      <input type="text" name="dni" placeholder="Ingresar DNI" required>
-      <button type="submit">Registrar</button>
-    </form>
-  </div>
-
-  <div id="result"></div>
+  <div id="resultado"></div>
 
   <script>
-    function usarQR() {
-      document.getElementById('reader').style.display = 'block';
-      document.getElementById('manual-input').style.display = 'none';
-
-      const html5QrCode = new Html5Qrcode("reader");
-      html5QrCode.start(
-        { facingMode: "environment" },
-        { fps: 10, qrbox: 250 },
-        (qrCodeMessage) => {
-          window.location.href = `registrar_asistencia_qr.php?dni=${encodeURIComponent(qrCodeMessage)}`;
-        },
-        (errorMessage) => {
-          // Ignorar errores
-        }
-      );
+    function onScanSuccess(decodedText) {
+      fetch('registrar_asistencia_qr.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: 'dni_qr=' + encodeURIComponent(decodedText)
+      })
+      .then(response => response.text())
+      .then(data => {
+        document.getElementById("resultado").innerHTML = data;
+      })
+      .catch(error => {
+        document.getElementById("resultado").innerText = "Error al enviar: " + error;
+      });
     }
 
-    function usarDNI() {
-      document.getElementById('reader').style.display = 'none';
-      document.getElementById('manual-input').style.display = 'block';
+    function onScanFailure(error) {
+      console.warn("Error escaneando: ", error);
     }
+
+    const html5QrCode = new Html5Qrcode("reader");
+    Html5Qrcode.getCameras().then(devices => {
+      if (devices.length) {
+        html5QrCode.start(
+          { facingMode: "environment" },
+          { fps: 10, qrbox: 250 },
+          onScanSuccess,
+          onScanFailure
+        );
+      } else {
+        document.getElementById("resultado").innerText = "No se detectaron cámaras.";
+      }
+    });
   </script>
 </body>
 </html>
+
+<?php
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['dni_qr'])) {
+    include 'conexion.php';
+    $dni = trim($_POST['dni_qr']);
+    $gimnasio_id = $_SESSION['gimnasio_id'] ?? 1;
+
+    $stmt = $conexion->prepare("SELECT id, nombre, apellido FROM clientes WHERE dni = ? AND gimnasio_id = ?");
+    $stmt->bind_param("si", $dni, $gimnasio_id);
+    $stmt->execute();
+    $resultado = $stmt->get_result();
+
+    if ($resultado->num_rows > 0) {
+        $cliente = $resultado->fetch_assoc();
+        $cliente_id = $cliente['id'];
+
+        $membresia = $conexion->query("SELECT id, clases_restantes, fecha_vencimiento FROM membresias WHERE cliente_id = $cliente_id ORDER BY fecha_vencimiento DESC LIMIT 1")->fetch_assoc();
+
+        if ($membresia) {
+            $fecha_actual = date("Y-m-d");
+            $vencimiento = $membresia['fecha_vencimiento'];
+            $clases = $membresia['clases_restantes'];
+
+            if ($vencimiento >= $fecha_actual && $clases > 0) {
+                $nuevas_clases = $clases - 1;
+                $conexion->query("UPDATE membresias SET clases_restantes = $nuevas_clases WHERE id = {$membresia['id']}");
+
+                echo "<div>✅ <strong>{$cliente['nombre']} {$cliente['apellido']}</strong><br>
+                      DNI: $dni<br>
+                      Clases restantes: $nuevas_clases<br>
+                      Válido hasta: $vencimiento</div>";
+            } else {
+                echo "<div style='color:red'>❌ Membresía vencida o sin clases.<br>Fecha de vencimiento: $vencimiento<br>Clases: $clases</div>";
+            }
+        } else {
+            echo "<div style='color:red'>❌ No se encontró membresía activa.</div>";
+        }
+    } else {
+        echo "<div style='color:red'>❌ Cliente no registrado.</div>";
+    }
+}
+?>
