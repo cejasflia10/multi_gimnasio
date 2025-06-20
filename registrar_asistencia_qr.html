@@ -1,0 +1,55 @@
+
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Escanear QR - Registro de Ingreso</title>
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/minified/html5-qrcode.min.js"></script>
+  <style>
+    body {
+      background-color: #000;
+      color: #ffd700;
+      font-family: Arial, sans-serif;
+      text-align: center;
+      padding-top: 30px;
+    }
+    #logo {
+      width: 80px;
+      margin-bottom: 20px;
+    }
+    #reader {
+      width: 100%;
+      max-width: 400px;
+      margin: 0 auto;
+    }
+    #result {
+      margin-top: 20px;
+      font-size: 18px;
+    }
+  </style>
+</head>
+<body>
+  <img id="logo" src="logo.png" alt="Logo" />
+  <h2>Escanear QR del Cliente</h2>
+  <div id="reader"></div>
+  <div id="result"></div>
+
+  <script>
+    function onScanSuccess(qrCodeMessage) {
+      document.getElementById("result").innerHTML = `<strong>DNI detectado:</strong> ${qrCodeMessage}`;
+      // Redirigir al script PHP con el DNI
+      setTimeout(() => {
+        window.location.href = `registrar_asistencia_qr.php?dni=${encodeURIComponent(qrCodeMessage)}`;
+      }, 1000);
+    }
+
+    function onScanError(errorMessage) {
+      // Ignorar errores de escaneo
+    }
+
+    const html5QrcodeScanner = new Html5QrcodeScanner(
+      "reader", { fps: 10, qrbox: 250 }, false);
+    html5QrcodeScanner.render(onScanSuccess, onScanError);
+  </script>
+</body>
+</html>
