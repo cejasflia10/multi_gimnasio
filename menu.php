@@ -1,4 +1,3 @@
-
 <nav id="sidebar">
   <div class="sidebar-header">
     <h3>🏋️‍♂️ Fight Academy</h3>
@@ -11,6 +10,7 @@
       <div class="dropdown-container">
         <a href="clientes.php">Ver Clientes</a>
         <a href="agregar_cliente.php">Agregar Cliente</a>
+        <a href="generar_qr.php">Generar QR</a>
       </div>
     </li>
 
@@ -33,146 +33,40 @@
     <li>
       <button class="dropdown-btn">🕒 Asistencias ▾</button>
       <div class="dropdown-container">
-        <a href="asistencias.php">Registrar Asistencia</a>
-        <a href="ver_asistencias.php">Ver Asistencias</a>
+        <a href="registrar_asistencia.php">Registrar Asistencia</a>
+        <a href="asistencia_profesores.php">Asistencia Profesores</a>
       </div>
     </li>
 
     <li>
-      <button class="dropdown-btn">💵 Ventas ▾</button>
+      <button class="dropdown-btn">💰 Ventas ▾</button>
       <div class="dropdown-container">
-        <a href="ventas.php">Registrar Venta</a>
-        <a href="ver_ventas.php">Ver Ventas</a>
+        <a href="ventas.php">Ver Ventas</a>
+        <a href="agregar_venta.php">Agregar Venta</a>
       </div>
     </li>
 
     <li>
       <button class="dropdown-btn">🏢 Gimnasios ▾</button>
       <div class="dropdown-container">
-        <a href="ver_gimnasios.php">Ver Gimnasios</a>
-        <a href="crear_gimnasio.php">Crear Gimnasio</a>
+        <a href="gimnasios.php">Ver Gimnasios</a>
+        <a href="agregar_gimnasio.php">Agregar Gimnasio</a>
       </div>
     </li>
 
     <li>
       <button class="dropdown-btn">⚙️ Configuración ▾</button>
       <div class="dropdown-container">
-        <a href="usuarios.php">Ver Usuarios</a>
-        <a href="agregar_usuario.php">Agregar Usuario</a>
-        <a href="permisos.php">Asignar Permisos</a>
-        <a href="cambiar_contrasena.php">Cambiar Contraseña</a>
-        <a href="logout.php">Cerrar Sesión</a>
+        <a href="usuarios.php">Usuarios</a>
+        <a href="permisos.php">Permisos</a>
       </div>
     </li>
-  
-<li class="nav-item">
-  <a class="nav-link collapsed" href="#" data-toggle="collapse" data-target="#collapseQR" aria-expanded="false" aria-controls="collapseQR">
-    <i class="fas fa-qrcode"></i>
-    <span>QR</span>
-  </a>
-  <div id="collapseQR" class="collapse" aria-labelledby="headingQR" data-parent="#accordionSidebar">
-    <div class="bg-dark py-2 collapse-inner rounded">
-      <a class="collapse-item" href="ver_qr_clientes.php">Ver QR generados</a>
-      <a class="collapse-item" href="imprimir_qr.php">Imprimir QR</a>
-    </div>
-  </div>
-</li>
-
-<li class="nav-item">
-  <a class="nav-link" href="registrar_asistencia_qr.php">
-    <i class="fas fa-user-check"></i>
-    <span>Asistencia por QR</span>
-  </a>
-</li>
-
-
-    <li>
-      <button class="dropdown-btn">🕓 Asistencias ▾</button>
-      <div class="dropdown-container">
-        <a href="registrar_asistencia.php">Registrar Asistencia</a>
-        <a href="registrar_asistencia_qr.php">Registrar Asistencia por QR</a>
-        <a href="ver_asistencias.php">Ver Asistencias</a>
-      </div>
-    </li>
-
-
-    <li>
-      <button class="dropdown-btn">📑 Planes ▾</button>
-      <div class="dropdown-container">
-        <a href="crear_plan.php">Crear Plan</a>
-        <a href="crear_plan_adicional.php">Crear Plan Adicional</a>
-        <a href="crear_disciplina.php">Crear Disciplina</a>
-      </div>
-    </li>
-
-
-    
-    
-
-
-
-<li class="nav-item has-treeview">
-    <a href="#" class="nav-link">
-        <i class="nav-icon fas fa-users"></i>
-        <p>
-            Clientes
-            <i class="right fas fa-angle-left"></i>
-        </p>
-    </a>
-    <ul class="nav nav-treeview">
-        <li class="nav-item"><a href="clientes.php" class="nav-link"><i class="far fa-circle nav-icon"></i><p>Ver Clientes</p></a></li>
-        <li class="nav-item"><a href="agregar_cliente.php" class="nav-link"><i class="far fa-circle nav-icon"></i><p>Agregar Cliente</p></a></li>
-        <li class="nav-item"><a href="importar_clientes.php" class="nav-link"><i class="far fa-circle nav-icon"></i><p>Importar Clientes</p></a></li>
-    
-    <li>
-      <button class="dropdown-btn">📷 QR ▾</button>
-      <div class="dropdown-container">
-        <a href="generar_qr.php">Generar QR</a>
-        <a href="registrar_asistencia_qr.php">Asistencia por QR</a>
-      </div>
-    </li>
-</ul>
-</li>
-<li class="nav-item has-treeview">
-    <a href="#" class="nav-link">
-        <i class="nav-icon fas fa-qrcode"></i>
-        <p>
-            QR
-            <i class="right fas fa-angle-left"></i>
-        </p>
-    </a>
-    <ul class="nav nav-treeview">
-        <li class="nav-item"><a href="generar_qr.php" class="nav-link"><i class="far fa-circle nav-icon"></i><p>Generar QR</p></a></li>
-        <li class="nav-item"><a href="ver_qr.php" class="nav-link"><i class="far fa-circle nav-icon"></i><p>Ver QR Generados</p></a></li>
-        <li class="nav-item"><a href="imprimir_qr.php" class="nav-link"><i class="far fa-circle nav-icon"></i><p>Imprimir QR</p></a></li>
-        <li class="nav-item"><a href="registrar_asistencia_qr.php" class="nav-link"><i class="far fa-circle nav-icon"></i><p>Asistencia por QR</p></a></li>
-    
-    <li>
-      <button class="dropdown-btn">📷 QR ▾</button>
-      <div class="dropdown-container">
-        <a href="generar_qr.php">Generar QR</a>
-        <a href="registrar_asistencia_qr.php">Asistencia por QR</a>
-      </div>
-    </li>
-</ul>
-</li>
 
     <li>
       <button class="dropdown-btn">📷 QR ▾</button>
       <div class="dropdown-container">
-        <a href="generar_qr.php">Generar QR</a>
         <a href="registrar_asistencia_qr.php">Asistencia por QR</a>
       </div>
     </li>
-</ul>
+  </ul>
 </nav>
-<script>
-  const dropdowns = document.querySelectorAll(".dropdown-btn");
-  dropdowns.forEach(btn => {
-    btn.addEventListener("click", function () {
-      this.classList.toggle("active");
-      const container = this.nextElementSibling;
-      container.style.display = container.style.display === "block" ? "none" : "block";
-    });
-  });
-</script>
