@@ -1,60 +1,71 @@
+
 <?php
 include 'conexion.php';
 date_default_timezone_set('America/Argentina/Buenos_Aires');
 
-if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST["dni"])) {
+if ($_SERVER["REQUEST_METHOD"] == "POST") {
     $dni = trim($_POST["dni"]);
 
-    // Buscar cliente y membresía activa con clases disponibles
-    $sql = "SELECT c.id AS cliente_id, c.nombre, c.apellido, m.id AS membresia_id, m.clases_disponibles, m.vencimiento
-            FROM clientes c
-            INNER JOIN membresias m ON c.id = m.cliente_id
-            WHERE c.dni = ? AND m.vencimiento >= CURDATE() AND m.clases_disponibles > 0
-            ORDER BY m.vencimiento DESC
-            LIMIT 1";
+    if (empty($dni)) {
+        echo "<script>alert('No se recibió DNI.'); window.location.href='escaneo_qr.php';</script>";
+        exit;
+    }
 
+    $sql = "SELECT * FROM clientes WHERE dni = ?";
     $stmt = $conexion->prepare($sql);
     $stmt->bind_param("s", $dni);
     $stmt->execute();
     $resultado = $stmt->get_result();
 
-    if ($resultado->num_rows > 0) {
-        $row = $resultado->fetch_assoc();
-        $cliente_id = $row['cliente_id'];
-        $membresia_id = $row['membresia_id'];
-        $nombre = $row['nombre'];
-        $apellido = $row['apellido'];
-        $clases = $row['clases_disponibles'] - 1;
-        $vencimiento = $row['vencimiento'];
-        $fecha = date("Y-m-d");
-        $hora = date("H:i:s");
-
-        // Descontar una clase
-        $sqlUpdate = "UPDATE membresias SET clases_disponibles = clases_disponibles - 1 WHERE id = ?";
-        $stmtUpdate = $conexion->prepare($sqlUpdate);
-        $stmtUpdate->bind_param("i", $membresia_id);
-        $stmtUpdate->execute();
-
-        // Registrar asistencia
-        $sqlAsistencia = "INSERT INTO asistencias (cliente_id, fecha, hora) VALUES (?, ?, ?)";
-        $stmtAsistencia = $conexion->prepare($sqlAsistencia);
-        $stmtAsistencia->bind_param("iss", $cliente_id, $fecha, $hora);
-        $stmtAsistencia->execute();
-
-        // Mostrar mensaje
-        echo "<div style='text-align:center; color:#fff; font-family:Arial;'>
-                <h2>Ingreso registrado</h2>
-                <p><strong>Cliente:</strong> $apellido, $nombre</p>
-                <p><strong>Clases restantes:</strong> $clases</p>
-                <p><strong>Vencimiento del plan:</strong> $vencimiento</p>
-              </div>";
-    } else {
-        echo "<script>alert('Cliente no encontrado o plan vencido.'); window.history.back();</script>";
+    if ($resultado->num_rows === 0) {
+        echo "<script>alert('Cliente no encontrado.'); window.location.href='escaneo_qr.php';</script>";
+        exit;
     }
 
-    $stmt->close();
-    $conexion->close();
-} else {
-    echo "<script>alert('No se recibió DNI.'); window.history.back();</script>";
+    $cliente = $resultado->fetch_assoc();
+    $cliente_id = $cliente["id"];
+    $nombre = $cliente["nombre"];
+    $apellido = $cliente["apellido"];
+    $gimnasio_id = $cliente["gimnasio_id"];
+
+    $hoy = date("Y-m-d");
+    $sqlM = "SELECT * FROM membresias WHERE cliente_id = ? AND vencimiento >= ? AND gimnasio_id = ? ORDER BY id DESC LIMIT 1";
+    $stmtM = $conexion->prepare($sqlM);
+    $stmtM->bind_param("isi", $cliente_id, $hoy, $gimnasio_id);
+    $stmtM->execute();
+    $resM = $stmtM->get_result();
+
+    if ($resM->num_rows === 0) {
+        echo "<script>alert('No tiene membresía vigente.'); window.location.href='escaneo_qr.php';</script>";
+        exit;
+    }
+
+    $membresia = $resM->fetch_assoc();
+    $clases_disponibles = $membresia["clases_disponibles"];
+    $membresia_id = $membresia["id"];
+    $vencimiento = $membresia["vencimiento"];
+
+    if ($clases_disponibles < 1) {
+        echo "<script>alert('No tiene clases disponibles.'); window.location.href='escaneo_qr.php';</script>";
+        exit;
+    }
+
+    $fecha = date("Y-m-d");
+    $hora = date("H:i:s");
+
+    $stmt = $conexion->prepare("INSERT INTO asistencias (cliente_id, fecha, hora, gimnasio_id) VALUES (?, ?, ?, ?)");
+    $stmt->bind_param("issi", $cliente_id, $fecha, $hora, $gimnasio_id);
+    $stmt->execute();
+
+    $nuevas_clases = $clases_disponibles - 1;
+    $stmt = $conexion->prepare("UPDATE membresias SET clases_disponibles = ? WHERE id = ?");
+    $stmt->bind_param("ii", $nuevas_clases, $membresia_id);
+    $stmt->execute();
+
+    echo "<script>
+        alert('Ingreso registrado: $apellido, $nombre. Clases restantes: $nuevas_clases. Vencimiento: $vencimiento');
+        window.location.href='escaneo_qr.php';
+    </script>";
+    exit;
 }
 ?>
