@@ -1,112 +1,60 @@
 <?php
 include 'conexion.php';
-session_start();
-?>
+date_default_timezone_set('America/Argentina/Buenos_Aires');
 
-<!DOCTYPE html>
-<html lang="es">
-<head>
-  <meta charset="UTF-8">
-  <title>Escaneo QR - Registrar Asistencia</title>
-  <script src="https://unpkg.com/html5-qrcode"></script>
-  <style>
-    body {
-      background-color: black;
-      color: gold;
-      font-family: Arial, sans-serif;
-      text-align: center;
-      padding: 20px;
-    }
-    #reader {
-      width: 300px;
-      margin: auto;
-    }
-    #resultado {
-      margin-top: 20px;
-      font-size: 18px;
-    }
-  </style>
-</head>
-<body>
-  <h2>Escaneo QR para Ingreso</h2>
-  <div id="reader"></div>
-  <div id="resultado"></div>
+if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST["dni"])) {
+    $dni = trim($_POST["dni"]);
 
-  <script>
-    function onScanSuccess(decodedText) {
-      fetch('registrar_asistencia_qr.php', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: 'dni_qr=' + encodeURIComponent(decodedText)
-      })
-      .then(response => response.text())
-      .then(data => {
-        document.getElementById("resultado").innerHTML = data;
-      })
-      .catch(error => {
-        document.getElementById("resultado").innerText = "Error al enviar: " + error;
-      });
-    }
+    // Buscar cliente y membresía activa con clases disponibles
+    $sql = "SELECT c.id AS cliente_id, c.nombre, c.apellido, m.id AS membresia_id, m.clases_disponibles, m.vencimiento
+            FROM clientes c
+            INNER JOIN membresias m ON c.id = m.cliente_id
+            WHERE c.dni = ? AND m.vencimiento >= CURDATE() AND m.clases_disponibles > 0
+            ORDER BY m.vencimiento DESC
+            LIMIT 1";
 
-    function onScanFailure(error) {
-      console.warn("Error escaneando: ", error);
-    }
-
-    const html5QrCode = new Html5Qrcode("reader");
-    Html5Qrcode.getCameras().then(devices => {
-      if (devices.length) {
-        html5QrCode.start(
-          { facingMode: "environment" },
-          { fps: 10, qrbox: 250 },
-          onScanSuccess,
-          onScanFailure
-        );
-      } else {
-        document.getElementById("resultado").innerText = "No se detectaron cámaras.";
-      }
-    });
-  </script>
-</body>
-</html>
-
-<?php
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['dni_qr'])) {
-    include 'conexion.php';
-    $dni = trim($_POST['dni_qr']);
-    $gimnasio_id = $_SESSION['gimnasio_id'] ?? 1;
-
-    $stmt = $conexion->prepare("SELECT id, nombre, apellido FROM clientes WHERE dni = ? AND gimnasio_id = ?");
-    $stmt->bind_param("si", $dni, $gimnasio_id);
+    $stmt = $conexion->prepare($sql);
+    $stmt->bind_param("s", $dni);
     $stmt->execute();
     $resultado = $stmt->get_result();
 
     if ($resultado->num_rows > 0) {
-        $cliente = $resultado->fetch_assoc();
-        $cliente_id = $cliente['id'];
+        $row = $resultado->fetch_assoc();
+        $cliente_id = $row['cliente_id'];
+        $membresia_id = $row['membresia_id'];
+        $nombre = $row['nombre'];
+        $apellido = $row['apellido'];
+        $clases = $row['clases_disponibles'] - 1;
+        $vencimiento = $row['vencimiento'];
+        $fecha = date("Y-m-d");
+        $hora = date("H:i:s");
 
-        $membresia = $conexion->query("SELECT id, clases_restantes, fecha_vencimiento FROM membresias WHERE cliente_id = $cliente_id ORDER BY fecha_vencimiento DESC LIMIT 1")->fetch_assoc();
+        // Descontar una clase
+        $sqlUpdate = "UPDATE membresias SET clases_disponibles = clases_disponibles - 1 WHERE id = ?";
+        $stmtUpdate = $conexion->prepare($sqlUpdate);
+        $stmtUpdate->bind_param("i", $membresia_id);
+        $stmtUpdate->execute();
 
-        if ($membresia) {
-            $fecha_actual = date("Y-m-d");
-            $vencimiento = $membresia['fecha_vencimiento'];
-            $clases = $membresia['clases_restantes'];
+        // Registrar asistencia
+        $sqlAsistencia = "INSERT INTO asistencias (cliente_id, fecha, hora) VALUES (?, ?, ?)";
+        $stmtAsistencia = $conexion->prepare($sqlAsistencia);
+        $stmtAsistencia->bind_param("iss", $cliente_id, $fecha, $hora);
+        $stmtAsistencia->execute();
 
-            if ($vencimiento >= $fecha_actual && $clases > 0) {
-                $nuevas_clases = $clases - 1;
-                $conexion->query("UPDATE membresias SET clases_restantes = $nuevas_clases WHERE id = {$membresia['id']}");
-
-                echo "<div>✅ <strong>{$cliente['nombre']} {$cliente['apellido']}</strong><br>
-                      DNI: $dni<br>
-                      Clases restantes: $nuevas_clases<br>
-                      Válido hasta: $vencimiento</div>";
-            } else {
-                echo "<div style='color:red'>❌ Membresía vencida o sin clases.<br>Fecha de vencimiento: $vencimiento<br>Clases: $clases</div>";
-            }
-        } else {
-            echo "<div style='color:red'>❌ No se encontró membresía activa.</div>";
-        }
+        // Mostrar mensaje
+        echo "<div style='text-align:center; color:#fff; font-family:Arial;'>
+                <h2>Ingreso registrado</h2>
+                <p><strong>Cliente:</strong> $apellido, $nombre</p>
+                <p><strong>Clases restantes:</strong> $clases</p>
+                <p><strong>Vencimiento del plan:</strong> $vencimiento</p>
+              </div>";
     } else {
-        echo "<div style='color:red'>❌ Cliente no registrado.</div>";
+        echo "<script>alert('Cliente no encontrado o plan vencido.'); window.history.back();</script>";
     }
+
+    $stmt->close();
+    $conexion->close();
+} else {
+    echo "<script>alert('No se recibió DNI.'); window.history.back();</script>";
 }
 ?>
