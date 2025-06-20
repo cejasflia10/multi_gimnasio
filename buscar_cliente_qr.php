@@ -1,25 +1,23 @@
-
 <?php
-include 'conexion.php';
+include("conexion.php");
 
-if (isset($_GET['dni'])) {
-    $dni = $_GET['dni'];
-    $stmt = $conexion->prepare("SELECT id, nombre, apellido FROM clientes WHERE dni = ?");
-    $stmt->bind_param("s", $dni);
-    $stmt->execute();
-    $resultado = $stmt->get_result();
+if (isset($_POST['query'])) {
+    $query = trim($_POST['query']);
+    $sql = "SELECT id, dni, CONCAT(nombre, ' ', apellido) AS nombre FROM clientes 
+            WHERE dni LIKE '%$query%' OR nombre LIKE '%$query%' OR apellido LIKE '%$query%' OR rfid_uid LIKE '%$query%' LIMIT 10";
+    $result = $conexion->query($sql);
 
-    if ($resultado->num_rows > 0) {
-        $cliente = $resultado->fetch_assoc();
-        echo json_encode([
-            'id' => $cliente['id'],
-            'nombre' => $cliente['nombre'],
-            'apellido' => $cliente['apellido']
-        ]);
+    if ($result->num_rows > 0) {
+        while ($row = $result->fetch_assoc()) {
+            $cliente = json_encode([
+                "id" => $row["id"],
+                "dni" => $row["dni"],
+                "nombre" => $row["nombre"]
+            ]);
+            echo "<div data-cliente='$cliente'>{$row['nombre']} - DNI: {$row['dni']}</div>";
+        }
     } else {
-        echo json_encode(['error' => 'No encontrado']);
+        echo "<div>No se encontraron coincidencias</div>";
     }
-
-    $stmt->close();
 }
 ?>
