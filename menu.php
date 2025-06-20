@@ -1,3 +1,4 @@
+
 <nav id="sidebar">
   <div class="sidebar-header">
     <h3>🏋️‍♂️ Fight Academy</h3>
