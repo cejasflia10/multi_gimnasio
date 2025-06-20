@@ -4,40 +4,43 @@ if (!isset($_SESSION['gimnasio_id'])) {
     die("Acceso denegado.");
 }
 include 'conexion.php';
+
 $gimnasio_id = $_SESSION['gimnasio_id'];
+$importados = 0;
+$omitidos = 0;
 
-if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_FILES["archivo_csv"])) {
-    $archivo = $_FILES["archivo_csv"]["tmp_name"];
-    $handle = fopen($archivo, "r");
-    $fila = 0;
-    $importados = 0;
-    $duplicados = 0;
+if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_FILES['archivo_csv'])) {
+    $archivo_tmp = $_FILES['archivo_csv']['tmp_name'];
+    if (($handle = fopen($archivo_tmp, "r")) !== false) {
+        $primera = true;
+        while (($datos = fgetcsv($handle, 1000, ",")) !== false) {
+            if ($primera) { $primera = false; continue; }
 
-    while (($datos = fgetcsv($handle, 1000, ",")) !== FALSE) {
-        if ($fila == 0) { $fila++; continue; } // Saltar encabezado
+            list($apellido, $nombre, $dni, $fecha_nacimiento, $domicilio, $telefono, $email, $rfid, $fecha_vencimiento, $disciplina) = $datos;
 
-        list($apellido, $nombre, $dni, $fecha_nac, $domicilio, $telefono, $email, $rfid, $disciplina, $fecha_vto) = $datos;
+            if (empty($dni)) continue;
 
-        // Verificar si el DNI ya existe
-        $check = $conexion->prepare("SELECT id FROM clientes WHERE dni = ?");
-        $check->bind_param("s", $dni);
-        $check->execute();
-        $check->store_result();
+            $check = $conexion->prepare("SELECT id FROM clientes WHERE dni = ? AND gimnasio_id = ?");
+            $check->bind_param("si", $dni, $gimnasio_id);
+            $check->execute();
+            $check->store_result();
 
-        if ($check->num_rows == 0) {
-            $stmt = $conexion->prepare("INSERT INTO clientes (apellido, nombre, dni, fecha_nacimiento, domicilio, telefono, email, rfid, disciplina, fecha_vencimiento, gimnasio_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
-            $stmt->bind_param("ssssssssssi", $apellido, $nombre, $dni, $fecha_nac, $domicilio, $telefono, $email, $rfid, $disciplina, $fecha_vto, $gimnasio_id);
-            $stmt->execute();
-            $importados++;
-        } else {
-            $duplicados++;
+            if ($check->num_rows == 0) {
+                $stmt = $conexion->prepare("INSERT INTO clientes (apellido, nombre, dni, fecha_nacimiento, domicilio, telefono, email, rfid, fecha_vencimiento, disciplina, gimnasio_id)
+                                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+                $stmt->bind_param("ssssssssssi", $apellido, $nombre, $dni, $fecha_nacimiento, $domicilio, $telefono, $email, $rfid, $fecha_vencimiento, $disciplina, $gimnasio_id);
+                if ($stmt->execute()) {
+                    $importados++;
+                }
+                $stmt->close();
+            } else {
+                $omitidos++;
+            }
+            $check->close();
         }
-        $fila++;
+        fclose($handle);
     }
-
-    fclose($handle);
-    echo "<script>alert('Importación finalizada: $importados clientes importados, $duplicados duplicados.'); window.location.href='clientes.php';</script>";
-    exit;
+    echo "<p style='color:yellow;'>Importados: $importados | Omitidos (duplicados): $omitidos</p>";
 }
 ?>
 
@@ -45,32 +48,18 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_FILES["archivo_csv"])) {
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>Importar Clientes por CSV</title>
+    <title>Importar Clientes</title>
     <style>
-        body { background: #000; color: #FFD700; font-family: Arial; padding: 30px; }
-        input[type=file], input[type=submit] {
-            padding: 10px;
-            margin: 10px 0;
-            background: #222;
-            color: #FFD700;
-            border: 1px solid #FFD700;
-        }
-        .btn {
-            background-color: #FFD700;
-            color: #000;
-            font-weight: bold;
-            border: none;
-            padding: 10px 20px;
-        }
+        body { background-color: #111; color: #FFD700; font-family: Arial; text-align: center; padding-top: 50px; }
+        input, button { padding: 10px; margin: 10px; border-radius: 5px; border: 1px solid #FFD700; background-color: #222; color: #FFD700; }
     </style>
 </head>
 <body>
-    <h2>Importar Clientes (Archivo CSV)</h2>
-    <form method="post" enctype="multipart/form-data">
-        <label>Seleccionar archivo CSV:</label><br>
-        <input type="file" name="archivo_csv" accept=".csv" required><br>
-        <input type="submit" class="btn" value="Importar Clientes">
+    <h2>Importar Clientes desde CSV</h2>
+    <form method="POST" enctype="multipart/form-data">
+        <input type="file" name="archivo_csv" accept=".csv" required>
+        <br>
+        <button type="submit">Importar</button>
     </form>
-    <p>Formato requerido: apellido,nombre,dni,fecha_nacimiento,domicilio,telefono,email,rfid,disciplina,fecha_vencimiento</p>
 </body>
 </html>
