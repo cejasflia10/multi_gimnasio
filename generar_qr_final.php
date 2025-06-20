@@ -1,41 +1,36 @@
 <?php
-require 'phpqrcode/qrlib.php';
+// Ocultar errores deprecated y warnings
+error_reporting(E_ALL & ~E_DEPRECATED & ~E_WARNING);
 
-$id = $_POST['id'] ?? '';
-$dni = $_POST['dni'] ?? '';
-$nombre = $_POST['nombre'] ?? '';
+require_once('phpqrcode/qrlib.php');
 
-if (!$id || !$dni || !$nombre) {
-    die("Faltan datos");
+// Validar que existan los datos necesarios
+if (!isset($_GET['id']) || !isset($_GET['dni']) || !isset($_GET['nombre'])) {
+    echo "Faltan datos";
+    exit;
 }
 
+// Datos del cliente
+$id = $_GET['id'];
+$dni = $_GET['dni'];
+$nombre = $_GET['nombre'];
+
+// Texto del QR
 $contenido = "ID:$id | DNI:$dni | $nombre";
 
-// Ruta de guardado
-$ruta_qr = "qrs/cliente_" . $id . ".png";
+// Crear carpeta 'qrs' si no existe
 if (!file_exists('qrs')) {
-    mkdir('qrs');
+    mkdir('qrs', 0777, true);
 }
 
-// Generar el código QR (sin GD, usa directamente PNG desde QRlib)
-QRcode::png($contenido, $ruta_qr, QR_ECLEVEL_L, 4);
+// Nombre de archivo
+$nombre_archivo = 'qrs/cliente_' . $id . '_' . $dni . '.png';
 
-echo "<!DOCTYPE html>
-<html lang='es'>
-<head>
-<meta charset='UTF-8'>
-<title>QR generado</title>
-<style>
-    body { background-color: #111; color: gold; font-family: Arial; text-align: center; padding-top: 50px; }
-    img { margin-top: 20px; border: 4px solid gold; padding: 10px; background: #222; }
-</style>
-</head>
-<body>
-<h1>QR generado correctamente</h1>
-<p>$contenido</p>
-<img src='$ruta_qr' alt='Código QR'>
-<br><br>
-<a href='generar_qr.php' style='color: gold;'>← Volver</a>
-</body>
-</html>";
+// Generar QR y guardarlo
+QRcode::png($contenido, $nombre_archivo, QR_ECLEVEL_L, 10);
+
+// Mostrar imagen generada
+echo "<h2>QR generado para $nombre</h2>";
+echo "<img src='$nombre_archivo' alt='QR del cliente'><br>";
+echo "<a href='generar_qr.html'>← Volver</a>";
 ?>
