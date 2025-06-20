@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Registro por QR</title>
+  <style>
+    body {
+      background-color: black;
+      color: gold;
+      font-family: Arial, sans-serif;
+      text-align: center;
+      padding-top: 50px;
+    }
+    #reader {
+      width: 300px;
+      margin: auto;
+      margin-top: 20px;
+    }
+  </style>
+</head>
+<body>
+  <h2>Escaneo QR - Fight Academy</h2>
+  <button onclick="startScanner()">Escanear QR</button>
+  <div id="reader" style="display: none;"></div>
+
+  <form id="form" action="registrar_qr.php" method="POST">
+    <input type="hidden" id="dni" name="dni" required>
+  </form>
+
+  <script src="https://unpkg.com/html5-qrcode"></script>
+  <script>
+    function startScanner() {
+      document.getElementById("reader").style.display = "block";
+      const html5QrCode = new Html5Qrcode("reader");
+      html5QrCode.start(
+        { facingMode: "environment" },
+        {
+          fps: 10,
+          qrbox: 250
+        },
+        qrCodeMessage => {
+          document.getElementById("dni").value = qrCodeMessage;
+          document.getElementById("form").submit();
+          html5QrCode.stop();
+        },
+        errorMessage => {}
+      ).catch(err => {
+        alert("No se pudo iniciar la cámara: " + err);
+      });
+    }
+  </script>
+</body>
+</html>
