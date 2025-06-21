@@ -12,6 +12,7 @@
         <a href="clientes.php">Ver Clientes</a>
         <a href="agregar_cliente.php">Agregar Cliente</a>
         <a href="generar_qr.php">Generar QR</a>
+        <a href="ver_asistencias_qr.php">Ver Asistencia</a>
       </div>
     </li>
 
