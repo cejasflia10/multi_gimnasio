@@ -66,7 +66,7 @@ $resultado = $conexion->query($consulta);
       <th>Rol</th>
       <th>Gimnasio</th>
       <th>Acciones</th>
-    </tr>
+    <th>Rol</th><th>Clientes</th><th>Membresías</th><th>Profesores</th><th>Ventas</th><th>Asistencias</th></tr>
   </thead>
   <tbody>
     <?php while ($usuario = $resultado->fetch_assoc()): ?>
@@ -78,7 +78,7 @@ $resultado = $conexion->query($consulta);
           <a href="editar_usuario.php?id=<?= $usuario['id'] ?>">✏️ Editar</a> |
           <a href="eliminar_usuario.php?id=<?= $usuario['id'] ?>" onclick="return confirm('¿Eliminar este usuario?')">🗑️ Eliminar</a>
         </td>
-      </tr>
+      <th>Rol</th><th>Clientes</th><th>Membresías</th><th>Profesores</th><th>Ventas</th><th>Asistencias</th></tr>
     <?php endwhile; ?>
   </tbody>
 </table>
