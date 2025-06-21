@@ -1,63 +1,99 @@
+
 <?php
 include 'conexion.php';
+date_default_timezone_set('America/Argentina/Buenos_Aires');
 
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
-    $dni = trim($_POST['dni']);
-    $fecha_actual = date('Y-m-d');
-    $hora_actual = date('H:i:s');
+    $dni = trim($_POST["dni"] ?? '');
+    if ($dni === '') {
+        echo json_encode(["success" => false, "message" => "No se recibió el DNI."]);
+        exit;
+    }
 
-    // Buscar al cliente por DNI
-    $sql_cliente = "SELECT id, nombre, apellido FROM clientes WHERE dni = ?";
-    $stmt_cliente = $conexion->prepare($sql_cliente);
-    $stmt_cliente->bind_param("s", $dni);
-    $stmt_cliente->execute();
-    $resultado_cliente = $stmt_cliente->get_result();
+    $sql = "SELECT id, nombre, apellido FROM clientes WHERE dni = ? OR rfid = ?";
+    $stmt = $conexion->prepare($sql);
+    $stmt->bind_param("ss", $dni, $dni);
+    $stmt->execute();
+    $resultado = $stmt->get_result();
 
-    if ($resultado_cliente->num_rows > 0) {
-        $cliente = $resultado_cliente->fetch_assoc();
-        $cliente_id = $cliente['id'];
+    if ($resultado->num_rows > 0) {
+        $cliente = $resultado->fetch_assoc();
+        $id_cliente = $cliente["id"];
 
-        // Buscar membresía activa
-        $sql_membresia = "SELECT id, fecha_vencimiento, clases_restantes FROM membresias WHERE cliente_id = ? ORDER BY id DESC LIMIT 1";
-        $stmt_membresia = $conexion->prepare($sql_membresia);
-        $stmt_membresia->bind_param("i", $cliente_id);
-        $stmt_membresia->execute();
-        $resultado_membresia = $stmt_membresia->get_result();
+        $sql_membresia = "SELECT id, clases_disponibles, fecha_fin FROM membresias WHERE cliente_id = ? AND fecha_fin >= CURDATE() ORDER BY fecha_fin DESC LIMIT 1";
+        $stmt_m = $conexion->prepare($sql_membresia);
+        $stmt_m->bind_param("i", $id_cliente);
+        $stmt_m->execute();
+        $res_m = $stmt_m->get_result();
 
-        if ($resultado_membresia->num_rows > 0) {
-            $membresia = $resultado_membresia->fetch_assoc();
-            $clases_restantes = $membresia['clases_restantes'];
-            $fecha_vencimiento = $membresia['fecha_vencimiento'];
+        if ($res_m->num_rows > 0) {
+            $membresia = $res_m->fetch_assoc();
+            $clases = (int)$membresia["clases_disponibles"];
 
-            if ($clases_restantes > 0 && $fecha_actual <= $fecha_vencimiento) {
-                // Descontar clase
-                $clases_actualizadas = $clases_restantes - 1;
-                $sql_update = "UPDATE membresias SET clases_restantes = ? WHERE id = ?";
-                $stmt_update = $conexion->prepare($sql_update);
-                $stmt_update->bind_param("ii", $clases_actualizadas, $membresia['id']);
-                $stmt_update->execute();
+            if ($clases > 0) {
+                $sql_insert = "INSERT INTO asistencias (cliente_id, fecha, hora) VALUES (?, CURDATE(), CURTIME())";
+                $stmt_ins = $conexion->prepare($sql_insert);
+                $stmt_ins->bind_param("i", $id_cliente);
+                $stmt_ins->execute();
 
-                // Registrar asistencia
-                $sql_asistencia = "INSERT INTO asistencias (cliente_id, fecha, hora) VALUES (?, ?, ?)";
-                $stmt_asistencia = $conexion->prepare($sql_asistencia);
-                $stmt_asistencia->bind_param("iss", $cliente_id, $fecha_actual, $hora_actual);
-                $stmt_asistencia->execute();
+                $sql_update = "UPDATE membresias SET clases_disponibles = clases_disponibles - 1 WHERE id = ?";
+                $stmt_upd = $conexion->prepare($sql_update);
+                $stmt_upd->bind_param("i", $membresia["id"]);
+                $stmt_upd->execute();
 
-                echo "<div style='color: #0f0; font-size: 20px;'>✅ Ingreso registrado: {$cliente['nombre']} {$cliente['apellido']}<br>Clases restantes: $clases_actualizadas<br>Válido hasta: $fecha_vencimiento</div>";
+                echo json_encode(["success" => true, "nombre" => $cliente["nombre"], "apellido" => $cliente["apellido"], "clases_restantes" => $clases - 1, "vencimiento" => $membresia["fecha_fin"]]);
             } else {
-                echo "<div style='color: red; font-size: 20px;'>❌ No se encontró membresía activa o no tiene clases disponibles.</div>";
+                echo json_encode(["success" => false, "message" => "No tiene clases disponibles."]);
             }
         } else {
-            echo "<div style='color: red; font-size: 20px;'>❌ No se encontró membresía registrada para este cliente.</div>";
+            echo json_encode(["success" => false, "message" => "No tiene membresía activa."]);
         }
     } else {
-        echo "<div style='color: red; font-size: 20px;'>❌ Cliente no encontrado.</div>";
+        echo json_encode(["success" => false, "message" => "Cliente no encontrado."]);
     }
-} else {
-    echo "<form method='POST' style='text-align: center; margin-top: 50px;'>
-        <input type='text' name='dni' placeholder='Escaneá el DNI o escribilo' autofocus style='font-size: 24px; padding: 10px;'>
-        <br><br>
-        <button type='submit' style='font-size: 20px;'>Registrar Ingreso</button>
-    </form>";
+    exit;
 }
 ?>
+
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Escaneo QR para Ingreso</title>
+    <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+    <style>
+        body { background-color: #000; color: gold; font-family: sans-serif; text-align: center; }
+        #reader { width: 300px; margin: auto; }
+    </style>
+</head>
+<body>
+    <h1>Escaneo QR para Ingreso</h1>
+    <div id="reader"></div>
+    <div id="resultado"></div>
+
+    <script>
+        function onScanSuccess(decodedText, decodedResult) {
+            html5QrcodeScanner.clear();
+
+            fetch("registrar_asistencia_qr.php", {
+                method: "POST",
+                headers: { "Content-Type": "application/x-www-form-urlencoded" },
+                body: "dni=" + encodeURIComponent(decodedText)
+            })
+            .then(response => response.json())
+            .then(data => {
+                const res = document.getElementById("resultado");
+                if (data.success) {
+                    res.innerHTML = `<h2>✅ ${data.nombre} ${data.apellido}</h2><p>Clases restantes: ${data.clases_restantes}</p><p>Vence: ${data.vencimiento}</p>`;
+                } else {
+                    res.innerHTML = `<h2>⚠️ ${data.message}</h2>`;
+                }
+                setTimeout(() => location.reload(), 4000);
+            });
+        }
+
+        const html5QrcodeScanner = new Html5QrcodeScanner("reader", { fps: 10, qrbox: 250 });
+        html5QrcodeScanner.render(onScanSuccess);
+    </script>
+</body>
+</html>
