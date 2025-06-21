@@ -3,16 +3,16 @@ include 'conexion.php';
 date_default_timezone_set('America/Argentina/Buenos_Aires');
 $hoy = date("Y-m-d");
 
-// Obtener asistencias de clientes (relación por ID, y se muestra el DNI desde clientes)
+// Obtener asistencias de clientes del día
 $clientes = $conexion->query("
     SELECT c.apellido, c.nombre, c.dni, a.fecha_hora 
     FROM asistencias a 
-    JOIN clientes c ON a.id_cliente = c.id 
+    JOIN clientes c ON a.cliente_id = c.id 
     WHERE DATE(a.fecha_hora) = '$hoy'
     ORDER BY a.fecha_hora DESC
 ");
 
-// Obtener asistencias de profesores
+// Obtener asistencias de profesores del día
 $profesores = $conexion->query("
     SELECT p.apellido, p.nombre, r.fecha_hora, r.tipo 
     FROM rfid_registros r 
