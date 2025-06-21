@@ -3,11 +3,11 @@ include 'conexion.php';
 date_default_timezone_set('America/Argentina/Buenos_Aires');
 $hoy = date("Y-m-d");
 
-// Obtener asistencias de clientes (por DNI)
+// Obtener asistencias de clientes (relación por ID, y se muestra el DNI desde clientes)
 $clientes = $conexion->query("
-    SELECT c.apellido, c.nombre, a.fecha_hora 
+    SELECT c.apellido, c.nombre, c.dni, a.fecha_hora 
     FROM asistencias a 
-    JOIN clientes c ON a.dni = c.dni 
+    JOIN clientes c ON a.id_cliente = c.id 
     WHERE DATE(a.fecha_hora) = '$hoy'
     ORDER BY a.fecha_hora DESC
 ");
@@ -28,7 +28,7 @@ $profesores = $conexion->query("
     <h3>👥 Clientes</h3>
     <ul>
         <?php while ($c = $clientes->fetch_assoc()): ?>
-            <li><?php echo $c['apellido'] . ", " . $c['nombre'] . " - " . date("H:i", strtotime($c['fecha_hora'])); ?></li>
+            <li><?php echo $c['apellido'] . ", " . $c['nombre'] . " (DNI: " . $c['dni'] . ") - " . date("H:i", strtotime($c['fecha_hora'])); ?></li>
         <?php endwhile; ?>
     </ul>
 
