@@ -2,10 +2,10 @@
 session_start();
 include 'conexion.php';
 
-// Verificamos si hay un gimnasio asociado al usuario
+// Obtenemos el ID del gimnasio de la sesión
 $gimnasio_id = $_SESSION['gimnasio_id'] ?? null;
 if (!$gimnasio_id) {
-    die("Error: No se ha definido un gimnasio.");
+    die("Acceso denegado.");
 }
 ?>
 
@@ -21,80 +21,112 @@ if (!$gimnasio_id) {
             color: #ffd700;
             font-family: Arial, sans-serif;
             padding: 20px;
+            margin: 0;
+        }
+        h2 {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        form {
+            max-width: 600px;
+            margin: auto;
+            background-color: #222;
+            padding: 20px;
+            border-radius: 8px;
+        }
+        label {
+            display: block;
+            margin-top: 12px;
+            font-weight: bold;
         }
         input, select {
             width: 100%;
-            padding: 8px;
-            margin-bottom: 12px;
+            padding: 10px;
+            margin-top: 4px;
+            margin-bottom: 10px;
             border: none;
             border-radius: 4px;
+            font-size: 16px;
         }
-        .boton {
+        input[type="submit"] {
             background-color: #ffd700;
             color: #111;
-            padding: 10px 20px;
-            border: none;
+            font-weight: bold;
             cursor: pointer;
         }
-        .boton:hover {
+        input[type="submit"]:hover {
             background-color: #e5c100;
+        }
+        @media screen and (max-width: 480px) {
+            body {
+                padding: 10px;
+            }
+            form {
+                padding: 15px;
+            }
+            input, select {
+                font-size: 14px;
+            }
         }
     </style>
 </head>
 <body>
-    <h2>Agregar Cliente</h2>
-    <form action="guardar_cliente.php" method="POST">
-        <label>Apellido:</label>
-        <input type="text" name="apellido" required>
 
-        <label>Nombre:</label>
-        <input type="text" name="nombre" required>
+<h2>Agregar Cliente</h2>
 
-        <label>DNI:</label>
-        <input type="text" name="dni" required>
+<form action="guardar_cliente.php" method="POST">
+    <label for="apellido">Apellido:</label>
+    <input type="text" name="apellido" required>
 
-        <label>Fecha de Nacimiento:</label>
-        <input type="date" name="fecha_nacimiento" id="fecha_nacimiento" required onchange="calcularEdad()">
+    <label for="nombre">Nombre:</label>
+    <input type="text" name="nombre" required>
 
-        <label>Edad:</label>
-        <input type="text" name="edad" id="edad" readonly>
+    <label for="dni">DNI:</label>
+    <input type="text" name="dni" required>
 
-        <label>Domicilio:</label>
-        <input type="text" name="domicilio">
+    <label for="fecha_nacimiento">Fecha de Nacimiento:</label>
+    <input type="date" name="fecha_nacimiento" id="fecha_nacimiento" required onchange="calcularEdad()">
 
-        <label>Teléfono:</label>
-        <input type="text" name="telefono">
+    <label for="edad">Edad:</label>
+    <input type="text" name="edad" id="edad" readonly>
 
-        <label>Email:</label>
-        <input type="email" name="email">
+    <label for="domicilio">Domicilio:</label>
+    <input type="text" name="domicilio">
 
-        <label>RFID (opcional):</label>
-        <input type="text" name="rfid_uid">
+    <label for="telefono">Teléfono:</label>
+    <input type="text" name="telefono">
 
-        <label>Disciplina (opcional):</label>
-        <input type="text" name="disciplina">
+    <label for="email">Email:</label>
+    <input type="email" name="email">
 
-        <input type="hidden" name="gimnasio_id" value="<?php echo htmlspecialchars($gimnasio_id); ?>">
+    <label for="rfid">RFID (opcional):</label>
+    <input type="text" name="rfid">
 
-        <input type="submit" class="boton" value="Guardar Cliente">
-    </form>
+    <label for="disciplina">Disciplina (opcional):</label>
+    <input type="text" name="disciplina">
 
-    <script>
-        function calcularEdad() {
-            const fechaNac = document.getElementById('fecha_nacimiento').value;
-            if (!fechaNac) return;
+    <input type="hidden" name="gimnasio_id" value="<?php echo htmlspecialchars($gimnasio_id); ?>">
 
-            const hoy = new Date();
-            const nacimiento = new Date(fechaNac);
-            let edad = hoy.getFullYear() - nacimiento.getFullYear();
-            const mes = hoy.getMonth() - nacimiento.getMonth();
+    <input type="submit" value="Guardar Cliente">
+</form>
 
-            if (mes < 0 || (mes === 0 && hoy.getDate() < nacimiento.getDate())) {
-                edad--;
-            }
+<script>
+    function calcularEdad() {
+        const fechaNac = document.getElementById('fecha_nacimiento').value;
+        if (!fechaNac) return;
 
-            document.getElementById('edad').value = edad;
+        const hoy = new Date();
+        const nacimiento = new Date(fechaNac);
+        let edad = hoy.getFullYear() - nacimiento.getFullYear();
+        const mes = hoy.getMonth() - nacimiento.getMonth();
+
+        if (mes < 0 || (mes === 0 && hoy.getDate() < nacimiento.getDate())) {
+            edad--;
         }
-    </script>
+
+        document.getElementById('edad').value = edad;
+    }
+</script>
+
 </body>
 </html>
