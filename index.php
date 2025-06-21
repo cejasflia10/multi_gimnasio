@@ -1,79 +1,59 @@
 <?php
-include("menu.php");
-include("conexion.php");
+session_start();
+include 'conexion.php';
+include 'menu.php';
 
-function getMonto($conexion, $tabla, $columnaFecha, $cantidad, $tipo)
-{
-    $fechaInicio = ($tipo == 'DIA') ? "CURDATE()" : "DATE_SUB(CURDATE(), INTERVAL $cantidad MONTH)";
-    $query = "SELECT SUM(monto) as total FROM $tabla WHERE DATE($columnaFecha) >= $fechaInicio";
-    $resultado = $conexion->query($query);
-    $fila = $resultado->fetch_assoc();
-    return $fila['total'] ?? 0;
+$gimnasio_id = $_SESSION['gimnasio_id'] ?? 1;
+
+function getMonto($conexion, $tabla, $campo_fecha, $gimnasio_id, $rango = 'DIA', $columna = 'precio_venta') {
+    $filtro_fecha = ($rango === 'DIA')
+        ? "DATE($campo_fecha) = CURDATE()"
+        : "MONTH($campo_fecha) = MONTH(CURDATE()) AND YEAR($campo_fecha) = YEAR(CURDATE())";
+
+    $sql = "SELECT SUM($columna) AS total FROM $tabla WHERE $filtro_fecha AND id_gimnasio = $gimnasio_id";
+    $resultado = $conexion->query($sql);
+    if ($fila = $resultado->fetch_assoc()) {
+        return $fila['total'] ?? 0;
+    }
+    return 0;
 }
 
-$pagosDia = getMonto($conexion, 'pagos', 'fecha', 1, 'DIA');
-$pagosMes = getMonto($conexion, 'pagos', 'fecha', 1, 'MES');
-$ventasDia = getMonto($conexion, 'ventas', 'fecha', 1, 'DIA');
-$ventasMes = getMonto($conexion, 'ventas', 'fecha', 1, 'MES');
-
+// Totales
+$ventasDia = getMonto($conexion, 'ventas', 'fecha', $gimnasio_id, 'DIA');
+$ventasMes = getMonto($conexion, 'ventas', 'fecha', $gimnasio_id, 'MES');
+$pagosDia = getMonto($conexion, 'pagos', 'fecha', $gimnasio_id, 'DIA', 'monto');
+$pagosMes = getMonto($conexion, 'pagos', 'fecha', $gimnasio_id, 'MES', 'monto');
 ?>
 
 <!DOCTYPE html>
 <html lang="es">
 <head>
-    <meta charset="UTF-8">
-    <title>Panel de Control</title>
-    <style>
-        body {
-            background-color: #111;
-            color: #f1f1f1;
-            font-family: Arial, sans-serif;
-            margin: 0;
-        }
-        .panel {
-            padding: 20px;
-        }
-        .tarjeta {
-            background-color: #222;
-            border: 1px solid #555;
-            padding: 20px;
-            margin: 10px;
-            border-radius: 12px;
-            display: inline-block;
-            width: 200px;
-            text-align: center;
-        }
-        .titulo {
-            font-size: 1.1em;
-            margin-bottom: 10px;
-            color: #ffcc00;
-        }
-        .valor {
-            font-size: 1.8em;
-            font-weight: bold;
-        }
-    </style>
-</head>
-<body>
+  <meta charset="UTF-8">
+  <title>Panel de Control - Fight Academy Scorpions</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    body {
+      margin: 0;
+      font-family: 'Segoe UI', sans-serif;
+      background-color: #111;
+      color: #f1f1f1;
+    }
 
-<div class="panel">
-    <div class="tarjeta">
-        <div class="titulo">Pagos del Día</div>
-        <div class="valor">$<?= number_format($pagosDia, 2) ?></div>
-    </div>
-    <div class="tarjeta">
-        <div class="titulo">Pagos del Mes</div>
-        <div class="valor">$<?= number_format($pagosMes, 2) ?></div>
-    </div>
-    <div class="tarjeta">
-        <div class="titulo">Ventas del Día</div>
-        <div class="valor">$<?= number_format($ventasDia, 2) ?></div>
-    </div>
-    <div class="tarjeta">
-        <div class="titulo">Ventas del Mes</div>
-        <div class="valor">$<?= number_format($ventasMes, 2) ?></div>
-    </div>
-</div>
+    .contenido {
+      margin-left: 260px;
+      padding: 20px;
+    }
 
-</body>
-</html>
+    .tarjetas {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 20px;
+      margin-top: 20px;
+    }
+
+    .tarjeta {
+      background-color: #222;
+      border-left: 5px solid #f7d774;
+      padding: 20px;
+      border-radius: 10px;
+      bo
