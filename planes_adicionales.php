@@ -1,69 +1,105 @@
 <?php
+session_start();
+if (!isset($_SESSION['gimnasio_id'])) {
+    die("Acceso denegado.");
+}
 include 'conexion.php';
 
-// Agregar nuevo adicional
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['nuevo_nombre'])) {
-    $nombre = $_POST['nuevo_nombre'];
-    $precio = $_POST['nuevo_precio'];
-    $conexion->query("INSERT INTO planes_adicionales (nombre, precio) VALUES ('$nombre', '$precio')");
-    header("Location: planes_adicionales.php");
-    exit();
+$gimnasio_id = $_SESSION['gimnasio_id'];
+
+if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST["nombre"], $_POST["precio"])) {
+    $nombre = $_POST["nombre"];
+    $precio = $_POST["precio"];
+
+    $stmt = $conexion->prepare("INSERT INTO planes_adicionales (nombre, precio, gimnasio_id) VALUES (?, ?, ?)");
+    $stmt->bind_param("sdi", $nombre, $precio, $gimnasio_id);
+    $stmt->execute();
 }
 
-// Eliminar adicional
-if (isset($_GET['eliminar'])) {
-    $id = $_GET['eliminar'];
-    $conexion->query("DELETE FROM planes_adicionales WHERE id = $id");
-    header("Location: planes_adicionales.php");
-    exit();
+if (isset($_GET["eliminar"])) {
+    $id = $_GET["eliminar"];
+    $conexion->query("DELETE FROM planes_adicionales WHERE id = $id AND gimnasio_id = $gimnasio_id");
 }
 
-$adicionales = $conexion->query("SELECT * FROM planes_adicionales ORDER BY id DESC");
+$resultado = $conexion->query("SELECT * FROM planes_adicionales WHERE gimnasio_id = $gimnasio_id");
 ?>
 
 <!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="UTF-8">
-  <title>Planes Adicionales</title>
-  <style>
-    body { background: #111; color: #fff; font-family: Arial; margin: 0; padding-left: 240px; }
-    .container { padding: 30px; }
-    h1 { color: #ffc107; }
-    table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-    th, td { padding: 10px; border-bottom: 1px solid #333; text-align: left; }
-    th { background: #222; color: #ffc107; }
-    .btn { padding: 5px 10px; margin-right: 5px; background: #ffc107; color: #111; text-decoration: none; border-radius: 5px; }
-    .btn:hover { background: #e0a800; }
-    input { padding: 5px; margin-right: 10px; }
-  </style>
+    <meta charset="UTF-8">
+    <title>Planes Adicionales</title>
+    <style>
+        body {
+            background-color: #000;
+            color: gold;
+            font-family: Arial, sans-serif;
+            text-align: center;
+        }
+        table {
+            margin: 20px auto;
+            border-collapse: collapse;
+            width: 90%;
+            color: #fff;
+        }
+        th, td {
+            border: 1px solid gold;
+            padding: 10px;
+        }
+        th {
+            background-color: #111;
+        }
+        input, button {
+            padding: 10px;
+            margin: 5px;
+        }
+        .volver {
+            margin-top: 20px;
+            display: inline-block;
+            padding: 10px 20px;
+            background-color: gold;
+            color: black;
+            text-decoration: none;
+            border-radius: 5px;
+        }
+        .btn-eliminar {
+            background-color: gold;
+            color: black;
+            padding: 6px 10px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+    </style>
 </head>
 <body>
-<?php include 'menu.php'; ?>
-<div class="container">
-  <h1>Planes Adicionales</h1>
-  <form method="POST" style="margin-bottom: 20px;">
-    <input type="text" name="nuevo_nombre" placeholder="Nombre adicional" required>
-    <input type="number" step="0.01" name="nuevo_precio" placeholder="Precio" required>
-    <button type="submit" class="btn">Agregar Adicional</button>
-  </form>
 
-  <table>
+<h1>Planes Adicionales</h1>
+
+<form method="POST">
+    <input type="text" name="nombre" placeholder="Nombre" required>
+    <input type="number" name="precio" placeholder="Precio" required step="0.01">
+    <button type="submit">Agregar Adicional</button>
+</form>
+
+<table>
     <tr>
-      <th>Nombre</th>
-      <th>Precio</th>
-      <th>Acciones</th>
+        <th>Nombre</th>
+        <th>Precio</th>
+        <th>Acciones</th>
     </tr>
-    <?php while ($a = $adicionales->fetch_assoc()): ?>
-    <tr>
-      <td><?= $a['nombre'] ?></td>
-      <td>$<?= number_format($a['precio'], 2) ?></td>
-      <td>
-        <a href="planes_adicionales.php?eliminar=<?= $a['id'] ?>" class="btn" onclick="return confirm('¿Eliminar este adicional?')">Eliminar</a>
-      </td>
-    </tr>
+    <?php while ($row = $resultado->fetch_assoc()): ?>
+        <tr>
+            <td><?= htmlspecialchars($row['nombre']) ?></td>
+            <td>$<?= number_format($row['precio'], 2) ?></td>
+            <td>
+                <a class="btn-eliminar" href="?eliminar=<?= $row['id'] ?>" onclick="return confirm('¿Eliminar este adicional?')">Eliminar</a>
+            </td>
+        </tr>
     <?php endwhile; ?>
-  </table>
-</div>
+</table>
+
+<a href="index.php" class="volver">Volver al menú</a>
+
 </body>
 </html>
