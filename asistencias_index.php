@@ -1,46 +1,54 @@
+
 <?php
 include 'conexion.php';
-date_default_timezone_set('America/Argentina/Buenos_Aires');
-$hoy = date("Y-m-d");
-
-// Obtener asistencias de clientes del día
-$clientes = $conexion->query("
-    SELECT c.apellido, c.nombre, c.dni, a.fecha_hora 
-    FROM asistencias a 
-    JOIN clientes c ON a.cliente_id = c.id 
-    WHERE DATE(a.fecha_hora) = '$hoy'
-    ORDER BY a.fecha_hora DESC
-");
-
-// Obtener asistencias de profesores del día
-$profesores = $conexion->query("
-    SELECT p.apellido, p.nombre, r.fecha_hora, r.tipo 
-    FROM rfid_registros r 
-    JOIN profesores p ON r.profesor_id = p.id 
-    WHERE DATE(r.fecha_hora) = '$hoy'
-    ORDER BY r.fecha_hora DESC
-");
+date_default_timezone_set("America/Argentina/Buenos_Aires");
+$fecha_actual = date("Y-m-d");
+$gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
 ?>
 
-<div style="padding: 20px; color: gold;">
-    <h2>📋 Asistencias del día - <?php echo date("d/m/Y"); ?></h2>
+<div style="display: flex; gap: 40px; flex-wrap: wrap; margin-top: 30px;">
 
-    <h3>👥 Clientes</h3>
-    <ul>
-        <?php while ($c = $clientes->fetch_assoc()): ?>
-            <li><?php echo $c['apellido'] . ", " . $c['nombre'] . " (DNI: " . $c['dni'] . ") - " . date("H:i", strtotime($c['fecha_hora'])); ?></li>
-        <?php endwhile; ?>
-    </ul>
+  <!-- CLIENTES -->
+  <div style='flex: 1; min-width: 300px;'>
+    <h3 style='color: #FFD700;'>📋 Clientes</h3>
+    <table style='width:100%; background: #222; color: white; border-collapse: collapse;'>
+      <tr><th>Nombre</th><th>Hora</th><th>Clases</th></tr>
+      <?php
+      $query = "
+        SELECT c.nombre, c.apellido, a.hora, m.clases_disponibles
+        FROM asistencias a
+        INNER JOIN clientes c ON a.cliente_id = c.id
+        LEFT JOIN membresias m ON m.cliente_id = c.id
+        WHERE a.fecha = '$fecha_actual' AND a.id_gimnasio = $gimnasio_id
+        ORDER BY a.hora DESC
+      ";
+      $res = $conexion->query($query);
+      while($row = $res->fetch_assoc()) {
+        echo "<tr style='text-align:center;'><td>{$row['nombre']} {$row['apellido']}</td><td>{$row['hora']}</td><td>{$row['clases_disponibles']}</td></tr>";
+      }
+      ?>
+    </table>
+  </div>
 
-    <h3>👨‍🏫 Profesores</h3>
-    <ul>
-        <?php while ($p = $profesores->fetch_assoc()): ?>
-            <li>
-                <?php
-                echo $p['apellido'] . ", " . $p['nombre'] . " - " .
-                date("H:i", strtotime($p['fecha_hora'])) . " (" . strtoupper($p['tipo']) . ")";
-                ?>
-            </li>
-        <?php endwhile; ?>
-    </ul>
+  <!-- PROFESORES -->
+  <div style='flex: 1; min-width: 300px;'>
+    <h3 style='color: #FFD700;'>👨‍🏫 Profesores</h3>
+    <table style='width:100%; background: #222; color: white; border-collapse: collapse;'>
+      <tr><th>Profesor</th><th>Ingreso</th><th>Egreso</th></tr>
+      <?php
+      $query = "
+        SELECT p.apellido, r.ingreso, r.egreso
+        FROM rfid_profesores_registros r
+        INNER JOIN profesores p ON r.profesor_id = p.id
+        WHERE r.fecha = '$fecha_actual' AND r.gimnasio_id = $gimnasio_id
+        ORDER BY r.ingreso DESC
+      ";
+      $res = $conexion->query($query);
+      while($row = $res->fetch_assoc()) {
+        echo "<tr style='text-align:center;'><td>{$row['apellido']}</td><td>{$row['ingreso']}</td><td>{$row['egreso']}</td></tr>";
+      }
+      ?>
+    </table>
+  </div>
+
 </div>
