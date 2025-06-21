@@ -1,10 +1,12 @@
 <?php
+// Ocultar warnings deprecados
+error_reporting(E_ERROR | E_PARSE);
 require 'phpqrcode/qrlib.php';
 
-$dni = $_GET['dni'] ?? '';
+$dni = $_GET['dni'] ?? 'SIN_DNI';
 
 ob_start();
-QRcode::png($dni, null, QR_ECLEVEL_H, 10);
+QRcode::png($dni, null, QR_ECLEVEL_H, 10); // Nivel alto y tamaño grande
 $imageData = base64_encode(ob_get_contents());
 ob_end_clean();
 ?>
@@ -28,20 +30,21 @@ ob_end_clean();
       padding: 20px;
       text-align: center;
     }
-
     h1 {
       color: #f7d774;
       margin-bottom: 20px;
     }
-
     .qr {
       background-color: #fff;
-      padding: 20px;
+      padding: 30px;
       border-radius: 10px;
-      margin-bottom: 20px;
       box-shadow: 0 0 20px #000;
+      margin-bottom: 30px;
     }
-
+    .qr img {
+      width: 280px;
+      height: 280px;
+    }
     a {
       color: #f7d774;
       font-size: 18px;
@@ -51,7 +54,6 @@ ob_end_clean();
       border-radius: 5px;
       transition: 0.3s;
     }
-
     a:hover {
       background-color: #f7d774;
       color: #111;
@@ -63,7 +65,7 @@ ob_end_clean();
   <h1>QR generado</h1>
 
   <div class="qr">
-    <img src="data:image/png;base64,<?= $imageData ?>" alt="QR">
+    <img src="data:image/png;base64,<?= $imageData ?>" alt="QR generado">
   </div>
 
   <a href="formulario_qr.php">Volver</a>
