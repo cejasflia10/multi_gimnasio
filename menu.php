@@ -3,151 +3,131 @@ if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 ?>
-<!DOCTYPE html>
-<html lang="es">
-<head>
-    <meta charset="UTF-8">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <style>
-        body {
-            margin: 0;
-            font-family: Arial, sans-serif;
-        }
-        .menu {
-            width: 250px;
-            background-color: #111;
-            height: 100vh;
-            position: fixed;
-            overflow-y: auto;
-            color: gold;
-        }
-        .menu h2 {
-            text-align: center;
-            padding: 15px 10px;
-            background-color: #000;
-            margin: 0;
-            font-size: 20px;
-        }
-        .menu ul {
-            list-style: none;
-            padding: 0;
-            margin: 0;
-        }
-        .menu li {
-            border-bottom: 1px solid #222;
-        }
-        .menu a {
-            display: flex;
-            align-items: center;
-            padding: 12px 20px;
-            text-decoration: none;
-            color: gold;
-            cursor: pointer;
-        }
-        .menu a:hover {
-            background-color: #333;
-        }
-        .submenu {
-            display: none;
-            background-color: #1a1a1a;
-        }
-        .menu li.active .submenu {
-            display: block;
-        }
-        .menu .submenu a {
-            padding-left: 40px;
-            font-size: 14px;
-            color: #ddd;
-        }
-        .menu i {
-            margin-right: 10px;
-        }
-        @media (max-width: 768px) {
-            .menu {
-                width: 100%;
-                height: auto;
-                position: relative;
-            }
-        }
-    </style>
-    <script>
-        function toggleMenu(element) {
-            element.classList.toggle("active");
-        }
-    </script>
-</head>
-<body>
-<div class="menu">
-    <h2>Fight Academy</h2>
-    <ul>
-        <li onclick="toggleMenu(this)">
-            <a><i class="fas fa-user"></i>Clientes</a>
-            <ul class="submenu">
-                <li><a href="ver_clientes.php">Ver Clientes</a></li>
-                <li><a href="agregar_cliente.php">Agregar Cliente</a></li>
-            </ul>
-        </li>
-        <li onclick="toggleMenu(this)">
-            <a><i class="fas fa-id-card"></i>Membresías</a>
-            <ul class="submenu">
-                <li><a href="ver_membresias.php">Ver Membresías</a></li>
-                <li><a href="agregar_membresia.php">Nueva Membresía</a></li>
-                <li><a href="planes.php">Planes</a></li>
-                <li><a href="planes_adicionales.php">Planes Adicionales</a></li>
-            </ul>
-        </li>
-        <li onclick="toggleMenu(this)">
-            <a><i class="fas fa-clipboard-check"></i>Asistencias</a>
-            <ul class="submenu">
-                <li><a href="registrar_asistencia.php">Registrar Asistencia</a></li>
-                <li><a href="asistencia_profesor.php">Asistencia Profesor</a></li>
-            </ul>
-        </li>
-        <li onclick="toggleMenu(this)">
-            <a><i class="fas fa-qrcode"></i>QR</a>
-            <ul class="submenu">
-                <li><a href="scanner_qr.php">Escaneo QR</a></li>
-                <li><a href="generar_qr.php">Generar QR</a></li>
-                <li><a href="formulario_qr.php">Formulario QR</a></li>
-            </ul>
-        </li>
-        <li onclick="toggleMenu(this)">
-            <a><i class="fas fa-chalkboard-teacher"></i>Profesores</a>
-            <ul class="submenu">
-                <li><a href="agregar_profesor.php">Agregar Profesor</a></li>
-                <li><a href="listar_profesor.php">Ver Profesores</a></li>
-                <li><a href="pagos_profesores.php">Pagos Profesores</a></li>
-                <li><a href="turnos_profesor.php">Turnos Profesor</a></li>
-            </ul>
-        </li>
-        <li onclick="toggleMenu(this)">
-            <a><i class="fas fa-dumbbell"></i>Gimnasios</a>
-            <ul class="submenu">
-                <li><a href="ver_gimnasios.php">Ver Gimnasios</a></li>
-                <li><a href="agregar_gimnasio.php">Agregar Gimnasio</a></li>
-            </ul>
-        </li>
-        <li onclick="toggleMenu(this)">
-            <a><i class="fas fa-users-cog"></i>Usuarios</a>
-            <ul class="submenu">
-                <li><a href="usuarios.php">Ver Usuarios</a></li>
-                <li><a href="agregar_usuario.php">Agregar Usuario</a></li>
-            </ul>
-        </li>
-        <li onclick="toggleMenu(this)">
-            <a><i class="fas fa-cog"></i>Configuraciones</a>
-            <ul class="submenu">
-                <li><a href="configuraciones.php">Opciones Generales</a></li>
-            </ul>
-        </li>
-        <li onclick="toggleMenu(this)">
-            <a><i class="fas fa-shopping-cart"></i>Ventas</a>
-            <ul class="submenu">
-                <li><a href="ventas.php">Ver Ventas</a></li>
-                <li><a href="agregar_venta.php">Agregar Venta</a></li>
-            </ul>
-        </li>
-    </ul>
+
+<link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet">
+
+<style>
+body {
+    margin: 0;
+}
+.sidebar {
+    height: 100vh;
+    width: 260px;
+    position: fixed;
+    background-color: #111;
+    color: #fff;
+    overflow-y: auto;
+}
+.sidebar h2 {
+    text-align: center;
+    font-size: 20px;
+    padding: 20px;
+    margin: 0;
+    background-color: #222;
+    color: gold;
+}
+.sidebar a {
+    display: block;
+    color: #ccc;
+    padding: 12px 20px;
+    text-decoration: none;
+    transition: 0.3s;
+}
+.sidebar a:hover {
+    background-color: #333;
+    color: #fff;
+}
+.sidebar i {
+    margin-right: 10px;
+    color: gold;
+}
+.submenu {
+    display: none;
+    background-color: #1c1c1c;
+}
+.sidebar a.submenu-toggle:after {
+    content: "\f0d7";
+    font-family: "Font Awesome 6 Free";
+    font-weight: 900;
+    float: right;
+}
+.sidebar .active + .submenu {
+    display: block;
+}
+</style>
+
+<div class="sidebar">
+    <h2><i class="fas fa-dumbbell"></i> Fight Academy</h2>
+
+    <a href="#" class="submenu-toggle"><i class="fas fa-users"></i> Clientes</a>
+    <div class="submenu">
+        <a href="agregar_cliente.php">Agregar Cliente</a>
+        <a href="ver_clientes.php">Ver Clientes</a>
+    </div>
+
+    <a href="#" class="submenu-toggle"><i class="fas fa-id-card-alt"></i> Membresías</a>
+    <div class="submenu">
+        <a href="nueva_membresia.php">Nueva Membresía</a>
+        <a href="ver_membresias.php">Ver Membresías</a>
+        <a href="planes.php">Planes</a>
+        <a href="planes_adicionales.php">Planes Adicionales</a>
+    </div>
+
+    <a href="#" class="submenu-toggle"><i class="fas fa-calendar-check"></i> Asistencias</a>
+    <div class="submenu">
+        <a href="registrar_asistencia.php">Registrar Asistencia</a>
+        <a href="asistencias_index.php">Ver Asistencias</a>
+    </div>
+
+    <a href="#" class="submenu-toggle"><i class="fas fa-qrcode"></i> QR</a>
+    <div class="submenu">
+        <a href="generar_qr.php">Generar QR</a>
+        <a href="scanner_qr.php">Escanear QR</a>
+    </div>
+
+    <a href="#" class="submenu-toggle"><i class="fas fa-chalkboard-teacher"></i> Profesores</a>
+    <div class="submenu">
+        <a href="agregar_profesor.php">Agregar Profesor</a>
+        <a href="listar_profesor.php">Ver Profesores</a>
+        <a href="asistencia_profesor.php">Asistencia Profesores</a>
+        <a href="reporte_asistencias_profesores.php">Reporte Mensual</a>
+    </div>
+
+    <a href="#" class="submenu-toggle"><i class="fas fa-dumbbell"></i> Gimnasios</a>
+    <div class="submenu">
+        <a href="agregar_gimnasio.php">Agregar Gimnasio</a>
+        <a href="ver_gimnasios.php">Ver Gimnasios</a>
+    </div>
+
+    <a href="#" class="submenu-toggle"><i class="fas fa-user-cog"></i> Usuarios</a>
+    <div class="submenu">
+        <a href="agregar_usuario.php">Agregar Usuario</a>
+        <a href="ver_usuarios.php">Ver Usuarios</a>
+    </div>
+
+    <a href="#" class="submenu-toggle"><i class="fas fa-cogs"></i> Configuraciones</a>
+    <div class="submenu">
+        <a href="configuracion_general.php">General</a>
+        <a href="permisos.php">Permisos</a>
+    </div>
+
+    <a href="#" class="submenu-toggle"><i class="fas fa-shopping-cart"></i> Ventas</a>
+    <div class="submenu">
+        <a href="ventas_indumentaria.php">Indumentaria</a>
+        <a href="ventas_protecciones.php">Protecciones</a>
+        <a href="ventas_suplementos.php">Suplementos</a>
+        <a href="ver_ventas.php">Ver Ventas</a>
+    </div>
+
 </div>
-</body>
-</html>
+
+<script>
+    const toggles = document.querySelectorAll('.submenu-toggle');
+    toggles.forEach(toggle => {
+        toggle.addEventListener('click', () => {
+            toggle.classList.toggle('active');
+            const submenu = toggle.nextElementSibling;
+            submenu.style.display = submenu.style.display === 'block' ? 'none' : 'block';
+        });
+    });
+</script>
