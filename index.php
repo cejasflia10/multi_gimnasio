@@ -1,106 +1,135 @@
-<?php if (session_status() === PHP_SESSION_NONE) { session_start(); } ?>
 <?php
-
-if (!isset($_SESSION["gimnasio_id"])) {
-    die("⛔ No has iniciado sesión correctamente.");
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
 }
-$gimnasio_id = $_SESSION["gimnasio_id"];
+
+if (!isset($_SESSION['usuario'])) {
+    header("Location: login.php");
+    exit();
+}
+
+include 'menu_moderno.php';
 include 'conexion.php';
 
-// Datos de ejemplo para el panel
-$pagos_dia = 0;
-$pagos_mes = 0;
-$ventas_dia = 0;
-$ventas_mes = 0;
-$cumples = ["Juan Pérez - 20/06", "Ana García - 22/06"];
-$vencimientos = ["Pedro Gómez - 3 días", "Lucía Díaz - 7 días"];
+$gimnasio_id = $_SESSION['gimnasio_id'] ?? null;
+
+// Pagos y ventas
+$hoy = date('Y-m-d');
+$mes = date('Y-m');
+
+// Totales del día
+$query_pago_dia = $conexion->query("SELECT SUM(monto) AS total FROM pagos WHERE fecha = '$hoy' AND gimnasio_id = '$gimnasio_id'");
+$pago_dia = $query_pago_dia->fetch_assoc()['total'] ?? 0;
+
+$query_venta_dia = $conexion->query("SELECT SUM(total) AS total FROM ventas WHERE fecha = '$hoy' AND gimnasio_id = '$gimnasio_id'");
+$venta_dia = $query_venta_dia->fetch_assoc()['total'] ?? 0;
+
+// Totales del mes
+$query_pago_mes = $conexion->query("SELECT SUM(monto) AS total FROM pagos WHERE fecha LIKE '$mes%' AND gimnasio_id = '$gimnasio_id'");
+$pago_mes = $query_pago_mes->fetch_assoc()['total'] ?? 0;
+
+$query_venta_mes = $conexion->query("SELECT SUM(total) AS total FROM ventas WHERE fecha LIKE '$mes%' AND gimnasio_id = '$gimnasio_id'");
+$venta_mes = $query_venta_mes->fetch_assoc()['total'] ?? 0;
+
+// Cumpleaños
+$mes_actual = date('m');
+$proximos_cumples = $conexion->query("SELECT nombre, apellido, fecha_nacimiento FROM clientes WHERE MONTH(fecha_nacimiento) = '$mes_actual' AND gimnasio_id = '$gimnasio_id' ORDER BY DAY(fecha_nacimiento) ASC");
+
+// Vencimientos
+$fecha_vencimiento = date('Y-m-d', strtotime('+10 days'));
+$vencimientos = $conexion->query("SELECT c.nombre, c.apellido, m.fecha_vencimiento FROM membresias m JOIN clientes c ON m.cliente_id = c.id WHERE m.fecha_vencimiento <= '$fecha_vencimiento' AND c.gimnasio_id = '$gimnasio_id'");
 ?>
+
 <!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Panel - Fight Academy</title>
-  <link rel="stylesheet" href="menu.css">
-  <style>
-    body {
-        margin: 0;
-        font-family: Arial, sans-serif;
-        background: #111;
-        color: #FFD700;
-    }
-    .contenido {
-        margin-left: 260px;
-        padding: 20px;
-    }
-    h1 {
-        text-align: center;
-        color: #FFD700;
-    }
-    .card {
-        background: #222;
-        padding: 15px;
-        margin: 10px 0;
-        border-left: 5px solid #FFD700;
-        border-radius: 5px;
-        font-size: 18px;
-    }
-    .card-group {
-        max-width: 600px;
-        margin: auto;
-    }
-    .titulo-seccion {
-        margin-top: 40px;
-        font-size: 20px;
-        border-bottom: 1px solid #FFD700;
-    }
-    @media screen and (max-width: 768px) {
+    <meta charset="UTF-8">
+    <title>Panel de Control - Fight Academy</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        body {
+            margin: 0;
+            background-color: #111;
+            color: #f1f1f1;
+            font-family: Arial, sans-serif;
+        }
+
         .contenido {
-            margin-left: 0;
-            padding: 10px;
+            margin-left: 250px;
+            padding: 20px;
         }
-        .card {
-            font-size: 16px;
+
+        h1 {
+            color: gold;
         }
-    }
-  </style>
+
+        .tarjeta {
+            background-color: #222;
+            color: gold;
+            border-left: 6px solid gold;
+            padding: 15px;
+            margin-bottom: 20px;
+            border-radius: 8px;
+        }
+
+        .tarjeta h2 {
+            margin: 0;
+            font-size: 20px;
+        }
+
+        .tarjeta p {
+            font-size: 24px;
+            font-weight: bold;
+        }
+
+        @media (max-width: 768px) {
+            .contenido {
+                margin-left: 0;
+                padding: 15px;
+            }
+        }
+    </style>
 </head>
 <body>
-  <?php include 'menu_moderno.php'; ?>
-  <div class="contenido">
+
+<div class="contenido">
     <h1>Bienvenido al Panel</h1>
-    <div class="card-group">
-        <div class="card">Pagos del día: $<?= $pagos_dia ?></div>
-        <div class="card">Pagos del mes: $<?= $pagos_mes ?></div>
-        <div class="card">Ventas del día: $<?= $ventas_dia ?></div>
-        <div class="card">Ventas del mes: $<?= $ventas_mes ?></div>
+
+    <div class="tarjeta">
+        <h2>Pagos del día</h2>
+        <p>$<?= number_format($pago_dia, 2, ',', '.') ?></p>
+    </div>
+    <div class="tarjeta">
+        <h2>Pagos del mes</h2>
+        <p>$<?= number_format($pago_mes, 2, ',', '.') ?></p>
+    </div>
+    <div class="tarjeta">
+        <h2>Ventas del día</h2>
+        <p>$<?= number_format($venta_dia, 2, ',', '.') ?></p>
+    </div>
+    <div class="tarjeta">
+        <h2>Ventas del mes</h2>
+        <p>$<?= number_format($venta_mes, 2, ',', '.') ?></p>
     </div>
 
-    <div class="card-group">
-        <div class="titulo-seccion">🎂 Próximos cumpleaños</div>
-        <?php foreach ($cumples as $cumple): ?>
-            <div class="card"><?= $cumple ?></div>
-        <?php endforeach; ?>
-
-        <div class="titulo-seccion">📅 Próximos vencimientos</div>
-        <?php foreach ($vencimientos as $ven): ?>
-            <div class="card"><?= $ven ?></div>
-        <?php endforeach; ?>
+    <div class="tarjeta">
+        <h2>Próximos cumpleaños del mes</h2>
+        <ul>
+            <?php while ($cumple = $proximos_cumples->fetch_assoc()): ?>
+                <li><?= $cumple['nombre'] . ' ' . $cumple['apellido'] . ' - ' . date('d/m', strtotime($cumple['fecha_nacimiento'])) ?></li>
+            <?php endwhile; ?>
+        </ul>
     </div>
-  </div>
 
-<script>
-  document.addEventListener('DOMContentLoaded', function () {
-    var dropdowns = document.getElementsByClassName("dropdown-btn");
-    for (let i = 0; i < dropdowns.length; i++) {
-      dropdowns[i].addEventListener("click", function () {
-        this.classList.toggle("active");
-        var container = this.nextElementSibling;
-        container.style.display = container.style.display === "block" ? "none" : "block";
-      });
-    }
-  });
-</script>
+    <div class="tarjeta">
+        <h2>Vencimientos próximos (10 días)</h2>
+        <ul>
+            <?php while ($vto = $vencimientos->fetch_assoc()): ?>
+                <li><?= $vto['nombre'] . ' ' . $vto['apellido'] . ' - ' . date('d/m/Y', strtotime($vto['fecha_vencimiento'])) ?></li>
+            <?php endwhile; ?>
+        </ul>
+    </div>
+</div>
 
 </body>
 </html>
