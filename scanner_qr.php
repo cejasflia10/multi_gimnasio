@@ -1,52 +1,169 @@
+<?php
+session_start();
+include 'conexion.php';
+include 'menu.php';
+
+$gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
+$resultado = $conexion->query("SELECT * FROM clientes WHERE gimnasio_id = $gimnasio_id");
+?>
+
 <!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="UTF-8">
-  <title>Escaneo QR para Ingreso</title>
-  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
-  <style>
-    body {
-      background-color: black;
-      color: gold;
-      font-family: Arial, sans-serif;
-      text-align: center;
-      padding-top: 20px;
-    }
-    #reader {
-      width: 300px;
-      margin: auto;
-      border: 2px solid gold;
-    }
-  </style>
+    <meta charset="UTF-8">
+    <title>Ver Clientes</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body {
+            margin: 0;
+            font-family: 'Segoe UI', sans-serif;
+            background-color: #111;
+            color: #f1f1f1;
+        }
+        .contenido {
+            margin-left: 260px;
+            padding: 20px;
+        }
+        h1 {
+            color: #f7d774;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background-color: #1a1a1a;
+            margin-top: 20px;
+        }
+        th, td {
+            padding: 12px;
+            border: 1px solid #333;
+            text-align: left;
+        }
+        th {
+            background-color: #222;
+            color: #f7d774;
+        }
+        tr:nth-child(even) {
+            background-color: #1f1f1f;
+        }
+        .action {
+            color: #f7d774;
+            margin-right: 10px;
+            text-decoration: none;
+            font-size: 1.2em;
+        }
+        .action:hover {
+            color: #fff;
+        }
+        @media (max-width: 768px) {
+            .contenido {
+                margin-left: 0;
+                padding: 10px;
+            }
+            table, thead, tbody, th, td, tr {
+                display: block;
+            }
+            th {
+                position: sticky;
+                top: 0;
+                background-color: #222;
+            }
+            td {
+                padding: 10px;
+                border: none;
+                border-bottom: 1px solid #333;
+                position: relative;
+                padding-left: 50%;
+            }
+            td:before {
+                position: absolute;
+                top: 10px;
+                left: 10px;
+                width: 45%;
+                white-space: nowrap;
+                font-weight: bold;
+            }
+        }
+    </style>
 </head>
 <body>
+<div class="contenido">
+    <h1>Clientes Registrados</h1>
+    <table>
+        <thead>
+            <tr>
+                <th>Apellido</th>
+                <th>Nombre</th>
+                <th>DNI</th>
+                <th>Teléfono</th>
+                <th>Email</th>
+                <th>RFID</th>
+                <th>Vencimiento</th>
+                <th>Acciones</th>
+            </tr>
+        </thead>
+        <tbody>
+            <?php while($row = $resultado->fetch_assoc()): ?>
+            <tr>
+                <td><?= $row['apellido'] ?></td>
+                <td><?= $row['nombre'] ?></td>
+                <td><?= $row['dni'] ?></td>
+                <td><?= $row['telefono'] ?></td>
+                <td><?= $row['email'] ?></td>
+                <td><?= $row['rfid'] ?></td>
+                <td><?= $row['fecha_vencimiento'] ?></td>
+                <td>
+                    <a class="action" href="editar_cliente.php?id=<?= $row['id'] ?>">✏️</a>
+                    <a class="action" href="eliminar_cliente.php?id=<?= $row['id'] ?>" onclick="return confirm('¿Eliminar este cliente?')">🗑️</a>
+                </td>
+            </tr>
+            <?php endwhile; ?>
+        </tbody>
+    </table>
+</div>
+</body>
+</html>
 
-  <h2>📷 Escaneo QR para Ingreso</h2>
-  <div id="reader"></div>
+        .btn {
+            margin-top: 15px;
+            padding: 10px 20px;
+            background-color: gold;
+            color: black;
+            border: none;
+            font-size: 16px;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+    </style>
+    <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+</head>
+<body>
+    <h1>📷 Escaneo QR para Ingreso</h1>
+    <div id="preview-container">
+        <div id="reader" width="300px"></div>
+    </div>
+    <div id="result"></div>
 
-  <form id="formulario" method="POST" action="registrar_asistencia_qr.php">
-    <input type="hidden" name="dni" id="dni">
-  </form>
+    <script>
+        function onScanSuccess(decodedText, decodedResult) {
+            document.getElementById('result').innerText = "DNI Detectado: " + decodedText;
 
-  <script>
-    function onScanSuccess(decodedText, decodedResult) {
-      // Detener escaneo
-      html5QrcodeScanner.clear().then(_ => {
-        // Enviar el DNI al backend
-        document.getElementById("dni").value = decodedText;
-        document.getElementById("formulario").submit();
-      }).catch(error => {
-        console.error("Error al detener escáner: ", error);
-      });
-    }
+            fetch('registrar_asistencia_qr.php?dni=' + decodedText)
+                .then(response => response.text())
+                .then(data => {
+                    alert(data);
+                    if (confirm("¿Desea seguir escaneando?")) {
+                        html5QrcodeScanner.clear().then(_ => {
+                            html5QrcodeScanner.render(onScanSuccess);
+                        });
+                    } else {
+                        html5QrcodeScanner.clear();
+                    }
+                });
+        }
 
-    const html5QrcodeScanner = new Html5QrcodeScanner(
-      "reader", 
-      { fps: 10, qrbox: 250 },
-      /* verbose= */ false
-    );
-    html5QrcodeScanner.render(onScanSuccess);
-  </script>
-
+        const html5QrcodeScanner = new Html5QrcodeScanner(
+            "reader", { fps: 10, qrbox: 250 });
+        html5QrcodeScanner.render(onScanSuccess);
+    </script>
 </body>
 </html>
