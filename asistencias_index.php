@@ -3,19 +3,16 @@ if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 
-include("conexion.php");
+include 'conexion.php';
 
-$fecha = date("Y-m-d");
-
-// Verifica que la sesión tenga gimnasio_id
-if (!isset($_SESSION["gimnasio_id"])) {
-    echo "<p>Error: no se detectó el gimnasio asignado.</p>";
-    exit;
+$gimnasio_id = $_SESSION['gimnasio_id'] ?? null;
+if (!$gimnasio_id) {
+    die("Error: No se pudo identificar el gimnasio.");
 }
 
-$gimnasio_id = $_SESSION["gimnasio_id"];
+$fecha = date('Y-m-d');
 
-// Asistencias de clientes
+// CLIENTES
 $sql_clientes = "
 SELECT c.apellido, c.nombre, a.fecha, a.hora
 FROM asistencias_clientes a
@@ -25,44 +22,53 @@ ORDER BY a.hora DESC
 ";
 $result_clientes = $conexion->query($sql_clientes);
 
-// Asistencias de profesores
+// PROFESORES
 $sql_profesores = "
-SELECT p.apellido, p.nombre, r.fecha, r.ingreso, r.egreso
+SELECT p.apellido, p.nombre, r.fecha_ingreso, r.hora_ingreso, r.hora_salida
 FROM rfid_registros r
 JOIN profesores p ON r.profesor_id = p.id
-WHERE r.id_gimnasio = $gimnasio_id AND r.fecha = '$fecha'
-ORDER BY r.ingreso DESC
+WHERE r.id_gimnasio = $gimnasio_id AND r.fecha_ingreso = '$fecha'
+ORDER BY r.hora_ingreso DESC
 ";
 $result_profesores = $conexion->query($sql_profesores);
 ?>
 
-<div style="display: flex; flex-wrap: wrap; justify-content: space-around; background: #111; color: gold; padding: 20px; border-radius: 10px;">
-    <div style="flex: 1 1 45%; margin: 10px;">
-        <h3>Clientes Asistieron Hoy</h3>
-        <table style="width:100%; background:#222; color:white; border-collapse: collapse;">
-            <tr style="background:#444;"><th>Apellido</th><th>Nombre</th><th>Hora</th></tr>
-            <?php while($row = $result_clientes->fetch_assoc()): ?>
+<div style='padding: 20px; color: #f1f1f1; font-family: Arial; background-color: #111;'>
+    <h2>Asistencias del Día - Clientes</h2>
+    <table border="1" cellpadding="8" cellspacing="0" style="width:100%; background:#222; color:#fff;">
+        <tr>
+            <th>Apellido</th>
+            <th>Nombre</th>
+            <th>Fecha</th>
+            <th>Hora</th>
+        </tr>
+        <?php while($row = $result_clientes->fetch_assoc()): ?>
             <tr>
-                <td><?= $row['apellido'] ?></td>
-                <td><?= $row['nombre'] ?></td>
-                <td><?= $row['hora'] ?></td>
+                <td><?= htmlspecialchars($row['apellido']) ?></td>
+                <td><?= htmlspecialchars($row['nombre']) ?></td>
+                <td><?= htmlspecialchars($row['fecha']) ?></td>
+                <td><?= htmlspecialchars($row['hora']) ?></td>
             </tr>
-            <?php endwhile; ?>
-        </table>
-    </div>
+        <?php endwhile; ?>
+    </table>
 
-    <div style="flex: 1 1 45%; margin: 10px;">
-        <h3>Profesores Asistieron Hoy</h3>
-        <table style="width:100%; background:#222; color:white; border-collapse: collapse;">
-            <tr style="background:#444;"><th>Apellido</th><th>Nombre</th><th>Ingreso</th><th>Egreso</th></tr>
-            <?php while($row = $result_profesores->fetch_assoc()): ?>
+    <h2 style='margin-top:40px;'>Asistencias del Día - Profesores</h2>
+    <table border="1" cellpadding="8" cellspacing="0" style="width:100%; background:#222; color:#fff;">
+        <tr>
+            <th>Apellido</th>
+            <th>Nombre</th>
+            <th>Fecha</th>
+            <th>Hora Ingreso</th>
+            <th>Hora Salida</th>
+        </tr>
+        <?php while($row = $result_profesores->fetch_assoc()): ?>
             <tr>
-                <td><?= $row['apellido'] ?></td>
-                <td><?= $row['nombre'] ?></td>
-                <td><?= $row['ingreso'] ?></td>
-                <td><?= $row['egreso'] ?></td>
+                <td><?= htmlspecialchars($row['apellido']) ?></td>
+                <td><?= htmlspecialchars($row['nombre']) ?></td>
+                <td><?= htmlspecialchars($row['fecha_ingreso']) ?></td>
+                <td><?= htmlspecialchars($row['hora_ingreso']) ?></td>
+                <td><?= htmlspecialchars($row['hora_salida']) ?></td>
             </tr>
-            <?php endwhile; ?>
-        </table>
-    </div>
+        <?php endwhile; ?>
+    </table>
 </div>
