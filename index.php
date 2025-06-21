@@ -3,92 +3,104 @@ if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 include 'conexion.php';
+include 'menu.php';
 
-$gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
-$nombre_gimnasio = $_SESSION['nombre_gimnasio'] ?? 'Academy';
+$gimnasio_id = $_SESSION['gimnasio_id'];
+$fecha_actual = date('Y-m-d');
 
-// Obtener asistencias de clientes
 function obtenerAsistenciasClientes($conexion, $gimnasio_id) {
-    $hoy = date('Y-m-d');
-    $sql = "SELECT c.apellido, c.nombre, a.fecha_ingreso, a.hora 
-            FROM asistencias_clientes a
-            JOIN clientes c ON a.cliente_id = c.id
-            WHERE a.fecha_ingreso = '$hoy' AND c.gimnasio_id = $gimnasio_id";
+    $fecha_actual = date('Y-m-d');
+    $sql = "
+        SELECT c.apellido, c.nombre, a.fecha_hora
+        FROM asistencias_clientes a
+        INNER JOIN clientes c ON a.cliente_id = c.id
+        WHERE a.id_gimnasio = $gimnasio_id AND a.fecha = '$fecha_actual'
+        ORDER BY a.fecha_hora DESC
+    ";
     return $conexion->query($sql);
 }
 
-$asistencias_clientes = obtenerAsistenciasClientes($conexion, $gimnasio_id);
-$hoy = date('Y-m-d');
+$resultado = obtenerAsistenciasClientes($conexion, $gimnasio_id);
 ?>
 
 <!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>Panel de Control</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Panel Principal</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
     <style>
         body {
-            background-color: #000;
-            color: gold;
-            font-family: Arial, sans-serif;
             margin: 0;
+            font-family: Arial, sans-serif;
+            background-color: #111;
+            color: #fff;
+        }
+        .container {
+            margin-left: 250px;
             padding: 20px;
         }
-        h1, h2 {
-            text-align: center;
-            margin-bottom: 10px;
+        .tarjeta {
+            background-color: #1a1a1a;
+            border-radius: 10px;
+            padding: 15px;
+            margin-bottom: 15px;
+            box-shadow: 0 0 5px #f1c40f;
         }
-        table {
+        .tarjeta h3 {
+            margin-top: 0;
+            color: #f1c40f;
+        }
+        .tabla-asistencias {
             width: 100%;
             border-collapse: collapse;
-            margin-bottom: 25px;
         }
-        th, td {
-            border: 1px solid gold;
-            padding: 8px;
-            text-align: center;
+        .tabla-asistencias th, .tabla-asistencias td {
+            border: 1px solid #333;
+            padding: 10px;
+            text-align: left;
         }
-        th {
-            background-color: #111;
+        .tabla-asistencias th {
+            background-color: #222;
         }
-        @media (max-width: 600px) {
-            table, thead, tbody, th, td, tr {
-                font-size: 12px;
+        @media screen and (max-width: 768px) {
+            .container {
+                margin-left: 0;
+                padding: 10px;
+            }
+            .tarjeta {
+                font-size: 14px;
             }
         }
     </style>
 </head>
 <body>
+<div class="container">
 
-    <h1>🏋️ Fight Academy - <?= strtoupper($nombre_gimnasio) ?></h1>
-    <h2>📊 Panel de Control</h2>
-
-    <h3>👥 Asistencias de Clientes - <?= $hoy ?></h3>
-    <table>
-        <thead>
+    <div class="tarjeta">
+        <h3>👥 Asistencias de Clientes (<?php echo date('d/m/Y'); ?>)</h3>
+        <?php if ($resultado && $resultado->num_rows > 0): ?>
+        <table class="tabla-asistencias">
             <tr>
                 <th>Apellido</th>
                 <th>Nombre</th>
-                <th>Fecha</th>
-                <th>Hora</th>
+                <th>Hora de ingreso</th>
             </tr>
-        </thead>
-        <tbody>
-        <?php if ($asistencias_clientes && $asistencias_clientes->num_rows > 0): ?>
-            <?php while($row = $asistencias_clientes->fetch_assoc()): ?>
-            <tr>
-                <td><?= $row['apellido'] ?></td>
-                <td><?= $row['nombre'] ?></td>
-                <td><?= $row['fecha_ingreso'] ?></td>
-                <td><?= $row['hora'] ?></td>
-            </tr>
+            <?php while ($row = $resultado->fetch_assoc()): ?>
+                <tr>
+                    <td><?php echo $row['apellido']; ?></td>
+                    <td><?php echo $row['nombre']; ?></td>
+                    <td><?php echo date('H:i', strtotime($row['fecha_hora'])); ?></td>
+                </tr>
             <?php endwhile; ?>
+        </table>
         <?php else: ?>
-            <tr><td colspan="4">Sin registros</td></tr>
+            <p>No hay asistencias registradas hoy.</p>
         <?php endif; ?>
-        </tbody>
-    </table>
+    </div>
 
+    <!-- Aquí podés seguir agregando tarjetas con: ventas, pagos, vencimientos, cumpleaños -->
+
+</div>
 </body>
 </html>
