@@ -1,124 +1,124 @@
 <?php
 session_start();
-if (!isset($_SESSION["gimnasio_id"])) {
-    die("⚠️ No has iniciado sesión correctamente.");
-}
-$gimnasio_id = $_SESSION["gimnasio_id"];
 include 'conexion.php';
+include 'menu.php';
+
+$gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
+$resultado = $conexion->query("SELECT * FROM clientes WHERE gimnasio_id = $gimnasio_id");
 ?>
 
 <!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>Clientes del Gimnasio</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Ver Clientes</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
         body {
-            font-family: Arial, sans-serif;
-            background-color: #111;
-            color: #f1c40f;
             margin: 0;
-            padding: 0;
+            font-family: 'Segoe UI', sans-serif;
+            background-color: #111;
+            color: #f1f1f1;
         }
-        .container {
+        .contenido {
+            margin-left: 260px;
             padding: 20px;
         }
-        h2 {
-            text-align: center;
-            color: #f1c40f;
-        }
-        .btn {
-            background-color: #f1c40f;
-            color: black;
-            padding: 10px 15px;
-            margin: 5px;
-            border: none;
-            border-radius: 5px;
-            cursor: pointer;
-            text-decoration: none;
-            font-weight: bold;
-        }
-        .btn:hover {
-            background-color: #ffd700;
-        }
-        .table-responsive {
-            overflow-x: auto;
+        h1 {
+            color: #f7d774;
         }
         table {
             width: 100%;
             border-collapse: collapse;
-            margin-top: 15px;
-            min-width: 600px;
+            background-color: #1a1a1a;
+            margin-top: 20px;
         }
         th, td {
-            border: 1px solid #f1c40f;
-            padding: 8px;
-            text-align: center;
+            padding: 12px;
+            border: 1px solid #333;
+            text-align: left;
         }
         th {
             background-color: #222;
+            color: #f7d774;
         }
-        a.action {
-            color: #f1c40f;
+        tr:nth-child(even) {
+            background-color: #1f1f1f;
+        }
+        .action {
+            color: #f7d774;
+            margin-right: 10px;
             text-decoration: none;
-            margin: 0 5px;
+            font-size: 1.2em;
         }
-        .top-bar {
-            display: flex;
-            justify-content: space-between;
-            flex-wrap: wrap;
-            gap: 10px;
+        .action:hover {
+            color: #fff;
+        }
+        @media (max-width: 768px) {
+            .contenido {
+                margin-left: 0;
+                padding: 10px;
+            }
+            table, thead, tbody, th, td, tr {
+                display: block;
+            }
+            th {
+                position: sticky;
+                top: 0;
+                background-color: #222;
+            }
+            td {
+                padding: 10px;
+                border: none;
+                border-bottom: 1px solid #333;
+                position: relative;
+                padding-left: 50%;
+            }
+            td:before {
+                position: absolute;
+                top: 10px;
+                left: 10px;
+                width: 45%;
+                white-space: nowrap;
+                font-weight: bold;
+            }
         }
     </style>
 </head>
 <body>
-    <div class="container">
-        <div class="top-bar">
-            <a href="agregar_cliente.php" class="btn">➕ Agregar Cliente</a>
-            <a href="index.php" class="btn">🏠 Volver al Panel</a>
-        </div>
-        <h2>Clientes del Gimnasio</h2>
-        <div class="table-responsive">
-            <table>
-                <thead>
-                    <tr>
-                        <th>Apellido</th>
-                        <th>Nombre</th>
-                        <th>DNI</th>
-                        <th>Teléfono</th>
-                        <th>Email</th>
-                        <th>Disciplina</th>
-                        <th>Vencimiento</th>
-                        <th>Acciones</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <?php
-                    $stmt = $conexion->prepare("SELECT apellido, nombre, dni, telefono, email, disciplina, fecha_vencimiento, id FROM clientes WHERE gimnasio_id = ?");
-                    $stmt->bind_param("i", $gimnasio_id);
-                    $stmt->execute();
-                    $resultado = $stmt->get_result();
-
-                    while ($row = $resultado->fetch_assoc()) {
-                        echo "<tr>
-                            <td>{$row['apellido']}</td>
-                            <td>{$row['nombre']}</td>
-                            <td>{$row['dni']}</td>
-                            <td>{$row['telefono']}</td>
-                            <td>{$row['email']}</td>
-                            <td>{$row['disciplina']}</td>
-                            <td>{$row['fecha_vencimiento']}</td>
-                            <td>
-                                <a class='action' href='editar_cliente.php?id={$row['id']}'>✏️</a>
-                                <a class='action' href='eliminar_cliente.php?id={$row['id']}' onclick='return confirm("¿Eliminar este cliente?")'>🗑️</a>
-                            </td>
-                        </tr>";
-                    }
-                    ?>
-                </tbody>
-            </table>
-        </div>
-    </div>
+<div class="contenido">
+    <h1>Clientes Registrados</h1>
+    <table>
+        <thead>
+            <tr>
+                <th>Apellido</th>
+                <th>Nombre</th>
+                <th>DNI</th>
+                <th>Teléfono</th>
+                <th>Email</th>
+                <th>RFID</th>
+                <th>Vencimiento</th>
+                <th>Acciones</th>
+            </tr>
+        </thead>
+        <tbody>
+            <?php while($row = $resultado->fetch_assoc()): ?>
+            <tr>
+                <td><?= $row['apellido'] ?></td>
+                <td><?= $row['nombre'] ?></td>
+                <td><?= $row['dni'] ?></td>
+                <td><?= $row['telefono'] ?></td>
+                <td><?= $row['email'] ?></td>
+                <td><?= $row['rfid'] ?></td>
+                <td><?= $row['fecha_vencimiento'] ?></td>
+                <td>
+                    <a class="action" href="editar_cliente.php?id=<?= $row['id'] ?>">✏️</a>
+                    <a class="action" href="eliminar_cliente.php?id=<?= $row['id'] ?>" onclick="return confirm('¿Eliminar este cliente?')">🗑️</a>
+                </td>
+            </tr>
+            <?php endwhile; ?>
+        </tbody>
+    </table>
+</div>
 </body>
 </html>

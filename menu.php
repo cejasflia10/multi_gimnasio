@@ -91,7 +91,7 @@
 
     <div class="menu-item" onclick="toggleSubmenu(this)">🔍 QR</div>
     <div class="submenu">
-        <a href="generar_qr.php">Generar QR</a>
+        <a href="formulario_qr.php">Generar QR</a>
         <a href="scanner_qr.php">Escanear QR</a>
     </div>
 
