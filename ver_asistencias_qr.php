@@ -1,82 +1,111 @@
 <?php
-if (session_status() === PHP_SESSION_NONE) { session_start(); }
-if (!isset($_SESSION["gimnasio_id"])) {
-    die("Acceso denegado.");
+session_start();
+include 'conexion.php';
+
+if (!isset($_SESSION['gimnasio_id'])) {
+    die("Acceso denegado");
 }
-include "conexion.php";
-$gimnasio_id = $_SESSION["gimnasio_id"];
-$sql = "SELECT c.apellido, c.nombre, c.dni, a.fecha_hora, c.clases_restantes, d.nombre AS disciplina
+
+$gimnasio_id = $_SESSION['gimnasio_id'];
+
+// Consultar asistencias con datos del cliente y su membresía actual
+$sql = "SELECT a.fecha, a.hora, c.apellido, c.nombre, d.nombre AS disciplina, m.fecha_vencimiento, m.clases_restantes
         FROM asistencias a
         JOIN clientes c ON a.cliente_id = c.id
-        LEFT JOIN disciplinas d ON c.disciplina = d.id
+        LEFT JOIN disciplinas d ON c.disciplina_id = d.id
+        LEFT JOIN membresias m ON m.cliente_id = c.id AND m.activa = 1
         WHERE c.gimnasio_id = $gimnasio_id
-        ORDER BY a.fecha_hora DESC";
+        ORDER BY a.fecha DESC, a.hora DESC
+        LIMIT 100";
+
 $resultado = $conexion->query($sql);
 ?>
 
 <!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Asistencias QR - Fight Academy</title>
-  <style>
-    body {
-      background-color: #111;
-      color: gold;
-      font-family: Arial, sans-serif;
-      padding: 20px;
-    }
-    h1 {
-      text-align: center;
-    }
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      margin-top: 20px;
-    }
-    th, td {
-      padding: 10px;
-      border: 1px solid gold;
-      text-align: center;
-    }
-    .btn-volver {
-      display: block;
-      width: 200px;
-      margin: 20px auto;
-      padding: 10px;
-      text-align: center;
-      background-color: gold;
-      color: black;
-      text-decoration: none;
-      border-radius: 8px;
-    }
-  </style>
+    <meta charset="UTF-8">
+    <title>Asistencias de Clientes</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        body {
+            background-color: #111;
+            color: #fff;
+            font-family: Arial, sans-serif;
+            padding: 20px;
+        }
+
+        h1 {
+            text-align: center;
+            color: gold;
+            margin-bottom: 20px;
+        }
+
+        .btn-volver {
+            background-color: gold;
+            color: #000;
+            padding: 10px 20px;
+            text-decoration: none;
+            border-radius: 8px;
+            display: inline-block;
+            margin-bottom: 20px;
+        }
+
+        .tabla {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 40px;
+        }
+
+        .tabla th, .tabla td {
+            border: 1px solid #444;
+            padding: 10px;
+            text-align: center;
+        }
+
+        .tabla th {
+            background-color: #222;
+            color: gold;
+        }
+
+        @media screen and (max-width: 600px) {
+            .tabla th, .tabla td {
+                font-size: 14px;
+                padding: 8px;
+            }
+
+            .btn-volver {
+                width: 100%;
+                text-align: center;
+            }
+        }
+    </style>
 </head>
 <body>
-  <h1>Asistencias QR - <?php echo $_SESSION["nombre_gimnasio"] ?? ''; ?></h1>
-  <table>
-    <thead>
-      <tr>
-        <th>Cliente</th>
-        <th>DNI</th>
-        <th>Fecha y Hora</th>
-        <th>Clases Restantes</th>
+
+<h1>Asistencias de Clientes</h1>
+<a href="index.php" class="btn-volver">⬅ Volver al Menú</a>
+
+<table class="tabla">
+    <tr>
+        <th>Nombre</th>
         <th>Disciplina</th>
-      </tr>
-    </thead>
-    <tbody>
-      <?php while($fila = $resultado->fetch_assoc()): ?>
+        <th>Clases Restantes</th>
+        <th>Fecha Vencimiento</th>
+        <th>Fecha</th>
+        <th>Hora</th>
+    </tr>
+    <?php while ($row = $resultado->fetch_assoc()) { ?>
         <tr>
-          <td><?= $fila["apellido"] ?>, <?= $fila["nombre"] ?></td>
-          <td><?= $fila["dni"] ?></td>
-          <td><?= $fila["fecha_hora"] ?></td>
-          <td><?= $fila["clases_restantes"] ?></td>
-          <td><?= $fila["disciplina"] ?></td>
+            <td><?php echo $row['apellido'] . ', ' . $row['nombre']; ?></td>
+            <td><?php echo $row['disciplina'] ?? 'No definida'; ?></td>
+            <td><?php echo $row['clases_restantes'] ?? '-'; ?></td>
+            <td><?php echo $row['fecha_vencimiento'] ?? '-'; ?></td>
+            <td><?php echo $row['fecha']; ?></td>
+            <td><?php echo $row['hora']; ?></td>
         </tr>
-      <?php endwhile; ?>
-    </tbody>
-  </table>
-  <a href="index.php" class="btn-volver">Volver al Panel</a>
+    <?php } ?>
+</table>
+
 </body>
 </html>
