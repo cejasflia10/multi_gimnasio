@@ -7,14 +7,16 @@
     <li><a href="index.php">🏠 Dashboard</a></li>
 
     <li>
-      <button class="dropdown-btn">👤 Clientes ▾</button>
-      <div class="dropdown-container">
-        <a href="clientes.php">Ver Clientes</a>
-        <a href="agregar_cliente.php">Agregar Cliente</a>
-        <a href="generar_qr.php">Generar QR</a>
-        <a href="ver_asistencias_qr.php">Ver Asistencia</a>
-      </div>
-    </li>
+  <button class="dropdown-btn">👤 Clientes ▾</button>
+  <div class="dropdown-container">
+    <a href="clientes.php">Ver Clientes</a>
+    <a href="agregar_cliente.php">Agregar Cliente</a>
+    <a href="generar_qr.php">Generar QR</a>
+    <a href="ver_asistencias_qr.php">Ver Asistencia</a>
+    <a href="importar_clientes.php">Importar Clientes</a>
+    <a href="exportar_clientes.php">Exportar Clientes</a>
+  </div>
+</li>
 
     <li>
       <button class="dropdown-btn">📋 Membresías ▾</button>
