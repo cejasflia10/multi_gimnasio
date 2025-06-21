@@ -8,12 +8,18 @@ if (!isset($_SESSION['gimnasio_id'])) {
 
 $gimnasio_id = $_SESSION['gimnasio_id'];
 
-// Consultar asistencias con datos del cliente y su membresía actual
-$sql = "SELECT a.fecha, a.hora, c.apellido, c.nombre, d.nombre AS disciplina, m.fecha_vencimiento, m.clases_restantes
+// Buscar membresía más reciente por cliente (asumiendo la más reciente como activa)
+$sql = "SELECT a.fecha, a.hora, c.apellido, c.nombre, d.nombre AS disciplina, 
+               m.fecha_vencimiento, m.clases_restantes
         FROM asistencias a
         JOIN clientes c ON a.cliente_id = c.id
         LEFT JOIN disciplinas d ON c.disciplina_id = d.id
-        LEFT JOIN membresias m ON m.cliente_id = c.id AND m.activa = 1
+        LEFT JOIN (
+            SELECT cliente_id, MAX(id) as max_id
+            FROM membresias
+            GROUP BY cliente_id
+        ) ultima ON ultima.cliente_id = c.id
+        LEFT JOIN membresias m ON m.id = ultima.max_id
         WHERE c.gimnasio_id = $gimnasio_id
         ORDER BY a.fecha DESC, a.hora DESC
         LIMIT 100";
