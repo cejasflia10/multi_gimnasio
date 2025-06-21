@@ -2,43 +2,10 @@
 session_start();
 include 'conexion.php';
 
-if ($_SERVER["REQUEST_METHOD"] == "POST") {
-    $apellido = $_POST['apellido'];
-    $nombre = $_POST['nombre'];
-    $dni = $_POST['dni'];
-    $fecha_nacimiento = $_POST['fecha_nacimiento'];
-    $telefono = $_POST['telefono'];
-    $email = $_POST['email'];
-    $rfid = $_POST['rfid'];
-    $fecha_vencimiento = $_POST['fecha_vencimiento'];
-    $disciplina_id = $_POST['disciplina_id'];
-    $gimnasio_id = $_SESSION['gimnasio_id'];
-
-    $fecha_actual = date('Y-m-d');
-    $edad = date_diff(date_create($fecha_nacimiento), date_create($fecha_actual))->y;
-
-    // Validación de DNI duplicado
-    $verificar = $conexion->prepare("SELECT id FROM clientes WHERE dni = ? AND gimnasio_id = ?");
-    $verificar->bind_param("si", $dni, $gimnasio_id);
-    $verificar->execute();
-    $verificar->store_result();
-
-    if ($verificar->num_rows > 0) {
-        echo "<script>alert('El DNI ingresado ya está registrado.'); window.location.href='agregar_cliente.php';</script>";
-        exit();
-    }
-
-    $stmt = $conexion->prepare("INSERT INTO clientes (apellido, nombre, dni, fecha_nacimiento, edad, telefono, email, rfid, fecha_vencimiento, disciplina_id, gimnasio_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
-    $stmt->bind_param("ssssissssii", $apellido, $nombre, $dni, $fecha_nacimiento, $edad, $telefono, $email, $rfid, $fecha_vencimiento, $disciplina_id, $gimnasio_id);
-
-    if ($stmt->execute()) {
-        echo "<script>alert('Cliente registrado exitosamente'); window.location.href='clientes.php';</script>";
-    } else {
-        echo "Error: " . $stmt->error;
-    }
-
-    $stmt->close();
-    $verificar->close();
+// Verificamos si hay un gimnasio asociado al usuario
+$gimnasio_id = $_SESSION['gimnasio_id'] ?? null;
+if (!$gimnasio_id) {
+    die("Error: No se ha definido un gimnasio.");
 }
 ?>
 
@@ -47,57 +14,36 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 <head>
     <meta charset="UTF-8">
     <title>Agregar Cliente</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
     <style>
         body {
-            background-color: #000;
-            color: #FFD700;
+            background-color: #111;
+            color: #ffd700;
             font-family: Arial, sans-serif;
             padding: 20px;
         }
-
-        form {
-            max-width: 600px;
-            margin: auto;
-            background-color: #111;
-            padding: 20px;
-            border-radius: 10px;
-        }
-
-        label {
-            display: block;
-            margin-top: 10px;
-        }
-
         input, select {
             width: 100%;
             padding: 8px;
-            margin-top: 5px;
-            background-color: #222;
-            color: #fff;
-            border: 1px solid #555;
-            border-radius: 5px;
+            margin-bottom: 12px;
+            border: none;
+            border-radius: 4px;
         }
-
-        button {
-            margin-top: 15px;
-            background-color: #FFD700;
-            color: #000;
-            padding: 10px;
+        .boton {
+            background-color: #ffd700;
+            color: #111;
+            padding: 10px 20px;
             border: none;
             cursor: pointer;
-            border-radius: 5px;
-            font-weight: bold;
         }
-
-        h2 {
-            text-align: center;
-            color: #FFD700;
+        .boton:hover {
+            background-color: #e5c100;
         }
     </style>
 </head>
 <body>
-    <h2>Registrar Nuevo Cliente</h2>
-    <form method="POST">
+    <h2>Agregar Cliente</h2>
+    <form action="guardar_cliente.php" method="POST">
         <label>Apellido:</label>
         <input type="text" name="apellido" required>
 
@@ -108,7 +54,13 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         <input type="text" name="dni" required>
 
         <label>Fecha de Nacimiento:</label>
-        <input type="date" name="fecha_nacimiento" required>
+        <input type="date" name="fecha_nacimiento" id="fecha_nacimiento" required onchange="calcularEdad()">
+
+        <label>Edad:</label>
+        <input type="text" name="edad" id="edad" readonly>
+
+        <label>Domicilio:</label>
+        <input type="text" name="domicilio">
 
         <label>Teléfono:</label>
         <input type="text" name="telefono">
@@ -116,32 +68,33 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         <label>Email:</label>
         <input type="email" name="email">
 
-        <label>RFID:</label>
-        <input type="text" name="rfid" required>
+        <label>RFID (opcional):</label>
+        <input type="text" name="rfid_uid">
 
-        <label>Fecha de Vencimiento:</label>
-        <input type="date" name="fecha_vencimiento" required>
+        <label>Disciplina (opcional):</label>
+        <input type="text" name="disciplina">
 
-        <label>Disciplina:</label>
-        <select name="disciplina_id" required>
-            <option value="">Seleccionar Disciplina</option>
-            <?php
-            $gimnasio_id = $_SESSION['gimnasio_id'];
-            $query = "SELECT id, nombre FROM disciplinas WHERE gimnasio_id = ?";
-            $stmt = $conexion->prepare($query);
-            $stmt->bind_param("i", $gimnasio_id);
-            $stmt->execute();
-            $stmt->bind_result($id_disciplina, $nombre_disciplina);
+        <input type="hidden" name="gimnasio_id" value="<?php echo htmlspecialchars($gimnasio_id); ?>">
 
-            while ($stmt->fetch()) {
-                echo '<option value="' . $id_disciplina . '">' . $nombre_disciplina . '</option>';
+        <input type="submit" class="boton" value="Guardar Cliente">
+    </form>
+
+    <script>
+        function calcularEdad() {
+            const fechaNac = document.getElementById('fecha_nacimiento').value;
+            if (!fechaNac) return;
+
+            const hoy = new Date();
+            const nacimiento = new Date(fechaNac);
+            let edad = hoy.getFullYear() - nacimiento.getFullYear();
+            const mes = hoy.getMonth() - nacimiento.getMonth();
+
+            if (mes < 0 || (mes === 0 && hoy.getDate() < nacimiento.getDate())) {
+                edad--;
             }
 
-            $stmt->close();
-            ?>
-        </select>
-
-        <button type="submit">Guardar Cliente</button>
-    </form>
+            document.getElementById('edad').value = edad;
+        }
+    </script>
 </body>
 </html>
