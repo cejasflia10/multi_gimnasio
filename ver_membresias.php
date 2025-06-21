@@ -1,109 +1,130 @@
 <?php
+session_start();
 include 'conexion.php';
-include 'menu.php';
+
+$gimnasio_id = $_SESSION['gimnasio_id'] ?? null;
+if (!$gimnasio_id) {
+    die("Acceso denegado.");
+}
+
+$sql = "SELECT m.id, c.nombre, c.apellido, m.fecha_inicio, m.fecha_vencimiento, m.clases_disponibles, m.total 
+        FROM membresias m
+        JOIN clientes c ON m.cliente_id = c.id
+        WHERE m.gimnasio_id = $gimnasio_id
+        ORDER BY m.fecha_vencimiento ASC";
+
+$resultado = $conexion->query($sql);
 ?>
 
 <!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>Membresías registradas</title>
+    <title>Membresías</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
     <style>
         body {
             background-color: #111;
-            color: #ffc107;
+            color: #ffd700;
             font-family: Arial, sans-serif;
-            margin: 0;
-            padding-top: 60px;
-        }
-
-        .contenedor {
-            margin-left: 250px;
             padding: 20px;
+            margin: 0;
         }
-
+        h2 {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        .tabla-contenedor {
+            overflow-x: auto;
+        }
         table {
             width: 100%;
             border-collapse: collapse;
-            background-color: #222;
-            margin-top: 20px;
+            margin-bottom: 30px;
         }
-
         th, td {
-            padding: 12px;
-            border: 1px solid #444;
-            text-align: center;
+            padding: 10px;
+            border-bottom: 1px solid #444;
+            text-align: left;
         }
-
         th {
+            background-color: #222;
+        }
+        tr:hover {
             background-color: #333;
-            color: #ffc107;
         }
-
-        td {
-            color: #eee;
+        .boton {
+            background-color: #ffd700;
+            color: #111;
+            padding: 6px 12px;
+            border: none;
+            border-radius: 4px;
+            text-decoration: none;
+            font-size: 14px;
+            margin-right: 5px;
         }
-
-        h1 {
+        .boton:hover {
+            background-color: #e5c100;
+        }
+        .volver {
+            display: block;
+            width: fit-content;
+            margin: 20px auto;
+            background-color: #ffd700;
+            color: #111;
+            padding: 10px 20px;
+            border-radius: 5px;
             text-align: center;
-            color: #ffc107;
+            text-decoration: none;
+        }
+        @media (max-width: 768px) {
+            th, td {
+                font-size: 14px;
+            }
+            .boton {
+                font-size: 12px;
+                padding: 5px 8px;
+            }
         }
     </style>
 </head>
 <body>
-    <div class="contenedor">
-        <h1>Membresías registradas</h1>
-        <table>
+
+<h2>Membresías Activas</h2>
+
+<div class="tabla-contenedor">
+    <table>
+        <thead>
             <tr>
-                <th>Cliente</th>
-                <th>Plan</th>
-                <th>Inicio</th>
-                <th>Vencimiento</th>
-                <th>Método de pago</th>
-                <th>Monto abonado</th>
-                <th>Clases totales</th>
-                <th>Clases usadas</th>
-                <th>Clases restantes</th>
+                <th>Nombre</th>
+                <th>Apellido</th>
+                <th>Fecha Inicio</th>
+                <th>Fecha Vencimiento</th>
+                <th>Clases</th>
+                <th>Total</th>
+                <th>Acciones</th>
             </tr>
+        </thead>
+        <tbody>
+            <?php while ($row = $resultado->fetch_assoc()) { ?>
+                <tr>
+                    <td><?php echo htmlspecialchars($row['nombre']); ?></td>
+                    <td><?php echo htmlspecialchars($row['apellido']); ?></td>
+                    <td><?php echo htmlspecialchars($row['fecha_inicio']); ?></td>
+                    <td><?php echo htmlspecialchars($row['fecha_vencimiento']); ?></td>
+                    <td><?php echo $row['clases_disponibles']; ?></td>
+                    <td>$<?php echo number_format($row['total'], 2, ',', '.'); ?></td>
+                    <td>
+                        <a class="boton" href="editar_membresia.php?id=<?php echo $row['id']; ?>">Editar</a>
+                        <a class="boton" href="eliminar_membresia.php?id=<?php echo $row['id']; ?>" onclick="return confirm('¿Eliminar esta membresía?')">Eliminar</a>
+                    </td>
+                </tr>
+            <?php } ?>
+        </tbody>
+    </table>
+</div>
 
-            <?php
-            $query = "SELECT m.*, c.apellido, c.nombre, p.nombre AS plan_nombre, p.precio, p.cantidad_clases 
-                      FROM membresias m
-                      JOIN clientes c ON m.cliente_id = c.id
-                      JOIN planes p ON m.plan_id = p.id";
+<a href="index.php" class="volver">Volver al Menú</a>
 
-            $result = $conexion->query($query);
-
-            while ($row = $result->fetch_assoc()) {
-                $cliente = $row['apellido'] . " " . $row['nombre'];
-                $plan = $row['plan_nombre'] . "<br>(" . $row['cantidad_clases'] . " clases - $" . number_format($row['precio'], 2) . ")";
-                $inicio = $row['fecha_inicio'];
-                $vencimiento = $row['fecha_vencimiento'];
-                $metodo_pago = !empty($row['metodo_pago']) ? ucfirst($row['metodo_pago']) : '-';
-                $monto = is_numeric($row['monto_pago']) ? '$' . number_format($row['monto_pago'], 2) : '-';
-                $clases_totales = $row['cantidad_clases'];
-
-                // Consultar clases realizadas
-                $membresia_id = $row['id'];
-                $usadas_result = $conexion->query("SELECT COUNT(*) AS usadas FROM clases_realizadas WHERE membresia_id = $membresia_id");
-                $usadas_row = $usadas_result ? $usadas_result->fetch_assoc() : ['usadas' => 0];
-                $usadas = $usadas_row['usadas'];
-                $restantes = $clases_totales - $usadas;
-
-                echo "<tr>
-                        <td>$cliente</td>
-                        <td>$plan</td>
-                        <td>$inicio</td>
-                        <td>$vencimiento</td>
-                        <td>$metodo_pago</td>
-                        <td>$monto</td>
-                        <td>$clases_totales</td>
-                        <td>$usadas</td>
-                        <td>$restantes</td>
-                      </tr>";
-            }
-            ?>
-        </table>
-    </div>
 </body>
 </html>
