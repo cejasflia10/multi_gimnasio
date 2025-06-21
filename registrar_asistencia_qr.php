@@ -1,13 +1,16 @@
 <?php
 include 'conexion.php';
+session_start();
 date_default_timezone_set('America/Argentina/Buenos_Aires');
 
+// POST tras escaneo QR
 if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST["dni"])) {
     $dni = trim($_POST["dni"]);
     $fecha_hoy = date('Y-m-d');
     $hora_actual = date('H:i:s');
 
-    $queryCliente = $conexion->prepare("SELECT id, nombre, apellido, disciplina FROM clientes WHERE dni = ?");
+    // Buscar cliente por DNI
+    $queryCliente = $conexion->prepare("SELECT id, nombre, apellido, disciplina, gimnasio_id FROM clientes WHERE dni = ?");
     $queryCliente->bind_param("s", $dni);
     $queryCliente->execute();
     $resultadoCliente = $queryCliente->get_result();
@@ -15,7 +18,9 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST["dni"])) {
     if ($resultadoCliente->num_rows > 0) {
         $cliente = $resultadoCliente->fetch_assoc();
         $cliente_id = $cliente['id'];
+        $gimnasio_id = $cliente['gimnasio_id'];
 
+        // Buscar membresía activa con clases disponibles
         $queryMembresia = $conexion->prepare("SELECT id, clases_disponibles, fecha_vencimiento FROM membresias WHERE cliente_id = ? AND fecha_vencimiento >= ? AND clases_disponibles > 0 ORDER BY fecha_vencimiento DESC LIMIT 1");
         $queryMembresia->bind_param("is", $cliente_id, $fecha_hoy);
         $queryMembresia->execute();
@@ -26,10 +31,12 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST["dni"])) {
             $membresia_id = $membresia['id'];
             $clases_restantes = $membresia['clases_disponibles'] - 1;
 
+            // Registrar asistencia
             $insertAsistencia = $conexion->prepare("INSERT INTO asistencias (cliente_id, fecha, hora) VALUES (?, ?, ?)");
             $insertAsistencia->bind_param("iss", $cliente_id, $fecha_hoy, $hora_actual);
             $insertAsistencia->execute();
 
+            // Descontar clase
             $updateClases = $conexion->prepare("UPDATE membresias SET clases_disponibles = ? WHERE id = ?");
             $updateClases->bind_param("ii", $clases_restantes, $membresia_id);
             $updateClases->execute();
@@ -93,9 +100,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST["dni"])) {
                 document.getElementById("dni_input").value = decodedText.trim();
                 document.getElementById("formulario").submit();
             },
-            (errorMessage) => {
-                // opcional: console.log(errorMessage);
-            }
+            (errorMessage) => {}
         ).catch((err) => {
             alert("Error al acceder a la cámara: " + err);
         });
