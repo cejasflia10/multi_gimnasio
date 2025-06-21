@@ -2,182 +2,135 @@
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
-include("conexion.php");
+include 'menu.php';
+include 'conexion.php';
 
-// Validación
-if (!isset($_SESSION['gimnasio_id'])) {
-    die("Acceso denegado.");
-}
-$gimnasio_id = $_SESSION['gimnasio_id'];
+$gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
+$hoy = date("Y-m-d");
 
-// Función total por fecha
-function getMonto($conexion, $tabla, $columnaFecha, $gimnasio_id, $periodo = 'DIA') {
-    $hoy = date('Y-m-d');
-    $inicioMes = date('Y-m-01');
-    $fechaFiltro = $periodo == 'DIA' ? $hoy : $inicioMes;
-
-    $stmt = $conexion->prepare("SELECT SUM(monto) as total FROM $tabla WHERE DATE($columnaFecha) >= ? AND gimnasio_id = ?");
-    $stmt->bind_param("si", $fechaFiltro, $gimnasio_id);
-    $stmt->execute();
-    $resultado = $stmt->get_result()->fetch_assoc();
-    return $resultado['total'] ?? 0;
+// Obtener asistencias de clientes
+function obtenerAsistenciasClientes($conexion, $gimnasio_id) {
+    $sql = "SELECT c.apellido, c.nombre, a.fecha, a.hora 
+            FROM asistencias_clientes a
+            INNER JOIN clientes c ON c.id = a.cliente_id
+            WHERE c.gimnasio_id = $gimnasio_id AND a.fecha = CURDATE()
+            ORDER BY a.fecha_hora DESC
+            LIMIT 10";
+    return $conexion->query($sql);
 }
 
-// Función cumpleaños
-function obtenerCumpleaños($conexion, $gimnasio_id) {
-    $hoy = date('m-d');
-    $sql = "SELECT nombre, apellido, fecha_nacimiento FROM clientes WHERE gimnasio_id = ? AND DATE_FORMAT(fecha_nacimiento, '%m-%d') >= ? ORDER BY DATE_FORMAT(fecha_nacimiento, '%m-%d') LIMIT 10";
-    $stmt = $conexion->prepare($sql);
-    $stmt->bind_param("is", $gimnasio_id, $hoy);
-    $stmt->execute();
-    return $stmt->get_result();
+// Obtener asistencias de profesores
+function obtenerAsistenciasProfesores($conexion, $gimnasio_id) {
+    $sql = "SELECT p.apellido, p.nombre, r.fecha, r.hora_ingreso, r.hora_salida 
+            FROM registro_profesores r
+            INNER JOIN profesores p ON p.id = r.profesor_id
+            WHERE p.gimnasio_id = $gimnasio_id AND r.fecha = CURDATE()
+            ORDER BY r.fecha_hora DESC
+            LIMIT 10";
+    return $conexion->query($sql);
 }
 
-// Función vencimientos
-function obtenerVencimientos($conexion, $gimnasio_id) {
-    $hoy = date('Y-m-d');
-    $diezDias = date('Y-m-d', strtotime('+10 days'));
-    $sql = "SELECT c.nombre, c.apellido, m.fecha_vencimiento 
-            FROM membresias m 
-            JOIN clientes c ON m.cliente_id = c.id 
-            WHERE m.fecha_vencimiento BETWEEN ? AND ? AND m.gimnasio_id = ? 
-            ORDER BY m.fecha_vencimiento ASC";
-    $stmt = $conexion->prepare($sql);
-    $stmt->bind_param("ssi", $hoy, $diezDias, $gimnasio_id);
-    $stmt->execute();
-    return $stmt->get_result();
-}
-
-// Función asistencias profesores
-function obtenerAsistenciasProfesores($conexion, $gimnasio_id, $fecha) {
-    $sql = "SELECT p.apellido, rp.ingreso, rp.salida
-            FROM registro_profesores rp
-            JOIN profesores p ON rp.profesor_id = p.id
-            WHERE DATE(rp.ingreso) = ? AND rp.gimnasio_id = ?";
-    $stmt = $conexion->prepare($sql);
-    $stmt->bind_param("si", $fecha, $gimnasio_id);
-    $stmt->execute();
-    return $stmt->get_result();
-}
-
-$pagosHoy = getMonto($conexion, 'pagos', 'fecha', $gimnasio_id, 'DIA');
-$pagosMes = getMonto($conexion, 'pagos', 'fecha', $gimnasio_id, 'MES');
-$ventasHoy = getMonto($conexion, 'ventas', 'fecha', $gimnasio_id, 'DIA');
-$ventasMes = getMonto($conexion, 'ventas', 'fecha', $gimnasio_id, 'MES');
-$cumples = obtenerCumpleaños($conexion, $gimnasio_id);
-$vencimientos = obtenerVencimientos($conexion, $gimnasio_id);
-$asistencias = obtenerAsistenciasProfesores($conexion, $gimnasio_id, date('Y-m-d'));
+$asistenciasClientes = obtenerAsistenciasClientes($conexion, $gimnasio_id);
+$asistenciasProfesores = obtenerAsistenciasProfesores($conexion, $gimnasio_id);
 ?>
 
 <!DOCTYPE html>
 <html lang="es">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Panel - Fight Academy</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Panel - Gym</title>
   <style>
     body {
-      font-family: Arial, sans-serif;
       background-color: #111;
-      color: #f1f1f1;
+      color: #fff;
       margin: 0;
-      padding: 10px;
+      font-family: 'Segoe UI', sans-serif;
     }
-
-    h1, h2 {
-      color: gold;
-      margin-top: 20px;
+    .contenido {
+      margin-left: 250px;
+      padding: 20px;
     }
-
-    .tarjetas {
-      display: flex;
-      flex-wrap: wrap;
-      justify-content: space-between;
+    .panel {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
       gap: 15px;
     }
-
     .card {
-      flex: 1 1 calc(50% - 20px);
-      background: #222;
-      padding: 15px;
+      background-color: #222;
+      border: 1px solid #555;
       border-radius: 10px;
-      min-width: 180px;
-      box-shadow: 0 0 5px #000;
+      padding: 15px;
+      text-align: center;
     }
-
-    .card strong {
+    h3 {
+      margin-top: 0;
       color: gold;
     }
-
-    ul {
-      list-style: none;
-      padding: 0;
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 10px;
+    }
+    th, td {
+      padding: 6px;
+      border: 1px solid #444;
+      text-align: center;
+      font-size: 14px;
+    }
+    th {
+      background-color: #333;
+      color: gold;
     }
 
     @media (max-width: 768px) {
-      .tarjetas {
-        flex-direction: column;
-      }
-      .card {
-        width: 100%;
+      .contenido {
+        margin-left: 0;
+        padding: 10px;
       }
     }
   </style>
 </head>
 <body>
 
-  <h1>Bienvenido al Panel</h1>
+<div class="contenido">
+  <h2>Panel de Control - <?php echo $_SESSION['nombre_gimnasio'] ?? 'Gimnasio'; ?></h2>
 
-  <div class="tarjetas">
+  <div class="panel">
     <div class="card">
-      <h2>Pagos del Día</h2>
-      <p><strong>$<?= number_format($pagosHoy, 0, '', '.') ?></strong></p>
+      <h3>Asistencias de Clientes</h3>
+      <table>
+        <tr><th>Apellido</th><th>Nombre</th><th>Fecha</th><th>Hora</th></tr>
+        <?php while ($row = $asistenciasClientes->fetch_assoc()): ?>
+          <tr>
+            <td><?= $row['apellido'] ?></td>
+            <td><?= $row['nombre'] ?></td>
+            <td><?= $row['fecha'] ?></td>
+            <td><?= $row['hora'] ?></td>
+          </tr>
+        <?php endwhile; ?>
+      </table>
     </div>
+
     <div class="card">
-      <h2>Pagos del Mes</h2>
-      <p><strong>$<?= number_format($pagosMes, 0, '', '.') ?></strong></p>
+      <h3>Asistencias de Profesores</h3>
+      <table>
+        <tr><th>Apellido</th><th>Nombre</th><th>Ingreso</th><th>Salida</th></tr>
+        <?php while ($row = $asistenciasProfesores->fetch_assoc()): ?>
+          <tr>
+            <td><?= $row['apellido'] ?></td>
+            <td><?= $row['nombre'] ?></td>
+            <td><?= $row['hora_ingreso'] ?></td>
+            <td><?= $row['hora_salida'] ?></td>
+          </tr>
+        <?php endwhile; ?>
+      </table>
     </div>
-    <div class="card">
-      <h2>Ventas del Día</h2>
-      <p><strong>$<?= number_format($ventasHoy, 0, '', '.') ?></strong></p>
-    </div>
-    <div class="card">
-      <h2>Ventas del Mes</h2>
-      <p><strong>$<?= number_format($ventasMes, 0, '', '.') ?></strong></p>
-    </div>
+
+    <!-- Agregar aquí más paneles como pagos del día, ventas, cumpleaños, etc. -->
+
   </div>
-
-  <h2>🎂 Próximos Cumpleaños</h2>
-  <ul>
-    <?php while($c = $cumples->fetch_assoc()): ?>
-      <li><?= $c['nombre'] . ' ' . $c['apellido'] . ' - ' . date('d/m', strtotime($c['fecha_nacimiento'])) ?></li>
-    <?php endwhile; ?>
-  </ul>
-
-  <h2>📆 Próximos Vencimientos</h2>
-  <ul>
-    <?php while($v = $vencimientos->fetch_assoc()): ?>
-      <li><?= $v['nombre'] . ' ' . $v['apellido'] . ' - Vence: ' . date('d/m', strtotime($v['fecha_vencimiento'])) ?></li>
-    <?php endwhile; ?>
-  </ul>
-
-  <h2>🧑‍🏫 Asistencias Profesores (Hoy)</h2>
-  <ul>
-    <?php while($a = $asistencias->fetch_assoc()): ?>
-      <li><?= $a['apellido'] ?> - Ingreso: <?= date('H:i', strtotime($a['ingreso'])) ?> 
-        <?php 
-          if ($a['salida']) {
-            $ingreso = new DateTime($a['ingreso']);
-            $salida = new DateTime($a['salida']);
-            $intervalo = $ingreso->diff($salida);
-            echo " / Salida: " . $salida->format('H:i') . " (Trabajó: " . $intervalo->format('%h:%I') . " hs)";
-          } else {
-            echo " / Aún presente";
-          }
-        ?>
-      </li>
-    <?php endwhile; ?>
-  </ul>
+</div>
 
 </body>
 </html>
