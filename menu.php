@@ -97,10 +97,12 @@
 
     <div class="menu-item" onclick="toggleSubmenu(this)">🏋️ Profesores</div>
     <div class="submenu">
-        <a href="agregar_profesor.php">Agregar Profesor</a>
-        <a href="listar_profesor.php">Ver Profesores</a>
-        <a href="asistencia_profesor.php">Asistencia Profesor</a>
-    </div>
+        <ul>
+    <li><a href="listar_profesor.php">Ver Profesores</a></li>
+    <li><a href="agregar_profesor.php">Agregar Profesor</a></li>
+    <li><a href="asistencia_profesor.php">Asistencia (RFID)</a></li>
+    <li><a href="ver_asistencias_profesores.php">Listado de Asistencias</a></li>
+  </ul>
 
     <div class="menu-item" onclick="toggleSubmenu(this)">🛒 Ventas</div>
     <div class="submenu">
