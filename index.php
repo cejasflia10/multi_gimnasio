@@ -1,99 +1,79 @@
 <?php
-session_start();
+include("menu.php");
 include("conexion.php");
-include("menu_moderno.php");
 
-// Suponiendo que el usuario está logueado y tiene gimnasio_id si aplica
-$gimnasio_id = $_SESSION["gimnasio_id"] ?? null;
-
-function getMonto($conexion, $tabla, $columna_fecha, $gimnasio_id = null, $periodo = "DIA") {
-    $hoy = date("Y-m-d");
-    $inicioMes = date("Y-m-01");
-
-    $condicion_fecha = $periodo === "MES" ? "$columna_fecha >= '$inicioMes'" : "$columna_fecha = '$hoy'";
-    $condicion_gimnasio = $gimnasio_id ? "AND gimnasio_id = $gimnasio_id" : "";
-
-    $sql = "SELECT SUM(monto) AS total FROM $tabla WHERE $condicion_fecha $condicion_gimnasio";
-    $resultado = $conexion->query($sql);
+function getMonto($conexion, $tabla, $columnaFecha, $cantidad, $tipo)
+{
+    $fechaInicio = ($tipo == 'DIA') ? "CURDATE()" : "DATE_SUB(CURDATE(), INTERVAL $cantidad MONTH)";
+    $query = "SELECT SUM(monto) as total FROM $tabla WHERE DATE($columnaFecha) >= $fechaInicio";
+    $resultado = $conexion->query($query);
     $fila = $resultado->fetch_assoc();
-    return $fila["total"] ?? 0;
+    return $fila['total'] ?? 0;
 }
 
-function getProximosCumpleaños($conexion, $gimnasio_id = null) {
-    $mes = date("m");
-    $dia = date("d");
-    $condicion_gimnasio = $gimnasio_id ? "AND gimnasio_id = $gimnasio_id" : "";
-    $sql = "SELECT nombre, apellido, fecha_nacimiento FROM clientes 
-            WHERE MONTH(fecha_nacimiento) = $mes AND DAY(fecha_nacimiento) >= $dia $condicion_gimnasio 
-            ORDER BY DAY(fecha_nacimiento) ASC LIMIT 5";
-    return $conexion->query($sql);
-}
+$pagosDia = getMonto($conexion, 'pagos', 'fecha', 1, 'DIA');
+$pagosMes = getMonto($conexion, 'pagos', 'fecha', 1, 'MES');
+$ventasDia = getMonto($conexion, 'ventas', 'fecha', 1, 'DIA');
+$ventasMes = getMonto($conexion, 'ventas', 'fecha', 1, 'MES');
 
-function getProximosVencimientos($conexion, $gimnasio_id = null) {
-    $hoy = date("Y-m-d");
-    $limite = date("Y-m-d", strtotime("+10 days"));
-    $condicion_gimnasio = $gimnasio_id ? "AND gimnasio_id = $gimnasio_id" : "";
-    $sql = "SELECT c.nombre, c.apellido, m.fecha_vencimiento 
-            FROM membresias m 
-            JOIN clientes c ON m.cliente_id = c.id 
-            WHERE m.fecha_vencimiento BETWEEN '$hoy' AND '$limite' $condicion_gimnasio 
-            ORDER BY m.fecha_vencimiento ASC LIMIT 5";
-    return $conexion->query($sql);
-}
-
-// Datos
-$pagos_dia = getMonto($conexion, "pagos", "fecha", $gimnasio_id, "DIA");
-$pagos_mes = getMonto($conexion, "pagos", "fecha", $gimnasio_id, "MES");
-$ventas_dia = getMonto($conexion, "ventas", "fecha", $gimnasio_id, "DIA");
-$ventas_mes = getMonto($conexion, "ventas", "fecha", $gimnasio_id, "MES");
 ?>
 
 <!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>Panel - Fight Academy</title>
+    <title>Panel de Control</title>
     <style>
         body {
             background-color: #111;
-            color: gold;
+            color: #f1f1f1;
             font-family: Arial, sans-serif;
-            padding: 20px;
-            margin-left: 220px;
+            margin: 0;
         }
-        h1 {
-            color: gold;
+        .panel {
+            padding: 20px;
         }
         .tarjeta {
-            background: #222;
-            padding: 15px;
-            margin-bottom: 15px;
-            border-left: 5px solid gold;
+            background-color: #222;
+            border: 1px solid #555;
+            padding: 20px;
+            margin: 10px;
+            border-radius: 12px;
+            display: inline-block;
+            width: 200px;
+            text-align: center;
+        }
+        .titulo {
+            font-size: 1.1em;
+            margin-bottom: 10px;
+            color: #ffcc00;
+        }
+        .valor {
+            font-size: 1.8em;
+            font-weight: bold;
         }
     </style>
 </head>
 <body>
-    <h1>Bienvenido al Panel</h1>
 
-    <div class="tarjeta">💰 Pagos del día: $<?= $pagos_dia ?></div>
-    <div class="tarjeta">💳 Pagos del mes: $<?= $pagos_mes ?></div>
-    <div class="tarjeta">🛍️ Ventas del día: $<?= $ventas_dia ?></div>
-    <div class="tarjeta">📦 Ventas del mes: $<?= $ventas_mes ?></div>
+<div class="panel">
+    <div class="tarjeta">
+        <div class="titulo">Pagos del Día</div>
+        <div class="valor">$<?= number_format($pagosDia, 2) ?></div>
+    </div>
+    <div class="tarjeta">
+        <div class="titulo">Pagos del Mes</div>
+        <div class="valor">$<?= number_format($pagosMes, 2) ?></div>
+    </div>
+    <div class="tarjeta">
+        <div class="titulo">Ventas del Día</div>
+        <div class="valor">$<?= number_format($ventasDia, 2) ?></div>
+    </div>
+    <div class="tarjeta">
+        <div class="titulo">Ventas del Mes</div>
+        <div class="valor">$<?= number_format($ventasMes, 2) ?></div>
+    </div>
+</div>
 
-    <h2>🎂 Próximos Cumpleaños</h2>
-    <?php
-    $cumples = getProximosCumpleaños($conexion, $gimnasio_id);
-    while ($row = $cumples->fetch_assoc()) {
-        echo "<div class='tarjeta'>{$row['nombre']} {$row['apellido']} - " . date("d/m", strtotime($row['fecha_nacimiento'])) . "</div>";
-    }
-    ?>
-
-    <h2>📅 Próximos Vencimientos</h2>
-    <?php
-    $vencimientos = getProximosVencimientos($conexion, $gimnasio_id);
-    while ($row = $vencimientos->fetch_assoc()) {
-        echo "<div class='tarjeta'>{$row['nombre']} {$row['apellido']} - Vence: " . date("d/m/Y", strtotime($row['fecha_vencimiento'])) . "</div>";
-    }
-    ?>
 </body>
 </html>
