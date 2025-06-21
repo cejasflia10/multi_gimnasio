@@ -1,130 +1,79 @@
 <?php
-session_start();
-include 'conexion.php';
-
-$gimnasio_id = $_SESSION['gimnasio_id'] ?? null;
-
-if (!$gimnasio_id) {
-    die("Acceso denegado.");
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
 }
+include "conexion.php";
 
-// Obtener planes
-$planes = $conexion->query("SELECT * FROM planes WHERE gimnasio_id = $gimnasio_id");
+$gimnasio_id = $_SESSION['gimnasio_id'] ?? 1;
 
-// Obtener planes adicionales
-$adicionales = $conexion->query("SELECT * FROM planes_adicionales WHERE gimnasio_id = $gimnasio_id");
-
-// Obtener clientes
-$clientes = $conexion->query("SELECT * FROM clientes WHERE gimnasio_id = $gimnasio_id");
+$planes = $conexion->query("SELECT id, nombre, precio FROM planes WHERE gimnasio_id = $gimnasio_id");
+$adicionales = $conexion->query("SELECT id, nombre, precio FROM planes_adicionales WHERE gimnasio_id = $gimnasio_id");
 ?>
 
 <!DOCTYPE html>
 <html lang="es">
 <head>
-    <meta charset="UTF-8">
-    <title>Agregar Membresía</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <style>
-        body {
-            background-color: #111;
-            color: #ffd700;
-            font-family: Arial, sans-serif;
-            padding: 20px;
-        }
-        h2 {
-            text-align: center;
-            margin-bottom: 20px;
-        }
-        form {
-            max-width: 600px;
-            margin: auto;
-            background-color: #222;
-            padding: 20px;
-            border-radius: 10px;
-        }
-        label {
-            display: block;
-            margin-top: 10px;
-        }
-        input, select {
-            width: 100%;
-            padding: 8px;
-            margin-top: 4px;
-            margin-bottom: 12px;
-            border: 1px solid #ffd700;
-            background-color: #333;
-            color: #ffd700;
-            border-radius: 4px;
-        }
-        input[type="submit"] {
-            background-color: #ffd700;
-            color: #111;
-            font-weight: bold;
-            cursor: pointer;
-        }
-        input[type="submit"]:hover {
-            background-color: #e5c100;
-        }
-    </style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Nueva Membresía</title>
+  <style>
+    body { background-color: #000; color: gold; font-family: Arial; padding: 10px; }
+    input, select { width: 100%; padding: 8px; margin-bottom: 10px; border: 2px solid gold; background-color: #222; color: white; }
+    .btn { background: gold; color: black; padding: 10px; border: none; cursor: pointer; width: 100%; }
+    .container { max-width: 500px; margin: auto; }
+  </style>
 </head>
 <body>
-    <h2>Agregar Nueva Membresía</h2>
-    <form action="guardar_membresia.php" method="POST">
-        <label>Seleccionar Cliente:</label>
-        <select name="cliente_id" required>
-            <option value="">Seleccione...</option>
-            <?php while($c = $clientes->fetch_assoc()) { ?>
-                <option value="<?php echo $c['id']; ?>">
-                    <?php echo $c['apellido'] . " " . $c['nombre'] . " - DNI: " . $c['dni']; ?>
-                </option>
-            <?php } ?>
-        </select>
+<div class="container">
+  <h2>Registrar Nueva Membresía</h2>
+  <form action="guardar_membresia.php" method="POST">
+    <label>Buscar Cliente (DNI):</label>
+    <input type="text" id="buscar_cliente" placeholder="Escriba DNI, nombre o RFID" autocomplete="off">
+    <select name="cliente_id" id="cliente_id" required></select>
 
-        <label>Plan:</label>
-        <select name="plan_id" required>
-            <option value="">Seleccione...</option>
-            <?php while($p = $planes->fetch_assoc()) { ?>
-                <option value="<?php echo $p['id']; ?>">
-                    <?php echo $p['nombre'] . " - $" . $p['precio']; ?>
-                </option>
-            <?php } ?>
-        </select>
+    <label>Seleccionar Plan:</label>
+    <select name="plan_id" id="plan_id" required>
+      <option value="">Seleccione un plan</option>
+      <?php while($p = $planes->fetch_assoc()): ?>
+        <option value="<?= $p['id'] ?>"><?= $p['nombre'] ?> - $<?= number_format($p['precio'], 2) ?></option>
+      <?php endwhile; ?>
+    </select>
 
-        <label>Fecha de Inicio:</label>
-        <input type="date" name="fecha_inicio" required>
+    <label>Fecha de Inicio:</label>
+    <input type="date" name="fecha_inicio" id="fecha_inicio" value="<?= date('Y-m-d') ?>">
 
-        <label>Fecha de Vencimiento:</label>
-        <input type="date" name="fecha_vencimiento" required>
+    <label>Fecha de Vencimiento:</label>
+    <input type="date" name="fecha_vencimiento" id="fecha_vencimiento">
 
-        <label>Clases Disponibles:</label>
-        <input type="number" name="clases_disponibles" required>
+    <label>Clases Disponibles:</label>
+    <input type="number" name="clases" id="clases" readonly>
 
-        <label>Planes Adicionales:</label>
-        <select name="adicional_id">
-            <option value="">Ninguno</option>
-            <?php while($a = $adicionales->fetch_assoc()) { ?>
-                <option value="<?php echo $a['id']; ?>">
-                    <?php echo $a['nombre'] . " - $" . $a['precio']; ?>
-                </option>
-            <?php } ?>
-        </select>
+    <label>Planes Adicionales:</label>
+    <select name="adicional_id" id="adicional_id">
+      <option value="">Ninguno</option>
+      <?php while($a = $adicionales->fetch_assoc()): ?>
+        <option value="<?= $a['id'] ?>"><?= $a['nombre'] ?> - $<?= number_format($a['precio'],2) ?></option>
+      <?php endwhile; ?>
+    </select>
 
-        <label>Otros Pagos:</label>
-        <input type="number" name="otros_pagos" min="0" step="0.01" placeholder="0">
+    <label>Otros Pagos:</label>
+    <input type="number" name="otros_pagos" id="otros_pagos" value="0">
 
-        <label>Método de Pago:</label>
-        <select name="metodo_pago" required>
-            <option value="Efectivo">Efectivo</option>
-            <option value="Transferencia">Transferencia</option>
-            <option value="Tarjeta Débito">Tarjeta Débito</option>
-            <option value="Tarjeta Crédito">Tarjeta Crédito</option>
-            <option value="Cuenta Corriente">Cuenta Corriente</option>
-        </select>
+    <label>Método de Pago:</label>
+    <select name="metodo_pago">
+      <option value="Efectivo">Efectivo</option>
+      <option value="Transferencia">Transferencia</option>
+      <option value="Cuenta Corriente">Cuenta Corriente</option>
+    </select>
 
-        <label>Total a Pagar:</label>
-        <input type="number" name="total_pagar" step="0.01" required>
+    <label>Total a Pagar:</label>
+    <input type="number" name="total" id="total" readonly>
 
-        <input type="submit" value="Registrar Membresía">
-    </form>
+    <button class="btn">Guardar</button>
+    <a href="index.php" class="btn" style="margin-top:10px; background:#333; color:gold;">Volver al Panel</a>
+  </form>
+</div>
+
+<script src="script.js"></script>
 </body>
 </html>
