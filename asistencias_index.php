@@ -1,6 +1,8 @@
 <?php
 include 'conexion.php';
-session_start();
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
 
 $gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
 $fecha_hoy = date('Y-m-d');
