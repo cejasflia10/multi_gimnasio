@@ -2,94 +2,72 @@
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
+include 'conexion.php';
+
+date_default_timezone_set('America/Argentina/Buenos_Aires');
+
+$dni = isset($_GET['qr']) ? trim($_GET['qr']) : '';
+$fecha_actual = date("Y-m-d");
+$hora_actual = date("H:i:s");
+
+// Validación rápida
+if (empty($dni)) {
+    echo "<h2 style='color:red'>No se recibió ningún código QR.</h2>";
+    exit;
+}
+
+// Buscar cliente
+$consulta = $conexion->prepare("SELECT id, nombre, apellido FROM clientes WHERE dni = ?");
+$consulta->bind_param("s", $dni);
+$consulta->execute();
+$resultado = $consulta->get_result();
+
+if ($resultado->num_rows === 0) {
+    echo "<h2 style='color:red'>Cliente no encontrado.</h2>";
+    exit;
+}
+
+$cliente = $resultado->fetch_assoc();
+$id_cliente = $cliente['id'];
+$nombre_completo = $cliente['nombre'] . " " . $cliente['apellido'];
+
+// Buscar membresía vigente
+$membresia = $conexion->prepare("SELECT id, clases_disponibles, fecha_vencimiento FROM membresias WHERE cliente_id = ? ORDER BY fecha_inicio DESC LIMIT 1");
+$membresia->bind_param("i", $id_cliente);
+$membresia->execute();
+$res_membresia = $membresia->get_result();
+
+if ($res_membresia->num_rows === 0) {
+    echo "<h2 style='color:red'>No hay membresía registrada.</h2>";
+    exit;
+}
+
+$datos_membresia = $res_membresia->fetch_assoc();
+$clases = (int)$datos_membresia['clases_disponibles'];
+$vencimiento = $datos_membresia['fecha_vencimiento'];
+
+// Verificar fecha de vencimiento
+if ($vencimiento < $fecha_actual) {
+    echo "<h2 style='color:red'>La membresía está vencida. Venció el: $vencimiento</h2>";
+    exit;
+}
+
+// Verificar clases
+if ($clases <= 0) {
+    echo "<h2 style='color:red'>No tiene clases disponibles.</h2>";
+    exit;
+}
+
+// Registrar asistencia
+$insert = $conexion->prepare("INSERT INTO asistencias (cliente_id, fecha, hora) VALUES (?, ?, ?)");
+$insert->bind_param("iss", $id_cliente, $fecha_actual, $hora_actual);
+$insert->execute();
+
+// Descontar clase
+$conexion->query("UPDATE membresias SET clases_disponibles = clases_disponibles - 1 WHERE id = " . $datos_membresia['id']);
+
+echo "<h2 style='color:green'>Bienvenido $nombre_completo</h2>";
+echo "<p>Ingreso registrado el <strong>$fecha_actual</strong> a las <strong>$hora_actual</strong></p>";
+echo "<p>Clases restantes: <strong>" . ($clases - 1) . "</strong></p>";
+echo "<p>Vencimiento: <strong>$vencimiento</strong></p>";
 ?>
-
-<!DOCTYPE html>
-<html lang="es">
-<head>
-  <meta charset="UTF-8">
-  <title>Escaneo de QR - Ingreso al Gimnasio</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <style>
-    body {
-      background-color: black;
-      color: gold;
-      font-family: Arial, sans-serif;
-      text-align: center;
-      margin: 0;
-      padding: 0;
-    }
-    h1 {
-      margin-top: 20px;
-    }
-    #video {
-      width: 90%;
-      max-width: 400px;
-      margin: 20px auto;
-      border: 4px solid gold;
-      border-radius: 10px;
-    }
-    #resultado {
-      margin-top: 20px;
-      font-size: 18px;
-    }
-  </style>
-</head>
-<body>
-  <h1>📸 Escaneo de QR - Ingreso al Gimnasio</h1>
-  <video id="video" autoplay playsinline></video>
-  <div id="resultado"></div>
-
-  <script>
-    const video = document.getElementById('video');
-    const resultado = document.getElementById('resultado');
-    let ultimoCodigo = "";
-
-    navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
-      .then(stream => {
-        video.srcObject = stream;
-      })
-      .catch(err => {
-        resultado.innerText = "Error al acceder a la cámara: " + err;
-      });
-
-    const canvas = document.createElement('canvas');
-    const context = canvas.getContext('2d');
-
-    function escanearQR() {
-      if (video.readyState === video.HAVE_ENOUGH_DATA) {
-        canvas.width = video.videoWidth;
-        canvas.height = video.videoHeight;
-        context.drawImage(video, 0, 0, canvas.width, canvas.height);
-        const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
-
-        const code = jsQR(imageData.data, imageData.width, imageData.height, {
-          inversionAttempts: "dontInvert",
-        });
-
-        if (code && code.data !== ultimoCodigo) {
-          ultimoCodigo = code.data;
-          resultado.innerText = "QR leído: " + code.data;
-          fetch("verificar_asistencia.php", {
-            method: "POST",
-            headers: { "Content-Type": "application/x-www-form-urlencoded" },
-            body: "dni=" + encodeURIComponent(code.data)
-          })
-          .then(response => response.text())
-          .then(texto => {
-            resultado.innerText = texto;
-            setTimeout(() => { ultimoCodigo = ""; resultado.innerText = ""; }, 3000);
-          });
-        }
-      }
-      requestAnimationFrame(escanearQR);
-    }
-
-    // Carga jsQR
-    const script = document.createElement('script');
-    script.src = "https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js";
-    script.onload = () => { requestAnimationFrame(escanearQR); };
-    document.body.appendChild(script);
-  </script>
-</body>
-</html>
