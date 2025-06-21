@@ -1,79 +1,74 @@
+<?php
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+$rol = $_SESSION['rol'] ?? '';
+?>
 
-<nav id="sidebar">
-  <div class="sidebar-header">
-    <h3>🏋️‍♂️ Fight Academy</h3>
-  </div>
-  <ul class="components">
-    <li><a href="index.php">🏠 Dashboard</a></li>
+<div class="sidebar">
+    <h2>Fight Academy Scorpions</h2>
+    <ul class="menu">
 
-    <li>
-  <button class="dropdown-btn">👤 Clientes ▾</button>
-  <div class="dropdown-container">
-    <a href="clientes.php">Ver Clientes</a>
-    <a href="agregar_cliente.php">Agregar Cliente</a>
-    <a href="generar_qr.php">Generar QR</a>
-    <a href="ver_asistencias_qr.php">Ver Asistencia</a>
-    <a href="importar_clientes.php">Importar Clientes</a>
-    <a href="exportar_clientes.php">Exportar Clientes</a>
-  </div>
-</li>
+        <?php if ($rol === 'admin' || $rol === 'escuela') : ?>
+        <li><a href="#">Clientes</a>
+            <ul>
+                <li><a href="agregar_cliente.php">Agregar Cliente</a></li>
+                <li><a href="ver_clientes.php">Ver Clientes</a></li>
+                <li><a href="ver_asistencias_qr.php">Ver Asistencias</a></li>
+                <li><a href="importar_clientes.php">Importar Clientes</a></li>
+                <li><a href="exportar_clientes.php">Exportar Clientes</a></li>
+            </ul>
+        </li>
+        <?php endif; ?>
 
-<li>
-  <button class="dropdown-btn">📅 Membresías ▾</button>
-  <div class="dropdown-container">
-    <a href="ver_membresias.php">Ver Membresías</a>
-    <a href="agregar_membresia.php">Agregar Membresía</a>
-    <a href="planes.php">Planes</a>
-    <a href="planes_adicionales.php">Planes Adicionales</a>
-    <a href="disciplinas.php">Disciplinas</a> <!-- NUEVO -->
-  </div>
-</li>
+        <?php if ($rol === 'admin' || $rol === 'escuela') : ?>
+        <li><a href="#">Membresías</a>
+            <ul>
+                <li><a href="agregar_membresia.php">Nueva Membresía</a></li>
+                <li><a href="ver_membresias.php">Ver Membresías</a></li>
+                <li><a href="planes_adicionales.php">Planes Adicionales</a></li>
+                <li><a href="disciplinas.php">Disciplinas</a></li>
+            </ul>
+        </li>
+        <?php endif; ?>
 
-    <li>
-      <button class="dropdown-btn">👨‍🏫 Profesores ▾</button>
-      <div class="dropdown-container">
-        <a href="profesores.php">Ver Profesores</a>
-        <a href="agregar_profesor.php">Agregar Profesor</a>
-      </div>
-    </li>
+        <?php if ($rol === 'admin' || $rol === 'escuela') : ?>
+        <li><a href="#">Ventas</a>
+            <ul>
+                <li><a href="ventas.php">Registrar Venta</a></li>
+                <li><a href="ver_ventas.php">Ver Ventas</a></li>
+                <li><a href="productos.php">Productos</a></li>
+            </ul>
+        </li>
+        <?php endif; ?>
 
-    <li>
-      <button class="dropdown-btn">🕒 Asistencias ▾</button>
-      <div class="dropdown-container">
-        <a href="registrar_asistencia.php">Registrar Asistencia</a>
-        <a href="asistencia_profesores.php">Asistencia Profesores</a>
-      </div>
-    </li>
+        <?php if ($rol === 'admin' || $rol === 'escuela' || $rol === 'profesor') : ?>
+        <li><a href="#">QR</a>
+            <ul>
+                <li><a href="registrar_asistencia_qr.php">Escanear QR</a></li>
+                <li><a href="generar_qr.php">Generar QR</a></li>
+            </ul>
+        </li>
+        <?php endif; ?>
 
-    <li>
-      <button class="dropdown-btn">💰 Ventas ▾</button>
-      <div class="dropdown-container">
-        <a href="ventas.php">Ver Ventas</a>
-        <a href="agregar_venta.php">Agregar Venta</a>
-      </div>
-    </li>
+        <?php if ($rol === 'admin' || $rol === 'escuela') : ?>
+        <li><a href="#">Asistencias</a>
+            <ul>
+                <li><a href="asistencias_clientes.php">Asistencia Clientes</a></li>
+                <li><a href="asistencias_profesores.php">Asistencia Profesores</a></li>
+            </ul>
+        </li>
+        <?php endif; ?>
 
-    <li>
-      <button class="dropdown-btn">🏢 Gimnasios ▾</button>
-      <div class="dropdown-container">
-        <a href="gimnasios.php">Ver Gimnasios</a>
-        <a href="agregar_gimnasio.php">Agregar Gimnasio</a>
-      </div>
-    </li>
+        <?php if ($rol === 'admin') : ?>
+        <li><a href="#">Administración</a>
+            <ul>
+                <li><a href="usuarios.php">Usuarios</a></li>
+                <li><a href="gimnasios.php">Gimnasios</a></li>
+            </ul>
+        </li>
+        <?php endif; ?>
 
-    <li>
-      <button class="dropdown-btn">⚙️ Configuración ▾</button>
-      <div class="dropdown-container">
-        <a href="usuarios.php">Usuarios</a>
-        <a href="permisos.php">Permisos</a>
-      </div>
-    </li>
-
-    <li>
-      <button class="dropdown-btn">📷 QR ▾</button>
-      <div class="dropdown-container">
-        <a href="registrar_asistencia_qr.php">Asistencia por QR</a>
-      </div>
-    </li>
-  </ul>
-</nav>
+        <li><a href="logout.php">Cerrar Sesión</a></li>
+    </ul>
+</div>
