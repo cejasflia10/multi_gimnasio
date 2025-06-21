@@ -1,87 +1,101 @@
 <?php
 session_start();
-include 'conexion.php';
+include("conexion.php");
 
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
-    $usuario = trim($_POST["usuario"]);
-    $clave = trim($_POST["clave"]);
+    $usuario = $_POST["usuario"];
+    $clave = $_POST["clave"];
 
-    $stmt = $conexion->prepare("SELECT id, usuario, contrasena, rol, debe_cambiar_contrasena, id_gimnasio FROM usuarios WHERE usuario = ?");
+    $stmt = $conexion->prepare("SELECT id, usuario, clave, rol, gimnasio_id FROM usuarios WHERE usuario = ?");
     $stmt->bind_param("s", $usuario);
     $stmt->execute();
     $resultado = $stmt->get_result();
 
-    if ($resultado->num_rows === 1) {
-        $row = $resultado->fetch_assoc();
+    if ($resultado->num_rows == 1) {
+        $fila = $resultado->fetch_assoc();
 
-        if (password_verify($clave, $row["contrasena"]) || $clave === $row["contrasena"]) {
-            $_SESSION["usuario_id"] = $row["id"];
-            $_SESSION["usuario"] = $row["usuario"];
-            $_SESSION["rol"] = $row["rol"];
-            $_SESSION["gimnasio_id"] = $row["id_gimnasio"];
+        // Verifica si la contraseña está en texto plano o encriptada
+        if (password_verify($clave, $fila["clave"]) || $clave === $fila["clave"]) {
+            $_SESSION["usuario_id"] = $fila["id"];
+            $_SESSION["usuario"] = $fila["usuario"];
+            $_SESSION["rol"] = $fila["rol"];
+            $_SESSION["gimnasio_id"] = $fila["gimnasio_id"];
 
-            if ($row["debe_cambiar_contrasena"] == 1) {
-                header("Location: cambiar_contrasena.php");
-            } else {
-                header("Location: index.php");
-            }
-            exit;
+            header("Location: index.php");
+            exit();
+        } else {
+            $error = "Contraseña incorrecta.";
         }
+    } else {
+        $error = "Usuario no encontrado.";
     }
 
-    echo "<script>alert('Usuario o contraseña incorrectos'); window.location.href='login.php';</script>";
+    $stmt->close();
 }
 ?>
+
 <!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>Login</title>
+    <title>Login - Gym System</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
     <style>
         body {
             background-color: #111;
-            color: #FFD700;
+            color: #f1f1f1;
             font-family: Arial, sans-serif;
             display: flex;
-            justify-content: center;
-            align-items: center;
             height: 100vh;
+            align-items: center;
+            justify-content: center;
+            margin: 0;
         }
-        .login-box {
+        .login-container {
             background-color: #222;
             padding: 30px;
             border-radius: 10px;
-            width: 300px;
+            box-shadow: 0 0 10px #f1c40f;
+            width: 90%;
+            max-width: 400px;
         }
-        input {
+        input[type="text"], input[type="password"] {
             width: 100%;
-            padding: 10px;
-            margin-top: 10px;
-            background: #333;
-            border: none;
-            color: #FFD700;
+            padding: 12px;
+            margin: 10px 0;
+            background-color: #333;
+            color: #f1f1f1;
+            border: 1px solid #555;
             border-radius: 5px;
         }
-        button {
+        input[type="submit"] {
             width: 100%;
-            margin-top: 15px;
-            padding: 10px;
-            background: #FFD700;
-            color: #111;
+            padding: 12px;
+            background-color: #f1c40f;
+            border: none;
+            border-radius: 5px;
             font-weight: bold;
-            border: none;
-            border-radius: 5px;
+            cursor: pointer;
+        }
+        input[type="submit"]:hover {
+            background-color: #d4ac0d;
+        }
+        .error {
+            color: #e74c3c;
+            text-align: center;
+            margin-top: 10px;
         }
     </style>
 </head>
 <body>
-    <div class="login-box">
-        <form method="POST">
-            <h2>Iniciar Sesión</h2>
-            <input type="text" name="usuario" placeholder="Usuario" required>
-            <input type="password" name="clave" placeholder="Contraseña" required>
-            <button type="submit">Ingresar</button>
-        </form>
-    </div>
+<div class="login-container">
+    <h2 style="text-align:center;">Acceso al Sistema</h2>
+    <form method="post" action="">
+        <input type="text" name="usuario" placeholder="Usuario" required>
+        <input type="password" name="clave" placeholder="Contraseña" required>
+        <input type="submit" value="Ingresar">
+    </form>
+    <?php if (!empty($error)) { echo "<div class='error'>$error</div>"; } ?>
+</div>
 </body>
 </html>
