@@ -106,59 +106,43 @@ function obtenerVencimientosProximos($conexion, $gimnasio_id) {
     <table>
       <tr><th>Apellido</th><th>Nombre</th><th>Fecha</th><th>Hora</th></tr>
       <?php
-        $asistencias = obtenerAsistenciasClientes($conexion, $gimnasio_id, $hoy);
-        if ($asistencias && $asistencias->num_rows > 0) {
-          while ($row = $asistencias->fetch_assoc()) {
-            echo "<tr><td>{$row['apellido']}</td><td>{$row['nombre']}</td><td>{$row['fecha']}</td><td>{$row['hora']}</td></tr>";
-          }
-        } else {
-          echo "<tr><td colspan='4'>No se registraron asistencias para hoy.</td></tr>";
-        }
+      $clientes = obtenerAsistenciasClientes($conexion, $gimnasio_id, $hoy);
+      while ($row = $clientes->fetch_assoc()) {
+          echo "<tr><td>{$row['apellido']}</td><td>{$row['nombre']}</td><td>{$row['fecha']}</td><td>{$row['hora']}</td></tr>";
+      }
       ?>
     </table>
 
-    <h2>👨‍🏫 Asistencias de Profesores - <?= $hoy ?></h2>
+    <h2>👨‍🏫 Asistencias de Profesores</h2>
     <table>
       <tr><th>Apellido</th><th>Nombre</th><th>Ingreso</th><th>Salida</th></tr>
       <?php
-        $asistenciasProf = obtenerAsistenciasProfesores($conexion, $gimnasio_id, $hoy);
-        if ($asistenciasProf && $asistenciasProf->num_rows > 0) {
-          while ($row = $asistenciasProf->fetch_assoc()) {
-            echo "<tr><td>{$row['apellido']}</td><td>{$row['nombre']}</td><td>{$row['ingreso']}</td><td>{$row['salida']}</td></tr>";
-          }
-        } else {
-          echo "<tr><td colspan='4'>No se registraron profesores hoy.</td></tr>";
-        }
+      $profesores = obtenerAsistenciasProfesores($conexion, $gimnasio_id, $hoy);
+      while ($row = $profesores->fetch_assoc()) {
+          echo "<tr><td>{$row['apellido']}</td><td>{$row['nombre']}</td><td>{$row['ingreso']}</td><td>{$row['salida']}</td></tr>";
+      }
       ?>
     </table>
 
     <h2>🎂 Próximos Cumpleaños</h2>
     <table>
-      <tr><th>Apellido</th><th>Nombre</th><th>Fecha</th></tr>
+      <tr><th>Apellido</th><th>Nombre</th><th>Fecha Nacimiento</th></tr>
       <?php
-        $cumples = obtenerCumpleaniosProximos($conexion, $gimnasio_id);
-        if ($cumples && $cumples->num_rows > 0) {
-          while ($row = $cumples->fetch_assoc()) {
-            echo "<tr><td>{$row['apellido']}</td><td>{$row['nombre']}</td><td>{$row['fecha_nacimiento']}</td></tr>";
-          }
-        } else {
-          echo "<tr><td colspan='3'>No hay cumpleaños próximos.</td></tr>";
-        }
+      $cumples = obtenerCumpleaniosProximos($conexion, $gimnasio_id);
+      while ($row = $cumples->fetch_assoc()) {
+          echo "<tr><td>{$row['apellido']}</td><td>{$row['nombre']}</td><td>{$row['fecha_nacimiento']}</td></tr>";
+      }
       ?>
     </table>
 
-    <h2>📆 Vencimientos Próximos</h2>
+    <h2>⏳ Próximos Vencimientos</h2>
     <table>
-      <tr><th>Apellido</th><th>Nombre</th><th>Vencimiento</th></tr>
+      <tr><th>Apellido</th><th>Nombre</th><th>Fecha Vencimiento</th></tr>
       <?php
-        $vencimientos = obtenerVencimientosProximos($conexion, $gimnasio_id);
-        if ($vencimientos && $vencimientos->num_rows > 0) {
-          while ($row = $vencimientos->fetch_assoc()) {
-            echo "<tr><td>{$row['apellido']}</td><td>{$row['nombre']}</td><td>{$row['fecha_vencimiento']}</td></tr>";
-          }
-        } else {
-          echo "<tr><td colspan='3'>No hay vencimientos próximos.</td></tr>";
-        }
+      $vencimientos = obtenerVencimientosProximos($conexion, $gimnasio_id);
+      while ($row = $vencimientos->fetch_assoc()) {
+          echo "<tr><td>{$row['apellido']}</td><td>{$row['nombre']}</td><td>{$row['fecha_vencimiento']}</td></tr>";
+      }
       ?>
     </table>
   </div>
