@@ -79,14 +79,11 @@ body {
         <a href="asistencias_index.php">Ver Asistencias</a>
     </div>
 
-<a href="#"><i class="fas fa-qrcode"></i> QR <span class="arrow">&#9660;</span></a>
-  <ul>
-    <li class="submenu">
-    <li><a href="scanner_qr.php"><i class="fas fa-camera"></i> Escanear QR</a></li>
-    <li><a href="formulario_qr.php"><i class="fas fa-qrcode"></i> Generar QR</a></li>
-  </ul>
-
-  </div>
+    <a href="#" class="submenu-toggle"><i class="fas fa-qrcode"></i> QR</a>
+    <div class="submenu">
+        <a href="generar_qr.php">Generar QR</a>
+        <a href="scanner_qr.php">Escanear QR</a>
+    </div>
 
     <a href="#" class="submenu-toggle"><i class="fas fa-chalkboard-teacher"></i> Profesores</a>
     <div class="submenu">
