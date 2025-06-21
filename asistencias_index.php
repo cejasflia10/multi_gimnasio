@@ -1,39 +1,46 @@
 <?php
 include 'conexion.php';
-
+date_default_timezone_set('America/Argentina/Buenos_Aires');
 $hoy = date("Y-m-d");
 
-// Clientes con asistencia hoy
-$asistencias_clientes = $conexion->query("SELECT c.nombre, c.apellido, a.fecha, a.hora 
-    FROM asistencias_clientes a 
-    JOIN clientes c ON a.cliente_id = c.id 
-    WHERE a.fecha = '$hoy'");
+// Obtener asistencias de clientes (por DNI)
+$clientes = $conexion->query("
+    SELECT c.apellido, c.nombre, a.fecha_hora 
+    FROM asistencias a 
+    JOIN clientes c ON a.dni = c.dni 
+    WHERE DATE(a.fecha_hora) = '$hoy'
+    ORDER BY a.fecha_hora DESC
+");
 
-// Profesores con asistencia hoy
-$asistencias_profesores = $conexion->query("SELECT p.nombre, p.apellido, a.hora_ingreso, a.hora_egreso 
-    FROM asistencias_profesores a 
-    JOIN profesores p ON a.profesor_id = p.id 
-    WHERE a.fecha = '$hoy'");
+// Obtener asistencias de profesores
+$profesores = $conexion->query("
+    SELECT p.apellido, p.nombre, r.fecha_hora, r.tipo 
+    FROM rfid_registros r 
+    JOIN profesores p ON r.profesor_id = p.id 
+    WHERE DATE(r.fecha_hora) = '$hoy'
+    ORDER BY r.fecha_hora DESC
+");
 ?>
 
-<div style='display: flex; flex-wrap: wrap; justify-content: space-around; margin-top: 30px; color: gold;'>
-  <div style='flex: 1; min-width: 300px; background-color: #111; padding: 20px; margin: 10px; border: 1px solid gold; border-radius: 10px;'>
-    <h2>📋 Asistencias de Clientes (Hoy)</h2>
-    <table style='width: 100%; color: white;'>
-      <tr><th>Nombre</th><th>Apellido</th><th>Hora</th></tr>
-      <?php while ($c = $asistencias_clientes->fetch_assoc()) {
-        echo "<tr><td>{$c['nombre']}</td><td>{$c['apellido']}</td><td>{$c['hora']}</td></tr>";
-      } ?>
-    </table>
-  </div>
+<div style="padding: 20px; color: gold;">
+    <h2>📋 Asistencias del día - <?php echo date("d/m/Y"); ?></h2>
 
-  <div style='flex: 1; min-width: 300px; background-color: #111; padding: 20px; margin: 10px; border: 1px solid gold; border-radius: 10px;'>
-    <h2>🧑‍🏫 Asistencias de Profesores (Hoy)</h2>
-    <table style='width: 100%; color: white;'>
-      <tr><th>Nombre</th><th>Apellido</th><th>Ingreso</th><th>Egreso</th></tr>
-      <?php while ($p = $asistencias_profesores->fetch_assoc()) {
-        echo "<tr><td>{$p['nombre']}</td><td>{$p['apellido']}</td><td>{$p['hora_ingreso']}</td><td>{$p['hora_egreso']}</td></tr>";
-      } ?>
-    </table>
-  </div>
+    <h3>👥 Clientes</h3>
+    <ul>
+        <?php while ($c = $clientes->fetch_assoc()): ?>
+            <li><?php echo $c['apellido'] . ", " . $c['nombre'] . " - " . date("H:i", strtotime($c['fecha_hora'])); ?></li>
+        <?php endwhile; ?>
+    </ul>
+
+    <h3>👨‍🏫 Profesores</h3>
+    <ul>
+        <?php while ($p = $profesores->fetch_assoc()): ?>
+            <li>
+                <?php
+                echo $p['apellido'] . ", " . $p['nombre'] . " - " .
+                date("H:i", strtotime($p['fecha_hora'])) . " (" . strtoupper($p['tipo']) . ")";
+                ?>
+            </li>
+        <?php endwhile; ?>
+    </ul>
 </div>
