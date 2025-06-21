@@ -1,29 +1,45 @@
 <?php
-if (session_status() === PHP_SESSION_NONE) {
-    session_start();
-}
+session_start();
 include 'conexion.php';
 
-$cliente_id = $_POST['cliente_id'] ?? 0;
-$plan_id = $_POST['plan_id'] ?? 0;
-$fecha_inicio = $_POST['fecha_inicio'] ?? '';
-$fecha_vencimiento = $_POST['fecha_vencimiento'] ?? '';
-$clases_disponibles = $_POST['clases_disponibles'] ?? 0;
-$adicional_id = isset($_POST['adicional_id']) && $_POST['adicional_id'] !== '' ? intval($_POST['adicional_id']) : null;
-$otros_pagos = isset($_POST['otros_pagos']) && $_POST['otros_pagos'] !== '' ? floatval($_POST['otros_pagos']) : 0.00;
-$total = $_POST['total'] ?? 0;
-$metodo_pago = $_POST['metodo_pago'] ?? '';
-$gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
+if ($_SERVER["REQUEST_METHOD"] == "POST") {
+    $apellido = trim($_POST["apellido"]);
+    $nombre = trim($_POST["nombre"]);
+    $dni = trim($_POST["dni"]);
+    $fecha_nacimiento = $_POST["fecha_nacimiento"];
+    $edad = $_POST["edad"];
+    $domicilio = trim($_POST["domicilio"]);
+    $telefono = trim($_POST["telefono"]);
+    $email = trim($_POST["email"]);
+    $rfid_uid = !empty($_POST["rfid_uid"]) ? trim($_POST["rfid_uid"]) : null;
+    $disciplina = !empty($_POST["disciplina"]) ? trim($_POST["disciplina"]) : null;
+    $gimnasio_id = $_POST["gimnasio_id"];
 
-$stmt = $conexion->prepare("INSERT INTO membresias (cliente_id, plan_id, fecha_inicio, fecha_vencimiento, clases_disponibles, adicional_id, otros_pagos, total, metodo_pago, gimnasio_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
-$stmt->bind_param("iissiiissi", $cliente_id, $plan_id, $fecha_inicio, $fecha_vencimiento, $clases_disponibles, $adicional_id, $otros_pagos, $total, $metodo_pago, $gimnasio_id);
+    // Validación por DNI duplicado
+    $stmt = $conexion->prepare("SELECT id FROM clientes WHERE dni = ? AND gimnasio_id = ?");
+    $stmt->bind_param("si", $dni, $gimnasio_id);
+    $stmt->execute();
+    $stmt->store_result();
+    if ($stmt->num_rows > 0) {
+        echo "<script>alert('El DNI ya está registrado en este gimnasio.'); window.location.href='agregar_cliente.php';</script>";
+        exit;
+    }
+    $stmt->close();
 
-if ($stmt->execute()) {
-    echo "<script>alert('Membresía registrada correctamente'); window.location.href='membresias.php';</script>";
+    // Insertar nuevo cliente
+    $stmt = $conexion->prepare("INSERT INTO clientes (apellido, nombre, dni, fecha_nacimiento, edad, domicilio, telefono, email, rfid_uid, disciplina, gimnasio_id)
+                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+    $stmt->bind_param("ssssisssssi", $apellido, $nombre, $dni, $fecha_nacimiento, $edad, $domicilio, $telefono, $email, $rfid_uid, $disciplina, $gimnasio_id);
+
+    if ($stmt->execute()) {
+        echo "<script>alert('Cliente registrado correctamente.'); window.location.href='ver_clientes.php';</script>";
+    } else {
+        echo "Error al guardar: " . $stmt->error;
+    }
+
+    $stmt->close();
+    $conexion->close();
 } else {
-    echo "Error: " . $stmt->error;
+    echo "Acceso no permitido.";
 }
-
-$stmt->close();
-$conexion->close();
 ?>
