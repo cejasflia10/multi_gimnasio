@@ -1,35 +1,52 @@
-<?php
-include 'conexion.php';
-
-if (!empty($_POST['dni'])) {
-    $dni = trim($_POST['dni']);
-    $stmt = $conexion->prepare("SELECT c.id, c.nombre, c.apellido, c.disciplina, m.clases_disponibles, m.fecha_vencimiento 
-                                FROM clientes c 
-                                JOIN membresias m ON c.id = m.cliente_id 
-                                WHERE c.dni = ? AND m.fecha_vencimiento >= CURDATE() AND m.clases_disponibles > 0 
-                                ORDER BY m.fecha_vencimiento DESC LIMIT 1");
-    $stmt->bind_param("s", $dni);
-    $stmt->execute();
-    $resultado = $stmt->get_result();
-
-    if ($fila = $resultado->fetch_assoc()) {
-        $cliente_id = $fila['id'];
-        $clases = $fila['clases_disponibles'] - 1;
-        $update = $conexion->prepare("UPDATE membresias SET clases_disponibles = ? WHERE cliente_id = ?");
-        $update->bind_param("ii", $clases, $cliente_id);
-        $update->execute();
-
-        $insert = $conexion->prepare("INSERT INTO asistencias (cliente_id, fecha, hora) VALUES (?, CURDATE(), CURTIME())");
-        $insert->bind_param("i", $cliente_id);
-        $insert->execute();
-
-        echo "<p>✅ Ingreso registrado</p>";
-        echo "<p><strong>{$fila['nombre']} {$fila['apellido']}</strong></p>";
-        echo "<p>Disciplina: {$fila['disciplina']}</p>";
-        echo "<p>Clases restantes: {$clases}</p>";
-        echo "<p>Válido hasta: {$fila['fecha_vencimiento']}</p>";
-    } else {
-        echo "<p style='color:red;'>❌ No se encontró membresía activa.</p>";
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Escaneo QR para Ingreso</title>
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+  <style>
+    body {
+      background-color: black;
+      color: gold;
+      font-family: Arial, sans-serif;
+      text-align: center;
+      padding-top: 20px;
     }
-}
-?>
+    #reader {
+      width: 300px;
+      margin: auto;
+      border: 2px solid gold;
+    }
+  </style>
+</head>
+<body>
+
+  <h2>📷 Escaneo QR para Ingreso</h2>
+  <div id="reader"></div>
+
+  <form id="formulario" method="POST" action="registrar_asistencia_qr.php">
+    <input type="hidden" name="dni" id="dni">
+  </form>
+
+  <script>
+    function onScanSuccess(decodedText, decodedResult) {
+      // Detener escaneo
+      html5QrcodeScanner.clear().then(_ => {
+        // Enviar el DNI al backend
+        document.getElementById("dni").value = decodedText;
+        document.getElementById("formulario").submit();
+      }).catch(error => {
+        console.error("Error al detener escáner: ", error);
+      });
+    }
+
+    const html5QrcodeScanner = new Html5QrcodeScanner(
+      "reader", 
+      { fps: 10, qrbox: 250 },
+      /* verbose= */ false
+    );
+    html5QrcodeScanner.render(onScanSuccess);
+  </script>
+
+</body>
+</html>
