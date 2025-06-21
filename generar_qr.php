@@ -1,29 +1,72 @@
 <?php
-error_reporting(E_ALL & ~E_DEPRECATED & ~E_WARNING);
-session_start();
+require 'phpqrcode/qrlib.php';
 
-if (!isset($_SESSION['gimnasio_id'])) {
-    die("Acceso denegado.");
-}
+$dni = $_GET['dni'] ?? '';
 
-include "phpqrcode/qrlib.php";
+ob_start();
+QRcode::png($dni, null, QR_ECLEVEL_H, 10);
+$imageData = base64_encode(ob_get_contents());
+ob_end_clean();
+?>
 
-// Validar DNI
-if (!isset($_GET['dni'])) {
-    echo "DNI no especificado.";
-    exit;
-}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>QR generado</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    body {
+      background-color: #111;
+      color: #f1f1f1;
+      font-family: 'Segoe UI', sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      padding: 20px;
+      text-align: center;
+    }
 
-$dni = $_GET['dni'];
-$dir = 'temp/';
-if (!file_exists($dir)) {
-    mkdir($dir);
-}
-$filename = $dir . 'qr_' . $dni . '.png';
+    h1 {
+      color: #f7d774;
+      margin-bottom: 20px;
+    }
 
-// Generar QR con solo el DNI
-QRcode::png($dni, $filename);
+    .qr {
+      background-color: #fff;
+      padding: 20px;
+      border-radius: 10px;
+      margin-bottom: 20px;
+      box-shadow: 0 0 20px #000;
+    }
 
-echo "<h3>QR generado</h3>";
-echo "<img src='$filename'>";
-echo "<br><a href='menu.php'>Volver</a>";
+    a {
+      color: #f7d774;
+      font-size: 18px;
+      text-decoration: none;
+      border: 1px solid #f7d774;
+      padding: 10px 20px;
+      border-radius: 5px;
+      transition: 0.3s;
+    }
+
+    a:hover {
+      background-color: #f7d774;
+      color: #111;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>QR generado</h1>
+
+  <div class="qr">
+    <img src="data:image/png;base64,<?= $imageData ?>" alt="QR">
+  </div>
+
+  <a href="formulario_qr.php">Volver</a>
+
+</body>
+</html>
