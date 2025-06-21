@@ -79,9 +79,9 @@ body {
         <a href="asistencias_index.php">Ver Asistencias</a>
     </div>
 
-    <li class="submenu">
-  <a href="#"><i class="fas fa-qrcode"></i> QR <span class="arrow">&#9660;</span></a>
+<a href="#"><i class="fas fa-qrcode"></i> QR <span class="arrow">&#9660;</span></a>
   <ul>
+    <li class="submenu">
     <li><a href="scanner_qr.php"><i class="fas fa-camera"></i> Escanear QR</a></li>
     <li><a href="formulario_qr.php"><i class="fas fa-qrcode"></i> Generar QR</a></li>
   </ul>
