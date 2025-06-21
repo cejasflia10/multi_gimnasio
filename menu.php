@@ -1,140 +1,140 @@
-<?php
-if (session_status() === PHP_SESSION_NONE) {
-    session_start();
-}
-if (!isset($_SESSION['usuario'])) {
-    header("Location: login.php");
-    exit();
-}
-$rol = $_SESSION['rol'];
-?>
+<style>
+    body {
+        margin: 0;
+        font-family: Arial, sans-serif;
+    }
 
-<!DOCTYPE html>
-<html lang="es">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Panel de Control - MultiGimnasio</title>
-    <link rel="stylesheet" href="estilos.css">
-    <style>
-        body {
-            margin: 0;
-            background-color: #111;
-            color: gold;
-            font-family: 'Segoe UI', sans-serif;
-        }
-        .sidebar {
-            position: fixed;
-            top: 0; left: 0;
-            width: 250px;
-            height: 100vh;
-            background-color: #1a1a1a;
-            padding: 20px 0;
-            overflow-y: auto;
-        }
-        .sidebar h2 {
-            text-align: center;
-            color: gold;
-            margin-bottom: 30px;
-        }
-        .sidebar a {
-            display: block;
-            padding: 10px 20px;
-            color: white;
-            text-decoration: none;
-        }
-        .sidebar a:hover {
-            background-color: #444;
-        }
-        .submenu {
-            padding-left: 30px;
-        }
-        .content {
-            margin-left: 250px;
-            padding: 20px;
-        }
-        @media screen and (max-width: 768px) {
-            .sidebar {
-                width: 100%;
-                height: auto;
-                position: relative;
-            }
-            .content {
-                margin-left: 0;
-            }
-        }
-    </style>
-</head>
-<body>
-    <div class="sidebar">
-        <h2>Fight Academy</h2>
-        <a href="index.php">Panel</a>
+    .sidebar {
+        height: 100vh;
+        width: 240px;
+        position: fixed;
+        background-color: #111;
+        padding-top: 20px;
+        overflow-y: auto;
+    }
 
-        <a href="#">Clientes</a>
+    .sidebar h2 {
+        color: gold;
+        text-align: center;
+        margin-bottom: 20px;
+    }
+
+    .sidebar a {
+        padding: 10px 20px;
+        display: block;
+        color: white;
+        text-decoration: none;
+        transition: 0.3s;
+    }
+
+    .sidebar a:hover {
+        background-color: #333;
+    }
+
+    .submenu {
+        display: none;
+        background-color: #222;
+    }
+
+    .submenu a {
+        padding-left: 40px;
+        font-size: 14px;
+    }
+
+    .has-submenu:hover .submenu {
+        display: block;
+    }
+
+    .icon {
+        margin-right: 5px;
+    }
+
+    .main-content {
+        margin-left: 240px;
+        padding: 20px;
+        background-color: #222;
+        color: #f1f1f1;
+        min-height: 100vh;
+    }
+</style>
+
+<div class="sidebar">
+    <h2>Fight Academy</h2>
+
+    <a href="index.php">📊 Panel</a>
+
+    <div class="has-submenu">
+        <a href="#">👤 Clientes</a>
         <div class="submenu">
-            <a href="agregar_cliente.php">Agregar Cliente</a>
-            <a href="ver_clientes.php">Ver Clientes</a>
-        </div>
-
-        <a href="#">Membresías</a>
-        <div class="submenu">
-            <a href="nueva_membresia.php">Nueva Membresía</a>
-            <a href="ver_membresias.php">Ver Membresías</a>
-        </div>
-
-        <a href="#">Registros Online</a>
-        <div class="submenu">
-            <a href="registro_online.php">Ver Registros</a>
-        </div>
-
-        <a href="#">Asistencias</a>
-        <div class="submenu">
-            <a href="asistencias_clientes.php">Clientes</a>
-            <a href="asistencias_profesores.php">Profesores</a>
-        </div>
-
-        <a href="#">QR</a>
-        <div class="submenu">
-            <a href="scanner_qr.php">Escanear QR</a>
-            <a href="generar_qr.php">Generar QR</a>
-        </div>
-
-        <a href="#">Profesores</a>
-        <div class="submenu">
-            <a href="agregar_profesor.php">Agregar Profesor</a>
-            <a href="ver_profesores.php">Ver Profesores</a>
-            <a href="turnos_profesores.php">Turnos</a>
-            <a href="pagos_profesores.php">Pagos</a>
-        </div>
-
-        <a href="#">Ventas</a>
-        <div class="submenu">
-            <a href="ventas_indumentaria.php">Indumentaria</a>
-            <a href="ventas_suplementos.php">Suplementos</a>
-        </div>
-
-        <a href="#">Gimnasios</a>
-        <div class="submenu">
-            <a href="ver_gimnasios.php">Ver Gimnasios</a>
-            <a href="agregar_gimnasio.php">Agregar Gimnasio</a>
-        </div>
-
-        <a href="#">Usuarios</a>
-        <div class="submenu">
-            <a href="ver_usuarios.php">Ver Usuarios</a>
-            <a href="agregar_usuario.php">Agregar Usuario</a>
-        </div>
-
-        <a href="#">Configuración</a>
-        <div class="submenu">
-            <a href="configuracion.php">Sistema</a>
+            <a href="agregar_cliente.php">➕ Agregar Cliente</a>
+            <a href="ver_clientes.php">📄 Ver Clientes</a>
         </div>
     </div>
 
-    <div class="content">
-        <h1>Bienvenido, <?php echo $_SESSION['usuario']; ?> (<?php echo $rol; ?>)</h1>
-        <h3>Panel de control de Fight Academy</h3>
-        <?php include('asistencias_index.php'); ?>
+    <div class="has-submenu">
+        <a href="#">📅 Membresías</a>
+        <div class="submenu">
+            <a href="agregar_membresia.php">➕ Nueva Membresía</a>
+            <a href="ver_membresias.php">📄 Ver Membresías</a>
+        </div>
     </div>
-</body>
-</html>
+
+    <div class="has-submenu">
+        <a href="#">🌐 Registros Online</a>
+        <div class="submenu">
+            <a href="ver_registros.php">📄 Ver Registros</a>
+        </div>
+    </div>
+
+    <div class="has-submenu">
+        <a href="#">📚 Asistencias</a>
+        <div class="submenu">
+            <a href="asistencia_clientes.php">👥 Clientes</a>
+            <a href="asistencia_profesores.php">👨‍🏫 Profesores</a>
+            <a href="scanner_qr.php">📷 QR</a>
+        </div>
+    </div>
+
+    <div class="has-submenu">
+        <a href="#">👨‍🏫 Profesores</a>
+        <div class="submenu">
+            <a href="agregar_profesor.php">➕ Agregar Profesor</a>
+            <a href="listar_profesor.php">📄 Ver Profesores</a>
+            <a href="asistencia_profesor.php">🕒 Registrar Asistencia</a>
+            <a href="reporte_profesor.php">💰 Reporte de Pagos</a>
+        </div>
+    </div>
+
+    <div class="has-submenu">
+        <a href="#">🛒 Ventas</a>
+        <div class="submenu">
+            <a href="ventas_indumentaria.php">👕 Indumentaria</a>
+            <a href="ventas_protecciones.php">🥊 Protecciones</a>
+            <a href="ventas_suplementos.php">💊 Suplementos</a>
+        </div>
+    </div>
+
+    <div class="has-submenu">
+        <a href="#">🏢 Gimnasios</a>
+        <div class="submenu">
+            <a href="agregar_gimnasio.php">➕ Agregar Gimnasio</a>
+            <a href="ver_gimnasios.php">📄 Ver Gimnasios</a>
+        </div>
+    </div>
+
+    <div class="has-submenu">
+        <a href="#">🔐 Usuarios</a>
+        <div class="submenu">
+            <a href="agregar_usuario.php">➕ Agregar Usuario</a>
+            <a href="ver_usuarios.php">📄 Ver Usuarios</a>
+        </div>
+    </div>
+</div>
+<div class="has-submenu">
+    <a href="#">🔐 Usuarios</a>
+    <div class="submenu">
+        <a href="agregar_usuario.php">➕ Agregar Usuario</a>
+        <a href="ver_usuarios.php">📄 Ver Usuarios</a>
+        <a href="permisos_usuarios.php">⚙️ Permisos</a>
+    </div>
+</div>
