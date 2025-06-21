@@ -46,7 +46,22 @@ include 'conexion.php';
         }
     </style>
 </head>
+<?php
+session_start();
+include 'conexion.php';
+
+// Obtener nombre del gimnasio
+$nombreGimnasio = '';
+if (isset($_SESSION['gimnasio_id'])) {
+    $gimnasio_id = $_SESSION['gimnasio_id'];
+    $resultado = $conexion->query("SELECT nombre FROM gimnasios WHERE id = $gimnasio_id");
+    if ($fila = $resultado->fetch_assoc()) {
+        $nombreGimnasio = $fila['nombre'];
+    }
+}
+?>
 <body>
+<h2 style="color: gold; margin-left: 20px;">🏋️ Gimnasio: <?php echo htmlspecialchars($nombreGimnasio); ?></h2>
     <div class="contenido">
         <h1>Bienvenido al Panel de Control</h1>
 
