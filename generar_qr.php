@@ -1,32 +1,29 @@
 <?php
-include 'conexion.php';
-require_once 'phpqrcode/qrlib.php';
+error_reporting(E_ALL & ~E_DEPRECATED & ~E_WARNING);
+session_start();
 
-if ($_SERVER["REQUEST_METHOD"] == "POST" && !empty($_POST["dni"])) {
-    $dni = trim($_POST["dni"]);
-    $filename = "temp_qr_" . $dni . ".png";
-    QRcode::png($dni, $filename);
+if (!isset($_SESSION['gimnasio_id'])) {
+    die("Acceso denegado.");
+}
 
-    echo "<h2>QR generado</h2>";
-    echo "<img src='$filename' /><br><a href='generar_qr.php'>Volver</a>";
+include "phpqrcode/qrlib.php";
+
+// Validar DNI
+if (!isset($_GET['dni'])) {
+    echo "DNI no especificado.";
     exit;
 }
-?>
-<!DOCTYPE html>
-<html lang="es">
-<head>
-    <meta charset="UTF-8">
-    <title>Generar QR del Cliente</title>
-    <style>
-        body { background: #000; color: gold; text-align: center; padding-top: 50px; font-family: sans-serif; }
-        input { padding: 10px; font-size: 16px; }
-    </style>
-</head>
-<body>
-    <h1>Generar QR del Cliente</h1>
-    <form method="POST">
-        <input type="text" name="dni" placeholder="DNI del cliente" required />
-        <input type="submit" value="Generar QR" />
-    </form>
-</body>
-</html>
+
+$dni = $_GET['dni'];
+$dir = 'temp/';
+if (!file_exists($dir)) {
+    mkdir($dir);
+}
+$filename = $dir . 'qr_' . $dni . '.png';
+
+// Generar QR con solo el DNI
+QRcode::png($dni, $filename);
+
+echo "<h3>QR generado</h3>";
+echo "<img src='$filename'>";
+echo "<br><a href='menu.php'>Volver</a>";
