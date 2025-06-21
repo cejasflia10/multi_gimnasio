@@ -6,6 +6,16 @@ if (!isset($_SESSION['rol']) || $_SESSION['rol'] !== 'admin') {
 include 'conexion.php';
 
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
+    // Validar que si es profesor, solo se permita QR
+    if ($rol === 'profesor') {
+        $permiso_clientes = 0;
+        $permiso_membresias = 0;
+        $permiso_profesores = 0;
+        $permiso_ventas = 0;
+        $permiso_panel = 0;
+        $permiso_asistencias = 0;
+    }
+
     $usuario = trim($_POST["usuario"]);
     $email = trim($_POST["email"]);
     $clave = password_hash(trim($_POST["clave"]), PASSWORD_BCRYPT);
