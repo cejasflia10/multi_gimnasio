@@ -1,41 +1,114 @@
 <?php
+session_start();
 include 'conexion.php';
-include 'menu.php';
+
 $resultado = $conexion->query("SELECT * FROM gimnasios");
 ?>
+
 <!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="UTF-8">
-  <title>Listado de Gimnasios</title>
-  <style>
-    body { background-color: #111; color: #f1f1f1; font-family: Arial, sans-serif; padding: 20px; }
-    table { width: 100%; border-collapse: collapse; margin-top: 20px; background-color: #222; }
-    th, td { padding: 10px; border: 1px solid #444; text-align: left; }
-    th { background-color: #333; color: gold; }
-    a.boton-agregar { background: gold; padding: 10px; color: black; text-decoration: none; border-radius: 5px; font-weight: bold; }
-    .acciones a { margin-right: 10px; color: gold; text-decoration: none; }
-  </style>
+    <meta charset="UTF-8">
+    <title>Listado de Gimnasios</title>
+    <style>
+        body {
+            background-color: #000;
+            color: gold;
+            font-family: Arial, sans-serif;
+            text-align: center;
+            padding-top: 40px;
+        }
+
+        table {
+            margin: 20px auto;
+            border-collapse: collapse;
+            width: 90%;
+            background-color: #111;
+            color: #fff;
+        }
+
+        th, td {
+            border: 1px solid gold;
+            padding: 10px;
+        }
+
+        th {
+            background-color: #222;
+        }
+
+        .btn {
+            background-color: gold;
+            color: black;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            text-decoration: none;
+            margin-bottom: 15px;
+            display: inline-block;
+        }
+
+        .btn-editar, .btn-eliminar {
+            padding: 6px 12px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+
+        .btn-editar {
+            background-color: orange;
+            color: #fff;
+        }
+
+        .btn-eliminar {
+            background-color: red;
+            color: #fff;
+        }
+
+        .volver {
+            margin-top: 20px;
+            display: inline-block;
+            background-color: gold;
+            color: black;
+            padding: 10px 20px;
+            border-radius: 5px;
+            text-decoration: none;
+        }
+    </style>
 </head>
 <body>
-  <h2>Listado de Gimnasios</h2>
-  <a href="agregar_gimnasio.php" class="boton-agregar">➕ Agregar Gimnasio</a>
-  <table>
-    <tr>
-      <th>Nombre</th><th>Dirección</th><th>Teléfono</th><th>Email</th><th>Acciones</th>
-    </tr>
-    <?php while ($row = $resultado->fetch_assoc()) { ?>
-      <tr>
-        <td><?php echo $row["nombre"]; ?></td>
-        <td><?php echo $row["direccion"]; ?></td>
-        <td><?php echo $row["telefono"]; ?></td>
-        <td><?php echo $row["email"]; ?></td>
-        <td class="acciones">
-          <a href='editar_gimnasio.php?id=<?php echo $row["id"]; ?>'>✏️ Editar</a>
-          <a href='eliminar_gimnasio.php?id=<?php echo $row["id"]; ?>' onclick="return confirm('¿Eliminar este gimnasio?')">🗑️ Eliminar</a>
-        </td>
-      </tr>
-    <?php } ?>
-  </table>
+
+<h2>Listado de Gimnasios</h2>
+
+<a class="btn" href="agregar_gimnasio.php">➕ Agregar Gimnasio</a>
+
+<table>
+    <thead>
+        <tr>
+            <th>Nombre</th>
+            <th>Dirección</th>
+            <th>Teléfono</th>
+            <th>Email</th>
+            <th>Acciones</th>
+        </tr>
+    </thead>
+    <tbody>
+    <?php while ($row = $resultado->fetch_assoc()): ?>
+        <tr>
+            <td><?= htmlspecialchars($row['nombre']) ?></td>
+            <td><?= htmlspecialchars($row['direccion']) ?></td>
+            <td><?= htmlspecialchars($row['telefono']) ?></td>
+            <td><?= htmlspecialchars($row['email']) ?></td>
+            <td>
+                <a class="btn-editar" href="editar_gimnasio.php?id=<?= $row['id'] ?>">✏️ Editar</a>
+                <a class="btn-eliminar" href="eliminar_gimnasio.php?id=<?= $row['id'] ?>" onclick="return confirm('¿Estás seguro que deseas eliminar este gimnasio?')">🗑️ Eliminar</a>
+            </td>
+        </tr>
+    <?php endwhile; ?>
+    </tbody>
+</table>
+
+<a class="volver" href="index.php">← Volver al menú</a>
+
 </body>
 </html>
