@@ -1,35 +1,32 @@
 <?php
-session_start();
-include 'conexion.php';
-include 'menu.php';
+include 'menu.php'; // Asegurate de tener el menú cargado
 
-$gimnasio_id = $_SESSION['gimnasio_id'] ?? 1;
+// Simulamos totales
+$ventasDia = 5000.00;
+$ventasMes = 42000.50;
+$pagosDia = 3200.00;
+$pagosMes = 28700.00;
 
-function getMonto($conexion, $tabla, $campo_fecha, $gimnasio_id, $rango = 'DIA', $columna = 'precio_venta') {
-    $filtro_fecha = ($rango === 'DIA')
-        ? "DATE($campo_fecha) = CURDATE()"
-        : "MONTH($campo_fecha) = MONTH(CURDATE()) AND YEAR($campo_fecha) = YEAR(CURDATE())";
+// Simulamos próximos cumpleaños
+$cumples = [
+  ['nombre' => 'Juan Pérez', 'fecha' => '2025-06-23'],
+  ['nombre' => 'María López', 'fecha' => '2025-06-26'],
+  ['nombre' => 'Carlos Ruiz', 'fecha' => '2025-06-29'],
+];
 
-    $sql = "SELECT SUM($columna) AS total FROM $tabla WHERE $filtro_fecha AND id_gimnasio = $gimnasio_id";
-    $resultado = $conexion->query($sql);
-    if ($fila = $resultado->fetch_assoc()) {
-        return $fila['total'] ?? 0;
-    }
-    return 0;
-}
-
-// Totales
-$ventasDia = getMonto($conexion, 'ventas', 'fecha', $gimnasio_id, 'DIA');
-$ventasMes = getMonto($conexion, 'ventas', 'fecha', $gimnasio_id, 'MES');
-$pagosDia = getMonto($conexion, 'pagos', 'fecha', $gimnasio_id, 'DIA', 'monto');
-$pagosMes = getMonto($conexion, 'pagos', 'fecha', $gimnasio_id, 'MES', 'monto');
+// Simulamos vencimientos
+$vencimientos = [
+  ['cliente' => 'Ana Torres', 'fecha' => '2025-06-24'],
+  ['cliente' => 'Luis Gómez', 'fecha' => '2025-06-26'],
+  ['cliente' => 'Pedro Álvarez', 'fecha' => '2025-07-01'],
+];
 ?>
 
 <!DOCTYPE html>
 <html lang="es">
 <head>
   <meta charset="UTF-8">
-  <title>Panel de Control - Fight Academy Scorpions</title>
+  <title>Panel de Control - Fight Academy</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <style>
     body {
@@ -38,22 +35,113 @@ $pagosMes = getMonto($conexion, 'pagos', 'fecha', $gimnasio_id, 'MES', 'monto');
       background-color: #111;
       color: #f1f1f1;
     }
-
     .contenido {
       margin-left: 260px;
       padding: 20px;
     }
-
     .tarjetas {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
       gap: 20px;
       margin-top: 20px;
     }
-
     .tarjeta {
       background-color: #222;
       border-left: 5px solid #f7d774;
       padding: 20px;
       border-radius: 10px;
-      bo
+      box-shadow: 0 0 10px #000;
+    }
+    .tarjeta h3 {
+      margin: 0 0 10px;
+      font-size: 1.1em;
+      color: #f7d774;
+    }
+    .tarjeta p {
+      font-size: 1.4em;
+      font-weight: bold;
+      margin: 0;
+    }
+
+    .lista {
+      margin-top: 40px;
+    }
+
+    .lista h2 {
+      color: #f7d774;
+    }
+
+    table {
+      width: 100%;
+      background-color: #1a1a1a;
+      color: #fff;
+      border-collapse: collapse;
+    }
+
+    th, td {
+      padding: 10px;
+      text-align: left;
+      border-bottom: 1px solid #333;
+    }
+
+    @media (max-width: 768px) {
+      .contenido {
+        margin-left: 0;
+        padding: 10px;
+      }
+    }
+  </style>
+</head>
+<body>
+
+<div class="contenido">
+  <h1>Panel de Control</h1>
+
+  <div class="tarjetas">
+    <div class="tarjeta">
+      <h3>Ventas del Día</h3>
+      <p>$<?= number_format($ventasDia, 2, ',', '.') ?></p>
+    </div>
+    <div class="tarjeta">
+      <h3>Ventas del Mes</h3>
+      <p>$<?= number_format($ventasMes, 2, ',', '.') ?></p>
+    </div>
+    <div class="tarjeta">
+      <h3>Pagos del Día</h3>
+      <p>$<?= number_format($pagosDia, 2, ',', '.') ?></p>
+    </div>
+    <div class="tarjeta">
+      <h3>Pagos del Mes</h3>
+      <p>$<?= number_format($pagosMes, 2, ',', '.') ?></p>
+    </div>
+  </div>
+
+  <div class="lista">
+    <h2>🎂 Próximos Cumpleaños</h2>
+    <table>
+      <tr><th>Nombre</th><th>Fecha</th></tr>
+      <?php foreach ($cumples as $cumple): ?>
+        <tr>
+          <td><?= $cumple['nombre'] ?></td>
+          <td><?= $cumple['fecha'] ?></td>
+        </tr>
+      <?php endforeach; ?>
+    </table>
+  </div>
+
+  <div class="lista">
+    <h2>📅 Próximos Vencimientos</h2>
+    <table>
+      <tr><th>Cliente</th><th>Fecha de Vencimiento</th></tr>
+      <?php foreach ($vencimientos as $v): ?>
+        <tr>
+          <td><?= $v['cliente'] ?></td>
+          <td><?= $v['fecha'] ?></td>
+        </tr>
+      <?php endforeach; ?>
+    </table>
+  </div>
+</div>
+
+</body>
+</html>
