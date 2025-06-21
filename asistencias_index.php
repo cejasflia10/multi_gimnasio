@@ -137,4 +137,4 @@ $resultado_profesores = $conexion->query($consulta_profesores);
         <tbody>
             <?php while ($fila = $resultado_profesores->fetch_assoc()) { ?>
                 <tr>
-                    <td><?= $fila['apelli]()
+                    <td><?= $fila['apellido']
