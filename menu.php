@@ -18,13 +18,16 @@
   </div>
 </li>
 
-    <li>
-      <button class="dropdown-btn">📋 Membresías ▾</button>
-      <div class="dropdown-container">
-        <a href="membresias.php">Ver Membresías</a>
-        <a href="agregar_membresia.php">Agregar Membresía</a>
-      </div>
-    </li>
+<li>
+  <button class="dropdown-btn">📅 Membresías ▾</button>
+  <div class="dropdown-container">
+    <a href="ver_membresias.php">Ver Membresías</a>
+    <a href="agregar_membresia.php">Agregar Membresía</a>
+    <a href="planes.php">Planes</a>
+    <a href="planes_adicionales.php">Planes Adicionales</a>
+    <a href="disciplinas.php">Disciplinas</a> <!-- NUEVO -->
+  </div>
+</li>
 
     <li>
       <button class="dropdown-btn">👨‍🏫 Profesores ▾</button>
