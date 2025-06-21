@@ -68,24 +68,5 @@
         <a href="registrar_asistencia_qr.php">Asistencia por QR</a>
       </div>
     </li>
-  
-<li class="nav-item">
-    <a href="#" class="nav-link">
-        <i class="fas fa-qrcode"></i>
-        <p>
-            QR
-            <i class="right fas fa-angle-left"></i>
-        </p>
-    </a>
-    <ul class="nav nav-treeview" style="background-color: #222;">
-        <li class="nav-item">
-            <a href="escaneo_qr.php" class="nav-link">
-                <i class="far fa-circle nav-icon"></i>
-                <p>Escanear QR</p>
-            </a>
-        </li>
-    </ul>
-</li>
-
-</ul>
+  </ul>
 </nav>
