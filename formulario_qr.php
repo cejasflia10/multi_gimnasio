@@ -2,18 +2,26 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>Generar QR del Cliente</title>
+    <title>Generar QR</title>
     <style>
-        body { background-color: #111; color: gold; text-align: center; font-family: Arial, sans-serif; }
-        input, button { padding: 10px; margin-top: 10px; }
+        body {
+            background-color: #000;
+            color: gold;
+            font-family: Arial, sans-serif;
+            text-align: center;
+            padding-top: 100px;
+        }
+        input[type="text"], input[type="submit"] {
+            padding: 10px;
+            font-size: 18px;
+        }
     </style>
 </head>
 <body>
     <h1>Generar QR del Cliente</h1>
     <form action="generar_qr.php" method="POST">
-        <input type="text" name="dni" id="dni" placeholder="DNI del cliente" required>
-        <br>
-        <button type="submit">Generar QR</button>
+        <input type="text" name="dni" placeholder="Ingrese el DNI">
+        <input type="submit" value="Generar QR">
     </form>
 </body>
 </html>
