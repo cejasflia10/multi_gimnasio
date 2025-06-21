@@ -1,5 +1,6 @@
+<?php if (session_status() === PHP_SESSION_NONE) { session_start(); } ?>
 <?php
-session_start();
+
 if (!isset($_SESSION["gimnasio_id"])) {
     die("⛔ No has iniciado sesión correctamente.");
 }
@@ -65,7 +66,7 @@ $vencimientos = ["Pedro Gómez - 3 días", "Lucía Díaz - 7 días"];
   </style>
 </head>
 <body>
-  <?php include 'menu.php'; ?>
+  <?php include 'menu_moderno.php'; ?>
   <div class="contenido">
     <h1>Bienvenido al Panel</h1>
     <div class="card-group">
