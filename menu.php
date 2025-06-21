@@ -1,79 +1,36 @@
+<style>
+.sidebar {
+    position: fixed;
+    width: 200px;
+    height: 100%;
+    background: #000;
+    padding-top: 20px;
+    color: gold;
+    font-family: Arial, sans-serif;
+}
+.sidebar h2 {
+    text-align: center;
+    color: gold;
+}
+.sidebar a {
+    display: block;
+    color: gold;
+    padding: 10px 20px;
+    text-decoration: none;
+}
+.sidebar a:hover {
+    background: #333;
+}
+</style>
 
-<nav id="sidebar">
-  <div class="sidebar-header">
-    <h3>🏋️‍♂️ Fight Academy</h3>
-  </div>
-  <ul class="components">
-    <li><a href="index.php">🏠 Dashboard</a></li>
-
-    <li>
-  <button class="dropdown-btn">👤 Clientes ▾</button>
-  <div class="dropdown-container">
-    <a href="clientes.php">Ver Clientes</a>
-    <a href="agregar_cliente.php">Agregar Cliente</a>
-    <a href="generar_qr.php">Generar QR</a>
-    <a href="ver_asistencias_qr.php">Ver Asistencia</a>
-    <a href="importar_clientes.php">Importar Clientes</a>
-    <a href="exportar_clientes.php">Exportar Clientes</a>
-  </div>
-</li>
-
-<li>
-  <button class="dropdown-btn">📅 Membresías ▾</button>
-  <div class="dropdown-container">
-    <a href="ver_membresias.php">Ver Membresías</a>
-    <a href="agregar_membresia.php">Agregar Membresía</a>
-    <a href="planes.php">Planes</a>
-    <a href="planes_adicionales.php">Planes Adicionales</a>
-    <a href="disciplinas.php">Disciplinas</a> <!-- NUEVO -->
-  </div>
-</li>
-
-    <li>
-      <button class="dropdown-btn">👨‍🏫 Profesores ▾</button>
-      <div class="dropdown-container">
-        <a href="profesores.php">Ver Profesores</a>
-        <a href="agregar_profesor.php">Agregar Profesor</a>
-      </div>
-    </li>
-
-    <li>
-      <button class="dropdown-btn">🕒 Asistencias ▾</button>
-      <div class="dropdown-container">
-        <a href="registrar_asistencia.php">Registrar Asistencia</a>
-        <a href="asistencia_profesores.php">Asistencia Profesores</a>
-      </div>
-    </li>
-
-    <li>
-      <button class="dropdown-btn">💰 Ventas ▾</button>
-      <div class="dropdown-container">
-        <a href="ventas.php">Ver Ventas</a>
-        <a href="agregar_venta.php">Agregar Venta</a>
-      </div>
-    </li>
-
-    <li>
-      <button class="dropdown-btn">🏢 Gimnasios ▾</button>
-      <div class="dropdown-container">
-        <a href="gimnasios.php">Ver Gimnasios</a>
-        <a href="agregar_gimnasio.php">Agregar Gimnasio</a>
-      </div>
-    </li>
-
-    <li>
-      <button class="dropdown-btn">⚙️ Configuración ▾</button>
-      <div class="dropdown-container">
-        <a href="usuarios.php">Usuarios</a>
-        <a href="permisos.php">Permisos</a>
-      </div>
-    </li>
-
-    <li>
-      <button class="dropdown-btn">📷 QR ▾</button>
-      <div class="dropdown-container">
-        <a href="registrar_asistencia_qr.php">Asistencia por QR</a>
-      </div>
-    </li>
-  </ul>
-</nav>
+<div class="sidebar">
+    <h2>Fight Academy</h2>
+    <a href="clientes.php">Clientes</a>
+    <a href="membresias.php">Membresías</a>
+    <a href="asistencias.php">Asistencias</a>
+    <a href="ventas.php">Ventas</a>
+    <a href="qr/registrar_asistencia_qr.php">Escaneo QR</a>
+    <a href="usuarios.php">Usuarios</a>
+    <a href="gimnasios.php">Gimnasios</a>
+    <a href="configuracion.php">Configuración</a>
+</div>
