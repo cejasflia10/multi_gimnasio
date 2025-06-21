@@ -4,14 +4,16 @@ if (!isset($_SESSION['gimnasio_id'])) {
     die("Acceso denegado.");
 }
 
-error_reporting(E_ALL & ~E_DEPRECATED); // Oculta warnings deprecated
+// ⚠️ Ocultar warnings deprecated y warnings visibles
+error_reporting(E_ALL & ~E_DEPRECATED & ~E_WARNING);
+ini_set('display_errors', 0);
 
 include 'conexion.php';
 require 'phpqrcode/qrlib.php';
 
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
-    if (!isset($_POST["dni"]) || empty($_POST["dni"])) {
-        echo "<script>alert('No se recibió DNI'); window.history.back();</script>";
+    if (!isset($_POST["dni"]) || empty(trim($_POST["dni"]))) {
+        echo "<script>alert('No se recibió el DNI'); window.history.back();</script>";
         exit;
     }
 
@@ -25,13 +27,12 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 
     if ($resultado->num_rows > 0) {
         $cliente = $resultado->fetch_assoc();
-        $contenido = $cliente['dni'] . " | " . $cliente['nombre'] . " " . $cliente['apellido'] . " | ID: " . $cliente['id'];
+        $contenido = $cliente['dni'] . " | " . $cliente['nombre'] . " " . $cliente['apellido'] . " | ID:" . $cliente['id'];
     } else {
         echo "<script>alert('El DNI no está registrado en este gimnasio.'); window.history.back();</script>";
         exit;
     }
 
-    // Crear carpeta si no existe
     if (!file_exists('qr_temp')) {
         mkdir('qr_temp');
     }
@@ -41,8 +42,10 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 
     echo "<body style='background-color:#111;color:#FFD700;text-align:center;padding-top:40px;'>";
     echo "<h2>QR generado correctamente</h2>";
-    echo "<img src='$nombreArchivo' alt='QR generado'>";
-    echo "<br><br><a href='formulario_qr.php' style='color:#FFD700;'>Generar otro</a>";
+    echo "<img src='$nombreArchivo' alt='QR generado'><br><br>";
+    echo "<a href='formulario_qr.php' style='color:#FFD700;'>⬅️ Generar otro</a>";
     echo "</body>";
+} else {
+    echo "<script>alert('Acceso inválido'); window.location.href='formulario_qr.php';</script>";
 }
 ?>
