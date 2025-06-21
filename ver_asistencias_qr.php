@@ -2,23 +2,28 @@
 session_start();
 include 'conexion.php';
 
-// Verificamos que el usuario esté logueado
 if (!isset($_SESSION['gimnasio_id'])) {
     die("Acceso denegado.");
 }
 
 $gimnasio_id = $_SESSION['gimnasio_id'];
 
-// Consulta asistencias de hoy, solo de clientes de este gimnasio
+// Traer la membresía activa más reciente para mostrar clases y vencimiento reales
 $query = "
 SELECT a.fecha, a.hora, c.apellido, c.nombre, d.nombre AS disciplina, 
        m.clases_disponibles, m.fecha_vencimiento
 FROM asistencias a
 JOIN clientes c ON a.cliente_id = c.id
 LEFT JOIN disciplinas d ON c.disciplina_id = d.id
-LEFT JOIN membresias m ON m.cliente_id = c.id
+LEFT JOIN (
+    SELECT cliente_id, clases_disponibles, fecha_vencimiento
+    FROM membresias
+    WHERE fecha_vencimiento >= CURDATE()
+    GROUP BY cliente_id
+    ORDER BY fecha_vencimiento DESC
+) m ON m.cliente_id = c.id
 WHERE DATE(a.fecha) = CURDATE() AND c.gimnasio_id = ?
-ORDER BY a.fecha DESC, a.hora DESC";
+ORDER BY a.hora DESC";
 
 $stmt = $conexion->prepare($query);
 $stmt->bind_param("i", $gimnasio_id);
@@ -30,31 +35,74 @@ $resultado = $stmt->get_result();
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>Asistencias por QR</title>
+    <title>Asistencias de Hoy</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
         body {
             background-color: #000;
             color: gold;
             font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
         }
+
+        h1 {
+            color: yellow;
+            text-align: center;
+        }
+
         table {
             width: 100%;
-            background: #111;
-            color: #f1f1f1;
             border-collapse: collapse;
+            margin-top: 20px;
         }
+
         th, td {
+            border: 1px solid #555;
             padding: 10px;
-            border: 1px solid #444;
+            text-align: center;
         }
+
         th {
-            background: #222;
+            background-color: #222;
+            color: white;
+        }
+
+        tr:nth-child(even) {
+            background-color: #111;
+        }
+
+        @media screen and (max-width: 600px) {
+            table, thead, tbody, th, td, tr {
+                display: block;
+            }
+
+            th {
+                display: none;
+            }
+
+            td {
+                position: relative;
+                padding-left: 50%;
+                text-align: left;
+            }
+
+            td::before {
+                content: attr(data-label);
+                position: absolute;
+                left: 10px;
+                color: #888;
+                font-weight: bold;
+            }
         }
     </style>
 </head>
 <body>
-    <h2>Asistencias de Hoy</h2>
-    <table>
+
+<h1>Asistencias de Hoy</h1>
+
+<table>
+    <thead>
         <tr>
             <th>Fecha</th>
             <th>Hora</th>
@@ -64,17 +112,21 @@ $resultado = $stmt->get_result();
             <th>Clases Restantes</th>
             <th>Vencimiento</th>
         </tr>
-        <?php while ($fila = $resultado->fetch_assoc()) { ?>
+    </thead>
+    <tbody>
+        <?php while ($fila = $resultado->fetch_assoc()): ?>
             <tr>
-                <td><?= $fila['fecha'] ?></td>
-                <td><?= $fila['hora'] ?></td>
-                <td><?= $fila['apellido'] ?></td>
-                <td><?= $fila['nombre'] ?></td>
-                <td><?= $fila['disciplina'] ?? 'Sin asignar' ?></td>
-                <td><?= $fila['clases_disponibles'] ?? '0' ?></td>
-                <td><?= $fila['fecha_vencimiento'] ?? 'Sin membresía' ?></td>
+                <td data-label="Fecha"><?= htmlspecialchars($fila['fecha']) ?></td>
+                <td data-label="Hora"><?= htmlspecialchars($fila['hora']) ?></td>
+                <td data-label="Apellido"><?= htmlspecialchars($fila['apellido']) ?></td>
+                <td data-label="Nombre"><?= htmlspecialchars($fila['nombre']) ?></td>
+                <td data-label="Disciplina"><?= htmlspecialchars($fila['disciplina']) ?></td>
+                <td data-label="Clases Restantes"><?= htmlspecialchars($fila['clases_disponibles'] ?? '0') ?></td>
+                <td data-label="Vencimiento"><?= htmlspecialchars($fila['fecha_vencimiento'] ?? '-') ?></td>
             </tr>
-        <?php } ?>
-    </table>
+        <?php endwhile; ?>
+    </tbody>
+</table>
+
 </body>
 </html>
