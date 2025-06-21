@@ -1,169 +1,100 @@
 <?php
 session_start();
-include 'conexion.php';
-include 'menu.php';
-
-$gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
-$resultado = $conexion->query("SELECT * FROM clientes WHERE gimnasio_id = $gimnasio_id");
 ?>
-
 <!DOCTYPE html>
 <html lang="es">
 <head>
-    <meta charset="UTF-8">
-    <title>Ver Clientes</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <style>
-        body {
-            margin: 0;
-            font-family: 'Segoe UI', sans-serif;
-            background-color: #111;
-            color: #f1f1f1;
-        }
-        .contenido {
-            margin-left: 260px;
-            padding: 20px;
-        }
-        h1 {
-            color: #f7d774;
-        }
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            background-color: #1a1a1a;
-            margin-top: 20px;
-        }
-        th, td {
-            padding: 12px;
-            border: 1px solid #333;
-            text-align: left;
-        }
-        th {
-            background-color: #222;
-            color: #f7d774;
-        }
-        tr:nth-child(even) {
-            background-color: #1f1f1f;
-        }
-        .action {
-            color: #f7d774;
-            margin-right: 10px;
-            text-decoration: none;
-            font-size: 1.2em;
-        }
-        .action:hover {
-            color: #fff;
-        }
-        @media (max-width: 768px) {
-            .contenido {
-                margin-left: 0;
-                padding: 10px;
-            }
-            table, thead, tbody, th, td, tr {
-                display: block;
-            }
-            th {
-                position: sticky;
-                top: 0;
-                background-color: #222;
-            }
-            td {
-                padding: 10px;
-                border: none;
-                border-bottom: 1px solid #333;
-                position: relative;
-                padding-left: 50%;
-            }
-            td:before {
-                position: absolute;
-                top: 10px;
-                left: 10px;
-                width: 45%;
-                white-space: nowrap;
-                font-weight: bold;
-            }
-        }
-    </style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Escaneo QR para Ingreso</title>
+  <style>
+    body {
+      background-color: #111;
+      color: gold;
+      font-family: Arial, sans-serif;
+      text-align: center;
+      margin: 0;
+      padding: 20px;
+    }
+    h1 {
+      margin-top: 20px;
+    }
+    #qr-reader {
+      width: 90%;
+      max-width: 400px;
+      margin: 20px auto;
+    }
+    #resultado {
+      margin-top: 20px;
+      font-size: 18px;
+      color: #0f0;
+    }
+    #acciones {
+      margin-top: 20px;
+    }
+    button {
+      margin: 10px;
+      padding: 10px 20px;
+      font-size: 16px;
+      border: none;
+      border-radius: 10px;
+      background-color: gold;
+      color: black;
+      cursor: pointer;
+    }
+  </style>
+  <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
 </head>
 <body>
-<div class="contenido">
-    <h1>Clientes Registrados</h1>
-    <table>
-        <thead>
-            <tr>
-                <th>Apellido</th>
-                <th>Nombre</th>
-                <th>DNI</th>
-                <th>Teléfono</th>
-                <th>Email</th>
-                <th>RFID</th>
-                <th>Vencimiento</th>
-                <th>Acciones</th>
-            </tr>
-        </thead>
-        <tbody>
-            <?php while($row = $resultado->fetch_assoc()): ?>
-            <tr>
-                <td><?= $row['apellido'] ?></td>
-                <td><?= $row['nombre'] ?></td>
-                <td><?= $row['dni'] ?></td>
-                <td><?= $row['telefono'] ?></td>
-                <td><?= $row['email'] ?></td>
-                <td><?= $row['rfid'] ?></td>
-                <td><?= $row['fecha_vencimiento'] ?></td>
-                <td>
-                    <a class="action" href="editar_cliente.php?id=<?= $row['id'] ?>">✏️</a>
-                    <a class="action" href="eliminar_cliente.php?id=<?= $row['id'] ?>" onclick="return confirm('¿Eliminar este cliente?')">🗑️</a>
-                </td>
-            </tr>
-            <?php endwhile; ?>
-        </tbody>
-    </table>
-</div>
-</body>
-</html>
+  <h1>📷 Escaneo QR para Ingreso</h1>
+  <div id="qr-reader"></div>
+  <div id="resultado"></div>
+  <div id="acciones" style="display: none;">
+    <button onclick="reanudarEscaneo()">Seguir Escaneando</button>
+    <button onclick="cerrarEscaner()">Cerrar</button>
+  </div>
 
-        .btn {
-            margin-top: 15px;
-            padding: 10px 20px;
-            background-color: gold;
-            color: black;
-            border: none;
-            font-size: 16px;
-            border-radius: 5px;
-            cursor: pointer;
+  <script>
+    let scanner = new Html5Qrcode("qr-reader");
+
+    function iniciarEscaner() {
+      Html5Qrcode.getCameras().then(cameras => {
+        if (cameras && cameras.length) {
+          scanner.start(
+            { facingMode: "environment" },
+            {
+              fps: 10,
+              qrbox: 250
+            },
+            qrCodeMessage => {
+              document.getElementById("resultado").innerText = `QR detectado: ${qrCodeMessage}`;
+              scanner.stop().then(() => {
+                document.getElementById("acciones").style.display = "block";
+              });
+            },
+            errorMessage => {}
+          ).catch(err => {
+            document.getElementById("resultado").innerText = `Error al iniciar: ${err}`;
+          });
         }
-    </style>
-    <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
-</head>
-<body>
-    <h1>📷 Escaneo QR para Ingreso</h1>
-    <div id="preview-container">
-        <div id="reader" width="300px"></div>
-    </div>
-    <div id="result"></div>
+      }).catch(err => {
+        document.getElementById("resultado").innerText = `No se detectaron cámaras: ${err}`;
+      });
+    }
 
-    <script>
-        function onScanSuccess(decodedText, decodedResult) {
-            document.getElementById('result').innerText = "DNI Detectado: " + decodedText;
+    function reanudarEscaneo() {
+      document.getElementById("acciones").style.display = "none";
+      document.getElementById("resultado").innerText = "";
+      iniciarEscaner();
+    }
 
-            fetch('registrar_asistencia_qr.php?dni=' + decodedText)
-                .then(response => response.text())
-                .then(data => {
-                    alert(data);
-                    if (confirm("¿Desea seguir escaneando?")) {
-                        html5QrcodeScanner.clear().then(_ => {
-                            html5QrcodeScanner.render(onScanSuccess);
-                        });
-                    } else {
-                        html5QrcodeScanner.clear();
-                    }
-                });
-        }
+    function cerrarEscaner() {
+      document.getElementById("qr-reader").innerHTML = "";
+      document.getElementById("resultado").innerText = "Escaneo finalizado.";
+      document.getElementById("acciones").style.display = "none";
+    }
 
-        const html5QrcodeScanner = new Html5QrcodeScanner(
-            "reader", { fps: 10, qrbox: 250 });
-        html5QrcodeScanner.render(onScanSuccess);
-    </script>
+    iniciarEscaner();
+  </script>
 </body>
 </html>
