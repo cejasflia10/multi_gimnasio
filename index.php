@@ -1,129 +1,183 @@
 <?php
-session_start();
-include 'conexion.php';
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+include("conexion.php");
 
-$gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
-$fecha_actual = date("Y-m-d");
+// Validación
+if (!isset($_SESSION['gimnasio_id'])) {
+    die("Acceso denegado.");
+}
+$gimnasio_id = $_SESSION['gimnasio_id'];
 
-function obtenerAsistenciasClientes($conexion, $gimnasio_id) {
-    $query = "SELECT c.apellido, c.nombre, a.fecha, a.hora
-              FROM asistencias_clientes a
-              INNER JOIN clientes c ON c.id = a.cliente_id
-              WHERE a.id_gimnasio = $gimnasio_id AND a.fecha = CURDATE()
-              ORDER BY a.fecha_hora DESC";
-    $resultado = $conexion->query($query);
-    return $resultado->fetch_all(MYSQLI_ASSOC);
+// Función total por fecha
+function getMonto($conexion, $tabla, $columnaFecha, $gimnasio_id, $periodo = 'DIA') {
+    $hoy = date('Y-m-d');
+    $inicioMes = date('Y-m-01');
+    $fechaFiltro = $periodo == 'DIA' ? $hoy : $inicioMes;
+
+    $stmt = $conexion->prepare("SELECT SUM(monto) as total FROM $tabla WHERE DATE($columnaFecha) >= ? AND gimnasio_id = ?");
+    $stmt->bind_param("si", $fechaFiltro, $gimnasio_id);
+    $stmt->execute();
+    $resultado = $stmt->get_result()->fetch_assoc();
+    return $resultado['total'] ?? 0;
 }
 
-function obtenerAsistenciasProfesores($conexion, $gimnasio_id, $fecha_actual) {
-    $query = "SELECT p.apellido, p.nombre, r.fecha_hora, r.tipo
-              FROM registro_profesores r
-              INNER JOIN profesores p ON p.id = r.profesor_id
-              WHERE r.gimnasio_id = $gimnasio_id AND DATE(r.fecha_hora) = '$fecha_actual'
-              ORDER BY r.fecha_hora DESC";
-    $resultado = $conexion->query($query);
-    return $resultado->fetch_all(MYSQLI_ASSOC);
+// Función cumpleaños
+function obtenerCumpleaños($conexion, $gimnasio_id) {
+    $hoy = date('m-d');
+    $sql = "SELECT nombre, apellido, fecha_nacimiento FROM clientes WHERE gimnasio_id = ? AND DATE_FORMAT(fecha_nacimiento, '%m-%d') >= ? ORDER BY DATE_FORMAT(fecha_nacimiento, '%m-%d') LIMIT 10";
+    $stmt = $conexion->prepare($sql);
+    $stmt->bind_param("is", $gimnasio_id, $hoy);
+    $stmt->execute();
+    return $stmt->get_result();
 }
 
-$asistencias_clientes = obtenerAsistenciasClientes($conexion, $gimnasio_id);
-$asistencias_profesores = obtenerAsistenciasProfesores($conexion, $gimnasio_id, $fecha_actual);
+// Función vencimientos
+function obtenerVencimientos($conexion, $gimnasio_id) {
+    $hoy = date('Y-m-d');
+    $diezDias = date('Y-m-d', strtotime('+10 days'));
+    $sql = "SELECT c.nombre, c.apellido, m.fecha_vencimiento 
+            FROM membresias m 
+            JOIN clientes c ON m.cliente_id = c.id 
+            WHERE m.fecha_vencimiento BETWEEN ? AND ? AND m.gimnasio_id = ? 
+            ORDER BY m.fecha_vencimiento ASC";
+    $stmt = $conexion->prepare($sql);
+    $stmt->bind_param("ssi", $hoy, $diezDias, $gimnasio_id);
+    $stmt->execute();
+    return $stmt->get_result();
+}
+
+// Función asistencias profesores
+function obtenerAsistenciasProfesores($conexion, $gimnasio_id, $fecha) {
+    $sql = "SELECT p.apellido, rp.ingreso, rp.salida
+            FROM registro_profesores rp
+            JOIN profesores p ON rp.profesor_id = p.id
+            WHERE DATE(rp.ingreso) = ? AND rp.gimnasio_id = ?";
+    $stmt = $conexion->prepare($sql);
+    $stmt->bind_param("si", $fecha, $gimnasio_id);
+    $stmt->execute();
+    return $stmt->get_result();
+}
+
+$pagosHoy = getMonto($conexion, 'pagos', 'fecha', $gimnasio_id, 'DIA');
+$pagosMes = getMonto($conexion, 'pagos', 'fecha', $gimnasio_id, 'MES');
+$ventasHoy = getMonto($conexion, 'ventas', 'fecha', $gimnasio_id, 'DIA');
+$ventasMes = getMonto($conexion, 'ventas', 'fecha', $gimnasio_id, 'MES');
+$cumples = obtenerCumpleaños($conexion, $gimnasio_id);
+$vencimientos = obtenerVencimientos($conexion, $gimnasio_id);
+$asistencias = obtenerAsistenciasProfesores($conexion, $gimnasio_id, date('Y-m-d'));
 ?>
 
-<?php include 'menu.php'; ?>
 <!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="UTF-8">
-  <title>Panel Principal - Fight Academy</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Panel - Fight Academy</title>
   <style>
     body {
-      background-color: #111;
-      color: #fff;
       font-family: Arial, sans-serif;
-      margin-left: 250px;
-      padding: 20px;
+      background-color: #111;
+      color: #f1f1f1;
+      margin: 0;
+      padding: 10px;
     }
+
+    h1, h2 {
+      color: gold;
+      margin-top: 20px;
+    }
+
+    .tarjetas {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      gap: 15px;
+    }
+
     .card {
-      background-color: #222;
-      border-radius: 10px;
+      flex: 1 1 calc(50% - 20px);
+      background: #222;
       padding: 15px;
-      margin-bottom: 15px;
-      box-shadow: 0 0 10px #000;
+      border-radius: 10px;
+      min-width: 180px;
+      box-shadow: 0 0 5px #000;
     }
-    h2 {
+
+    .card strong {
       color: gold;
     }
-    table {
-      width: 100%;
-      background-color: #333;
-      border-collapse: collapse;
+
+    ul {
+      list-style: none;
+      padding: 0;
     }
-    th, td {
-      border: 1px solid #444;
-      padding: 8px;
-      text-align: left;
-    }
-    th {
-      background-color: #555;
-    }
-    @media screen and (max-width: 768px) {
-      body {
-        margin-left: 0;
-        padding: 10px;
+
+    @media (max-width: 768px) {
+      .tarjetas {
+        flex-direction: column;
+      }
+      .card {
+        width: 100%;
       }
     }
   </style>
 </head>
 <body>
 
-<h2>Asistencias de Clientes - Hoy (<?php echo $fecha_actual; ?>)</h2>
-<div class="card">
-  <?php if (count($asistencias_clientes) > 0): ?>
-  <table>
-    <tr>
-      <th>Apellido</th>
-      <th>Nombre</th>
-      <th>Fecha</th>
-      <th>Hora</th>
-    </tr>
-    <?php foreach ($asistencias_clientes as $asistencia): ?>
-    <tr>
-      <td><?php echo $asistencia['apellido']; ?></td>
-      <td><?php echo $asistencia['nombre']; ?></td>
-      <td><?php echo $asistencia['fecha']; ?></td>
-      <td><?php echo $asistencia['hora']; ?></td>
-    </tr>
-    <?php endforeach; ?>
-  </table>
-  <?php else: ?>
-    <p>No hay asistencias de clientes hoy.</p>
-  <?php endif; ?>
-</div>
+  <h1>Bienvenido al Panel</h1>
 
-<h2>Asistencias de Profesores - Hoy (<?php echo $fecha_actual; ?>)</h2>
-<div class="card">
-  <?php if (count($asistencias_profesores) > 0): ?>
-  <table>
-    <tr>
-      <th>Apellido</th>
-      <th>Nombre</th>
-      <th>Fecha y Hora</th>
-      <th>Tipo</th>
-    </tr>
-    <?php foreach ($asistencias_profesores as $asistencia): ?>
-    <tr>
-      <td><?php echo $asistencia['apellido']; ?></td>
-      <td><?php echo $asistencia['nombre']; ?></td>
-      <td><?php echo $asistencia['fecha_hora']; ?></td>
-      <td><?php echo ucfirst($asistencia['tipo']); ?></td>
-    </tr>
-    <?php endforeach; ?>
-  </table>
-  <?php else: ?>
-    <p>No hay asistencias de profesores hoy.</p>
-  <?php endif; ?>
-</div>
+  <div class="tarjetas">
+    <div class="card">
+      <h2>Pagos del Día</h2>
+      <p><strong>$<?= number_format($pagosHoy, 0, '', '.') ?></strong></p>
+    </div>
+    <div class="card">
+      <h2>Pagos del Mes</h2>
+      <p><strong>$<?= number_format($pagosMes, 0, '', '.') ?></strong></p>
+    </div>
+    <div class="card">
+      <h2>Ventas del Día</h2>
+      <p><strong>$<?= number_format($ventasHoy, 0, '', '.') ?></strong></p>
+    </div>
+    <div class="card">
+      <h2>Ventas del Mes</h2>
+      <p><strong>$<?= number_format($ventasMes, 0, '', '.') ?></strong></p>
+    </div>
+  </div>
+
+  <h2>🎂 Próximos Cumpleaños</h2>
+  <ul>
+    <?php while($c = $cumples->fetch_assoc()): ?>
+      <li><?= $c['nombre'] . ' ' . $c['apellido'] . ' - ' . date('d/m', strtotime($c['fecha_nacimiento'])) ?></li>
+    <?php endwhile; ?>
+  </ul>
+
+  <h2>📆 Próximos Vencimientos</h2>
+  <ul>
+    <?php while($v = $vencimientos->fetch_assoc()): ?>
+      <li><?= $v['nombre'] . ' ' . $v['apellido'] . ' - Vence: ' . date('d/m', strtotime($v['fecha_vencimiento'])) ?></li>
+    <?php endwhile; ?>
+  </ul>
+
+  <h2>🧑‍🏫 Asistencias Profesores (Hoy)</h2>
+  <ul>
+    <?php while($a = $asistencias->fetch_assoc()): ?>
+      <li><?= $a['apellido'] ?> - Ingreso: <?= date('H:i', strtotime($a['ingreso'])) ?> 
+        <?php 
+          if ($a['salida']) {
+            $ingreso = new DateTime($a['ingreso']);
+            $salida = new DateTime($a['salida']);
+            $intervalo = $ingreso->diff($salida);
+            echo " / Salida: " . $salida->format('H:i') . " (Trabajó: " . $intervalo->format('%h:%I') . " hs)";
+          } else {
+            echo " / Aún presente";
+          }
+        ?>
+      </li>
+    <?php endwhile; ?>
+  </ul>
 
 </body>
 </html>
