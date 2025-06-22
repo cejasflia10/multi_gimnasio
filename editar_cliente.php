@@ -11,12 +11,19 @@ if (!isset($_GET['id'])) {
 }
 
 $id = $_GET['id'];
-$consulta = "SELECT * FROM clientes WHERE id = $id";
-$resultado = mysqli_query($conexion, $consulta);
-$cliente = mysqli_fetch_assoc($resultado);
+$cliente = mysqli_fetch_assoc(mysqli_query($conexion, "SELECT * FROM clientes WHERE id = $id"));
 if (!$cliente) {
     echo "<div class='error'>Cliente no encontrado.</div>";
     exit;
+}
+
+// Cargar disciplinas
+$disciplinas = mysqli_query($conexion, "SELECT * FROM disciplinas");
+
+// Si es admin, cargar gimnasios
+$es_admin = ($_SESSION['rol'] ?? '') === 'admin';
+if ($es_admin) {
+    $gimnasios = mysqli_query($conexion, "SELECT * FROM gimnasios");
 }
 ?>
 <!DOCTYPE html>
@@ -45,7 +52,7 @@ if (!$cliente) {
             margin-bottom: 20px;
             color: #f1c40f;
         }
-        input[type="text"], input[type="number"], input[type="date"], input[type="email"] {
+        input, select {
             width: 100%;
             padding: 10px;
             margin-top: 6px;
@@ -80,22 +87,47 @@ if (!$cliente) {
         <input type="hidden" name="id" value="<?= $cliente['id']; ?>">
         <label>Apellido:</label>
         <input type="text" name="apellido" value="<?= $cliente['apellido']; ?>" required>
+
         <label>Nombre:</label>
         <input type="text" name="nombre" value="<?= $cliente['nombre']; ?>" required>
+
         <label>DNI:</label>
         <input type="text" name="dni" value="<?= $cliente['dni']; ?>" required>
+
         <label>Fecha de nacimiento:</label>
         <input type="date" name="fecha_nacimiento" value="<?= $cliente['fecha_nacimiento']; ?>">
+
         <label>Domicilio:</label>
         <input type="text" name="domicilio" value="<?= $cliente['domicilio']; ?>">
+
         <label>Teléfono:</label>
         <input type="text" name="telefono" value="<?= $cliente['telefono']; ?>">
+
         <label>Email:</label>
         <input type="email" name="email" value="<?= $cliente['email']; ?>">
+
         <label>Disciplina:</label>
-        <input type="text" name="disciplina" value="<?= $cliente['disciplina']; ?>">
-        <label>Fecha de vencimiento del plan:</label>
-        <input type="date" name="fecha_vencimiento" value="<?= $cliente['fecha_vencimiento']; ?>">
+        <select name="disciplina" required>
+            <option value="">Seleccionar disciplina</option>
+            <?php while ($row = mysqli_fetch_assoc($disciplinas)): ?>
+                <option value="<?= $row['nombre']; ?>" <?= $row['nombre'] == $cliente['disciplina'] ? 'selected' : ''; ?>>
+                    <?= $row['nombre']; ?>
+                </option>
+            <?php endwhile; ?>
+        </select>
+
+        <?php if ($es_admin): ?>
+        <label>Gimnasio:</label>
+        <select name="gimnasio_id">
+            <option value="">Seleccionar gimnasio</option>
+            <?php while ($g = mysqli_fetch_assoc($gimnasios)): ?>
+                <option value="<?= $g['id']; ?>" <?= $g['id'] == $cliente['gimnasio_id'] ? 'selected' : ''; ?>>
+                    <?= $g['nombre']; ?>
+                </option>
+            <?php endwhile; ?>
+        </select>
+        <?php endif; ?>
+
         <button type="submit">Guardar Cambios</button>
     </form>
 </div>
