@@ -28,6 +28,7 @@ function obtenerCumpleanios($conexion, $gimnasio_id) {
     $mes = date('m');
     return $conexion->query("SELECT nombre, apellido, fecha_nacimiento FROM clientes WHERE MONTH(fecha_nacimiento) = $mes AND gimnasio_id = $gimnasio_id ORDER BY DAY(fecha_nacimiento)");
 }
+
 function obtenerVencimientos($conexion, $gimnasio_id) {
     $fecha_limite = date('Y-m-d', strtotime('+10 days'));
     return $conexion->query("SELECT c.nombre, c.apellido, m.fecha_vencimiento 
@@ -37,14 +38,16 @@ function obtenerVencimientos($conexion, $gimnasio_id) {
         AND m.id_gimnasio = $gimnasio_id 
         ORDER BY m.fecha_vencimiento");
 }
+
 function obtenerAsistenciasClientes($conexion, $gimnasio_id) {
     return $conexion->query("SELECT c.nombre, c.apellido, c.dni, c.disciplina, m.fecha_vencimiento, a.hora 
         FROM asistencias a 
         INNER JOIN clientes c ON a.cliente_id = c.id 
-        LEFT JOIN membresias m ON c.id = m.cliente_id 
+        LEFT JOIN membresias m ON m.cliente_id = c.id 
         WHERE a.fecha = CURDATE() AND c.gimnasio_id = $gimnasio_id 
         ORDER BY a.hora DESC");
 }
+
 function obtenerAsistenciasProfesores($conexion, $gimnasio_id) {
     return $conexion->query("SELECT p.apellido, r.fecha, r.hora_entrada, r.hora_salida 
         FROM registro_asistencias_profesores r 
