@@ -100,7 +100,7 @@ $resultado = $conexion->query($query);
                         echo "<a class='action' href='$qr_file' target='_blank' title='Ver QR'>📷</a>";
                         echo "<a class='action' href='$qr_file' download title='Descargar QR'>⬇️</a>";
                     } else {
-                        echo "<a class='action' href='generar_qr_individual.php?id={$row['id']}' onclick=\"return confirm('¿Generar QR para este cliente?')\">⚙️</a>";
+                        echo "<a class='action' href='generar_qr_individual.php?id={$row['id']}' title='Generar QR'>⚙️</a>";
                     }
                     ?>
                 </td>
