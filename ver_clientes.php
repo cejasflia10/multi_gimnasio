@@ -24,87 +24,26 @@ $resultado = $conexion->query($query);
     <title>Ver Clientes</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
-        body {
-            margin: 0;
-            font-family: 'Segoe UI', sans-serif;
-            background-color: #111;
-            color: #f1f1f1;
-        }
-        .contenido {
-            margin-left: 260px;
-            padding: 20px;
-        }
-        h1 {
-            color: #f7d774;
-            margin-bottom: 10px;
-        }
-        .volver-btn {
-            display: inline-block;
-            background-color: #f7d774;
-            color: #111;
-            padding: 10px 20px;
-            margin-bottom: 20px;
-            text-decoration: none;
-            border-radius: 5px;
-            font-weight: bold;
-        }
-        .volver-btn:hover {
-            background-color: #e5c100;
-        }
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            background-color: #1a1a1a;
-            margin-top: 10px;
-        }
-        th, td {
-            padding: 12px;
-            border: 1px solid #333;
-            text-align: left;
-        }
-        th {
-            background-color: #222;
-            color: #f7d774;
-        }
-        tr:nth-child(even) {
-            background-color: #1f1f1f;
-        }
-        .action {
-            color: #f7d774;
-            margin-right: 10px;
-            text-decoration: none;
-            font-size: 1.2em;
-        }
-        .action:hover {
-            color: #fff;
-        }
-
+        body { margin: 0; font-family: 'Segoe UI', sans-serif; background-color: #111; color: #f1f1f1; }
+        .contenido { margin-left: 260px; padding: 20px; }
+        h1 { color: #f7d774; margin-bottom: 10px; }
+        .volver-btn { background-color: #f7d774; color: #111; padding: 10px 20px; margin-bottom: 20px;
+                      text-decoration: none; border-radius: 5px; font-weight: bold; display: inline-block; }
+        .volver-btn:hover { background-color: #e5c100; }
+        table { width: 100%; border-collapse: collapse; background-color: #1a1a1a; margin-top: 10px; }
+        th, td { padding: 12px; border: 1px solid #333; text-align: left; }
+        th { background-color: #222; color: #f7d774; }
+        tr:nth-child(even) { background-color: #1f1f1f; }
+        .action { color: #f7d774; margin-right: 10px; text-decoration: none; font-size: 1.2em; }
+        .action:hover { color: #fff; }
         @media (max-width: 768px) {
-            .contenido {
-                margin-left: 0;
-                padding: 10px;
-            }
-            table, thead, tbody, th, td, tr {
-                display: block;
-            }
-            thead {
-                display: none;
-            }
-            td {
-                padding: 10px;
-                border: none;
-                border-bottom: 1px solid #333;
-                position: relative;
-                padding-left: 50%;
-            }
+            .contenido { margin-left: 0; padding: 10px; }
+            table, thead, tbody, th, td, tr { display: block; }
+            thead { display: none; }
+            td { padding: 10px; border: none; border-bottom: 1px solid #333; position: relative; padding-left: 50%; }
             td:before {
-                position: absolute;
-                top: 10px;
-                left: 10px;
-                width: 45%;
-                white-space: nowrap;
-                font-weight: bold;
-                color: #f7d774;
+                position: absolute; top: 10px; left: 10px; width: 45%; white-space: nowrap;
+                font-weight: bold; color: #f7d774;
             }
             td:nth-child(1):before { content: "Apellido"; }
             td:nth-child(2):before { content: "Nombre"; }
@@ -161,7 +100,7 @@ $resultado = $conexion->query($query);
                         echo "<a class='action' href='$qr_file' target='_blank' title='Ver QR'>📷</a>";
                         echo "<a class='action' href='$qr_file' download title='Descargar QR'>⬇️</a>";
                     } else {
-                        echo "❌";
+                        echo "<a class='action' href='generar_qr_individual.php?id={$row['id']}' onclick=\"return confirm('¿Generar QR para este cliente?')\">⚙️</a>";
                     }
                     ?>
                 </td>
