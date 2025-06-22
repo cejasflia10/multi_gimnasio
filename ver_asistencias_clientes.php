@@ -7,15 +7,20 @@ if (!$gimnasio_id) {
     die("Acceso denegado.");
 }
 
-// Consulta de asistencias de clientes
+// Fecha actual
+$mes = date('m');
+$anio = date('Y');
+
+// Consulta asistencias del mes actual para este gimnasio
 $sql = "SELECT a.id, c.nombre, c.apellido, c.disciplina, a.fecha, a.hora
         FROM asistencias a
         JOIN clientes c ON a.cliente_id = c.id
         WHERE a.gimnasio_id = ?
+        AND MONTH(a.fecha) = ? AND YEAR(a.fecha) = ?
         ORDER BY a.fecha DESC, a.hora DESC";
 
 $stmt = $conexion->prepare($sql);
-$stmt->bind_param("i", $gimnasio_id);
+$stmt->bind_param("iii", $gimnasio_id, $mes, $anio);
 $stmt->execute();
 $resultado = $stmt->get_result();
 ?>
@@ -25,7 +30,7 @@ $resultado = $stmt->get_result();
 <head>
     <meta charset='UTF-8'>
     <meta name='viewport' content='width=device-width, initial-scale=1'>
-    <title>Asistencias de Clientes</title>
+    <title>Asistencias del Mes</title>
     <style>
         body {
             background-color: #111;
@@ -48,7 +53,7 @@ $resultado = $stmt->get_result();
         }
         th, td {
             padding: 10px;
-            text-align: left;
+            text-align: center;
             border-bottom: 1px solid #444;
         }
         th {
@@ -79,7 +84,7 @@ $resultado = $stmt->get_result();
 </head>
 <body>
 
-<h2>Asistencias de Clientes</h2>
+<h2>Asistencias del Mes - <?php echo date('F Y'); ?></h2>
 
 <div class="tabla-contenedor">
     <table>
@@ -93,15 +98,19 @@ $resultado = $stmt->get_result();
             </tr>
         </thead>
         <tbody>
-            <?php while ($row = $resultado->fetch_assoc()) { ?>
-                <tr>
-                    <td><?php echo htmlspecialchars($row['nombre']); ?></td>
-                    <td><?php echo htmlspecialchars($row['apellido']); ?></td>
-                    <td><?php echo htmlspecialchars($row['disciplina']); ?></td>
-                    <td><?php echo htmlspecialchars($row['fecha']); ?></td>
-                    <td><?php echo htmlspecialchars($row['hora']); ?></td>
-                </tr>
-            <?php } ?>
+            <?php if ($resultado->num_rows > 0): ?>
+                <?php while ($row = $resultado->fetch_assoc()) { ?>
+                    <tr>
+                        <td><?php echo htmlspecialchars($row['nombre']); ?></td>
+                        <td><?php echo htmlspecialchars($row['apellido']); ?></td>
+                        <td><?php echo htmlspecialchars($row['disciplina']); ?></td>
+                        <td><?php echo htmlspecialchars($row['fecha']); ?></td>
+                        <td><?php echo htmlspecialchars($row['hora']); ?></td>
+                    </tr>
+                <?php } ?>
+            <?php else: ?>
+                <tr><td colspan="5">Sin asistencias registradas este mes.</td></tr>
+            <?php endif; ?>
         </tbody>
     </table>
 </div>
