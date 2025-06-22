@@ -14,9 +14,14 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
     $telefono = trim($_POST["telefono"]);
     $email = trim($_POST["email"]);
     $disciplina = trim($_POST["disciplina"]);
+    $gimnasio_id = intval($_POST["gimnasio_id"]); // ✅ Este campo estaba faltando
 
-    $stmt = $conexion->prepare("UPDATE clientes SET apellido = ?, nombre = ?, dni = ?, fecha_nacimiento = ?, domicilio = ?, telefono = ?, email = ?, disciplina = ? WHERE id = ?");
-    $stmt->bind_param("ssssssssi", $apellido, $nombre, $dni, $fecha_nacimiento, $domicilio, $telefono, $email, $disciplina, $id);
+    // ✅ Incluimos gimnasio_id en la consulta
+    $stmt = $conexion->prepare("UPDATE clientes 
+        SET apellido = ?, nombre = ?, dni = ?, fecha_nacimiento = ?, domicilio = ?, telefono = ?, email = ?, disciplina = ?, gimnasio_id = ?
+        WHERE id = ?");
+
+    $stmt->bind_param("ssssssssii", $apellido, $nombre, $dni, $fecha_nacimiento, $domicilio, $telefono, $email, $disciplina, $gimnasio_id, $id);
 
     if ($stmt->execute()) {
         echo "<script>alert('Cliente actualizado correctamente.'); window.location.href='ver_clientes.php';</script>";
