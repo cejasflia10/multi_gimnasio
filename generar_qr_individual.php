@@ -36,8 +36,8 @@ if (!file_exists($carpeta)) {
 
 $nombre_archivo = $carpeta . "/" . $apellido . "_" . $nombre . "_" . $dni . ".png";
 
-// ✅ CORREGIDO para PHP 8+
-QRcode::png($dni, $nombre_archivo, QR_ECLEVEL_L, 6, 2, false, 0xFFFFFF);
+// ✅ CORRECTO: solo los 4 primeros parámetros
+QRcode::png($dni, $nombre_archivo, QR_ECLEVEL_L, 6);
 
 echo "<script>alert('QR generado correctamente'); window.location.href='ver_clientes.php';</script>";
 ?>
