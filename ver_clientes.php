@@ -4,7 +4,18 @@ include 'conexion.php';
 include 'menu.php';
 
 $gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
-$resultado = $conexion->query("SELECT * FROM clientes WHERE gimnasio_id = $gimnasio_id");
+$rol = $_SESSION['rol'] ?? '';
+
+// Si es admin, ver todos. Si no, ver solo los de su gimnasio
+if ($rol === 'admin') {
+    $query = "SELECT clientes.*, gimnasios.nombre AS nombre_gimnasio FROM clientes 
+              LEFT JOIN gimnasios ON clientes.gimnasio_id = gimnasios.id";
+} else {
+    $query = "SELECT clientes.*, gimnasios.nombre AS nombre_gimnasio FROM clientes 
+              LEFT JOIN gimnasios ON clientes.gimnasio_id = gimnasios.id
+              WHERE gimnasio_id = $gimnasio_id";
+}
+$resultado = $conexion->query($query);
 ?>
 
 <!DOCTYPE html>
@@ -96,8 +107,11 @@ $resultado = $conexion->query("SELECT * FROM clientes WHERE gimnasio_id = $gimna
                 <th>DNI</th>
                 <th>Teléfono</th>
                 <th>Email</th>
-                <th>RFID</th>
+                <th>Disciplina</th>
                 <th>Vencimiento</th>
+                <?php if ($rol === 'admin'): ?>
+                    <th>Gimnasio</th>
+                <?php endif; ?>
                 <th>Acciones</th>
             </tr>
         </thead>
@@ -109,8 +123,11 @@ $resultado = $conexion->query("SELECT * FROM clientes WHERE gimnasio_id = $gimna
                 <td><?= $row['dni'] ?></td>
                 <td><?= $row['telefono'] ?></td>
                 <td><?= $row['email'] ?></td>
-                <td><?= $row['rfid'] ?></td>
+                <td><?= $row['disciplina'] ?></td>
                 <td><?= $row['fecha_vencimiento'] ?></td>
+                <?php if ($rol === 'admin'): ?>
+                    <td><?= $row['nombre_gimnasio'] ?></td>
+                <?php endif; ?>
                 <td>
                     <a class="action" href="editar_cliente.php?id=<?= $row['id'] ?>">✏️</a>
                     <a class="action" href="eliminar_cliente.php?id=<?= $row['id'] ?>" onclick="return confirm('¿Eliminar este cliente?')">🗑️</a>
