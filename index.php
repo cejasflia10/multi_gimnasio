@@ -1,7 +1,9 @@
 <?php
 include 'menu.php';
 include 'conexion.php';
-session_start();
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
 
 if (!isset($_SESSION['gimnasio_id'])) {
     die("Acceso denegado.");
