@@ -1,6 +1,7 @@
 <?php
 session_start();
 include 'conexion.php';
+require_once 'phpqrcode/qrlib.php'; // Asegúrate de tener esta librería instalada
 
 $gimnasio_id = $_SESSION['gimnasio_id'] ?? null;
 $rol = $_SESSION['rol'] ?? null;
@@ -191,13 +192,3 @@ function verificarDNI(dni) {
                 document.getElementById('mensajeDNI').style.display = 'none';
                 dniValido = true;
             }
-        });
-}
-
-function validarDNI() {
-    return dniValido;
-}
-</script>
-
-</body>
-</html>

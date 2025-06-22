@@ -1,6 +1,7 @@
 <?php
 session_start();
 include 'conexion.php';
+require 'phpqrcode/qrlib.php'; // Asegurate de tener esta librería instalada
 
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
     $apellido = trim($_POST["apellido"] ?? '');
@@ -12,17 +13,13 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     $telefono = trim($_POST["telefono"] ?? '');
     $email = trim($_POST["email"] ?? '');
     $disciplina = trim($_POST["disciplina"] ?? '');
-
-    // Gimnasio: lo toma del form si es admin, o de la sesión
     $gimnasio_id = $_POST["gimnasio_id"] ?? ($_SESSION["gimnasio_id"] ?? null);
 
-    // Validación de campos obligatorios
     if (!$apellido || !$nombre || !$dni || !$fecha_nacimiento || !$edad || !$gimnasio_id) {
         echo "<script>alert('Faltan datos obligatorios.'); window.history.back();</script>";
         exit;
     }
 
-    // Verificar si el DNI ya existe en ese gimnasio
     $stmt = $conexion->prepare("SELECT id FROM clientes WHERE dni = ? AND gimnasio_id = ?");
     $stmt->bind_param("si", $dni, $gimnasio_id);
     $stmt->execute();
@@ -34,7 +31,6 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     }
     $stmt->close();
 
-    // Insertar nuevo cliente
     $stmt = $conexion->prepare("INSERT INTO clientes 
         (apellido, nombre, dni, fecha_nacimiento, edad, domicilio, telefono, email, disciplina, gimnasio_id) 
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
@@ -43,6 +39,13 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         $apellido, $nombre, $dni, $fecha_nacimiento, $edad, $domicilio, $telefono, $email, $disciplina, $gimnasio_id);
 
     if ($stmt->execute()) {
+        // Generar código QR después de guardar el cliente
+        $nombre_archivo = "qr_clientes/" . $apellido . "_" . $nombre . "_" . $dni . ".png";
+        if (!file_exists("qr_clientes")) {
+            mkdir("qr_clientes", 0777, true);
+        }
+        QRcode::png($dni, $nombre_archivo, QR_ECLEVEL_L, 6);
+
         echo "<script>alert('Cliente agregado correctamente.'); window.location.href='ver_clientes.php';</script>";
     } else {
         echo "Error al agregar cliente: " . $stmt->error;
