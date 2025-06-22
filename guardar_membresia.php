@@ -11,6 +11,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $adicional_id = !empty($_POST['adicional_id']) ? $_POST['adicional_id'] : null;
     $otros_pagos = isset($_POST['otros_pagos']) && is_numeric($_POST['otros_pagos']) ? floatval($_POST['otros_pagos']) : 0;
     $metodo_pago = $_POST['metodo_pago'] ?? null;
+    $clases_disponibles = isset($_POST['clases_disponibles']) ? intval($_POST['clases_disponibles']) : 0;
+    $fecha_vencimiento = $_POST['fecha_vencimiento'] ?? date('Y-m-d', strtotime($fecha_inicio . ' +30 days'));
 
     // Validar campos obligatorios
     if (!$cliente_id || !$plan_id || !$metodo_pago) {
@@ -46,9 +48,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $total = -abs($total);
     }
 
-    // Calcular vencimiento: 30 días desde la fecha de inicio
-    $fecha_vencimiento = date('Y-m-d', strtotime($fecha_inicio . ' +30 days'));
-
     // Obtener gimnasio ID
     $gimnasio_id = $_SESSION['gimnasio_id'] ?? null;
     if (!$gimnasio_id) {
@@ -58,11 +57,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     // Insertar membresía
     $stmt = $conexion->prepare("INSERT INTO membresias 
-        (cliente_id, fecha_inicio, fecha_vencimiento, plan_id, adicional_id, otros_pagos, metodo_pago, total, gimnasio_id) 
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)");
-    $stmt->bind_param("issiiisdi", 
+        (cliente_id, fecha_inicio, fecha_vencimiento, plan_id, adicional_id, otros_pagos, metodo_pago, total, clases_disponibles, gimnasio_id) 
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+    $stmt->bind_param("issiiisdii", 
         $cliente_id, $fecha_inicio, $fecha_vencimiento, $plan_id, 
-        $adicional_id, $otros_pagos, $metodo_pago, $total, $gimnasio_id
+        $adicional_id, $otros_pagos, $metodo_pago, $total, $clases_disponibles, $gimnasio_id
     );
 
     if ($stmt->execute()) {
