@@ -32,7 +32,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
         $usuario = $_POST["usuario"];
         $clave = password_hash($_POST["clave"], PASSWORD_BCRYPT);
         $rol = "admin";
-        $stmt_user = $conexion->prepare("INSERT INTO usuarios (usuario, clave, rol, gimnasio_id) VALUES (?, ?, ?, ?)");
+        $stmt_user = $conexion->prepare("INSERT INTO usuarios (usuario, password, rol, gimnasio_id) VALUES (?, ?, ?, ?)");
         $stmt_user->bind_param("sssi", $usuario, $clave, $rol, $id);
         $stmt_user->execute();
     }
