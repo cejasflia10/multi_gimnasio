@@ -87,9 +87,6 @@ $resultado = $conexion->query($query);
             table, thead, tbody, th, td, tr {
                 display: block;
             }
-            table {
-                border: none;
-            }
             thead {
                 display: none;
             }
@@ -116,11 +113,12 @@ $resultado = $conexion->query($query);
             td:nth-child(5):before { content: "Email"; }
             td:nth-child(6):before { content: "Disciplina"; }
             td:nth-child(7):before { content: "Vencimiento"; }
+            td:nth-child(8):before { content: "QR"; }
             <?php if ($rol === 'admin'): ?>
-            td:nth-child(8):before { content: "Gimnasio"; }
-            td:nth-child(9):before { content: "Acciones"; }
+            td:nth-child(9):before { content: "Gimnasio"; }
+            td:nth-child(10):before { content: "Acciones"; }
             <?php else: ?>
-            td:nth-child(8):before { content: "Acciones"; }
+            td:nth-child(9):before { content: "Acciones"; }
             <?php endif; ?>
         }
     </style>
@@ -139,6 +137,7 @@ $resultado = $conexion->query($query);
                 <th>Email</th>
                 <th>Disciplina</th>
                 <th>Vencimiento</th>
+                <th>QR</th>
                 <?php if ($rol === 'admin'): ?>
                     <th>Gimnasio</th>
                 <?php endif; ?>
@@ -155,12 +154,23 @@ $resultado = $conexion->query($query);
                 <td><?= $row['email'] ?></td>
                 <td><?= $row['disciplina'] ?></td>
                 <td><?= $row['fecha_vencimiento'] ?></td>
+                <td>
+                    <?php
+                    $qr_file = "qr_clientes/" . $row['apellido'] . "_" . $row['nombre'] . "_" . $row['dni'] . ".png";
+                    if (file_exists($qr_file)) {
+                        echo "<a class='action' href='$qr_file' target='_blank' title='Ver QR'>📷</a>";
+                        echo "<a class='action' href='$qr_file' download title='Descargar QR'>⬇️</a>";
+                    } else {
+                        echo "❌";
+                    }
+                    ?>
+                </td>
                 <?php if ($rol === 'admin'): ?>
                     <td><?= $row['nombre_gimnasio'] ?></td>
                 <?php endif; ?>
                 <td>
-                    <a class="action" href="editar_cliente.php?id=<?= $row['id'] ?>">✏️</a>
-                    <a class="action" href="eliminar_cliente.php?id=<?= $row['id'] ?>" onclick="return confirm('¿Eliminar este cliente?')">🗑️</a>
+                    <a class="action" href="editar_cliente.php?id=<?= $row['id'] ?>" title="Editar">✏️</a>
+                    <a class="action" href="eliminar_cliente.php?id=<?= $row['id'] ?>" onclick="return confirm('¿Eliminar este cliente?')" title="Eliminar">🗑️</a>
                 </td>
             </tr>
             <?php endwhile; ?>
