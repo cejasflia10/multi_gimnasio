@@ -38,14 +38,12 @@ function obtenerVencimientos($conexion, $gimnasio_id) {
         ORDER BY m.fecha_vencimiento");
 }
 function obtenerAsistenciasClientes($conexion, $gimnasio_id) {
-    // ✅ Corrección importante: se asegura que `a.fecha` sea exactamente hoy
-    $query = "SELECT c.nombre, c.apellido, c.dni, c.disciplina, m.fecha_vencimiento, a.hora 
+    return $conexion->query("SELECT c.nombre, c.apellido, c.dni, c.disciplina, m.fecha_vencimiento, a.hora 
         FROM asistencias a 
         INNER JOIN clientes c ON a.cliente_id = c.id 
-        LEFT JOIN membresias m ON m.cliente_id = c.id 
+        LEFT JOIN membresias m ON c.id = m.cliente_id 
         WHERE a.fecha = CURDATE() AND c.gimnasio_id = $gimnasio_id 
-        ORDER BY a.hora DESC";
-    return $conexion->query($query);
+        ORDER BY a.hora DESC");
 }
 function obtenerAsistenciasProfesores($conexion, $gimnasio_id) {
     return $conexion->query("SELECT p.apellido, r.fecha, r.hora_entrada, r.hora_salida 
@@ -68,4 +66,133 @@ $clientes_dia = obtenerAsistenciasClientes($conexion, $gimnasio_id);
 $profesores_dia = obtenerAsistenciasProfesores($conexion, $gimnasio_id);
 ?>
 
-<!-- HTML igual al tuyo, conservado -->
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <title>Panel de Control</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <style>
+    body {
+        background-color: #111;
+        color: gold;
+        font-family: Arial, sans-serif;
+        margin: 0;
+        padding: 20px;
+        padding-left: 260px;
+        transition: padding-left 0.3s ease-in-out;
+    }
+    .panel {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 15px;
+        justify-content: center;
+    }
+    .card {
+        background: #222;
+        padding: 15px;
+        border-radius: 10px;
+        box-shadow: 0 0 10px #000;
+        width: 300px;
+        max-width: 90%;
+    }
+    h2 {
+        color: gold;
+        margin-top: 20px;
+    }
+    ul {
+        padding-left: 20px;
+    }
+    .tabla-responsive {
+        overflow-x: auto;
+        margin-bottom: 20px;
+    }
+    table {
+        width: 100%;
+        border-collapse: collapse;
+        background: #111;
+        min-width: 600px;
+    }
+    th, td {
+        border: 1px solid #333;
+        padding: 8px;
+        color: white;
+        text-align: left;
+    }
+    th {
+        background: #444;
+    }
+    @media (max-width: 768px) {
+        body {
+            padding-left: 10px !important;
+            padding-right: 10px;
+        }
+        .card {
+            width: 100%;
+        }
+        table {
+            min-width: 100%;
+            font-size: 14px;
+        }
+    }
+  </style>
+</head>
+<body>
+
+  <h2>Resumen Económico</h2>
+  <div class="panel">
+    <div class="card"><h3>Pagos del Día</h3><p>$<?= number_format($pagos_dia, 2, ',', '.') ?></p></div>
+    <div class="card"><h3>Pagos del Mes</h3><p>$<?= number_format($pagos_mes, 2, ',', '.') ?></p></div>
+    <div class="card"><h3>Ventas del Día</h3><p>$<?= number_format($ventas_dia, 2, ',', '.') ?></p></div>
+    <div class="card"><h3>Ventas del Mes</h3><p>$<?= number_format($ventas_mes, 2, ',', '.') ?></p></div>
+    <div class="card"><h3>Membresías del Día</h3><p>$<?= number_format($membresias_dia, 2, ',', '.') ?></p></div>
+    <div class="card"><h3>Membresías del Mes</h3><p>$<?= number_format($membresias_mes, 2, ',', '.') ?></p></div>
+  </div>
+
+  <h2>Ingresos del Día - Clientes</h2>
+  <div class="tabla-responsive">
+    <table>
+      <tr><th>Nombre</th><th>DNI</th><th>Disciplina</th><th>Vencimiento</th><th>Hora</th></tr>
+      <?php while ($c = $clientes_dia->fetch_assoc()): ?>
+      <tr>
+        <td><?= $c['nombre'] . ' ' . $c['apellido'] ?></td>
+        <td><?= $c['dni'] ?></td>
+        <td><?= $c['disciplina'] ?></td>
+        <td><?= $c['fecha_vencimiento'] ?></td>
+        <td><?= $c['hora'] ?></td>
+      </tr>
+      <?php endwhile; ?>
+    </table>
+  </div>
+
+  <h2>Ingresos del Día - Profesores</h2>
+  <div class="tabla-responsive">
+    <table>
+      <tr><th>Apellido</th><th>Fecha</th><th>Ingreso</th><th>Salida</th></tr>
+      <?php while ($p = $profesores_dia->fetch_assoc()): ?>
+      <tr>
+        <td><?= $p['apellido'] ?></td>
+        <td><?= $p['fecha'] ?></td>
+        <td><?= $p['hora_entrada'] ?></td>
+        <td><?= $p['hora_salida'] ?></td>
+      </tr>
+      <?php endwhile; ?>
+    </table>
+  </div>
+
+  <h2>Próximos Cumpleaños</h2>
+  <ul>
+    <?php while ($cumple = $cumples->fetch_assoc()): ?>
+      <li><?= $cumple['nombre'] . ' ' . $cumple['apellido'] ?> - <?= date('d/m', strtotime($cumple['fecha_nacimiento'])) ?></li>
+    <?php endwhile; ?>
+  </ul>
+
+  <h2>Próximos Vencimientos</h2>
+  <ul>
+    <?php while ($v = $vencimientos->fetch_assoc()): ?>
+      <li><?= $v['nombre'] . ' ' . $v['apellido'] ?> - <?= date('d/m/Y', strtotime($v['fecha_vencimiento'])) ?></li>
+    <?php endwhile; ?>
+  </ul>
+
+</body>
+</html>
