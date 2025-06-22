@@ -6,6 +6,9 @@ if (session_status() === PHP_SESSION_NONE) {
 
 <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet">
 
+<!-- BOTÓN ☰ PARA CELULARES -->
+<button class="menu-toggle" onclick="toggleMenu()">☰</button>
+
 <style>
 body {
     margin: 0;
@@ -17,6 +20,11 @@ body {
     background-color: #111;
     color: #fff;
     overflow-y: auto;
+    transition: transform 0.3s ease-in-out;
+    z-index: 999;
+}
+.sidebar.hidden {
+    transform: translateX(-100%);
 }
 .sidebar h2 {
     text-align: center;
@@ -54,9 +62,31 @@ body {
 .sidebar .active + .submenu {
     display: block;
 }
+.menu-toggle {
+    display: none;
+    position: fixed;
+    top: 10px;
+    left: 10px;
+    z-index: 1000;
+    background: #111;
+    color: gold;
+    border: none;
+    padding: 10px;
+    font-size: 24px;
+    cursor: pointer;
+}
+@media (max-width: 768px) {
+    .menu-toggle {
+        display: block;
+    }
+    body {
+        padding-left: 0 !important;
+    }
+}
 </style>
 
-<div class="sidebar">
+<!-- MENÚ LATERAL -->
+<div class="sidebar hidden" id="sidebar">
     <h2><i class="fas fa-dumbbell"></i> Fight Academy</h2>
 
     <a href="#" class="submenu-toggle"><i class="fas fa-users"></i> Clientes</a>
@@ -105,29 +135,4 @@ body {
         <a href="ver_usuarios.php">Ver Usuarios</a>
     </div>
 
-    <a href="#" class="submenu-toggle"><i class="fas fa-cogs"></i> Configuraciones</a>
-    <div class="submenu">
-        <a href="configuracion_general.php">General</a>
-        <a href="permisos.php">Permisos</a>
-    </div>
-
-    <a href="#" class="submenu-toggle"><i class="fas fa-shopping-cart"></i> Ventas</a>
-    <div class="submenu">
-        <a href="ventas_indumentaria.php">Indumentaria</a>
-        <a href="ventas_protecciones.php">Protecciones</a>
-        <a href="ventas_suplementos.php">Suplementos</a>
-        <a href="ver_ventas.php">Ver Ventas</a>
-    </div>
-
-</div>
-
-<script>
-    const toggles = document.querySelectorAll('.submenu-toggle');
-    toggles.forEach(toggle => {
-        toggle.addEventListener('click', () => {
-            toggle.classList.toggle('active');
-            const submenu = toggle.nextElementSibling;
-            submenu.style.display = submenu.style.display === 'block' ? 'none' : 'block';
-        });
-    });
-</script>
+    <a href="#" class="submenu-toggle"><i class="fa
