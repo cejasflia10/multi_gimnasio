@@ -1,47 +1,47 @@
 <?php
-ob_start();
 session_start();
 include 'conexion.php';
 require 'phpqrcode/qrlib.php';
 
 if (!isset($_GET['id']) || !is_numeric($_GET['id'])) {
-    die("ID inválido.");
+    die("Cliente no válido.");
 }
 
 $id = intval($_GET['id']);
-$gimnasio_id = $_SESSION['gimnasio_id'] ?? null;
+$gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
 $rol = $_SESSION['rol'] ?? '';
 
-if (!$gimnasio_id && $rol !== 'admin') {
-    die("Acceso denegado.");
+if ($rol === 'admin') {
+    $query = "SELECT * FROM clientes WHERE id = ?";
+    $stmt = $conexion->prepare($query);
+    $stmt->bind_param("i", $id);
+} else {
+    $query = "SELECT * FROM clientes WHERE id = ? AND gimnasio_id = ?";
+    $stmt = $conexion->prepare($query);
+    $stmt->bind_param("ii", $id, $gimnasio_id);
 }
 
-$query = ($rol === 'admin')
-    ? "SELECT * FROM clientes WHERE id = $id"
-    : "SELECT * FROM clientes WHERE id = $id AND gimnasio_id = $gimnasio_id";
+$stmt->execute();
+$result = $stmt->get_result();
 
-$resultado = $conexion->query($query);
-
-if (!$resultado || $resultado->num_rows === 0) {
+if ($result->num_rows === 0) {
     die("Cliente no encontrado o acceso denegado.");
 }
 
-$cliente = $resultado->fetch_assoc();
+$cliente = $result->fetch_assoc();
 $apellido = $cliente['apellido'];
 $nombre = $cliente['nombre'];
 $dni = $cliente['dni'];
 
-// Crear carpeta si no existe
 $carpeta = "qr_clientes";
 if (!file_exists($carpeta)) {
     mkdir($carpeta, 0777, true);
 }
 
-$nombre_archivo = "$carpeta/{$apellido}_{$nombre}_{$dni}.png";
+$archivo_qr = $carpeta . "/" . $apellido . "_" . $nombre . "_" . $dni . ".png";
 
-// Generar QR de forma segura
-QRcode::png($dni, $nombre_archivo, QR_ECLEVEL_L, 6);
+// ✅ GENERAR QR CORRECTAMENTE (corregido)
+QRcode::png($dni, $archivo_qr, QR_ECLEVEL_L, 6, 2, false, 0xFFFFFF, 0x000000);
 
-echo "<script>alert('QR generado correctamente'); window.location.href='ver_clientes.php';</script>";
-ob_end_flush();
+echo "<script>alert('QR generado correctamente.'); window.location.href='ver_clientes.php';</script>";
 ?>
