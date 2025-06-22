@@ -81,7 +81,7 @@ if (session_status() === PHP_SESSION_NONE) {
             <?php
             $planes = mysqli_query($conexion, "SELECT * FROM planes");
             while ($row = mysqli_fetch_assoc($planes)) {
-                echo "<option value='{$row['id']}' data-precio='{$row['precio']}' data-clases='{$row['clases']}'>{$row['nombre']} - {$row['precio']}</option>";
+                echo "<option value='{$row['id']}' data-precio='{$row['precio']}' data-clases='{$row['clases']}'>{$row['nombre']} - \${$row['precio']}</option>";
             }
             ?>
         </select>
@@ -92,7 +92,7 @@ if (session_status() === PHP_SESSION_NONE) {
             <?php
             $adicionales = mysqli_query($conexion, "SELECT * FROM planes_adicionales");
             while ($row = mysqli_fetch_assoc($adicionales)) {
-                echo "<option value='{$row['id']}' data-precio='{$row['precio']}'>{$row['nombre']} - {$row['precio']}</option>";
+                echo "<option value='{$row['id']}' data-precio='{$row['precio']}'>{$row['nombre']} - \${$row['precio']}</option>";
             }
             ?>
         </select>
@@ -100,14 +100,24 @@ if (session_status() === PHP_SESSION_NONE) {
         <label>Otros pagos:</label>
         <input type="number" step="0.01" name="otros_pagos" id="otros_pagos" placeholder="0.00">
 
+        <label>Método de pago:</label>
+        <select name="metodo_pago" required>
+            <option value="">Seleccione</option>
+            <option value="efectivo">Efectivo</option>
+            <option value="transferencia">Transferencia</option>
+            <option value="tarjeta débito">Tarjeta Débito</option>
+            <option value="tarjeta crédito">Tarjeta Crédito</option>
+            <option value="cuenta corriente">Cuenta Corriente</option>
+        </select>
+
         <label>Total a pagar:</label>
         <input type="text" name="total" id="total" readonly>
 
         <label>Clases disponibles:</label>
-        <input type="number" name="clases_disponibles" id="clases_disponibles" readonly>
+        <input type="number" id="clases_disponibles" readonly placeholder="Se carga según el plan">
 
         <label>Fecha de vencimiento:</label>
-        <input type="date" name="fecha_vencimiento" id="fecha_vencimiento" readonly>
+        <input type="date" id="fecha_vencimiento" readonly>
 
         <button type="submit">Registrar Membresía</button>
     </form>
@@ -116,47 +126,45 @@ if (session_status() === PHP_SESSION_NONE) {
 <script>
 // Buscar cliente automáticamente
 document.getElementById("buscar_cliente").addEventListener("input", function () {
-  const valor = this.value;
-  const clienteSelect = document.getElementById("cliente_id");
+    const valor = this.value;
+    const clienteSelect = document.getElementById("cliente_id");
 
-  if (valor.length >= 2) {
-    fetch("buscar_cliente.php?q=" + valor)
-      .then(res => res.json())
-      .then(data => {
-        clienteSelect.innerHTML = "<option value=''>Seleccione un cliente</option>";
-        data.forEach(cliente => {
-          const opt = document.createElement("option");
-          opt.value = cliente.id;
-          opt.textContent = cliente.text;
-          clienteSelect.appendChild(opt);
-        });
-      });
-  }
+    if (valor.length >= 2) {
+        fetch("buscar_cliente.php?q=" + valor)
+            .then(res => res.json())
+            .then(data => {
+                clienteSelect.innerHTML = "<option value=''>Seleccione un cliente</option>";
+                data.forEach(cliente => {
+                    const opt = document.createElement("option");
+                    opt.value = cliente.id;
+                    opt.textContent = cliente.text;
+                    clienteSelect.appendChild(opt);
+                });
+            });
+    }
 });
 
 // Calcular total, clases y vencimiento
 function actualizarTotal() {
-  const plan = document.querySelector("#plan_id option:checked");
-  const adicional = document.querySelector("#adicional_id option:checked");
-  const otrosPagos = parseFloat(document.getElementById("otros_pagos").value || 0);
+    const plan = document.querySelector("#plan_id option:checked");
+    const adicional = document.querySelector("#adicional_id option:checked");
+    const otrosPagos = parseFloat(document.getElementById("otros_pagos").value || 0);
 
-  const precioPlan = parseFloat(plan?.dataset.precio || 0);
-  const precioAdicional = parseFloat(adicional?.dataset.precio || 0);
-  const total = precioPlan + precioAdicional + otrosPagos;
-  document.getElementById("total").value = total.toFixed(2);
+    const precioPlan = parseFloat(plan?.dataset.precio || 0);
+    const precioAdicional = parseFloat(adicional?.dataset.precio || 0);
+    const total = precioPlan + precioAdicional + otrosPagos;
+    document.getElementById("total").value = total.toFixed(2);
 
-  // Cargar clases disponibles
-  const clases = plan?.dataset.clases || 0;
-  document.getElementById("clases_disponibles").value = clases;
+    const clases = plan?.dataset.clases || 0;
+    document.getElementById("clases_disponibles").value = clases;
 
-  // Calcular vencimiento = fecha inicio + 1 mes
-  const inicio = document.getElementById("fecha_inicio").value;
-  if (inicio) {
-    const fecha = new Date(inicio);
-    fecha.setMonth(fecha.getMonth() + 1);
-    const vencimiento = fecha.toISOString().split('T')[0];
-    document.getElementById("fecha_vencimiento").value = vencimiento;
-  }
+    const inicio = document.getElementById("fecha_inicio").value;
+    if (inicio) {
+        const fecha = new Date(inicio);
+        fecha.setMonth(fecha.getMonth() + 1);
+        const vencimiento = fecha.toISOString().split('T')[0];
+        document.getElementById("fecha_vencimiento").value = vencimiento;
+    }
 }
 
 document.getElementById("plan_id").addEventListener("change", actualizarTotal);
