@@ -1,200 +1,211 @@
 <?php
-if (session_status() === PHP_SESSION_NONE) {
-    session_start();
+include 'menu.php';
+include 'conexion.php';
+session_start();
+
+if (!isset($_SESSION['gimnasio_id'])) {
+    die("Acceso denegado.");
 }
-include("conexion.php");
 
-$gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
-$hoy = date("Y-m-d");
+$gimnasio_id = $_SESSION['gimnasio_id'];
 
-// Función general para sumar montos según tabla y campo de fecha
+// FUNCIONES DE CONSULTA
+
 function obtenerMonto($conexion, $tabla, $campo_fecha, $gimnasio_id, $modo = 'DIA') {
     $condicion = $modo === 'MES' ? "MONTH($campo_fecha) = MONTH(CURDATE())" : "$campo_fecha = CURDATE()";
 
-    // Ajuste: usar el campo correcto para cada tabla
-    if ($tabla === 'ventas') {
-        $columna = 'monto_total';
-    } elseif ($tabla === 'pagos') {
-        $columna = 'monto';
-    } else {
-        $columna = 'monto'; // valor por defecto
+    switch ($tabla) {
+        case 'ventas':
+            $columna = 'monto_total';
+            break;
+        case 'pagos':
+            $columna = 'monto';
+            break;
+        case 'membresias':
+            $columna = 'total';
+            break;
+        default:
+            $columna = 'monto';
     }
 
-    $query = "SELECT SUM($columna) AS total FROM $tabla WHERE $condicion AND gimnasio_id = $gimnasio_id";
+    $query = "SELECT SUM($columna) AS total FROM $tabla WHERE $condicion AND id_gimnasio = $gimnasio_id";
     $resultado = $conexion->query($query);
     $fila = $resultado->fetch_assoc();
     return $fila['total'] ?? 0;
 }
 
-
-// Cumpleaños del mes
-function obtenerCumpleaños($conexion, $gimnasio_id) {
+function obtenerCumpleanios($conexion, $gimnasio_id) {
     $mes = date('m');
-    $query = "SELECT nombre, apellido, fecha_nacimiento FROM clientes 
-              WHERE MONTH(fecha_nacimiento) = $mes AND gimnasio_id = $gimnasio_id";
+    $query = "SELECT nombre, apellido, fecha_nacimiento FROM clientes WHERE MONTH(fecha_nacimiento) = $mes AND gimnasio_id = $gimnasio_id ORDER BY DAY(fecha_nacimiento)";
     return $conexion->query($query);
 }
 
-// Vencimientos próximos (10 días)
 function obtenerVencimientos($conexion, $gimnasio_id) {
-    $query = "SELECT c.nombre, c.apellido, m.fecha_vencimiento FROM membresias m
-              JOIN clientes c ON c.id = m.cliente_id
-              WHERE m.fecha_vencimiento BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 10 DAY)
-              AND m.id_gimnasio = $gimnasio_id
-              ORDER BY m.fecha_vencimiento ASC";
+    $fecha_limite = date('Y-m-d', strtotime('+10 days'));
+    $query = "SELECT c.nombre, c.apellido, m.fecha_vencimiento 
+              FROM membresias m 
+              INNER JOIN clientes c ON m.cliente_id = c.id 
+              WHERE m.fecha_vencimiento BETWEEN CURDATE() AND '$fecha_limite' 
+              AND m.id_gimnasio = $gimnasio_id 
+              ORDER BY m.fecha_vencimiento";
     return $conexion->query($query);
 }
 
-// Asistencias del día
-function obtenerAsistenciasClientes($conexion, $gimnasio_id, $fecha) {
-    $query = "SELECT c.nombre, c.apellido, c.disciplina, r.hora FROM registros_clientes r
-              JOIN clientes c ON c.id = r.cliente_id
-              WHERE r.fecha = '$fecha' AND r.gimnasio_id = $gimnasio_id";
+function obtenerAsistenciasClientes($conexion, $gimnasio_id) {
+    $query = "SELECT c.nombre, c.apellido, c.dni, c.disciplina, m.fecha_vencimiento, a.hora 
+              FROM asistencias a 
+              INNER JOIN clientes c ON a.cliente_id = c.id 
+              LEFT JOIN membresias m ON c.id = m.cliente_id 
+              WHERE a.fecha = CURDATE() AND a.tipo = 'cliente' AND c.gimnasio_id = $gimnasio_id 
+              ORDER BY a.hora DESC";
     return $conexion->query($query);
 }
 
-// Ingresos profesores del día
-function obtenerIngresosProfesores($conexion, $gimnasio_id, $fecha) {
-    $query = "SELECT p.apellido, r.hora_entrada, r.hora_salida FROM registros_profesores r
-              JOIN profesores p ON p.id = r.profesor_id
-              WHERE r.fecha = '$fecha' AND r.gimnasio_id = $gimnasio_id";
+function obtenerAsistenciasProfesores($conexion, $gimnasio_id) {
+    $query = "SELECT p.apellido, r.fecha, r.hora_entrada, r.hora_salida 
+              FROM registro_asistencias_profesores r 
+              INNER JOIN profesores p ON r.profesor_id = p.id 
+              WHERE r.fecha = CURDATE() AND p.gimnasio_id = $gimnasio_id 
+              ORDER BY r.hora_entrada DESC";
     return $conexion->query($query);
 }
 
-// Monto total
-$pagos_dia = obtenerMonto($conexion, 'membresias', 'fecha_inicio', $gimnasio_id, 'DIA');
-$pagos_mes = obtenerMonto($conexion, 'membresias', 'fecha_inicio', $gimnasio_id, 'MES');
+// DATOS
+$pagos_dia = obtenerMonto($conexion, 'pagos', 'fecha', $gimnasio_id, 'DIA');
+$pagos_mes = obtenerMonto($conexion, 'pagos', 'fecha', $gimnasio_id, 'MES');
+
 $ventas_dia = obtenerMonto($conexion, 'ventas', 'fecha', $gimnasio_id, 'DIA');
 $ventas_mes = obtenerMonto($conexion, 'ventas', 'fecha', $gimnasio_id, 'MES');
 
+$membresias_dia = obtenerMonto($conexion, 'membresias', 'fecha_inicio', $gimnasio_id, 'DIA');
+$membresias_mes = obtenerMonto($conexion, 'membresias', 'fecha_inicio', $gimnasio_id, 'MES');
+
 $cumples = obtenerCumpleanios($conexion, $gimnasio_id);
 $vencimientos = obtenerVencimientos($conexion, $gimnasio_id);
-$asistencias = obtenerAsistenciasClientes($conexion, $gimnasio_id, $hoy);
-$ingresos_profesores = obtenerIngresosProfesores($conexion, $gimnasio_id, $hoy);
+$clientes_dia = obtenerAsistenciasClientes($conexion, $gimnasio_id);
+$profesores_dia = obtenerAsistenciasProfesores($conexion, $gimnasio_id);
 ?>
 
 <!DOCTYPE html>
 <html lang="es">
 <head>
-    <meta charset="UTF-8">
-    <title>Panel - Multi Gimnasio</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <style>
-        body {
-            background-color: #111;
-            color: #ffd700;
-            font-family: Arial, sans-serif;
-            margin: 0;
-            padding: 20px;
-        }
-        h2 {
-            color: #fff;
-            margin-top: 40px;
-        }
-        .tarjetas {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 20px;
-        }
-        .tarjeta {
-            background-color: #222;
-            padding: 20px;
-            border-radius: 10px;
-            flex: 1 1 200px;
-            text-align: center;
-            box-shadow: 0 0 10px #000;
-        }
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 15px;
-            background-color: #222;
-        }
-        th, td {
-            padding: 10px;
-            border: 1px solid #444;
-            color: #fff;
-            text-align: left;
-        }
-        th {
-            background-color: #333;
-        }
-        @media (max-width: 768px) {
-            .tarjetas {
-                flex-direction: column;
-            }
-        }
-    </style>
+  <meta charset="UTF-8" />
+  <title>Panel de Control</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <style>
+    body {
+        background-color: #111;
+        color: gold;
+        font-family: Arial, sans-serif;
+        margin: 0;
+        padding: 20px;
+    }
+    .panel {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: space-around;
+        gap: 15px;
+    }
+    .card {
+        background: #222;
+        padding: 15px;
+        border-radius: 10px;
+        box-shadow: 0 0 10px #000;
+        width: 300px;
+    }
+    h2 {
+        color: gold;
+        margin-top: 0;
+    }
+    ul {
+        padding-left: 20px;
+    }
+    table {
+        width: 100%;
+        border-collapse: collapse;
+        background: #111;
+    }
+    th, td {
+        border: 1px solid #333;
+        padding: 5px;
+        color: white;
+    }
+    th {
+        background: #444;
+    }
+    @media (max-width: 600px) {
+        .card { width: 100%; }
+    }
+  </style>
 </head>
 <body>
-    <h1>Bienvenido al Panel General</h1>
-
-    <div class="tarjetas">
-        <div class="tarjeta">
-            <h3>Pagos del Día</h3>
-            <p>$<?= number_format($pagos_dia, 2, ',', '.') ?></p>
-        </div>
-        <div class="tarjeta">
-            <h3>Pagos del Mes</h3>
-            <p>$<?= number_format($pagos_mes, 2, ',', '.') ?></p>
-        </div>
-        <div class="tarjeta">
-            <h3>Ventas del Día</h3>
-            <p>$<?= number_format($ventas_dia, 2, ',', '.') ?></p>
-        </div>
-        <div class="tarjeta">
-            <h3>Ventas del Mes</h3>
-            <p>$<?= number_format($ventas_mes, 2, ',', '.') ?></p>
-        </div>
+  <h2>Resumen Económico</h2>
+  <div class="panel">
+    <div class="card">
+      <h3>Pagos del Día</h3>
+      <p>$<?= number_format($pagos_dia, 2, ',', '.') ?></p>
     </div>
+    <div class="card">
+      <h3>Pagos del Mes</h3>
+      <p>$<?= number_format($pagos_mes, 2, ',', '.') ?></p>
+    </div>
+    <div class="card">
+      <h3>Ventas del Día</h3>
+      <p>$<?= number_format($ventas_dia, 2, ',', '.') ?></p>
+    </div>
+    <div class="card">
+      <h3>Ventas del Mes</h3>
+      <p>$<?= number_format($ventas_mes, 2, ',', '.') ?></p>
+    </div>
+    <div class="card">
+      <h3>Membresías del Día</h3>
+      <p>$<?= number_format($membresias_dia, 2, ',', '.') ?></p>
+    </div>
+    <div class="card">
+      <h3>Membresías del Mes</h3>
+      <p>$<?= number_format($membresias_mes, 2, ',', '.') ?></p>
+    </div>
+  </div>
 
-    <h2>Cumpleaños del Mes</h2>
-    <table>
-        <tr><th>Nombre</th><th>Apellido</th><th>Fecha</th></tr>
-        <?php while($c = $cumples->fetch_assoc()): ?>
-            <tr>
-                <td><?= $c['nombre'] ?></td>
-                <td><?= $c['apellido'] ?></td>
-                <td><?= date("d/m", strtotime($c['fecha_nacimiento'])) ?></td>
-            </tr>
-        <?php endwhile; ?>
-    </table>
+  <h2>Ingresos del Día - Clientes</h2>
+  <table>
+    <tr><th>Nombre</th><th>DNI</th><th>Disciplina</th><th>Vencimiento</th><th>Hora</th></tr>
+    <?php while ($c = $clientes_dia->fetch_assoc()): ?>
+      <tr>
+        <td><?= $c['nombre'] . ' ' . $c['apellido'] ?></td>
+        <td><?= $c['dni'] ?></td>
+        <td><?= $c['disciplina'] ?></td>
+        <td><?= $c['fecha_vencimiento'] ?></td>
+        <td><?= $c['hora'] ?></td>
+      </tr>
+    <?php endwhile; ?>
+  </table>
 
-    <h2>Próximos Vencimientos</h2>
-    <table>
-        <tr><th>Nombre</th><th>Apellido</th><th>Vencimiento</th></tr>
-        <?php while($v = $vencimientos->fetch_assoc()): ?>
-            <tr>
-                <td><?= $v['nombre'] ?></td>
-                <td><?= $v['apellido'] ?></td>
-                <td><?= date("d/m/Y", strtotime($v['fecha_vencimiento'])) ?></td>
-            </tr>
-        <?php endwhile; ?>
-    </table>
+  <h2>Ingresos del Día - Profesores</h2>
+  <table>
+    <tr><th>Apellido</th><th>Fecha</th><th>Ingreso</th><th>Salida</th></tr>
+    <?php while ($p = $profesores_dia->fetch_assoc()): ?>
+      <tr>
+        <td><?= $p['apellido'] ?></td>
+        <td><?= $p['fecha'] ?></td>
+        <td><?= $p['hora_entrada'] ?></td>
+        <td><?= $p['hora_salida'] ?></td>
+      </tr>
+    <?php endwhile; ?>
+  </table>
 
-    <h2>Asistencias del Día (Clientes)</h2>
-    <table>
-        <tr><th>Nombre</th><th>Apellido</th><th>Disciplina</th><th>Hora</th></tr>
-        <?php while($a = $asistencias->fetch_assoc()): ?>
-            <tr>
-                <td><?= $a['nombre'] ?></td>
-                <td><?= $a['apellido'] ?></td>
-                <td><?= $a['disciplina'] ?></td>
-                <td><?= $a['hora'] ?></td>
-            </tr>
-        <?php endwhile; ?>
-    </table>
+  <h2>Próximos Cumpleaños</h2>
+  <ul>
+    <?php while ($cumple = $cumples->fetch_assoc()): ?>
+      <li><?= $cumple['nombre'] . ' ' . $cumple['apellido'] ?> - <?= date('d/m', strtotime($cumple['fecha_nacimiento'])) ?></li>
+    <?php endwhile; ?>
+  </ul>
 
-    <h2>Ingresos Profesores del Día</h2>
-    <table>
-        <tr><th>Apellido</th><th>Entrada</th><th>Salida</th></tr>
-        <?php while($p = $ingresos_profesores->fetch_assoc()): ?>
-            <tr>
-                <td><?= $p['apellido'] ?></td>
-                <td><?= $p['hora_entrada'] ?></td>
-                <td><?= $p['hora_salida'] ?></td>
-            </tr>
-        <?php endwhile; ?>
-    </table>
+  <h2>Próximos Vencimientos</h2>
+  <ul>
+    <?php while ($v = $vencimientos->fetch_assoc()): ?>
+      <li><?= $v['nombre'] . ' ' . $v['apellido'] ?> - <?= date('d/m/Y', strtotime($v['fecha_vencimiento'])) ?></li>
+    <?php endwhile; ?>
+  </ul>
 </body>
 </html>
