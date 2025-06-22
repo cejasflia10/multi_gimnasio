@@ -135,4 +135,44 @@ body {
         <a href="ver_usuarios.php">Ver Usuarios</a>
     </div>
 
-    <a href="#" class="submenu-toggle"><i class="fa
+    <a href="#" class="submenu-toggle"><i class="fas fa-cogs"></i> Configuraciones</a>
+    <div class="submenu">
+        <a href="configuracion_general.php">General</a>
+        <a href="permisos.php">Permisos</a>
+    </div>
+
+    <a href="#" class="submenu-toggle"><i class="fas fa-shopping-cart"></i> Ventas</a>
+    <div class="submenu">
+        <a href="ventas_indumentaria.php">Indumentaria</a>
+        <a href="ventas_protecciones.php">Protecciones</a>
+        <a href="ventas_suplementos.php">Suplementos</a>
+        <a href="reporte_ventas.php">Reportes</a>
+    </div>
+</div>
+
+<!-- JS PARA TOGGLE -->
+<script>
+  // Mostrar u ocultar el menú lateral en celulares
+  function toggleMenu() {
+    const sidebar = document.getElementById("sidebar");
+    sidebar.classList.toggle("hidden");
+  }
+
+  // Mostrar y ocultar submenús
+  document.querySelectorAll(".submenu-toggle").forEach(toggle => {
+    toggle.addEventListener("click", function(e) {
+      e.preventDefault();
+      // Remover 'active' de otros
+      document.querySelectorAll(".submenu-toggle").forEach(el => el.classList.remove("active"));
+      // Cerrar todos los submenús
+      document.querySelectorAll(".submenu").forEach(menu => menu.style.display = "none");
+
+      // Activar el actual
+      toggle.classList.add("active");
+      const submenu = toggle.nextElementSibling;
+      if (submenu && submenu.classList.contains("submenu")) {
+        submenu.style.display = "block";
+      }
+    });
+  });
+</script>
