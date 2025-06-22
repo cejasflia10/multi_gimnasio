@@ -79,7 +79,8 @@ $profesores_dia = obtenerAsistenciasProfesores($conexion, $gimnasio_id);
         font-family: Arial, sans-serif;
         margin: 0;
         padding: 20px;
-        padding-left: 250px;
+        padding-left: 260px;
+        transition: padding-left 0.3s ease-in-out;
     }
     .panel {
         display: flex;
@@ -123,11 +124,15 @@ $profesores_dia = obtenerAsistenciasProfesores($conexion, $gimnasio_id);
     }
     @media (max-width: 768px) {
         body {
-            padding-left: 10px;
+            padding-left: 10px !important;
             padding-right: 10px;
         }
         .card {
             width: 100%;
+        }
+        table {
+            min-width: 100%;
+            font-size: 14px;
         }
     }
   </style>
