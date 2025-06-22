@@ -114,10 +114,14 @@ if (session_status() === PHP_SESSION_NONE) {
         <input type="text" name="total" id="total" readonly>
 
         <label>Clases disponibles:</label>
-        <input type="number" id="clases_disponibles" readonly placeholder="Se carga según el plan">
+        <input type="number" id="clases_disponibles_visible" readonly placeholder="Se carga según el plan">
+
+        <!-- Campos ocultos reales -->
+        <input type="hidden" name="clases_disponibles" id="clases_disponibles">
+        <input type="hidden" name="clases_restantes" id="clases_restantes">
 
         <label>Fecha de vencimiento:</label>
-        <input type="date" id="fecha_vencimiento" readonly>
+        <input type="date" name="fecha_vencimiento" id="fecha_vencimiento" readonly>
 
         <button type="submit">Registrar Membresía</button>
     </form>
@@ -155,8 +159,10 @@ function actualizarTotal() {
     const total = precioPlan + precioAdicional + otrosPagos;
     document.getElementById("total").value = total.toFixed(2);
 
-    const clases = plan?.dataset.clases || 0;
+    const clases = parseInt(plan?.dataset.clases || 0);
+    document.getElementById("clases_disponibles_visible").value = clases;
     document.getElementById("clases_disponibles").value = clases;
+    document.getElementById("clases_restantes").value = clases;
 
     const inicio = document.getElementById("fecha_inicio").value;
     if (inicio) {
