@@ -1,7 +1,7 @@
 <?php
 session_start();
 include 'conexion.php';
-require 'phpqrcode/qrlib.php'; // Asegurate de tener esta librería instalada
+require 'phpqrcode/qrlib.php';
 
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
     $apellido = trim($_POST["apellido"] ?? '');
@@ -39,10 +39,9 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         $apellido, $nombre, $dni, $fecha_nacimiento, $edad, $domicilio, $telefono, $email, $disciplina, $gimnasio_id);
 
     if ($stmt->execute()) {
-        // Generar código QR después de guardar el cliente
-        $nombre_archivo = "qr_clientes/" . $apellido . "_" . $nombre . "_" . $dni . ".png";
-        if (!file_exists("qr_clientes")) {
-            mkdir("qr_clientes", 0777, true);
+        $nombre_archivo = "qrs/" . $dni . ".png";
+        if (!file_exists("qrs")) {
+            mkdir("qrs", 0777, true);
         }
         QRcode::png($dni, $nombre_archivo, QR_ECLEVEL_L, 6);
 
