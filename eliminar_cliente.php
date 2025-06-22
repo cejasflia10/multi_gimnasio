@@ -2,29 +2,28 @@
 session_start();
 include 'conexion.php';
 
-if (isset($_GET['id']) && is_numeric($_GET['id'])) {
-    $id = (int) $_GET['id'];
+$gimnasio_id = $_SESSION['gimnasio_id'] ?? null;
+$rol = $_SESSION['rol'] ?? null;
 
-    // Validar que el cliente pertenezca al gimnasio del usuario logueado
-    $gimnasio_id = $_SESSION['gimnasio_id'] ?? null;
+if (!isset($_GET['id']) || (!$gimnasio_id && $rol != 'admin')) {
+    die("Acceso denegado.");
+}
 
-    if (!$gimnasio_id) {
-        echo "Acceso denegado.";
-        exit;
-    }
+$id = intval($_GET['id']);
 
+// Si es admin, puede eliminar sin restricción de gimnasio
+if ($rol === 'admin') {
+    $stmt = $conexion->prepare("DELETE FROM clientes WHERE id = ?");
+    $stmt->bind_param("i", $id);
+} else {
+    // Si no es admin, solo puede eliminar clientes de su propio gimnasio
     $stmt = $conexion->prepare("DELETE FROM clientes WHERE id = ? AND gimnasio_id = ?");
     $stmt->bind_param("ii", $id, $gimnasio_id);
-
-    if ($stmt->execute()) {
-        header("Location: ver_clientes.php");
-        exit();
-    } else {
-        echo "Error al eliminar cliente.";
-    }
-
-    $stmt->close();
-} else {
-    echo "ID de cliente no válido.";
 }
-?>
+
+if ($stmt->execute()) {
+    header("Location: ver_clientes.php");
+    exit();
+} else {
+    echo "Error al eliminar cliente.";
+}
