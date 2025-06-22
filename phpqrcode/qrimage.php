@@ -1,14 +1,11 @@
 <?php
-/**
- * PHP QR Code encoder
- * Image output of code using GD2
- */
-
+/* PHP QR Code encoder - Image output using GD2 */
 define('QR_IMAGE', true);
 
-class QRimage
-{
-    public static function png($frame, $back_color, $fore_color, $filename = false, $pixelPerPoint = 4, $outerFrame = 4, $saveandprint = false)
+class qrimage {
+
+    //----------------------------------------------------------------------  
+    public static function png($frame, $filename = false, $pixelPerPoint = 4, $outerFrame = 4, $saveandprint = false, $back_color = 0xFFFFFF, $fore_color = 0x000000)
     {
         $image = self::image($frame, $pixelPerPoint, $outerFrame, $back_color, $fore_color);
 
@@ -28,6 +25,7 @@ class QRimage
         imagedestroy($image);
     }
 
+    //----------------------------------------------------------------------  
     public static function jpg($frame, $filename = false, $pixelPerPoint = 8, $outerFrame = 4, $q = 85)
     {
         $image = self::image($frame, $pixelPerPoint, $outerFrame);
@@ -42,11 +40,12 @@ class QRimage
         imagedestroy($image);
     }
 
+    //----------------------------------------------------------------------  
     private static function image($frame, $pixelPerPoint = 4, $outerFrame = 4, $back_color = 0xFFFFFF, $fore_color = 0x000000)
     {
-        // Conversión segura a int
-        $pixelPerPoint = intval($pixelPerPoint);
-        $outerFrame = intval($outerFrame);
+        // Conversión segura
+        $pixelPerPoint = max(1, intval($pixelPerPoint));
+        $outerFrame = max(0, intval($outerFrame));
         $back_color = intval($back_color);
         $fore_color = intval($fore_color);
 
@@ -57,16 +56,18 @@ class QRimage
         $imgH = $h + 2 * $outerFrame;
 
         $base_image = imagecreate($imgW, $imgH);
+        if (!$base_image) {
+            die("Error: No se pudo crear la imagen base.");
+        }
 
-        // Foreground color
-        $r1 = ($fore_color & 0xFF0000) >> 16;
-        $g1 = ($fore_color & 0x00FF00) >> 8;
-        $b1 = ($fore_color & 0x0000FF);
+        // Colores
+        $r1 = ($fore_color >> 16) & 0xFF;
+        $g1 = ($fore_color >> 8) & 0xFF;
+        $b1 = $fore_color & 0xFF;
 
-        // Background color
-        $r2 = ($back_color & 0xFF0000) >> 16;
-        $g2 = ($back_color & 0x00FF00) >> 8;
-        $b2 = ($back_color & 0x0000FF);
+        $r2 = ($back_color >> 16) & 0xFF;
+        $g2 = ($back_color >> 8) & 0xFF;
+        $b2 = $back_color & 0xFF;
 
         $col[0] = imagecolorallocate($base_image, $r2, $g2, $b2);
         $col[1] = imagecolorallocate($base_image, $r1, $g1, $b1);
@@ -75,14 +76,24 @@ class QRimage
 
         for ($y = 0; $y < $h; $y++) {
             for ($x = 0; $x < $w; $x++) {
-                if ($frame[$y][$x] == '1') {
+                if ($frame[$y][$x] === '1') {
                     imagesetpixel($base_image, $x + $outerFrame, $y + $outerFrame, $col[1]);
                 }
             }
         }
 
         $target_image = imagecreatetruecolor($imgW * $pixelPerPoint, $imgH * $pixelPerPoint);
-        imagecopyresized($target_image, $base_image, 0, 0, 0, 0, $imgW * $pixelPerPoint, $imgH * $pixelPerPoint, $imgW, $imgH);
+        if (!$target_image) {
+            die("Error: No se pudo crear la imagen escalada.");
+        }
+
+        imagecopyresized(
+            $target_image, $base_image,
+            0, 0, 0, 0,
+            $imgW * $pixelPerPoint, $imgH * $pixelPerPoint,
+            $imgW, $imgH
+        );
+
         imagedestroy($base_image);
 
         return $target_image;
