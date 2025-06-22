@@ -2,7 +2,8 @@
 include 'conexion.php';
 include 'menu.php';
 
-$query = "SELECT u.id, u.usuario, u.rol, g.nombre AS gimnasio 
+$query = "SELECT u.id, u.usuario, u.rol, g.nombre AS gimnasio,
+                 u.clientes, u.membresias, u.profesores, u.ventas, u.asistencias
           FROM usuarios u 
           LEFT JOIN gimnasios g ON u.id_gimnasio = g.id";
 $resultado = $conexion->query($query);
@@ -31,6 +32,11 @@ $resultado = $conexion->query($query);
       <th>Usuario</th>
       <th>Rol</th>
       <th>Gimnasio</th>
+      <th>Clientes</th>
+      <th>Membresías</th>
+      <th>Profesores</th>
+      <th>Ventas</th>
+      <th>Asistencias</th>
       <th>Acciones</th>
     </tr>
     <?php while($row = $resultado->fetch_assoc()) { ?>
@@ -38,6 +44,11 @@ $resultado = $conexion->query($query);
         <td><?php echo htmlspecialchars($row['usuario']); ?></td>
         <td><?php echo htmlspecialchars($row['rol']); ?></td>
         <td><?php echo htmlspecialchars($row['gimnasio'] ?? 'Sin asignar'); ?></td>
+        <td><?= $row['clientes'] ? '✔️' : '❌' ?></td>
+        <td><?= $row['membresias'] ? '✔️' : '❌' ?></td>
+        <td><?= $row['profesores'] ? '✔️' : '❌' ?></td>
+        <td><?= $row['ventas'] ? '✔️' : '❌' ?></td>
+        <td><?= $row['asistencias'] ? '✔️' : '❌' ?></td>
         <td>
           <a class="boton" href="editar_usuario.php?id=<?php echo $row['id']; ?>">Editar</a>
           <a class="boton" href="eliminar_usuario.php?id=<?php echo $row['id']; ?>" onclick="return confirm('¿Seguro que deseas eliminar este usuario?')">Eliminar</a>
