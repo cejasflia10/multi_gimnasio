@@ -1,74 +1,71 @@
 <?php
-// Ocultar warnings deprecados
-error_reporting(E_ERROR | E_PARSE);
-require 'phpqrcode/qrlib.php';
+include 'conexion.php'; // Asegurate de tener la conexión funcionando
 
-$dni = $_GET['dni'] ?? 'SIN_DNI';
+$cliente = null;
 
-ob_start();
-QRcode::png($dni, null, QR_ECLEVEL_H, 10); // Nivel alto y tamaño grande
-$imageData = base64_encode(ob_get_contents());
-ob_end_clean();
+if (isset($_GET['dni']) && $_GET['dni'] != "") {
+    $dni = $_GET['dni'];
+    $stmt = $conexion->prepare("SELECT * FROM clientes WHERE dni = ?");
+    $stmt->bind_param("s", $dni);
+    $stmt->execute();
+    $resultado = $stmt->get_result();
+
+    if ($resultado->num_rows > 0) {
+        $cliente = $resultado->fetch_assoc();
+    } else {
+        $mensaje = "Cliente no encontrado.";
+    }
+}
 ?>
 
 <!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="UTF-8">
-  <title>QR generado</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <style>
-    body {
-      background-color: #111;
-      color: #f1f1f1;
-      font-family: 'Segoe UI', sans-serif;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      min-height: 100vh;
-      padding: 20px;
-      text-align: center;
-    }
-    h1 {
-      color: #f7d774;
-      margin-bottom: 20px;
-    }
-    .qr {
-      background-color: #fff;
-      padding: 30px;
-      border-radius: 10px;
-      box-shadow: 0 0 20px #000;
-      margin-bottom: 30px;
-    }
-    .qr img {
-      width: 280px;
-      height: 280px;
-    }
-    a {
-      color: #f7d774;
-      font-size: 18px;
-      text-decoration: none;
-      border: 1px solid #f7d774;
-      padding: 10px 20px;
-      border-radius: 5px;
-      transition: 0.3s;
-    }
-    a:hover {
-      background-color: #f7d774;
-      color: #111;
-    }
-  </style>
+    <meta charset="UTF-8">
+    <title>Generar QR de Cliente</title>
+    <style>
+        body {
+            background-color: #111;
+            color: #f1f1f1;
+            font-family: Arial, sans-serif;
+            padding: 20px;
+        }
+
+        input, button {
+            padding: 10px;
+            margin: 5px;
+        }
+
+        .resultado {
+            margin-top: 20px;
+        }
+
+        a {
+            color: #ffc107;
+            font-weight: bold;
+        }
+    </style>
 </head>
 <body>
 
-  <h1>QR generado</h1>
+<h2>Buscar Cliente por DNI para generar QR</h2>
 
-  <div class="qr">
-    <img src="data:image/png;base64,<?= $imageData ?>" alt="QR generado">
-  </div>
+<form method="GET" action="">
+    <input type="text" name="dni" placeholder="Ingrese DNI" required>
+    <button type="submit">Buscar</button>
+</form>
 
-  <a href="formulario_qr.php">Volver</a>
+<?php if (isset($mensaje)) echo "<p style='color: red;'>$mensaje</p>"; ?>
+
+<?php if ($cliente): ?>
+    <div class="resultado">
+        <h3>Cliente encontrado:</h3>
+        <p><strong>Nombre:</strong> <?= $cliente['nombre'] ?> <?= $cliente['apellido'] ?></p>
+        <p><strong>DNI:</strong> <?= $cliente['dni'] ?></p>
+
+        <a href="generar_qr.php?dni=<?= $cliente['dni'] ?>" target="_blank">➡ Generar código QR</a>
+    </div>
+<?php endif; ?>
 
 </body>
 </html>
