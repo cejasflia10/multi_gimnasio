@@ -2,7 +2,6 @@
 include 'conexion.php';
 $planes = $conexion->query("SELECT id, nombre, precio FROM planes");
 $adicionales = $conexion->query("SELECT id, nombre, precio FROM planes_adicionales");
-$disciplinas = $conexion->query("SELECT id, nombre FROM disciplinas");
 $profesores = $conexion->query("SELECT id, apellido, nombre FROM profesores");
 ?>
 
@@ -81,14 +80,6 @@ $profesores = $conexion->query("SELECT id, apellido, nombre FROM profesores");
       <?php endwhile; ?>
     </select>
 
-    <label for="disciplina_id">Disciplina:</label>
-    <select name="disciplina_id" id="disciplina_id" required>
-      <option value="">-- Seleccionar disciplina --</option>
-      <?php while($d = $disciplinas->fetch_assoc()): ?>
-        <option value="<?= $d['id'] ?>"><?= $d['nombre'] ?></option>
-      <?php endwhile; ?>
-    </select>
-
     <label for="profesor_id">Asignar Profesor (opcional):</label>
     <select name="profesor_id" id="profesor_id">
       <option value="">-- Sin profesor --</option>
@@ -100,28 +91,25 @@ $profesores = $conexion->query("SELECT id, apellido, nombre FROM profesores");
     <label for="fecha_inicio">Fecha de inicio:</label>
     <input type="date" name="fecha_inicio" value="<?= date('Y-m-d') ?>">
 
-    <label for="pago1">Método de Pago 1:</label>
-    <select name="pago1">
+    <label for="metodo_pago">Método de Pago:</label>
+    <select name="metodo_pago" required>
+      <option value="">-- Seleccionar --</option>
       <option value="efectivo">Efectivo</option>
       <option value="transferencia">Transferencia</option>
       <option value="tarjeta">Tarjeta</option>
-      <option value="otro">Otro</option>
+      <option value="cuenta corriente">Cuenta Corriente</option>
     </select>
 
-    <label for="monto1">Monto $:</label>
-    <input type="number" name="monto1" step="0.01" placeholder="Ej: 5000">
-
-    <label for="pago2">Método de Pago 2 (opcional):</label>
-    <select name="pago2">
+    <label for="otros_pagos_tipo">Otros Pagos (opcional):</label>
+    <select name="otros_pagos_tipo" id="otros_pagos_tipo" onchange="mostrarMontoOtrosPagos()">
       <option value="">-- Ninguno --</option>
       <option value="efectivo">Efectivo</option>
       <option value="transferencia">Transferencia</option>
       <option value="tarjeta">Tarjeta</option>
-      <option value="otro">Otro</option>
     </select>
 
-    <label for="monto2">Monto $:</label>
-    <input type="number" name="monto2" step="0.01" placeholder="Ej: 5000">
+    <label for="monto_otros_pagos">Monto Otros Pagos:</label>
+    <input type="number" step="0.01" name="monto_otros_pagos" id="monto_otros_pagos" disabled>
 
     <div id="total">Total: $0</div>
 
@@ -129,12 +117,29 @@ $profesores = $conexion->query("SELECT id, apellido, nombre FROM profesores");
   </form>
 
   <script>
-    function calcularTotal() {
-      const plan = document.querySelector('#plan_id option:checked').dataset.precio || 0;
-      const adicional = document.querySelector('#adicional_id option:checked').dataset.precio || 0;
-      const total = parseFloat(plan) + parseFloat(adicional);
-      document.getElementById('total').textContent = 'Total: $' + total;
+    function mostrarMontoOtrosPagos() {
+      const select = document.getElementById("otros_pagos_tipo");
+      const monto = document.getElementById("monto_otros_pagos");
+      if (select.value !== "") {
+        monto.disabled = false;
+        monto.required = true;
+      } else {
+        monto.disabled = true;
+        monto.value = "";
+        monto.required = false;
+      }
+      calcularTotal();
     }
+
+    function calcularTotal() {
+      const plan = parseFloat(document.querySelector('#plan_id option:checked')?.dataset.precio || 0);
+      const adicional = parseFloat(document.querySelector('#adicional_id option:checked')?.dataset.precio || 0);
+      const otros = parseFloat(document.getElementById('monto_otros_pagos').value || 0);
+      const total = plan + adicional + otros;
+      document.getElementById('total').textContent = 'Total: $' + total.toFixed(2);
+    }
+
+    document.getElementById("monto_otros_pagos").addEventListener("input", calcularTotal);
 
     document.getElementById("dni_buscar").addEventListener("input", function() {
       const valor = this.value;
@@ -147,8 +152,7 @@ $profesores = $conexion->query("SELECT id, apellido, nombre FROM profesores");
               document.getElementById("cliente_id").value = cliente.id;
               document.getElementById("resultado_cliente").innerHTML = 
                 `<strong>Cliente:</strong> ${cliente.apellido}, ${cliente.nombre}<br>
-                 <strong>DNI:</strong> ${cliente.dni}<br>
-                 <strong>Disciplina:</strong> ${cliente.disciplina || 'No asignada'}`;
+                 <strong>DNI:</strong> ${cliente.dni}`;
             } else {
               document.getElementById("cliente_id").value = "";
               document.getElementById("resultado_cliente").innerHTML = "Cliente no encontrado";
