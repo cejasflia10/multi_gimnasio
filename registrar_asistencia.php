@@ -1,10 +1,15 @@
 <?php
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
 include 'conexion.php';
 date_default_timezone_set('America/Argentina/Buenos_Aires');
 $hoy = date('Y-m-d');
 
 $advertencia = "";
 $activar_sonido = false;
+
+$gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
 
 // PROCESAR ingreso automático
 if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST["codigo"])) {
@@ -30,8 +35,12 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST["codigo"])) {
             $vencimiento = $membresia['fecha_vencimiento'];
 
             if ($clases > 0 && $vencimiento >= $hoy) {
-                // Registrar asistencia
-                $conexion->query("INSERT INTO asistencias (cliente_id, fecha_hora) VALUES ($id_cliente, NOW())");
+                // Registrar asistencia con id_gimnasio
+                $stmt3 = $conexion->prepare("INSERT INTO asistencias (cliente_id, fecha_hora, id_gimnasio) VALUES (?, NOW(), ?)");
+                $stmt3->bind_param("ii", $id_cliente, $gimnasio_id);
+                $stmt3->execute();
+
+                // Descontar clase
                 $conexion->query("UPDATE membresias SET clases_restantes = clases_restantes - 1 WHERE cliente_id = $id_cliente AND fecha_vencimiento = '$vencimiento'");
             } else {
                 $advertencia = "¡Membresía vencida o sin clases disponibles!";
@@ -52,7 +61,7 @@ $profesores = $conexion->query("
     SELECT p.apellido, ap.hora_entrada, ap.hora_salida
     FROM asistencias_profesor ap
     JOIN profesores p ON ap.profesor_id = p.id
-    WHERE ap.fecha = '$hoy'
+    WHERE ap.fecha = '$hoy' AND ap.gimnasio_id = $gimnasio_id
 ");
 
 $clientes = $conexion->query("
@@ -60,7 +69,7 @@ $clientes = $conexion->query("
     FROM asistencias a
     JOIN clientes c ON a.cliente_id = c.id
     JOIN membresias m ON m.cliente_id = c.id
-    WHERE DATE(a.fecha_hora) = '$hoy'
+    WHERE DATE(a.fecha_hora) = '$hoy' AND a.id_gimnasio = $gimnasio_id
 ");
 ?>
 
