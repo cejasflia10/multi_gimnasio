@@ -1,4 +1,4 @@
-<?php
++<?php
 session_start();
 include 'conexion.php';
 require 'phpqrcode/qrlib.php';
@@ -36,7 +36,7 @@ if (!file_exists($carpeta)) {
 
 $nombre_archivo = $carpeta . "/" . $apellido . "_" . $nombre . "_" . $dni . ".png";
 
-// ✅ CORRECTO: solo los 4 primeros parámetros
+// ✅ Corrección aquí
 QRcode::png($dni, $nombre_archivo, QR_ECLEVEL_L, 6);
 
 echo "<script>alert('QR generado correctamente'); window.location.href='ver_clientes.php';</script>";
