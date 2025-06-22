@@ -49,8 +49,8 @@ $adicionales = $conexion->query("SELECT id, nombre, precio FROM planes_adicional
     <label>Fecha de Vencimiento:</label>
     <input type="date" name="fecha_vencimiento" id="fecha_vencimiento" readonly>
 
-    <!-- Campo oculto de clases -->
-    <input type="hidden" name="clases_disponibles" id="clases_disponibles">
+    <label>Días disponibles (clases):</label>
+    <input type="number" name="clases_disponibles" id="clases_disponibles" readonly>
 
     <label>Planes Adicionales:</label>
     <select name="adicional_id" id="adicional_id">
@@ -110,11 +110,11 @@ function actualizarTotal() {
   const total = precioPlan + precioAdicional + otrosPagos;
   document.getElementById("total").value = total.toFixed(2);
 
-  // Clases disponibles desde plan
+  // Cargar clases disponibles
   const clases = plan?.dataset.clases || 0;
   document.getElementById("clases_disponibles").value = clases;
 
-  // Fecha de vencimiento = inicio + 1 mes
+  // Calcular vencimiento = fecha inicio + 1 mes
   const inicio = document.getElementById("fecha_inicio").value;
   if (inicio) {
     const fecha = new Date(inicio);
