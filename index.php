@@ -58,10 +58,11 @@ function obtenerAsistenciasClientes($conexion, $gimnasio_id) {
               FROM asistencias a 
               INNER JOIN clientes c ON a.cliente_id = c.id 
               LEFT JOIN membresias m ON c.id = m.cliente_id 
-              WHERE a.fecha = CURDATE() AND a.tipo = 'cliente' AND c.gimnasio_id = $gimnasio_id 
+              WHERE a.fecha = CURDATE() AND c.gimnasio_id = $gimnasio_id 
               ORDER BY a.hora DESC";
     return $conexion->query($query);
 }
+
 
 function obtenerAsistenciasProfesores($conexion, $gimnasio_id) {
     $query = "SELECT p.apellido, r.fecha, r.hora_entrada, r.hora_salida 
