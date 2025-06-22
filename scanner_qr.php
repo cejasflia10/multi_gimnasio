@@ -1,20 +1,36 @@
 <?php
 if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST["dni"])) {
     include("conexion.php");
-    $dni = trim($_POST["dni"]);
+    session_start();
 
-    $sql = "SELECT c.nombre, c.apellido, m.clases_disponibles, m.fecha_vencimiento
+    $dni = trim($_POST["dni"]);
+    $gimnasio_id = $_SESSION['gimnasio_id'] ?? 1;
+
+    $sql = "SELECT c.id, c.nombre, c.apellido, m.id AS membresia_id, m.clases_disponibles, m.fecha_vencimiento
             FROM clientes c
             LEFT JOIN membresias m ON c.id = m.cliente_id
-            WHERE c.dni = ? ORDER BY m.fecha_inicio DESC LIMIT 1";
+            WHERE c.dni = ? AND c.gimnasio_id = ?
+            ORDER BY m.fecha_inicio DESC LIMIT 1";
 
     $stmt = $conexion->prepare($sql);
-    $stmt->bind_param("s", $dni);
+    $stmt->bind_param("si", $dni, $gimnasio_id);
     $stmt->execute();
-    $stmt->bind_result($nombre, $apellido, $clases, $vencimiento);
+    $stmt->bind_result($cliente_id, $nombre, $apellido, $membresia_id, $clases, $vencimiento);
 
     if ($stmt->fetch()) {
-        $mensaje = "✅ $nombre $apellido\n📅 Vencimiento: $vencimiento\n🎯 Clases: $clases";
+        if ($clases > 0 && $vencimiento >= date('Y-m-d')) {
+            // Descontar clase
+            $conexion->query("UPDATE membresias SET clases_disponibles = clases_disponibles - 1 
+                              WHERE id = $membresia_id");
+
+            // Registrar asistencia
+            $conexion->query("INSERT INTO asistencias (cliente_id, fecha, hora, gimnasio_id)
+                              VALUES ($cliente_id, CURDATE(), CURTIME(), $gimnasio_id)");
+
+            $mensaje = "✅ $nombre $apellido\n📅 Vencimiento: $vencimiento\n🎯 Clases restantes: " . ($clases - 1);
+        } else {
+            $mensaje = "⚠️ Membresía vencida o sin clases.\n📅 Vencimiento: $vencimiento\n🎯 Clases: $clases";
+        }
     } else {
         $mensaje = "❌ Cliente no encontrado.";
     }
