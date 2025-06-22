@@ -1,5 +1,5 @@
 <?php
-/*
+/*cambio forzado para git detecte el archivo
  * PHP QR Code encoder
  *
  * Image output of code using GD2
