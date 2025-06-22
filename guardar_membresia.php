@@ -1,36 +1,67 @@
 <?php
-session_start();
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
 include 'conexion.php';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $cliente_id = $_POST['cliente_id'];
-    $fecha_inicio = $_POST['fecha_inicio'];
-    $fecha_vencimiento = $_POST['fecha_vencimiento'];
-    $clases_disponibles = $_POST['clases_disponibles'];
-    $plan_id = $_POST['plan_id'];
-
-    // Plan adicional puede quedar vacío
+    $cliente_id = $_POST['cliente_id'] ?? null;
+    $plan_id = $_POST['plan_id'] ?? null;
+    $fecha_inicio = $_POST['fecha_inicio'] ?? date('Y-m-d');
     $adicional_id = !empty($_POST['adicional_id']) ? $_POST['adicional_id'] : null;
+    $otros_pagos = isset($_POST['otros_pagos']) && is_numeric($_POST['otros_pagos']) ? floatval($_POST['otros_pagos']) : 0;
+    $metodo_pago = $_POST['metodo_pago'] ?? null;
 
-    // Otros pagos puede quedar vacío o 0
-    $otros_pagos = isset($_POST['otros_pagos']) && is_numeric($_POST['otros_pagos']) ? $_POST['otros_pagos'] : 0;
+    // Validar campos obligatorios
+    if (!$cliente_id || !$plan_id || !$metodo_pago) {
+        echo "<script>alert('Faltan campos obligatorios.'); history.back();</script>";
+        exit;
+    }
 
-    $metodo_pago = $_POST['metodo_pago'];
-    $total = floatval($_POST['total_pagar']);
+    // Obtener datos del plan
+    $stmt_plan = $conexion->prepare("SELECT precio FROM planes WHERE id = ?");
+    $stmt_plan->bind_param("i", $plan_id);
+    $stmt_plan->execute();
+    $res_plan = $stmt_plan->get_result();
+    $plan = $res_plan->fetch_assoc();
+    $precio_plan = $plan['precio'] ?? 0;
+    $stmt_plan->close();
+
+    // Obtener precio adicional si se seleccionó
+    $precio_adicional = 0;
+    if ($adicional_id) {
+        $stmt_add = $conexion->prepare("SELECT precio FROM planes_adicionales WHERE id = ?");
+        $stmt_add->bind_param("i", $adicional_id);
+        $stmt_add->execute();
+        $res_add = $stmt_add->get_result();
+        $add = $res_add->fetch_assoc();
+        $precio_adicional = $add['precio'] ?? 0;
+        $stmt_add->close();
+    }
+
+    $total = $precio_plan + $precio_adicional + $otros_pagos;
 
     // Si es cuenta corriente, registrar como saldo negativo
-    if ($metodo_pago === 'Cuenta Corriente') {
+    if (strtolower($metodo_pago) === 'cuenta corriente') {
         $total = -abs($total);
     }
 
-    $gimnasio_id = $_SESSION['gimnasio_id'];
+    // Calcular vencimiento: 30 días desde la fecha de inicio
+    $fecha_vencimiento = date('Y-m-d', strtotime($fecha_inicio . ' +30 days'));
 
+    // Obtener gimnasio ID
+    $gimnasio_id = $_SESSION['gimnasio_id'] ?? null;
+    if (!$gimnasio_id) {
+        echo "<script>alert('Sesión no válida.'); window.location.href='index.php';</script>";
+        exit;
+    }
+
+    // Insertar membresía
     $stmt = $conexion->prepare("INSERT INTO membresias 
-        (cliente_id, fecha_inicio, fecha_vencimiento, clases_disponibles, plan_id, adicional_id, otros_pagos, metodo_pago, total, gimnasio_id) 
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
-
-    $stmt->bind_param("issiiiisdi", 
-        $cliente_id, $fecha_inicio, $fecha_vencimiento, $clases_disponibles, $plan_id, 
+        (cliente_id, fecha_inicio, fecha_vencimiento, plan_id, adicional_id, otros_pagos, metodo_pago, total, gimnasio_id) 
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)");
+    $stmt->bind_param("issiiisdi", 
+        $cliente_id, $fecha_inicio, $fecha_vencimiento, $plan_id, 
         $adicional_id, $otros_pagos, $metodo_pago, $total, $gimnasio_id
     );
 
