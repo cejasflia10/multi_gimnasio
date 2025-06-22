@@ -11,10 +11,10 @@ if (!isset($_SESSION['gimnasio_id'])) {
 $gimnasio_id = $_SESSION['gimnasio_id'];
 $hoy = date('Y-m-d');
 
-// Consulta de asistencias del día por gimnasio
+// Consulta de asistencias del día por gimnasio (usando tabla correcta)
 $query = "
 SELECT c.apellido, c.nombre, a.fecha, a.hora
-FROM asistencias_clientes a
+FROM asistencias a
 INNER JOIN clientes c ON c.id = a.cliente_id
 WHERE a.id_gimnasio = $gimnasio_id AND a.fecha = '$hoy'
 ORDER BY a.hora DESC
