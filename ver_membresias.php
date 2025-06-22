@@ -7,7 +7,7 @@ if (!$gimnasio_id) {
     die("Acceso denegado.");
 }
 
-$sql = "SELECT m.id, c.nombre, c.apellido, m.fecha_inicio, m.fecha_vencimiento, m.clases_disponibles, m.total 
+$sql = "SELECT m.id, c.nombre, c.apellido, m.fecha_inicio, m.fecha_vencimiento, m.total 
         FROM membresias m
         JOIN clientes c ON m.cliente_id = c.id
         WHERE m.gimnasio_id = $gimnasio_id
@@ -100,7 +100,6 @@ $resultado = $conexion->query($sql);
                 <th>Apellido</th>
                 <th>Fecha Inicio</th>
                 <th>Fecha Vencimiento</th>
-                <th>Clases</th>
                 <th>Total</th>
                 <th>Acciones</th>
             </tr>
@@ -108,15 +107,14 @@ $resultado = $conexion->query($sql);
         <tbody>
             <?php while ($row = $resultado->fetch_assoc()) { ?>
                 <tr>
-                    <td><?php echo htmlspecialchars($row['nombre']); ?></td>
-                    <td><?php echo htmlspecialchars($row['apellido']); ?></td>
-                    <td><?php echo htmlspecialchars($row['fecha_inicio']); ?></td>
-                    <td><?php echo htmlspecialchars($row['fecha_vencimiento']); ?></td>
-                    <td><?php echo $row['clases_disponibles']; ?></td>
-                    <td>$<?php echo number_format($row['total'], 2, ',', '.'); ?></td>
+                    <td><?= htmlspecialchars($row['nombre']) ?></td>
+                    <td><?= htmlspecialchars($row['apellido']) ?></td>
+                    <td><?= htmlspecialchars($row['fecha_inicio']) ?></td>
+                    <td><?= htmlspecialchars($row['fecha_vencimiento']) ?></td>
+                    <td>$<?= number_format($row['total'], 2, ',', '.') ?></td>
                     <td>
-                        <a class="boton" href="editar_membresia.php?id=<?php echo $row['id']; ?>">Editar</a>
-                        <a class="boton" href="eliminar_membresia.php?id=<?php echo $row['id']; ?>" onclick="return confirm('¿Eliminar esta membresía?')">Eliminar</a>
+                        <a class="boton" href="editar_membresia.php?id=<?= $row['id'] ?>">Editar</a>
+                        <a class="boton" href="eliminar_membresia.php?id=<?= $row['id'] ?>" onclick="return confirm('¿Eliminar esta membresía?')">Eliminar</a>
                     </td>
                 </tr>
             <?php } ?>
