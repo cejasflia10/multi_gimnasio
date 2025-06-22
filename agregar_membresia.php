@@ -6,7 +6,7 @@ include "conexion.php";
 
 $gimnasio_id = $_SESSION['gimnasio_id'] ?? 1;
 
-$planes = $conexion->query("SELECT id, nombre, precio FROM planes WHERE gimnasio_id = $gimnasio_id");
+$planes = $conexion->query("SELECT id, nombre, precio, clases FROM planes WHERE gimnasio_id = $gimnasio_id");
 $adicionales = $conexion->query("SELECT id, nombre, precio FROM planes_adicionales WHERE gimnasio_id = $gimnasio_id");
 ?>
 
@@ -37,7 +37,9 @@ $adicionales = $conexion->query("SELECT id, nombre, precio FROM planes_adicional
     <select name="plan_id" id="plan_id" required>
       <option value="">Seleccione un plan</option>
       <?php while($p = $planes->fetch_assoc()): ?>
-        <option value="<?= $p['id'] ?>" data-precio="<?= $p['precio'] ?>" data-clases="8"><?= $p['nombre'] ?> - $<?= number_format($p['precio'], 2) ?></option>
+        <option value="<?= $p['id'] ?>" data-precio="<?= $p['precio'] ?>" data-clases="<?= $p['clases'] ?>">
+          <?= $p['nombre'] ?> - $<?= number_format($p['precio'], 2) ?>
+        </option>
       <?php endwhile; ?>
     </select>
 
@@ -47,8 +49,8 @@ $adicionales = $conexion->query("SELECT id, nombre, precio FROM planes_adicional
     <label>Fecha de Vencimiento:</label>
     <input type="date" name="fecha_vencimiento" id="fecha_vencimiento" readonly>
 
-    <label>Clases Disponibles:</label>
-    <input type="number" name="clases" id="clases" readonly>
+    <!-- Campo oculto de clases -->
+    <input type="hidden" name="clases_disponibles" id="clases_disponibles">
 
     <label>Planes Adicionales:</label>
     <select name="adicional_id" id="adicional_id">
@@ -62,14 +64,14 @@ $adicionales = $conexion->query("SELECT id, nombre, precio FROM planes_adicional
     <input type="number" name="otros_pagos" id="otros_pagos" value="0">
 
     <label>Método de Pago:</label>
-    <select name="metodo_pago">
+    <select name="metodo_pago" required>
       <option value="Efectivo">Efectivo</option>
       <option value="Transferencia">Transferencia</option>
       <option value="Cuenta Corriente">Cuenta Corriente</option>
     </select>
 
     <label>Total a Pagar:</label>
-    <input type="number" name="total" id="total" readonly>
+    <input type="number" name="total_pagar" id="total" readonly>
 
     <button class="btn">Guardar</button>
     <a href="index.php" class="btn" style="margin-top:10px; background:#333; color:gold;">Volver al Panel</a>
@@ -97,7 +99,7 @@ document.getElementById("buscar_cliente").addEventListener("input", function () 
   }
 });
 
-// Calcular total
+// Calcular total, clases y vencimiento
 function actualizarTotal() {
   const plan = document.querySelector("#plan_id option:checked");
   const adicional = document.querySelector("#adicional_id option:checked");
@@ -105,14 +107,14 @@ function actualizarTotal() {
 
   const precioPlan = parseFloat(plan?.dataset.precio || 0);
   const precioAdicional = parseFloat(adicional?.dataset.precio || 0);
-
   const total = precioPlan + precioAdicional + otrosPagos;
   document.getElementById("total").value = total.toFixed(2);
 
-  // Clases (simulado 8 por ahora, puede venir de la BD)
-  document.getElementById("clases").value = plan?.dataset.clases || 8;
+  // Clases disponibles desde plan
+  const clases = plan?.dataset.clases || 0;
+  document.getElementById("clases_disponibles").value = clases;
 
-  // Calcular fecha vencimiento = fecha_inicio + 1 mes
+  // Fecha de vencimiento = inicio + 1 mes
   const inicio = document.getElementById("fecha_inicio").value;
   if (inicio) {
     const fecha = new Date(inicio);
@@ -122,7 +124,6 @@ function actualizarTotal() {
   }
 }
 
-// Escuchar cambios
 document.getElementById("plan_id").addEventListener("change", actualizarTotal);
 document.getElementById("adicional_id").addEventListener("change", actualizarTotal);
 document.getElementById("otros_pagos").addEventListener("input", actualizarTotal);
