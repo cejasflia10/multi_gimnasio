@@ -91,16 +91,16 @@ $profesores_dia = obtenerAsistenciasProfesores($conexion, $gimnasio_id);
         background: #222;
         padding: 15px;
         border-radius: 10px;
-        box-shadow: 0 0 10px gold;
+        box-shadow: 0 0 10px #000;
         width: 300px;
         max-width: 90%;
-        text-align: center;
     }
     h2 {
         color: gold;
-        margin-top: 30px;
-        border-bottom: 1px solid gold;
-        padding-bottom: 5px;
+        margin-top: 20px;
+    }
+    ul {
+        padding-left: 20px;
     }
     .tabla-responsive {
         overflow-x: auto;
@@ -121,12 +121,6 @@ $profesores_dia = obtenerAsistenciasProfesores($conexion, $gimnasio_id);
     th {
         background: #444;
     }
-    ul {
-        padding-left: 20px;
-    }
-    li {
-        margin-bottom: 5px;
-    }
     @media (max-width: 768px) {
         body {
             padding-left: 10px;
@@ -135,16 +129,12 @@ $profesores_dia = obtenerAsistenciasProfesores($conexion, $gimnasio_id);
         .card {
             width: 100%;
         }
-        table {
-            min-width: 100%;
-            font-size: 14px;
-        }
     }
   </style>
 </head>
 <body>
 
-  <h2>📊 Resumen Económico</h2>
+  <h2>Resumen Económico</h2>
   <div class="panel">
     <div class="card"><h3>Pagos del Día</h3><p>$<?= number_format($pagos_dia, 2, ',', '.') ?></p></div>
     <div class="card"><h3>Pagos del Mes</h3><p>$<?= number_format($pagos_mes, 2, ',', '.') ?></p></div>
@@ -154,7 +144,7 @@ $profesores_dia = obtenerAsistenciasProfesores($conexion, $gimnasio_id);
     <div class="card"><h3>Membresías del Mes</h3><p>$<?= number_format($membresias_mes, 2, ',', '.') ?></p></div>
   </div>
 
-  <h2>👥 Ingresos del Día - Clientes</h2>
+  <h2>Ingresos del Día - Clientes</h2>
   <div class="tabla-responsive">
     <table>
       <tr><th>Nombre</th><th>DNI</th><th>Disciplina</th><th>Vencimiento</th><th>Hora</th></tr>
@@ -163,21 +153,21 @@ $profesores_dia = obtenerAsistenciasProfesores($conexion, $gimnasio_id);
         <td><?= $c['nombre'] . ' ' . $c['apellido'] ?></td>
         <td><?= $c['dni'] ?></td>
         <td><?= $c['disciplina'] ?></td>
-        <td><?= date('d/m/Y', strtotime($c['fecha_vencimiento'])) ?></td>
+        <td><?= $c['fecha_vencimiento'] ?></td>
         <td><?= $c['hora'] ?></td>
       </tr>
       <?php endwhile; ?>
     </table>
   </div>
 
-  <h2>🧑‍🏫 Ingresos del Día - Profesores</h2>
+  <h2>Ingresos del Día - Profesores</h2>
   <div class="tabla-responsive">
     <table>
       <tr><th>Apellido</th><th>Fecha</th><th>Ingreso</th><th>Salida</th></tr>
       <?php while ($p = $profesores_dia->fetch_assoc()): ?>
       <tr>
         <td><?= $p['apellido'] ?></td>
-        <td><?= date('d/m/Y', strtotime($p['fecha'])) ?></td>
+        <td><?= $p['fecha'] ?></td>
         <td><?= $p['hora_entrada'] ?></td>
         <td><?= $p['hora_salida'] ?></td>
       </tr>
@@ -185,14 +175,14 @@ $profesores_dia = obtenerAsistenciasProfesores($conexion, $gimnasio_id);
     </table>
   </div>
 
-  <h2>🎂 Próximos Cumpleaños</h2>
+  <h2>Próximos Cumpleaños</h2>
   <ul>
     <?php while ($cumple = $cumples->fetch_assoc()): ?>
       <li><?= $cumple['nombre'] . ' ' . $cumple['apellido'] ?> - <?= date('d/m', strtotime($cumple['fecha_nacimiento'])) ?></li>
     <?php endwhile; ?>
   </ul>
 
-  <h2>📅 Próximos Vencimientos</h2>
+  <h2>Próximos Vencimientos</h2>
   <ul>
     <?php while ($v = $vencimientos->fetch_assoc()): ?>
       <li><?= $v['nombre'] . ' ' . $v['apellido'] ?> - <?= date('d/m/Y', strtotime($v['fecha_vencimiento'])) ?></li>
