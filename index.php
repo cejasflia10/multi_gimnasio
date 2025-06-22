@@ -10,14 +10,25 @@ $hoy = date("Y-m-d");
 // Función general para sumar montos según tabla y campo de fecha
 function obtenerMonto($conexion, $tabla, $campo_fecha, $gimnasio_id, $modo = 'DIA') {
     $condicion = $modo === 'MES' ? "MONTH($campo_fecha) = MONTH(CURDATE())" : "$campo_fecha = CURDATE()";
-    $query = "SELECT SUM(total) AS total FROM $tabla WHERE $condicion AND gimnasio_id = $gimnasio_id";
+
+    // Ajuste: usar el campo correcto para cada tabla
+    if ($tabla === 'ventas') {
+        $columna = 'monto_total';
+    } elseif ($tabla === 'pagos') {
+        $columna = 'monto';
+    } else {
+        $columna = 'monto'; // valor por defecto
+    }
+
+    $query = "SELECT SUM($columna) AS total FROM $tabla WHERE $condicion AND gimnasio_id = $gimnasio_id";
     $resultado = $conexion->query($query);
     $fila = $resultado->fetch_assoc();
     return $fila['total'] ?? 0;
 }
 
+
 // Cumpleaños del mes
-function obtenerCumpleanios($conexion, $gimnasio_id) {
+function obtenerCumpleaños($conexion, $gimnasio_id) {
     $mes = date('m');
     $query = "SELECT nombre, apellido, fecha_nacimiento FROM clientes 
               WHERE MONTH(fecha_nacimiento) = $mes AND gimnasio_id = $gimnasio_id";
