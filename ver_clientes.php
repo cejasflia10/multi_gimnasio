@@ -16,11 +16,12 @@ if ($rol === 'admin') {
 }
 $resultado = $conexion->query($query);
 ?>
+
 <!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>Clientes Registrados</title>
+    <title>Ver Clientes</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
         body {
@@ -78,34 +79,14 @@ $resultado = $conexion->query($query);
             color: #fff;
         }
 
-        @media screen and (max-width: 768px) {
-            .contenido {
-                margin-left: 0;
-                padding: 10px;
-            }
-            table, thead, tbody, th, td, tr {
-                display: block;
-            }
-            thead {
-                display: none;
-            }
-            tr {
-                margin-bottom: 15px;
-                border: 1px solid #333;
-                border-radius: 8px;
-                padding: 10px;
-                background-color: #1c1c1c;
-            }
-            td {
-                border: none;
-                padding: 8px;
-                position: relative;
-                padding-left: 50%;
-                text-align: left;
-            }
+        @media (max-width: 768px) {
+            .contenido { margin-left: 0; padding: 10px; }
+            table, thead, tbody, th, td, tr { display: block; }
+            thead { display: none; }
+            td { padding: 10px; border: none; border-bottom: 1px solid #333; position: relative; padding-left: 50%; }
             td:before {
                 position: absolute;
-                top: 8px;
+                top: 10px;
                 left: 10px;
                 width: 45%;
                 white-space: nowrap;
@@ -118,13 +99,12 @@ $resultado = $conexion->query($query);
             td:nth-child(4):before { content: "Teléfono"; }
             td:nth-child(5):before { content: "Email"; }
             td:nth-child(6):before { content: "Disciplina"; }
-            td:nth-child(7):before { content: "Vencimiento"; }
-            td:nth-child(8):before { content: "QR"; }
+            td:nth-child(7):before { content: "QR"; }
             <?php if ($rol === 'admin'): ?>
-            td:nth-child(9):before { content: "Gimnasio"; }
-            td:nth-child(10):before { content: "Acciones"; }
-            <?php else: ?>
+            td:nth-child(8):before { content: "Gimnasio"; }
             td:nth-child(9):before { content: "Acciones"; }
+            <?php else: ?>
+            td:nth-child(8):before { content: "Acciones"; }
             <?php endif; ?>
         }
     </style>
@@ -142,7 +122,6 @@ $resultado = $conexion->query($query);
                 <th>Teléfono</th>
                 <th>Email</th>
                 <th>Disciplina</th>
-                <th>Vencimiento</th>
                 <th>QR</th>
                 <?php if ($rol === 'admin'): ?>
                 <th>Gimnasio</th>
@@ -151,7 +130,7 @@ $resultado = $conexion->query($query);
             </tr>
         </thead>
         <tbody>
-        <?php while($row = $resultado->fetch_assoc()): ?>
+            <?php while($row = $resultado->fetch_assoc()): ?>
             <tr>
                 <td><?= $row['apellido'] ?></td>
                 <td><?= $row['nombre'] ?></td>
@@ -159,7 +138,6 @@ $resultado = $conexion->query($query);
                 <td><?= $row['telefono'] ?></td>
                 <td><?= $row['email'] ?></td>
                 <td><?= $row['disciplina'] ?></td>
-                <td><?= $row['fecha_vencimiento'] ?></td>
                 <td>
                     <?php
                     $qr_file = "qr_clientes/" . $row['apellido'] . "_" . $row['nombre'] . "_" . $row['dni'] . ".png";
@@ -172,14 +150,14 @@ $resultado = $conexion->query($query);
                     ?>
                 </td>
                 <?php if ($rol === 'admin'): ?>
-                <td><?= $row['nombre_gimnasio'] ?></td>
+                    <td><?= $row['nombre_gimnasio'] ?></td>
                 <?php endif; ?>
                 <td>
                     <a class="action" href="editar_cliente.php?id=<?= $row['id'] ?>" title="Editar">✏️</a>
                     <a class="action" href="eliminar_cliente.php?id=<?= $row['id'] ?>" onclick="return confirm('¿Eliminar este cliente?')" title="Eliminar">🗑️</a>
                 </td>
             </tr>
-        <?php endwhile; ?>
+            <?php endwhile; ?>
         </tbody>
     </table>
 </div>
