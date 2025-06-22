@@ -6,7 +6,6 @@ include 'menu.php';
 $gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
 $rol = $_SESSION['rol'] ?? '';
 
-// Si es admin, ver todos. Si no, ver solo los de su gimnasio
 if ($rol === 'admin') {
     $query = "SELECT clientes.*, gimnasios.nombre AS nombre_gimnasio FROM clientes 
               LEFT JOIN gimnasios ON clientes.gimnasio_id = gimnasios.id";
@@ -37,12 +36,26 @@ $resultado = $conexion->query($query);
         }
         h1 {
             color: #f7d774;
+            margin-bottom: 10px;
+        }
+        .volver-btn {
+            display: inline-block;
+            background-color: #f7d774;
+            color: #111;
+            padding: 10px 20px;
+            margin-bottom: 20px;
+            text-decoration: none;
+            border-radius: 5px;
+            font-weight: bold;
+        }
+        .volver-btn:hover {
+            background-color: #e5c100;
         }
         table {
             width: 100%;
             border-collapse: collapse;
             background-color: #1a1a1a;
-            margin-top: 20px;
+            margin-top: 10px;
         }
         th, td {
             padding: 12px;
@@ -65,6 +78,7 @@ $resultado = $conexion->query($query);
         .action:hover {
             color: #fff;
         }
+
         @media (max-width: 768px) {
             .contenido {
                 margin-left: 0;
@@ -73,10 +87,11 @@ $resultado = $conexion->query($query);
             table, thead, tbody, th, td, tr {
                 display: block;
             }
-            th {
-                position: sticky;
-                top: 0;
-                background-color: #222;
+            table {
+                border: none;
+            }
+            thead {
+                display: none;
             }
             td {
                 padding: 10px;
@@ -92,13 +107,28 @@ $resultado = $conexion->query($query);
                 width: 45%;
                 white-space: nowrap;
                 font-weight: bold;
+                color: #f7d774;
             }
+            td:nth-child(1):before { content: "Apellido"; }
+            td:nth-child(2):before { content: "Nombre"; }
+            td:nth-child(3):before { content: "DNI"; }
+            td:nth-child(4):before { content: "Teléfono"; }
+            td:nth-child(5):before { content: "Email"; }
+            td:nth-child(6):before { content: "Disciplina"; }
+            td:nth-child(7):before { content: "Vencimiento"; }
+            <?php if ($rol === 'admin'): ?>
+            td:nth-child(8):before { content: "Gimnasio"; }
+            td:nth-child(9):before { content: "Acciones"; }
+            <?php else: ?>
+            td:nth-child(8):before { content: "Acciones"; }
+            <?php endif; ?>
         }
     </style>
 </head>
 <body>
 <div class="contenido">
     <h1>Clientes Registrados</h1>
+    <a class="volver-btn" href="index.php">← Volver al Menú</a>
     <table>
         <thead>
             <tr>
