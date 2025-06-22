@@ -19,11 +19,9 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST["dni"])) {
 
     if ($stmt->fetch()) {
         if ($clases > 0 && $vencimiento >= date('Y-m-d')) {
-            // Descontar clase
             $conexion->query("UPDATE membresias SET clases_disponibles = clases_disponibles - 1 
                               WHERE id = $membresia_id");
 
-            // Registrar asistencia
             $conexion->query("INSERT INTO asistencias (cliente_id, fecha, hora, gimnasio_id)
                               VALUES ($cliente_id, CURDATE(), CURTIME(), $gimnasio_id)");
 
@@ -56,8 +54,6 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST["dni"])) {
             padding: 20px;
         }
         h1 {
-            font-size: 1.6em;
-            margin-bottom: 20px;
             color: gold;
         }
         #reader {
@@ -68,64 +64,59 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST["dni"])) {
             border-radius: 10px;
             margin-bottom: 20px;
         }
-        input[type="text"] {
-            padding: 10px;
-            width: 90%;
-            max-width: 400px;
+        input, button {
             font-size: 1em;
+            padding: 10px;
+            margin: 5px;
             border-radius: 5px;
-            border: none;
-            margin-bottom: 10px;
         }
         button {
             background-color: gold;
+            color: black;
             border: none;
-            padding: 12px 20px;
-            font-size: 1em;
-            cursor: pointer;
-            border-radius: 5px;
-            margin: 5px;
         }
         pre {
             background-color: #111;
             color: white;
             padding: 10px;
-            margin-top: 10px;
-            border: 1px solid gold;
             border-radius: 5px;
+            border: 1px solid gold;
             white-space: pre-wrap;
+            margin-top: 10px;
         }
     </style>
 </head>
 <body>
 
-    <h1>Escaneo QR - Fight Academy</h1>
+<h1>Escaneo QR - Fight Academy</h1>
 
-    <div id="reader"></div>
+<div id="reader"></div>
 
-    <form method="POST" id="qrForm">
-        <input type="text" name="dni" id="dniInput" placeholder="Ingresar DNI manualmente">
-        <button type="submit">Verificar DNI</button>
-    </form>
+<form method="POST" id="qrForm">
+    <input type="text" name="dni" id="dniInput" placeholder="Ingresar DNI manualmente">
+    <button type="submit">Verificar DNI</button>
+</form>
 
-    <?php if (isset($mensaje)) { echo "<pre>$mensaje</pre>"; } ?>
+<?php if (isset($mensaje)) { echo "<pre>$mensaje</pre>"; } ?>
 
-    <script>
-        function onScanSuccess(decodedText, decodedResult) {
-            let dni = decodedText;
+<script>
+function onScanSuccess(decodedText) {
+    let dni = decodedText;
 
-            // Extraer DNI si viene en formato "generar_qr.php?dni=xxxx"
-            if (dni.includes("dni=")) {
-                dni = dni.split("dni=")[1].split("&")[0];
-            }
-
-            document.getElementById("dniInput").value = dni;
-            document.getElementById("qrForm").submit();
+    if (dni.includes("dni=")) {
+        let match = dni.match(/dni=([0-9]+)/);
+        if (match) {
+            dni = match[1];
         }
+    }
 
-        let html5QrcodeScanner = new Html5QrcodeScanner("reader", { fps: 10, qrbox: 250 });
-        html5QrcodeScanner.render(onScanSuccess);
-    </script>
+    document.getElementById("dniInput").value = dni;
+    document.getElementById("qrForm").submit();
+}
+
+const scanner = new Html5QrcodeScanner("reader", { fps: 10, qrbox: 250 });
+scanner.render(onScanSuccess);
+</script>
 
 </body>
 </html>
