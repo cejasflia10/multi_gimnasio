@@ -16,34 +16,101 @@ if ($rol === 'admin') {
 }
 $resultado = $conexion->query($query);
 ?>
-
 <!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>Ver Clientes</title>
+    <title>Clientes Registrados</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
-        body { margin: 0; font-family: 'Segoe UI', sans-serif; background-color: #111; color: #f1f1f1; }
-        .contenido { margin-left: 260px; padding: 20px; }
-        h1 { color: #f7d774; margin-bottom: 10px; }
-        .volver-btn { background-color: #f7d774; color: #111; padding: 10px 20px; margin-bottom: 20px;
-                      text-decoration: none; border-radius: 5px; font-weight: bold; display: inline-block; }
-        .volver-btn:hover { background-color: #e5c100; }
-        table { width: 100%; border-collapse: collapse; background-color: #1a1a1a; margin-top: 10px; }
-        th, td { padding: 12px; border: 1px solid #333; text-align: left; }
-        th { background-color: #222; color: #f7d774; }
-        tr:nth-child(even) { background-color: #1f1f1f; }
-        .action { color: #f7d774; margin-right: 10px; text-decoration: none; font-size: 1.2em; }
-        .action:hover { color: #fff; }
-        @media (max-width: 768px) {
-            .contenido { margin-left: 0; padding: 10px; }
-            table, thead, tbody, th, td, tr { display: block; }
-            thead { display: none; }
-            td { padding: 10px; border: none; border-bottom: 1px solid #333; position: relative; padding-left: 50%; }
+        body {
+            margin: 0;
+            font-family: 'Segoe UI', sans-serif;
+            background-color: #111;
+            color: #f1f1f1;
+        }
+        .contenido {
+            margin-left: 260px;
+            padding: 20px;
+        }
+        h1 {
+            color: #f7d774;
+            margin-bottom: 10px;
+        }
+        .volver-btn {
+            background-color: #f7d774;
+            color: #111;
+            padding: 10px 20px;
+            margin-bottom: 20px;
+            text-decoration: none;
+            border-radius: 5px;
+            font-weight: bold;
+            display: inline-block;
+        }
+        .volver-btn:hover {
+            background-color: #e5c100;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background-color: #1a1a1a;
+            margin-top: 10px;
+        }
+        th, td {
+            padding: 12px;
+            border: 1px solid #333;
+            text-align: left;
+        }
+        th {
+            background-color: #222;
+            color: #f7d774;
+        }
+        tr:nth-child(even) {
+            background-color: #1f1f1f;
+        }
+        .action {
+            color: #f7d774;
+            margin-right: 10px;
+            text-decoration: none;
+            font-size: 1.2em;
+        }
+        .action:hover {
+            color: #fff;
+        }
+
+        @media screen and (max-width: 768px) {
+            .contenido {
+                margin-left: 0;
+                padding: 10px;
+            }
+            table, thead, tbody, th, td, tr {
+                display: block;
+            }
+            thead {
+                display: none;
+            }
+            tr {
+                margin-bottom: 15px;
+                border: 1px solid #333;
+                border-radius: 8px;
+                padding: 10px;
+                background-color: #1c1c1c;
+            }
+            td {
+                border: none;
+                padding: 8px;
+                position: relative;
+                padding-left: 50%;
+                text-align: left;
+            }
             td:before {
-                position: absolute; top: 10px; left: 10px; width: 45%; white-space: nowrap;
-                font-weight: bold; color: #f7d774;
+                position: absolute;
+                top: 8px;
+                left: 10px;
+                width: 45%;
+                white-space: nowrap;
+                font-weight: bold;
+                color: #f7d774;
             }
             td:nth-child(1):before { content: "Apellido"; }
             td:nth-child(2):before { content: "Nombre"; }
@@ -78,13 +145,13 @@ $resultado = $conexion->query($query);
                 <th>Vencimiento</th>
                 <th>QR</th>
                 <?php if ($rol === 'admin'): ?>
-                    <th>Gimnasio</th>
+                <th>Gimnasio</th>
                 <?php endif; ?>
                 <th>Acciones</th>
             </tr>
         </thead>
         <tbody>
-            <?php while($row = $resultado->fetch_assoc()): ?>
+        <?php while($row = $resultado->fetch_assoc()): ?>
             <tr>
                 <td><?= $row['apellido'] ?></td>
                 <td><?= $row['nombre'] ?></td>
@@ -105,14 +172,14 @@ $resultado = $conexion->query($query);
                     ?>
                 </td>
                 <?php if ($rol === 'admin'): ?>
-                    <td><?= $row['nombre_gimnasio'] ?></td>
+                <td><?= $row['nombre_gimnasio'] ?></td>
                 <?php endif; ?>
                 <td>
                     <a class="action" href="editar_cliente.php?id=<?= $row['id'] ?>" title="Editar">✏️</a>
                     <a class="action" href="eliminar_cliente.php?id=<?= $row['id'] ?>" onclick="return confirm('¿Eliminar este cliente?')" title="Eliminar">🗑️</a>
                 </td>
             </tr>
-            <?php endwhile; ?>
+        <?php endwhile; ?>
         </tbody>
     </table>
 </div>
