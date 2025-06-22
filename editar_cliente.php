@@ -77,27 +77,25 @@ if (!$cliente) {
 <div class="container">
     <h2>Editar Cliente</h2>
     <form action="guardar_edicion_cliente.php" method="POST">
-        <input type="hidden" name="id" value="<?php echo $cliente['id']; ?>">
+        <input type="hidden" name="id" value="<?= $cliente['id']; ?>">
         <label>Apellido:</label>
-        <input type="text" name="apellido" value="<?php echo $cliente['apellido']; ?>" required>
+        <input type="text" name="apellido" value="<?= $cliente['apellido']; ?>" required>
         <label>Nombre:</label>
-        <input type="text" name="nombre" value="<?php echo $cliente['nombre']; ?>" required>
+        <input type="text" name="nombre" value="<?= $cliente['nombre']; ?>" required>
         <label>DNI:</label>
-        <input type="text" name="dni" value="<?php echo $cliente['dni']; ?>" required>
+        <input type="text" name="dni" value="<?= $cliente['dni']; ?>" required>
         <label>Fecha de nacimiento:</label>
-        <input type="date" name="fecha_nacimiento" value="<?php echo $cliente['fecha_nacimiento']; ?>">
+        <input type="date" name="fecha_nacimiento" value="<?= $cliente['fecha_nacimiento']; ?>">
         <label>Domicilio:</label>
-        <input type="text" name="domicilio" value="<?php echo $cliente['domicilio']; ?>">
+        <input type="text" name="domicilio" value="<?= $cliente['domicilio']; ?>">
         <label>Teléfono:</label>
-        <input type="text" name="telefono" value="<?php echo $cliente['telefono']; ?>">
+        <input type="text" name="telefono" value="<?= $cliente['telefono']; ?>">
         <label>Email:</label>
-        <input type="email" name="email" value="<?php echo $cliente['email']; ?>">
+        <input type="email" name="email" value="<?= $cliente['email']; ?>">
         <label>RFID:</label>
-        <input type="text" name="rfid_uid" value="<?php echo $cliente['rfid_uid']; ?>">
+        <input type="text" name="rfid" value="<?= $cliente['rfid']; ?>">
         <label>Fecha de vencimiento del plan:</label>
-        <input type="date" name="fecha_vencimiento" value="<?php echo $cliente['fecha_vencimiento']; ?>">
-        <label>Días disponibles:</label>
-        <input type="number" name="dias_disponibles" value="<?php echo $cliente['dias_disponibles']; ?>">
+        <input type="date" name="fecha_vencimiento" value="<?= $cliente['fecha_vencimiento']; ?>">
         <button type="submit">Guardar Cambios</button>
     </form>
 </div>
