@@ -2,10 +2,19 @@
 session_start();
 include 'conexion.php';
 
-// Obtenemos el ID del gimnasio de la sesión
 $gimnasio_id = $_SESSION['gimnasio_id'] ?? null;
-if (!$gimnasio_id) {
+$rol = $_SESSION['rol'] ?? null;
+
+if (!$gimnasio_id && $rol != 'admin') {
     die("Acceso denegado.");
+}
+
+// Cargar disciplinas
+$disciplinas = $conexion->query("SELECT id, nombre FROM disciplinas");
+
+// Cargar gimnasios solo si es administrador
+if ($rol == 'admin') {
+    $gimnasios = $conexion->query("SELECT id, nombre FROM gimnasios");
 }
 ?>
 
@@ -99,13 +108,25 @@ if (!$gimnasio_id) {
     <label for="email">Email:</label>
     <input type="email" name="email">
 
-    <label for="rfid">RFID (opcional):</label>
-    <input type="text" name="rfid">
+    <label for="disciplina">Disciplina:</label>
+    <select name="disciplina">
+        <option value="">Seleccionar</option>
+        <?php while ($d = $disciplinas->fetch_assoc()): ?>
+            <option value="<?= $d['nombre'] ?>"><?= $d['nombre'] ?></option>
+        <?php endwhile; ?>
+    </select>
 
-    <label for="disciplina">Disciplina (opcional):</label>
-    <input type="text" name="disciplina">
-
-    <input type="hidden" name="gimnasio_id" value="<?php echo htmlspecialchars($gimnasio_id); ?>">
+    <?php if ($rol == 'admin'): ?>
+        <label for="gimnasio_id">Gimnasio:</label>
+        <select name="gimnasio_id" required>
+            <option value="">Seleccionar</option>
+            <?php while ($g = $gimnasios->fetch_assoc()): ?>
+                <option value="<?= $g['id'] ?>"><?= $g['nombre'] ?></option>
+            <?php endwhile; ?>
+        </select>
+    <?php else: ?>
+        <input type="hidden" name="gimnasio_id" value="<?= $gimnasio_id ?>">
+    <?php endif; ?>
 
     <input type="submit" value="Guardar Cliente">
 </form>
