@@ -1,30 +1,43 @@
 <?php
+session_start();
 include 'conexion.php';
 require 'phpqrcode/qrlib.php';
 
-if (!isset($_GET['id'])) {
-    echo "ID no válido.";
-    exit;
+if (!isset($_GET['id']) || !is_numeric($_GET['id'])) {
+    die("ID inválido.");
 }
 
 $id = intval($_GET['id']);
-$result = $conexion->query("SELECT apellido, nombre, dni FROM clientes WHERE id = $id");
+$gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
+$rol = $_SESSION['rol'] ?? '';
 
-if ($result->num_rows == 0) {
-    echo "Cliente no encontrado.";
-    exit;
+if ($rol !== 'admin') {
+    $query = "SELECT * FROM clientes WHERE id = $id AND gimnasio_id = $gimnasio_id";
+} else {
+    $query = "SELECT * FROM clientes WHERE id = $id";
 }
 
-$cliente = $result->fetch_assoc();
+$resultado = $conexion->query($query);
+
+if ($resultado->num_rows === 0) {
+    die("Cliente no encontrado o acceso denegado.");
+}
+
+$cliente = $resultado->fetch_assoc();
 $apellido = $cliente['apellido'];
 $nombre = $cliente['nombre'];
 $dni = $cliente['dni'];
 
-if (!file_exists("qr_clientes")) {
-    mkdir("qr_clientes", 0777, true);
+// Crear carpeta si no existe
+$carpeta = "qr_clientes";
+if (!file_exists($carpeta)) {
+    mkdir($carpeta, 0777, true);
 }
 
-$filename = "qr_clientes/" . $apellido . "_" . $nombre . "_" . $dni . ".png";
-QRcode::png($dni, $filename, QR_ECLEVEL_L, 6);
+$nombre_archivo = $carpeta . "/" . $apellido . "_" . $nombre . "_" . $dni . ".png";
 
-echo "<script>alert('QR generado correctamente.'); window.location.href='ver_clientes.php';</script>";
+// ✅ CORREGIDO para PHP 8+
+QRcode::png($dni, $nombre_archivo, QR_ECLEVEL_L, 6, 2, false, 0xFFFFFF);
+
+echo "<script>alert('QR generado correctamente'); window.location.href='ver_clientes.php';</script>";
+?>
