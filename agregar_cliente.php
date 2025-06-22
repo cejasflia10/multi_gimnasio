@@ -12,7 +12,7 @@ if (!$gimnasio_id && $rol != 'admin') {
 // Cargar disciplinas
 $disciplinas = $conexion->query("SELECT id, nombre FROM disciplinas");
 
-// Cargar gimnasios solo si es administrador
+// Cargar gimnasios si es administrador
 if ($rol == 'admin') {
     $gimnasios = $conexion->query("SELECT id, nombre FROM gimnasios");
 }
@@ -35,6 +35,19 @@ if ($rol == 'admin') {
         h2 {
             text-align: center;
             margin-bottom: 20px;
+        }
+        .volver-btn {
+            display: inline-block;
+            background-color: #ffd700;
+            color: #111;
+            padding: 10px 20px;
+            margin-bottom: 20px;
+            text-decoration: none;
+            border-radius: 5px;
+            font-weight: bold;
+        }
+        .volver-btn:hover {
+            background-color: #e5c100;
         }
         form {
             max-width: 600px;
@@ -66,6 +79,14 @@ if ($rol == 'admin') {
         input[type="submit"]:hover {
             background-color: #e5c100;
         }
+        .mensaje-error {
+            color: red;
+            font-weight: bold;
+            font-size: 14px;
+            display: none;
+            margin-top: -8px;
+            margin-bottom: 10px;
+        }
         @media screen and (max-width: 480px) {
             body {
                 padding: 10px;
@@ -81,9 +102,11 @@ if ($rol == 'admin') {
 </head>
 <body>
 
+<a class="volver-btn" href="index.php">← Volver al Menú</a>
+
 <h2>Agregar Cliente</h2>
 
-<form action="guardar_cliente.php" method="POST">
+<form action="guardar_cliente.php" method="POST" onsubmit="return validarDNI()">
     <label for="apellido">Apellido:</label>
     <input type="text" name="apellido" required>
 
@@ -91,7 +114,8 @@ if ($rol == 'admin') {
     <input type="text" name="nombre" required>
 
     <label for="dni">DNI:</label>
-    <input type="text" name="dni" required>
+    <input type="text" name="dni" id="dni" required oninput="verificarDNI(this.value)">
+    <div class="mensaje-error" id="mensajeDNI">Este DNI ya está registrado.</div>
 
     <label for="fecha_nacimiento">Fecha de Nacimiento:</label>
     <input type="date" name="fecha_nacimiento" id="fecha_nacimiento" required onchange="calcularEdad()">
@@ -132,21 +156,47 @@ if ($rol == 'admin') {
 </form>
 
 <script>
-    function calcularEdad() {
-        const fechaNac = document.getElementById('fecha_nacimiento').value;
-        if (!fechaNac) return;
+function calcularEdad() {
+    const fechaNac = document.getElementById('fecha_nacimiento').value;
+    if (!fechaNac) return;
 
-        const hoy = new Date();
-        const nacimiento = new Date(fechaNac);
-        let edad = hoy.getFullYear() - nacimiento.getFullYear();
-        const mes = hoy.getMonth() - nacimiento.getMonth();
+    const hoy = new Date();
+    const nacimiento = new Date(fechaNac);
+    let edad = hoy.getFullYear() - nacimiento.getFullYear();
+    const mes = hoy.getMonth() - nacimiento.getMonth();
 
-        if (mes < 0 || (mes === 0 && hoy.getDate() < nacimiento.getDate())) {
-            edad--;
-        }
-
-        document.getElementById('edad').value = edad;
+    if (mes < 0 || (mes === 0 && hoy.getDate() < nacimiento.getDate())) {
+        edad--;
     }
+
+    document.getElementById('edad').value = edad;
+}
+
+let dniValido = true;
+
+function verificarDNI(dni) {
+    if (dni.length < 5) {
+        document.getElementById('mensajeDNI').style.display = 'none';
+        dniValido = true;
+        return;
+    }
+
+    fetch('verificar_dni.php?dni=' + dni)
+        .then(response => response.json())
+        .then(data => {
+            if (data.existe) {
+                document.getElementById('mensajeDNI').style.display = 'block';
+                dniValido = false;
+            } else {
+                document.getElementById('mensajeDNI').style.display = 'none';
+                dniValido = true;
+            }
+        });
+}
+
+function validarDNI() {
+    return dniValido;
+}
 </script>
 
 </body>
