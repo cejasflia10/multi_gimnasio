@@ -92,8 +92,8 @@ if (!$cliente) {
         <input type="text" name="telefono" value="<?= $cliente['telefono']; ?>">
         <label>Email:</label>
         <input type="email" name="email" value="<?= $cliente['email']; ?>">
-        <label>RFID:</label>
-        <input type="text" name="rfid" value="<?= $cliente['rfid']; ?>">
+        <label>Disciplina:</label>
+        <input type="text" name="disciplina" value="<?= $cliente['disciplina']; ?>">
         <label>Fecha de vencimiento del plan:</label>
         <input type="date" name="fecha_vencimiento" value="<?= $cliente['fecha_vencimiento']; ?>">
         <button type="submit">Guardar Cambios</button>
