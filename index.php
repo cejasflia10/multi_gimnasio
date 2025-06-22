@@ -63,7 +63,6 @@ function obtenerAsistenciasClientes($conexion, $gimnasio_id) {
     return $conexion->query($query);
 }
 
-
 function obtenerAsistenciasProfesores($conexion, $gimnasio_id) {
     $query = "SELECT p.apellido, r.fecha, r.hora_entrada, r.hora_salida 
               FROM registro_asistencias_profesores r 
@@ -76,13 +75,10 @@ function obtenerAsistenciasProfesores($conexion, $gimnasio_id) {
 // DATOS
 $pagos_dia = obtenerMonto($conexion, 'pagos', 'fecha', $gimnasio_id, 'DIA');
 $pagos_mes = obtenerMonto($conexion, 'pagos', 'fecha', $gimnasio_id, 'MES');
-
 $ventas_dia = obtenerMonto($conexion, 'ventas', 'fecha', $gimnasio_id, 'DIA');
 $ventas_mes = obtenerMonto($conexion, 'ventas', 'fecha', $gimnasio_id, 'MES');
-
 $membresias_dia = obtenerMonto($conexion, 'membresias', 'fecha_inicio', $gimnasio_id, 'DIA');
 $membresias_mes = obtenerMonto($conexion, 'membresias', 'fecha_inicio', $gimnasio_id, 'MES');
-
 $cumples = obtenerCumpleanios($conexion, $gimnasio_id);
 $vencimientos = obtenerVencimientos($conexion, $gimnasio_id);
 $clientes_dia = obtenerAsistenciasClientes($conexion, $gimnasio_id);
@@ -102,11 +98,12 @@ $profesores_dia = obtenerAsistenciasProfesores($conexion, $gimnasio_id);
         font-family: Arial, sans-serif;
         margin: 0;
         padding: 20px;
+        padding-left: 250px;
     }
     .panel {
         display: flex;
         flex-wrap: wrap;
-        justify-content: space-around;
+        justify-content: center;
         gap: 15px;
     }
     .card {
@@ -115,10 +112,11 @@ $profesores_dia = obtenerAsistenciasProfesores($conexion, $gimnasio_id);
         border-radius: 10px;
         box-shadow: 0 0 10px #000;
         width: 300px;
+        max-width: 90%;
     }
     h2 {
         color: gold;
-        margin-top: 0;
+        margin-top: 20px;
     }
     ul {
         padding-left: 20px;
@@ -127,60 +125,51 @@ $profesores_dia = obtenerAsistenciasProfesores($conexion, $gimnasio_id);
         width: 100%;
         border-collapse: collapse;
         background: #111;
+        margin-bottom: 20px;
     }
     th, td {
         border: 1px solid #333;
-        padding: 5px;
+        padding: 8px;
         color: white;
+        text-align: left;
     }
     th {
         background: #444;
     }
-    @media (max-width: 600px) {
-        .card { width: 100%; }
+    @media (max-width: 768px) {
+        body {
+            padding: 10px;
+        }
+        .panel {
+            flex-direction: column;
+            align-items: center;
+        }
     }
   </style>
 </head>
 <body>
+
   <h2>Resumen Económico</h2>
   <div class="panel">
-    <div class="card">
-      <h3>Pagos del Día</h3>
-      <p>$<?= number_format($pagos_dia, 2, ',', '.') ?></p>
-    </div>
-    <div class="card">
-      <h3>Pagos del Mes</h3>
-      <p>$<?= number_format($pagos_mes, 2, ',', '.') ?></p>
-    </div>
-    <div class="card">
-      <h3>Ventas del Día</h3>
-      <p>$<?= number_format($ventas_dia, 2, ',', '.') ?></p>
-    </div>
-    <div class="card">
-      <h3>Ventas del Mes</h3>
-      <p>$<?= number_format($ventas_mes, 2, ',', '.') ?></p>
-    </div>
-    <div class="card">
-      <h3>Membresías del Día</h3>
-      <p>$<?= number_format($membresias_dia, 2, ',', '.') ?></p>
-    </div>
-    <div class="card">
-      <h3>Membresías del Mes</h3>
-      <p>$<?= number_format($membresias_mes, 2, ',', '.') ?></p>
-    </div>
+    <div class="card"><h3>Pagos del Día</h3><p>$<?= number_format($pagos_dia, 2, ',', '.') ?></p></div>
+    <div class="card"><h3>Pagos del Mes</h3><p>$<?= number_format($pagos_mes, 2, ',', '.') ?></p></div>
+    <div class="card"><h3>Ventas del Día</h3><p>$<?= number_format($ventas_dia, 2, ',', '.') ?></p></div>
+    <div class="card"><h3>Ventas del Mes</h3><p>$<?= number_format($ventas_mes, 2, ',', '.') ?></p></div>
+    <div class="card"><h3>Membresías del Día</h3><p>$<?= number_format($membresias_dia, 2, ',', '.') ?></p></div>
+    <div class="card"><h3>Membresías del Mes</h3><p>$<?= number_format($membresias_mes, 2, ',', '.') ?></p></div>
   </div>
 
   <h2>Ingresos del Día - Clientes</h2>
   <table>
     <tr><th>Nombre</th><th>DNI</th><th>Disciplina</th><th>Vencimiento</th><th>Hora</th></tr>
     <?php while ($c = $clientes_dia->fetch_assoc()): ?>
-      <tr>
-        <td><?= $c['nombre'] . ' ' . $c['apellido'] ?></td>
-        <td><?= $c['dni'] ?></td>
-        <td><?= $c['disciplina'] ?></td>
-        <td><?= $c['fecha_vencimiento'] ?></td>
-        <td><?= $c['hora'] ?></td>
-      </tr>
+    <tr>
+      <td><?= $c['nombre'] . ' ' . $c['apellido'] ?></td>
+      <td><?= $c['dni'] ?></td>
+      <td><?= $c['disciplina'] ?></td>
+      <td><?= $c['fecha_vencimiento'] ?></td>
+      <td><?= $c['hora'] ?></td>
+    </tr>
     <?php endwhile; ?>
   </table>
 
@@ -188,12 +177,12 @@ $profesores_dia = obtenerAsistenciasProfesores($conexion, $gimnasio_id);
   <table>
     <tr><th>Apellido</th><th>Fecha</th><th>Ingreso</th><th>Salida</th></tr>
     <?php while ($p = $profesores_dia->fetch_assoc()): ?>
-      <tr>
-        <td><?= $p['apellido'] ?></td>
-        <td><?= $p['fecha'] ?></td>
-        <td><?= $p['hora_entrada'] ?></td>
-        <td><?= $p['hora_salida'] ?></td>
-      </tr>
+    <tr>
+      <td><?= $p['apellido'] ?></td>
+      <td><?= $p['fecha'] ?></td>
+      <td><?= $p['hora_entrada'] ?></td>
+      <td><?= $p['hora_salida'] ?></td>
+    </tr>
     <?php endwhile; ?>
   </table>
 
@@ -210,5 +199,6 @@ $profesores_dia = obtenerAsistenciasProfesores($conexion, $gimnasio_id);
       <li><?= $v['nombre'] . ' ' . $v['apellido'] ?> - <?= date('d/m/Y', strtotime($v['fecha_vencimiento'])) ?></li>
     <?php endwhile; ?>
   </ul>
+
 </body>
 </html>
