@@ -4,32 +4,20 @@ include 'conexion.php';
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
-
 if (!isset($_SESSION['gimnasio_id'])) {
     die("Acceso denegado.");
 }
-
 $gimnasio_id = $_SESSION['gimnasio_id'];
 
-// FUNCIONES DE CONSULTA
-
+// FUNCIONES
 function obtenerMonto($conexion, $tabla, $campo_fecha, $gimnasio_id, $modo = 'DIA') {
     $condicion = $modo === 'MES' ? "MONTH($campo_fecha) = MONTH(CURDATE())" : "$campo_fecha = CURDATE()";
-
     switch ($tabla) {
-        case 'ventas':
-            $columna = 'monto_total';
-            break;
-        case 'pagos':
-            $columna = 'monto';
-            break;
-        case 'membresias':
-            $columna = 'total';
-            break;
-        default:
-            $columna = 'monto';
+        case 'ventas': $columna = 'monto_total'; break;
+        case 'pagos': $columna = 'monto'; break;
+        case 'membresias': $columna = 'total'; break;
+        default: $columna = 'monto';
     }
-
     $query = "SELECT SUM($columna) AS total FROM $tabla WHERE $condicion AND id_gimnasio = $gimnasio_id";
     $resultado = $conexion->query($query);
     $fila = $resultado->fetch_assoc();
@@ -38,38 +26,31 @@ function obtenerMonto($conexion, $tabla, $campo_fecha, $gimnasio_id, $modo = 'DI
 
 function obtenerCumpleanios($conexion, $gimnasio_id) {
     $mes = date('m');
-    $query = "SELECT nombre, apellido, fecha_nacimiento FROM clientes WHERE MONTH(fecha_nacimiento) = $mes AND gimnasio_id = $gimnasio_id ORDER BY DAY(fecha_nacimiento)";
-    return $conexion->query($query);
+    return $conexion->query("SELECT nombre, apellido, fecha_nacimiento FROM clientes WHERE MONTH(fecha_nacimiento) = $mes AND gimnasio_id = $gimnasio_id ORDER BY DAY(fecha_nacimiento)");
 }
-
 function obtenerVencimientos($conexion, $gimnasio_id) {
     $fecha_limite = date('Y-m-d', strtotime('+10 days'));
-    $query = "SELECT c.nombre, c.apellido, m.fecha_vencimiento 
-              FROM membresias m 
-              INNER JOIN clientes c ON m.cliente_id = c.id 
-              WHERE m.fecha_vencimiento BETWEEN CURDATE() AND '$fecha_limite' 
-              AND m.id_gimnasio = $gimnasio_id 
-              ORDER BY m.fecha_vencimiento";
-    return $conexion->query($query);
+    return $conexion->query("SELECT c.nombre, c.apellido, m.fecha_vencimiento 
+        FROM membresias m 
+        INNER JOIN clientes c ON m.cliente_id = c.id 
+        WHERE m.fecha_vencimiento BETWEEN CURDATE() AND '$fecha_limite' 
+        AND m.id_gimnasio = $gimnasio_id 
+        ORDER BY m.fecha_vencimiento");
 }
-
 function obtenerAsistenciasClientes($conexion, $gimnasio_id) {
-    $query = "SELECT c.nombre, c.apellido, c.dni, c.disciplina, m.fecha_vencimiento, a.hora 
-              FROM asistencias a 
-              INNER JOIN clientes c ON a.cliente_id = c.id 
-              LEFT JOIN membresias m ON c.id = m.cliente_id 
-              WHERE a.fecha = CURDATE() AND c.gimnasio_id = $gimnasio_id 
-              ORDER BY a.hora DESC";
-    return $conexion->query($query);
+    return $conexion->query("SELECT c.nombre, c.apellido, c.dni, c.disciplina, m.fecha_vencimiento, a.hora 
+        FROM asistencias a 
+        INNER JOIN clientes c ON a.cliente_id = c.id 
+        LEFT JOIN membresias m ON c.id = m.cliente_id 
+        WHERE a.fecha = CURDATE() AND c.gimnasio_id = $gimnasio_id 
+        ORDER BY a.hora DESC");
 }
-
 function obtenerAsistenciasProfesores($conexion, $gimnasio_id) {
-    $query = "SELECT p.apellido, r.fecha, r.hora_entrada, r.hora_salida 
-              FROM registro_asistencias_profesores r 
-              INNER JOIN profesores p ON r.profesor_id = p.id 
-              WHERE r.fecha = CURDATE() AND p.gimnasio_id = $gimnasio_id 
-              ORDER BY r.hora_entrada DESC";
-    return $conexion->query($query);
+    return $conexion->query("SELECT p.apellido, r.fecha, r.hora_entrada, r.hora_salida 
+        FROM registro_asistencias_profesores r 
+        INNER JOIN profesores p ON r.profesor_id = p.id 
+        WHERE r.fecha = CURDATE() AND p.gimnasio_id = $gimnasio_id 
+        ORDER BY r.hora_entrada DESC");
 }
 
 // DATOS
@@ -103,8 +84,8 @@ $profesores_dia = obtenerAsistenciasProfesores($conexion, $gimnasio_id);
     .panel {
         display: flex;
         flex-wrap: wrap;
-        justify-content: center;
         gap: 15px;
+        justify-content: center;
     }
     .card {
         background: #222;
@@ -121,11 +102,15 @@ $profesores_dia = obtenerAsistenciasProfesores($conexion, $gimnasio_id);
     ul {
         padding-left: 20px;
     }
+    .tabla-responsive {
+        overflow-x: auto;
+        margin-bottom: 20px;
+    }
     table {
         width: 100%;
         border-collapse: collapse;
         background: #111;
-        margin-bottom: 20px;
+        min-width: 600px;
     }
     th, td {
         border: 1px solid #333;
@@ -138,11 +123,11 @@ $profesores_dia = obtenerAsistenciasProfesores($conexion, $gimnasio_id);
     }
     @media (max-width: 768px) {
         body {
-            padding: 10px;
+            padding-left: 10px;
+            padding-right: 10px;
         }
-        .panel {
-            flex-direction: column;
-            align-items: center;
+        .card {
+            width: 100%;
         }
     }
   </style>
@@ -160,31 +145,35 @@ $profesores_dia = obtenerAsistenciasProfesores($conexion, $gimnasio_id);
   </div>
 
   <h2>Ingresos del Día - Clientes</h2>
-  <table>
-    <tr><th>Nombre</th><th>DNI</th><th>Disciplina</th><th>Vencimiento</th><th>Hora</th></tr>
-    <?php while ($c = $clientes_dia->fetch_assoc()): ?>
-    <tr>
-      <td><?= $c['nombre'] . ' ' . $c['apellido'] ?></td>
-      <td><?= $c['dni'] ?></td>
-      <td><?= $c['disciplina'] ?></td>
-      <td><?= $c['fecha_vencimiento'] ?></td>
-      <td><?= $c['hora'] ?></td>
-    </tr>
-    <?php endwhile; ?>
-  </table>
+  <div class="tabla-responsive">
+    <table>
+      <tr><th>Nombre</th><th>DNI</th><th>Disciplina</th><th>Vencimiento</th><th>Hora</th></tr>
+      <?php while ($c = $clientes_dia->fetch_assoc()): ?>
+      <tr>
+        <td><?= $c['nombre'] . ' ' . $c['apellido'] ?></td>
+        <td><?= $c['dni'] ?></td>
+        <td><?= $c['disciplina'] ?></td>
+        <td><?= $c['fecha_vencimiento'] ?></td>
+        <td><?= $c['hora'] ?></td>
+      </tr>
+      <?php endwhile; ?>
+    </table>
+  </div>
 
   <h2>Ingresos del Día - Profesores</h2>
-  <table>
-    <tr><th>Apellido</th><th>Fecha</th><th>Ingreso</th><th>Salida</th></tr>
-    <?php while ($p = $profesores_dia->fetch_assoc()): ?>
-    <tr>
-      <td><?= $p['apellido'] ?></td>
-      <td><?= $p['fecha'] ?></td>
-      <td><?= $p['hora_entrada'] ?></td>
-      <td><?= $p['hora_salida'] ?></td>
-    </tr>
-    <?php endwhile; ?>
-  </table>
+  <div class="tabla-responsive">
+    <table>
+      <tr><th>Apellido</th><th>Fecha</th><th>Ingreso</th><th>Salida</th></tr>
+      <?php while ($p = $profesores_dia->fetch_assoc()): ?>
+      <tr>
+        <td><?= $p['apellido'] ?></td>
+        <td><?= $p['fecha'] ?></td>
+        <td><?= $p['hora_entrada'] ?></td>
+        <td><?= $p['hora_salida'] ?></td>
+      </tr>
+      <?php endwhile; ?>
+    </table>
+  </div>
 
   <h2>Próximos Cumpleaños</h2>
   <ul>
