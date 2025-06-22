@@ -1,8 +1,10 @@
 <?php
-if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST["dni"])) {
-    include("conexion.php");
-    session_start();
+include("conexion.php");
+session_start();
 
+$mensaje = "";
+
+if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST["dni"])) {
     $dni = trim($_POST["dni"]);
     $gimnasio_id = $_SESSION['gimnasio_id'] ?? 1;
 
@@ -19,11 +21,9 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST["dni"])) {
 
     if ($stmt->fetch()) {
         if ($clases > 0 && $vencimiento >= date('Y-m-d')) {
-            // Descontar clase
             $conexion->query("UPDATE membresias SET clases_disponibles = clases_disponibles - 1 
                               WHERE id = $membresia_id");
 
-            // Registrar asistencia
             $conexion->query("INSERT INTO asistencias (cliente_id, fecha, hora, gimnasio_id)
                               VALUES ($cliente_id, CURDATE(), CURTIME(), $gimnasio_id)");
 
@@ -55,10 +55,6 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST["dni"])) {
             text-align: center;
             padding: 20px;
         }
-        h1 {
-            font-size: 1.6em;
-            margin-bottom: 20px;
-        }
         #reader {
             width: 100%;
             max-width: 400px;
@@ -66,24 +62,6 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST["dni"])) {
             border: 3px solid gold;
             border-radius: 10px;
             margin-bottom: 20px;
-        }
-        input[type="text"] {
-            padding: 10px;
-            width: 90%;
-            max-width: 400px;
-            font-size: 1em;
-            border-radius: 5px;
-            border: none;
-            margin-bottom: 10px;
-        }
-        button {
-            background-color: gold;
-            border: none;
-            padding: 12px 20px;
-            font-size: 1em;
-            cursor: pointer;
-            border-radius: 5px;
-            margin: 5px;
         }
         pre {
             background-color: #111;
@@ -102,17 +80,16 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST["dni"])) {
 
     <div id="reader"></div>
 
-    <form method="POST">
-        <input type="text" name="dni" placeholder="Ingresar DNI manualmente">
-        <button type="submit">Verificar DNI</button>
+    <form id="qrForm" method="POST" style="display: none;">
+        <input type="hidden" name="dni" id="dniInput">
     </form>
 
-    <?php if (isset($mensaje)) { echo "<pre>$mensaje</pre>"; } ?>
+    <?php if ($mensaje) { echo "<pre>$mensaje</pre>"; } ?>
 
     <script>
         function onScanSuccess(decodedText, decodedResult) {
-            document.querySelector('input[name="dni"]').value = decodedText;
-            document.querySelector('form').submit();
+            document.getElementById('dniInput').value = decodedText;
+            document.getElementById('qrForm').submit();
         }
 
         let html5QrcodeScanner = new Html5QrcodeScanner(
