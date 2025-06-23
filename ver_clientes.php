@@ -1,7 +1,6 @@
 <?php
 session_start();
 include 'conexion.php';
-include 'menu.php';
 
 $gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
 $rol = $_SESSION['rol'] ?? '';
