@@ -1,6 +1,5 @@
 <?php
 include 'conexion.php';
-include 'menu.php';
 
 $resultado = $conexion->query("SELECT * FROM usuarios");
 ?>
