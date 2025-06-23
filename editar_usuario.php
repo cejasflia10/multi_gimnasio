@@ -1,96 +1,103 @@
 <?php
-include 'conexion.php';
-include 'menu.php';
-session_start();
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+include("conexion.php");
 
-if (!isset($_SESSION['rol']) || $_SESSION['rol'] !== 'admin') {
-    die("Acceso denegado.");
+if (!isset($_GET['id'])) {
+    die("ID de usuario no especificado.");
 }
 
-$resultado = $conexion->query("SELECT usuarios.*, gimnasios.nombre AS nombre_gimnasio FROM usuarios 
-                               LEFT JOIN gimnasios ON usuarios.id_gimnasio = gimnasios.id");
+$id = intval($_GET['id']);
+$query = "SELECT * FROM usuarios WHERE id = $id";
+$resultado = $conexion->query($query);
+
+if ($resultado->num_rows === 0) {
+    die("Usuario no encontrado.");
+}
+
+$usuario = $resultado->fetch_assoc();
+
+// Obtener gimnasios disponibles
+$gimnasios_resultado = $conexion->query("SELECT id, nombre FROM gimnasios");
 ?>
 
 <!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>Ver Usuarios</title>
+    <title>Editar Usuario</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
         body {
-            margin-left: 270px;
             background-color: #121212;
             color: gold;
             font-family: Arial, sans-serif;
+            padding: 20px;
         }
         h1 {
             text-align: center;
             color: gold;
         }
-        table {
-            width: 95%;
-            margin: 20px auto;
-            border-collapse: collapse;
+        form {
+            max-width: 500px;
+            margin: auto;
             background-color: #1e1e1e;
-            color: white;
+            padding: 20px;
+            border-radius: 10px;
         }
-        th, td {
-            border: 1px solid #444;
-            padding: 10px;
-            text-align: center;
-        }
-        th {
-            background-color: #222;
-            color: gold;
-        }
-        tr:hover {
-            background-color: #333;
-        }
-        a.btn {
-            padding: 5px 10px;
-            margin: 2px;
-            border-radius: 5px;
-            text-decoration: none;
+        label {
+            display: block;
+            margin-top: 15px;
             font-weight: bold;
         }
-        .btn-editar {
-            background-color: #3498db;
+        input, select {
+            width: 100%;
+            padding: 10px;
+            background-color: #2c2c2c;
             color: white;
+            border: 1px solid gold;
+            border-radius: 5px;
         }
-        .btn-eliminar {
-            background-color: #e74c3c;
-            color: white;
+        input[type="submit"] {
+            background-color: gold;
+            color: black;
+            cursor: pointer;
+            margin-top: 20px;
+        }
+        input[type="submit"]:hover {
+            background-color: #e0c200;
         }
     </style>
 </head>
 <body>
-    <h1>Usuarios del Sistema</h1>
+    <h1>Editar Usuario</h1>
+    <form action="guardar_edicion_usuario.php" method="POST">
+        <input type="hidden" name="id" value="<?= $usuario['id'] ?>">
 
-    <table>
-        <thead>
-            <tr>
-                <th>ID</th>
-                <th>Usuario</th>
-                <th>Rol</th>
-                <th>Gimnasio</th>
-                <th>Acciones</th>
-            </tr>
-        </thead>
-        <tbody>
-        <?php while ($row = $resultado->fetch_assoc()): ?>
-            <tr>
-                <td><?= $row['id'] ?></td>
-                <td><?= htmlspecialchars($row['usuario']) ?></td>
-                <td><?= $row['rol'] ?></td>
-                <td><?= $row['nombre_gimnasio'] ?? 'Sin asignar' ?></td>
-                <td>
-                    <a class="btn btn-editar" href="editar_usuario.php?id=<?= $row['id'] ?>">Editar</a>
-                    <a class="btn btn-eliminar" href="eliminar_usuario.php?id=<?= $row['id'] ?>" onclick="return confirm('¿Seguro que deseas eliminar este usuario?')">Eliminar</a>
-                </td>
-            </tr>
-        <?php endwhile; ?>
-        </tbody>
-    </table>
+        <label>Usuario:</label>
+        <input type="text" name="usuario" value="<?= htmlspecialchars($usuario['usuario'] ?? '') ?>" required>
+
+        <label>Email:</label>
+        <input type="text" name="email" value="<?= htmlspecialchars($usuario['email'] ?? '') ?>">
+
+        <label>Rol:</label>
+        <select name="rol" required>
+            <option value="admin" <?= $usuario['rol'] === 'admin' ? 'selected' : '' ?>>Admin</option>
+            <option value="cliente_gym" <?= $usuario['rol'] === 'cliente_gym' ? 'selected' : '' ?>>Cliente Gym</option>
+            <option value="profesor" <?= $usuario['rol'] === 'profesor' ? 'selected' : '' ?>>Profesor</option>
+        </select>
+
+        <label>Gimnasio:</label>
+        <select name="id_gimnasio" required>
+            <?php while ($gim = $gimnasios_resultado->fetch_assoc()): ?>
+                <option value="<?= $gim['id'] ?>" <?= $usuario['id_gimnasio'] == $gim['id'] ? 'selected' : '' ?>>
+                    <?= htmlspecialchars($gim['nombre']) ?>
+                </option>
+            <?php endwhile; ?>
+        </select>
+
+        <input type="submit" value="Guardar Cambios">
+    </form>
 </body>
 </html>
