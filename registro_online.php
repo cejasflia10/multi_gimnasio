@@ -4,18 +4,19 @@ include 'conexion.php';
 
 $gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
 
-// Buscar datos del gimnasio
-$logo = "default_logo.png"; // Logo por defecto
+// Obtener logo y nombre del gimnasio
+$logo = "default_logo.png";
 $nombre_gimnasio = "Gimnasio";
-
-$resultado = $conexion->query("SELECT nombre, logo FROM gimnasios WHERE id = $gimnasio_id LIMIT 1");
-if ($fila = $resultado->fetch_assoc()) {
+$res = $conexion->query("SELECT nombre, logo FROM gimnasios WHERE id = $gimnasio_id LIMIT 1");
+if ($fila = $res->fetch_assoc()) {
     $nombre_gimnasio = $fila['nombre'];
-    if (!empty($fila['logo'])) {
-        $logo = $fila['logo'];
-    }
+    if (!empty($fila['logo'])) $logo = $fila['logo'];
 }
+
+// Cargar disciplinas
+$disciplinas = $conexion->query("SELECT nombre FROM disciplinas ORDER BY nombre");
 ?>
+
 <!DOCTYPE html>
 <html lang="es">
 <head>
@@ -25,48 +26,41 @@ if ($fila = $resultado->fetch_assoc()) {
   <style>
     body {
       background-color: #111;
-      color: #f1f1f1;
+      color: gold;
       font-family: Arial, sans-serif;
       margin: 0;
       padding: 0;
     }
-
     .contenedor {
       max-width: 500px;
-      margin: 0 auto;
+      margin: auto;
       padding: 20px;
     }
-
     .logo {
       text-align: center;
       padding: 20px 0;
     }
-
     .logo img {
       width: 120px;
       border-radius: 10px;
     }
-
     .titulo {
       text-align: center;
       font-size: 24px;
       color: gold;
       margin-bottom: 20px;
     }
-
     .formulario {
       background-color: #222;
       padding: 20px;
       border-radius: 10px;
       box-shadow: 0 0 10px #000;
     }
-
     label {
       display: block;
       margin-top: 10px;
     }
-
-    input, button {
+    input, select, button {
       width: 100%;
       padding: 10px;
       margin-top: 5px;
@@ -74,12 +68,10 @@ if ($fila = $resultado->fetch_assoc()) {
       border-radius: 5px;
       font-size: 16px;
     }
-
-    input {
+    input, select {
       background-color: #333;
-      color: white;
+      color: gold;
     }
-
     button {
       background-color: gold;
       color: black;
@@ -87,13 +79,11 @@ if ($fila = $resultado->fetch_assoc()) {
       margin-top: 15px;
       cursor: pointer;
     }
-
     #respuesta {
       margin-top: 15px;
       text-align: center;
       font-weight: bold;
     }
-
     @media (max-width: 600px) {
       .contenedor {
         padding: 10px;
@@ -132,8 +122,15 @@ if ($fila = $resultado->fetch_assoc()) {
         <label>Email:</label>
         <input type="email" name="email" required>
 
-        <label>RFID (opcional):</label>
-        <input type="text" name="rfid_uid">
+        <label>Disciplina:</label>
+        <select name="disciplina" required>
+          <option value="">Seleccionar disciplina</option>
+          <?php while($d = $disciplinas->fetch_assoc()): ?>
+            <option value="<?= $d['nombre'] ?>"><?= $d['nombre'] ?></option>
+          <?php endwhile; ?>
+        </select>
+
+        <input type="hidden" name="gimnasio_id" value="<?= $gimnasio_id ?>">
 
         <button type="submit">Registrar</button>
       </form>
