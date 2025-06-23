@@ -10,7 +10,72 @@ if (!isset($_SESSION['gimnasio_id'])) {
 $gimnasio_id = $_SESSION['gimnasio_id'];
 $usuario = $_SESSION['usuario'] ?? 'Usuario';
 
-// ... todas tus funciones sin modificar (obtenerMonto, obtenerAsistenciasClientes, etc.)
+// FUNCIONES
+function obtenerMonto($conexion, $tabla, $campo_fecha, $gimnasio_id, $modo = 'DIA') {
+    $condicion = $modo === 'MES' ? "MONTH($campo_fecha) = MONTH(CURDATE())" : "$campo_fecha = CURDATE()";
+    $columna = ($tabla === 'ventas') ? 'monto_total' : (($tabla === 'membresias') ? 'total' : 'monto');
+    $query = "SELECT SUM($columna) AS total FROM $tabla WHERE $condicion AND id_gimnasio = $gimnasio_id";
+    $res = $conexion->query($query);
+    return $res->fetch_assoc()['total'] ?? 0;
+}
+
+function obtenerAsistenciasClientes($conexion, $gimnasio_id) {
+    return $conexion->query("
+        SELECT c.nombre, c.apellido, c.dni, c.disciplina, m.fecha_vencimiento, a.hora
+        FROM asistencias a
+        INNER JOIN clientes c ON a.cliente_id = c.id
+        LEFT JOIN membresias m ON m.cliente_id = c.id
+        WHERE DATE(a.fecha) = CURDATE() AND c.gimnasio_id = $gimnasio_id
+    ");
+}
+
+function obtenerAsistenciasProfesores($conexion, $gimnasio_id) {
+    return $conexion->query("
+        SELECT p.apellido, ap.fecha, ap.hora_entrada, ap.hora_salida
+        FROM asistencias_profesores ap
+        INNER JOIN profesores p ON ap.profesor_id = p.id
+        WHERE DATE(ap.fecha) = CURDATE() AND p.gimnasio_id = $gimnasio_id
+    ");
+}
+
+function obtenerCumpleanios($conexion, $gimnasio_id) {
+    return $conexion->query("
+        SELECT nombre, apellido, fecha_nacimiento 
+        FROM clientes 
+        WHERE gimnasio_id = $gimnasio_id AND MONTH(fecha_nacimiento) = MONTH(CURDATE()) 
+        ORDER BY DAY(fecha_nacimiento)
+    ");
+}
+
+function obtenerVencimientos($conexion, $gimnasio_id) {
+    return $conexion->query("
+        SELECT c.nombre, c.apellido, m.fecha_vencimiento 
+        FROM membresias m 
+        INNER JOIN clientes c ON m.cliente_id = c.id 
+        WHERE m.fecha_vencimiento BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 10 DAY) 
+        AND c.gimnasio_id = $gimnasio_id 
+        ORDER BY m.fecha_vencimiento ASC
+    ");
+}
+
+function obtenerDisciplinas($conexion, $gimnasio_id) {
+    return $conexion->query("
+        SELECT disciplina, COUNT(*) as cantidad 
+        FROM clientes 
+        WHERE gimnasio_id = $gimnasio_id 
+        GROUP BY disciplina
+    ");
+}
+
+function obtenerPagosPorMetodo($conexion, $gimnasio_id) {
+    return $conexion->query("
+        SELECT metodo_pago, COUNT(*) as cantidad 
+        FROM pagos 
+        WHERE id_gimnasio = $gimnasio_id 
+        AND MONTH(fecha) = MONTH(CURDATE()) 
+        GROUP BY metodo_pago
+    ");
+}
 
 // DATOS
 $pagos_dia = obtenerMonto($conexion, 'pagos', 'fecha', $gimnasio_id, 'DIA');
@@ -42,24 +107,16 @@ $graf_metodos_pago = obtenerPagosPorMetodo($conexion, $gimnasio_id);
         font-family: Arial, sans-serif;
         margin: 0;
     }
-
     .contenido {
         padding: 20px;
         margin-left: 260px;
     }
-
     h2 { margin-top: 30px; }
-
     .tabla-responsive { overflow-x: auto; margin-bottom: 20px; }
-
     table { width: 100%; border-collapse: collapse; background: #111; min-width: 600px; }
-
     th, td { border: 1px solid #333; padding: 8px; color: white; text-align: left; }
-
     th { background: #444; }
-
     .panel { display: flex; flex-wrap: wrap; gap: 15px; justify-content: center; }
-
     .card {
         background: #222;
         padding: 15px;
@@ -67,7 +124,6 @@ $graf_metodos_pago = obtenerPagosPorMetodo($conexion, $gimnasio_id);
         box-shadow: 0 0 10px #000;
         width: 280px;
     }
-
     .graficos-container {
         display: flex;
         flex-wrap: wrap;
@@ -75,7 +131,6 @@ $graf_metodos_pago = obtenerPagosPorMetodo($conexion, $gimnasio_id);
         gap: 20px;
         margin: 20px 0;
     }
-
     .grafico-box {
         width: 260px;
         max-width: 90%;
@@ -83,17 +138,13 @@ $graf_metodos_pago = obtenerPagosPorMetodo($conexion, $gimnasio_id);
         padding: 10px;
         border-radius: 10px;
     }
-
     ul { padding-left: 20px; }
-
     @media (max-width: 768px) {
         .contenido {
             margin-left: 0 !important;
             padding: 10px;
         }
-
         .card { width: 100%; }
-
         table { min-width: 100%; font-size: 14px; }
     }
   </style>
@@ -102,7 +153,7 @@ $graf_metodos_pago = obtenerPagosPorMetodo($conexion, $gimnasio_id);
 
 <div class="contenido">
 
-  <h2><?= date('H') < 12 ? '¡Buenos días' : '¡Buenas tardes' ?>, <?= $usuario ?>!</h2>
+  <h2><?= date('H') < 12 ? '¡Buenos días' : '¡Buenas tardes' ?>, <?= htmlspecialchars($usuario) ?>!</h2>
 
   <h2>Ingresos del Día - Clientes</h2>
   <div class="tabla-responsive">
@@ -173,7 +224,7 @@ $graf_metodos_pago = obtenerPagosPorMetodo($conexion, $gimnasio_id);
     <?php endwhile; ?>
   </ul>
 
-</div> <!-- Cierre div.contenido -->
+</div>
 
 <script>
   const ctx1 = document.getElementById('disciplinasChart').getContext('2d');
