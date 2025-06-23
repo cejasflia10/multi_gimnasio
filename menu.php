@@ -155,12 +155,13 @@ body {
 
     <a href="#" class="submenu-toggle"><i class="fas fa-id-card"></i> Acceso Clientes</a>
     <div class="submenu">
-        <a href="cliente_acceso.php">Ingreso por DNI</a>
-        <a href="reservar_turno.php">Reservar Turno</a>
-        <a href="ver_turnos_cliente.php">Ver Mis Turnos</a>
-        <a href="estado_pagos.php">Estado de Pagos</a>
-        <a href="mi_qr.php">Mi Código QR</a>
-    </div>
+        <a href="cliente_acceso.php"><i class="fas fa-sign-in-alt"></i> Ingreso por DNI</a>
+        <a href="reservar_turno.php"><i class="fas fa-calendar-plus"></i> Reservar Turno</a>
+        <a href="ver_turnos_cliente.php?dni=<?= $_SESSION['dni_cliente'] ?? '' ?>"><i class="fas fa-calendar-check"></i> Ver Mis Turnos</a>
+        <a href="estado_pagos.php?dni=<?= $_SESSION['dni_cliente'] ?? '' ?>"><i class="fas fa-dollar-sign"></i> Estado de Pagos</a>
+        <a href="mi_qr.php?dni=<?= $_SESSION['dni_cliente'] ?? '' ?>"><i class="fas fa-qrcode"></i> Mi Código QR</a>
+
+
 </div>
 
 <!-- JS PARA TOGGLE -->
