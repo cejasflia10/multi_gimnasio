@@ -5,8 +5,8 @@ if (session_status() === PHP_SESSION_NONE) {
 include 'conexion.php';
 
 $gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
-
 $nombre_gimnasio = '';
+
 if ($gimnasio_id > 0) {
     $resultado = $conexion->query("SELECT nombre FROM gimnasios WHERE id = $gimnasio_id");
     if ($fila = $resultado->fetch_assoc()) {
@@ -38,10 +38,18 @@ if ($gimnasio_id > 0) {
             width: 90%;
             max-width: 400px;
         }
-        h2, h3 {
+        h2 {
             text-align: center;
             color: gold;
-            margin-bottom: 10px;
+            margin-bottom: 5px;
+            font-size: 22px;
+        }
+        h3 {
+            text-align: center;
+            color: white;
+            margin-top: 0;
+            font-size: 16px;
+            margin-bottom: 20px;
         }
         label {
             display: block;
@@ -77,10 +85,9 @@ if ($gimnasio_id > 0) {
 </head>
 <body>
     <form class="form-container" action="guardar_cliente_online.php" method="POST">
-        <h2>Registro de Cliente</h2>
-        <h3>Gimnasio: <?php echo htmlspecialchars($nombre_gimnasio); ?></h3>
+        <h2><?php echo strtoupper(htmlspecialchars($nombre_gimnasio)); ?></h2>
+        <h3>Registro de Cliente</h3>
 
-        <!-- Campo oculto para registrar el gimnasio asociado -->
         <input type="hidden" name="gimnasio_id" value="<?php echo $gimnasio_id; ?>">
 
         <label for="apellido">Apellido:</label>
@@ -104,7 +111,6 @@ if ($gimnasio_id > 0) {
         <label for="email">Email:</label>
         <input type="email" id="email" name="email" required>
 
-        <!-- RFID oculto para completar internamente -->
         <input type="hidden" name="rfid_uid" value="">
 
         <label for="disciplina">Disciplina:</label>
@@ -114,8 +120,6 @@ if ($gimnasio_id > 0) {
             <option value="Kickboxing">Kickboxing</option>
             <option value="MMA">MMA</option>
         </select>
-
-        <!-- Eliminado el selector de academia ya que se define automáticamente -->
 
         <button type="submit">Registrar</button>
     </form>
