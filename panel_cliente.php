@@ -1,5 +1,4 @@
 <?php
-session_start();
 include 'conexion.php';
 
 if (!isset($_GET['dni'])) {
@@ -8,25 +7,17 @@ if (!isset($_GET['dni'])) {
 
 $dni = $_GET['dni'];
 
-// Obtener cliente
-$query = "SELECT * FROM clientes WHERE dni = '$dni' LIMIT 1";
-$resultado = $conexion->query($query);
+// Buscamos al cliente
+$stmt = $conexion->prepare("SELECT * FROM clientes WHERE dni = ?");
+$stmt->bind_param("s", $dni);
+$stmt->execute();
+$resultado = $stmt->get_result();
 
 if ($resultado->num_rows === 0) {
     die("Cliente no encontrado.");
 }
 
 $cliente = $resultado->fetch_assoc();
-
-// Obtener membresía activa
-$id_cliente = $cliente['id'];
-$membresia = $conexion->query("SELECT * FROM membresias WHERE id_cliente = $id_cliente ORDER BY fecha_inicio DESC LIMIT 1")->fetch_assoc();
-
-$clases = $membresia['clases_disponibles'] ?? 0;
-$vencimiento = $membresia['fecha_vencimiento'] ?? 'No registrada';
-
-// Obtener próximos turnos
-$turnos = $conexion->query("SELECT * FROM turnos WHERE id_cliente = $id_cliente AND fecha >= CURDATE() ORDER BY fecha ASC LIMIT 5");
 ?>
 
 <!DOCTYPE html>
@@ -40,53 +31,42 @@ $turnos = $conexion->query("SELECT * FROM turnos WHERE id_cliente = $id_cliente 
             background-color: #111;
             color: gold;
             font-family: Arial, sans-serif;
+            margin: 0;
             padding: 20px;
         }
         .panel {
-            background-color: #1a1a1a;
-            padding: 20px;
+            max-width: 600px;
+            margin: auto;
+            background-color: #222;
+            padding: 30px;
             border-radius: 10px;
         }
-        h1 {
-            color: #f1f1f1;
+        h2, p {
+            margin-bottom: 15px;
         }
-        .dato {
-            margin-bottom: 10px;
+        .dorado {
+            color: #ffd700;
         }
-        .btn {
-            background-color: gold;
-            color: #111;
-            padding: 10px 15px;
-            border: none;
-            border-radius: 5px;
+        .volver {
+            margin-top: 20px;
+            display: block;
+            text-align: center;
+            color: gold;
             text-decoration: none;
-            display: inline-block;
-            margin-top: 15px;
+            font-weight: bold;
         }
     </style>
 </head>
 <body>
     <div class="panel">
-        <h1>Bienvenido, <?= $cliente['nombre'] . " " . $cliente['apellido'] ?></h1>
+        <h2>Bienvenido, <?php echo $cliente['nombre'] . " " . $cliente['apellido']; ?></h2>
+        <p><span class="dorado">DNI:</span> <?php echo $cliente['dni']; ?></p>
+        <p><span class="dorado">Disciplina:</span> <?php echo $cliente['disciplina']; ?></p>
+        <p><span class="dorado">Fecha de nacimiento:</span> <?php echo $cliente['fecha_nacimiento']; ?></p>
+        <p><span class="dorado">Email:</span> <?php echo $cliente['email']; ?></p>
+        <p><span class="dorado">Teléfono:</span> <?php echo $cliente['telefono']; ?></p>
 
-        <div class="dato"><strong>DNI:</strong> <?= $cliente['dni'] ?></div>
-        <div class="dato"><strong>Clases disponibles:</strong> <?= $clases ?></div>
-        <div class="dato"><strong>Vencimiento:</strong> <?= $vencimiento ?></div>
-
-        <div class="dato">
-            <strong>Próximos turnos:</strong><br>
-            <?php if ($turnos->num_rows > 0): ?>
-                <ul>
-                    <?php while($t = $turnos->fetch_assoc()): ?>
-                        <li><?= $t['fecha'] . " " . $t['hora'] ?></li>
-                    <?php endwhile; ?>
-                </ul>
-            <?php else: ?>
-                No tenés turnos próximos.
-            <?php endif; ?>
-        </div>
-
-        <a class="btn" href="mi_qr.php?dni=<?= $dni ?>">Ver mi QR</a>
+        <a class="volver" href="cliente_acceso.php">← Volver</a>
     </div>
 </body>
 </html>
