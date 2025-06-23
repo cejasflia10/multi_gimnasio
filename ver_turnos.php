@@ -1,116 +1,92 @@
 <?php
 include 'conexion.php';
+include 'menu.php';
 if (session_status() === PHP_SESSION_NONE) session_start();
 
 $gimnasio_id = $_SESSION['gimnasio_id'];
 
-if (!isset($_GET['id'])) {
-    die("ID de turno no especificado.");
-}
+// Consulta con todos los JOIN necesarios
+$query = "SELECT turnos.id, dias.nombre AS dia, horarios.hora_inicio, horarios.hora_fin, 
+                 profesores.nombre AS profesor, profesores.apellido, turnos.cupo_maximo
+          FROM turnos
+          LEFT JOIN dias ON turnos.id_dia = dias.id
+          LEFT JOIN horarios ON turnos.id_horario = horarios.id
+          LEFT JOIN profesores ON turnos.id_profesor = profesores.id
+          WHERE turnos.gimnasio_id = $gimnasio_id
+          ORDER BY dias.id, horarios.hora_inicio";
 
-$id = intval($_GET['id']);
-
-// Procesar actualización
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $id_dia = $_POST['id_dia'];
-    $id_horario = $_POST['id_horario'];
-    $id_profesor = $_POST['id_profesor'];
-    $cupo_maximo = $_POST['cupo_maximo'];
-
-    $stmt = $conexion->prepare("UPDATE turnos SET id_dia = ?, id_horario = ?, id_profesor = ?, cupo_maximo = ? WHERE id = ? AND gimnasio_id = ?");
-    $stmt->bind_param("iiiiii", $id_dia, $id_horario, $id_profesor, $cupo_maximo, $id, $gimnasio_id);
-    $stmt->execute();
-
-    header("Location: ver_turnos.php");
-    exit;
-}
-
-// Cargar datos actuales del turno
-$turno = $conexion->query("SELECT * FROM turnos WHERE id = $id AND gimnasio_id = $gimnasio_id")->fetch_assoc();
-$dias = $conexion->query("SELECT * FROM dias");
-$horarios = $conexion->query("SELECT * FROM horarios");
-$profesores = $conexion->query("SELECT * FROM profesores WHERE gimnasio_id = $gimnasio_id");
+$resultado = $conexion->query($query);
 ?>
 
 <!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>Editar Turno</title>
+    <title>Turnos y Horarios</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <style>
         body {
             background-color: #111;
             color: gold;
-            font-family: Arial, sans-serif;
-            display: flex;
-            justify-content: center;
-            padding: 40px;
-        }
-        form {
-            background-color: #222;
+            font-family: Arial;
+            margin-left: 260px;
             padding: 20px;
-            border-radius: 10px;
-            width: 100%;
-            max-width: 400px;
         }
-        label, select, input {
-            display: block;
-            width: 100%;
-            margin-bottom: 15px;
-            font-size: 16px;
+        h1 {
+            text-align: center;
         }
-        input[type="submit"] {
+        table {
+            width: 100%;
+            background-color: #222;
+            border-collapse: collapse;
+            margin-top: 15px;
+        }
+        th, td {
+            border: 1px solid #444;
+            padding: 10px;
+            text-align: center;
+        }
+        th {
+            background-color: #333;
+        }
+        .boton {
+            padding: 6px 10px;
             background-color: gold;
             color: black;
-            border: none;
-            padding: 10px;
+            text-decoration: none;
             border-radius: 5px;
-            cursor: pointer;
-        }
-        a {
-            color: gold;
-            text-align: center;
-            display: block;
-            margin-top: 10px;
+            margin: 2px;
         }
     </style>
 </head>
 <body>
-    <form method="POST">
-        <h2>Editar Turno</h2>
+    <h1>Turnos y Horarios</h1>
+    <a class="boton" href="agregar_turno.php">+ Nuevo Turno</a>
 
-        <label>Día:</label>
-        <select name="id_dia" required>
-            <?php while ($d = $dias->fetch_assoc()) {
-                $selected = $d['id'] == $turno['id_dia'] ? 'selected' : '';
-                echo "<option value='{$d['id']}' $selected>{$d['nombre']}</option>";
-            } ?>
-        </select>
-
-        <label>Horario:</label>
-        <select name="id_horario" required>
-            <?php while ($h = $horarios->fetch_assoc()) {
-                $rango = substr($h['hora_inicio'], 0, 5) . ' - ' . substr($h['hora_fin'], 0, 5);
-                $selected = $h['id'] == $turno['id_horario'] ? 'selected' : '';
-                echo "<option value='{$h['id']}' $selected>$rango</option>";
-            } ?>
-        </select>
-
-        <label>Profesor:</label>
-        <select name="id_profesor" required>
-            <?php while ($p = $profesores->fetch_assoc()) {
-                $nombre = $p['apellido'] . ' ' . $p['nombre'];
-                $selected = $p['id'] == $turno['id_profesor'] ? 'selected' : '';
-                echo "<option value='{$p['id']}' $selected>$nombre</option>";
-            } ?>
-        </select>
-
-        <label>Cupo máximo:</label>
-        <input type="number" name="cupo_maximo" value="<?= $turno['cupo_maximo'] ?>" min="1">
-
-        <input type="submit" value="Guardar Cambios">
-        <a href="ver_turnos.php">← Volver</a>
-    </form>
+    <table>
+        <thead>
+            <tr>
+                <th>Día</th>
+                <th>Horario</th>
+                <th>Profesor</th>
+                <th>Cupo</th>
+                <th>Acciones</th>
+            </tr>
+        </thead>
+        <tbody>
+            <?php while ($fila = $resultado->fetch_assoc()) { ?>
+                <tr>
+                    <td><?= $fila['dia'] ?></td>
+                    <td><?= substr($fila['hora_inicio'], 0, 5) ?> - <?= substr($fila['hora_fin'], 0, 5) ?></td>
+                    <td><?= $fila['apellido'] . ' ' . $fila['profesor'] ?></td>
+                    <td><?= $fila['cupo_maximo'] ?></td>
+                    <td>
+                        <a class="boton" href="editar_turno.php?id=<?= $fila['id'] ?>">Editar</a>
+                        <a class="boton" href="eliminar_turno.php?id=<?= $fila['id'] ?>" onclick="return confirm('¿Eliminar este turno?')">Eliminar</a>
+                    </td>
+                </tr>
+            <?php } ?>
+        </tbody>
+    </table>
 </body>
 </html>
