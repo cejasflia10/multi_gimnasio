@@ -107,15 +107,14 @@ body {
     <div class="submenu">
         <a href="registrar_asistencia.php">Registrar Asistencia</a>
         <a href="asistencias_index.php">Ver Asistencias</a>
-        <a href="registro_online.php" target="_blank"><i class="fas fa-link"></i> Registro Online</a></li>
-
+        <a href="registro_online.php" target="_blank"><i class="fas fa-link"></i> Registro Online</a>
     </div>
 
     <a href="#" class="submenu-toggle"><i class="fas fa-qrcode"></i> QR</a>
     <div class="submenu">
-        <a href="ver_asistencia_qr.php">Ver Asistencias QR</a></li>
-        <a href="ver_asistencias_mes.php">Asistencias del Mes</a></li>
-        <a href="ver_asistencia_qr.php">Ver Asistencia QR del Día</a></li>
+        <a href="ver_asistencia_qr.php">Ver Asistencias QR</a>
+        <a href="ver_asistencias_mes.php">Asistencias del Mes</a>
+        <a href="ver_asistencia_qr.php">Ver Asistencia QR del Día</a>
         <a href="generar_qr.php">Generar QR</a>
         <a href="scanner_qr.php">Escanear QR</a>
     </div>
@@ -152,20 +151,16 @@ body {
         <a href="ventas_protecciones.php">Protecciones</a>
         <a href="ventas_suplementos.php">Suplementos</a>
         <a href="reporte_ventas.php">Reportes</a>
-        
-    </div class="menu-item">
-    <a href="#" class="menu-link">
-        <i class="fas fa-id-card"></i> Acceso Clientes
-    </a>
-    <ul class="submenu">
-        <li><a href="cliente_acceso.php">Ingreso por DNI</a></li>
-        <li><a href="reservar_turno.php">Reservar Turno</a></li>
-        <li><a href="ver_turnos_cliente.php">Ver Mis Turnos</a></li>
-        <li><a href="estado_pagos.php">Estado de Pagos</a></li>
-        <li><a href="mi_qr.php">Mi Código QR</a></li>
-    </ul>
-</li>
+    </div>
 
+    <a href="#" class="submenu-toggle"><i class="fas fa-id-card"></i> Acceso Clientes</a>
+    <div class="submenu">
+        <a href="cliente_acceso.php">Ingreso por DNI</a>
+        <a href="reservar_turno.php">Reservar Turno</a>
+        <a href="ver_turnos_cliente.php">Ver Mis Turnos</a>
+        <a href="estado_pagos.php">Estado de Pagos</a>
+        <a href="mi_qr.php">Mi Código QR</a>
+    </div>
 </div>
 
 <!-- JS PARA TOGGLE -->
@@ -180,12 +175,9 @@ body {
   document.querySelectorAll(".submenu-toggle").forEach(toggle => {
     toggle.addEventListener("click", function(e) {
       e.preventDefault();
-      // Remover 'active' de otros
       document.querySelectorAll(".submenu-toggle").forEach(el => el.classList.remove("active"));
-      // Cerrar todos los submenús
       document.querySelectorAll(".submenu").forEach(menu => menu.style.display = "none");
 
-      // Activar el actual
       toggle.classList.add("active");
       const submenu = toggle.nextElementSibling;
       if (submenu && submenu.classList.contains("submenu")) {
