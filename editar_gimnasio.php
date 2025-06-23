@@ -147,38 +147,38 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
 <h2>Editar Gimnasio</h2>
 
 <?php if (!empty($error)): ?>
-    <div class="error"><?= $error ?></div>
+    <div class="error"><?= htmlspecialchars($error, ENT_QUOTES) ?></div>
 <?php endif; ?>
 
 <form method="POST">
     <label>Nombre:</label>
-    <input type="text" name="nombre" value="<?= htmlspecialchars($gimnasio['nombre']) ?>" required>
+    <input type="text" name="nombre" value="<?= htmlspecialchars($gimnasio['nombre'] ?? '', ENT_QUOTES) ?>" required>
 
     <label>Dirección:</label>
-    <input type="text" name="direccion" value="<?= htmlspecialchars($gimnasio['direccion']) ?>">
+    <input type="text" name="direccion" value="<?= htmlspecialchars($gimnasio['direccion'] ?? '', ENT_QUOTES) ?>">
 
     <label>Teléfono:</label>
-    <input type="text" name="telefono" value="<?= htmlspecialchars($gimnasio['telefono']) ?>">
+    <input type="text" name="telefono" value="<?= htmlspecialchars($gimnasio['telefono'] ?? '', ENT_QUOTES) ?>">
 
     <label>Email:</label>
-    <input type="email" name="email" value="<?= htmlspecialchars($gimnasio['email']) ?>">
+    <input type="email" name="email" value="<?= htmlspecialchars($gimnasio['email'] ?? '', ENT_QUOTES) ?>">
 
     <label>Plan:</label>
-    <input type="text" name="plan" maxlength="100" value="<?= htmlspecialchars($gimnasio['plan']) ?>">
+    <input type="text" name="plan" maxlength="100" value="<?= htmlspecialchars($gimnasio['plan'] ?? '', ENT_QUOTES) ?>">
 
     <label>Fecha de vencimiento:</label>
-    <input type="date" name="fecha_vencimiento" value="<?= $gimnasio['fecha_vencimiento'] ?>">
+    <input type="date" name="fecha_vencimiento" value="<?= htmlspecialchars($gimnasio['fecha_vencimiento'] ?? '', ENT_QUOTES) ?>">
 
     <label>Duración del plan (en meses):</label>
-    <input type="number" name="duracion_plan" value="<?= $gimnasio['duracion_plan'] ?>" min="1">
+    <input type="number" name="duracion_plan" value="<?= htmlspecialchars($gimnasio['duracion_plan'] ?? '', ENT_QUOTES) ?>" min="1">
 
     <label>Límite de clientes:</label>
-    <input type="number" name="limite_clientes" value="<?= $gimnasio['limite_clientes'] ?>" min="0">
+    <input type="number" name="limite_clientes" value="<?= htmlspecialchars($gimnasio['limite_clientes'] ?? '', ENT_QUOTES) ?>" min="0">
 
     <div class="checkboxes">
-        <label><input type="checkbox" name="acceso_panel" <?= $gimnasio['acceso_panel'] ? 'checked' : '' ?>> Acceso al panel</label>
-        <label><input type="checkbox" name="acceso_ventas" <?= $gimnasio['acceso_ventas'] ? 'checked' : '' ?>> Acceso a ventas</label>
-        <label><input type="checkbox" name="acceso_asistencias" <?= $gimnasio['acceso_asistencias'] ? 'checked' : '' ?>> Acceso a asistencias</label>
+        <label><input type="checkbox" name="acceso_panel" <?= !empty($gimnasio['acceso_panel']) ? 'checked' : '' ?>> Acceso al panel</label>
+        <label><input type="checkbox" name="acceso_ventas" <?= !empty($gimnasio['acceso_ventas']) ? 'checked' : '' ?>> Acceso a ventas</label>
+        <label><input type="checkbox" name="acceso_asistencias" <?= !empty($gimnasio['acceso_asistencias']) ? 'checked' : '' ?>> Acceso a asistencias</label>
     </div>
 
     <label>Crear nuevo usuario (opcional):</label>
