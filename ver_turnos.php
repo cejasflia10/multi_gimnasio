@@ -1,58 +1,110 @@
 <?php
 include 'conexion.php';
-include 'menu.php';
 if (session_status() === PHP_SESSION_NONE) session_start();
 
 $gimnasio_id = $_SESSION['gimnasio_id'];
 
-$query = "SELECT turnos.*, profesores.nombre AS profesor
-          FROM turnos 
-          LEFT JOIN profesores ON turnos.profesor_id = profesores.id
-          WHERE turnos.gimnasio_id = $gimnasio_id
-          ORDER BY FIELD(dia, 'Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'), horario_inicio";
+if (!isset($_GET['id'])) {
+    die("ID de turno no especificado.");
+}
 
-$resultado = $conexion->query($query);
+$id = $_GET['id'];
+
+// Procesar actualización
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $dia = $_POST['dia'];
+    $horario_inicio = $_POST['horario_inicio'];
+    $horario_fin = $_POST['horario_fin'];
+    $profesor_id = $_POST['profesor_id'];
+
+    $stmt = $conexion->prepare("UPDATE turnos SET dia = ?, horario_inicio = ?, horario_fin = ?, profesor_id = ? WHERE id = ?");
+    $stmt->bind_param("sssii", $dia, $horario_inicio, $horario_fin, $profesor_id, $id);
+    $stmt->execute();
+
+    header("Location: ver_turnos.php");
+    exit;
+}
+
+// Cargar datos actuales del turno
+$turno = $conexion->query("SELECT * FROM turnos WHERE id = $id AND gimnasio_id = $gimnasio_id")->fetch_assoc();
+$profesores = $conexion->query("SELECT id, nombre FROM profesores WHERE gimnasio_id = $gimnasio_id");
 ?>
 
 <!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>Turnos y Horarios</title>
+    <title>Editar Turno</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <style>
-        body { background-color: #111; color: gold; font-family: Arial; margin-left: 260px; padding: 20px; }
-        table { width: 100%; background-color: #222; border-collapse: collapse; }
-        th, td { border: 1px solid #444; padding: 10px; text-align: center; }
-        th { background-color: #333; }
-        a.boton { padding: 6px 10px; color: black; background-color: gold; text-decoration: none; margin: 0 2px; border-radius: 5px; }
+        body {
+            background-color: #111;
+            color: gold;
+            font-family: Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+            padding: 40px;
+        }
+        form {
+            background-color: #222;
+            padding: 20px;
+            border-radius: 10px;
+            width: 100%;
+            max-width: 400px;
+        }
+        label, select, input {
+            display: block;
+            width: 100%;
+            margin-bottom: 15px;
+            font-size: 16px;
+        }
+        input[type="submit"] {
+            background-color: gold;
+            color: black;
+            border: none;
+            padding: 10px;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        a {
+            color: gold;
+            text-align: center;
+            display: block;
+            margin-top: 10px;
+        }
     </style>
 </head>
 <body>
-    <h1>Turnos y Horarios</h1>
-    <a href="agregar_turno.php" class="boton">+ Nuevo Turno</a>
-    <table>
-        <thead>
-            <tr>
-                <th>Día</th>
-                <th>Horario</th>
-                <th>Profesor</th>
-                <th>Acciones</th>
-            </tr>
-        </thead>
-        <tbody>
-            <?php while ($fila = $resultado->fetch_assoc()) { ?>
-                <tr>
-                    <td><?= $fila['dia'] ?></td>
-                    <td><?= substr($fila['horario_inicio'],0,5) ?> - <?= substr($fila['horario_fin'],0,5) ?></td>
-                    <td><?= $fila['profesor'] ?></td>
-                    <td>
-                        <a class="boton" href="editar_turno.php?id=<?= $fila['id'] ?>">Editar</a>
-                        <a class="boton" href="eliminar_turno.php?id=<?= $fila['id'] ?>" onclick="return confirm('¿Eliminar este turno?')">Eliminar</a>
-                    </td>
-                </tr>
-            <?php } ?>
-        </tbody>
-    </table>
+    <form method="POST">
+        <h2>Editar Turno</h2>
+
+        <label>Día:</label>
+        <select name="dia" required>
+            <?php
+            $dias = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"];
+            foreach ($dias as $d) {
+                $selected = $turno['dia'] === $d ? 'selected' : '';
+                echo "<option value='$d' $selected>$d</option>";
+            }
+            ?>
+        </select>
+
+        <label>Horario de Inicio:</label>
+        <input type="time" name="horario_inicio" value="<?= $turno['horario_inicio'] ?>" required>
+
+        <label>Horario de Fin:</label>
+        <input type="time" name="horario_fin" value="<?= $turno['horario_fin'] ?>" required>
+
+        <label>Profesor:</label>
+        <select name="profesor_id" required>
+            <?php while ($p = $profesores->fetch_assoc()) {
+                $selected = $p['id'] == $turno['profesor_id'] ? 'selected' : '';
+                echo "<option value='{$p['id']}' $selected>{$p['nombre']}</option>";
+            } ?>
+        </select>
+
+        <input type="submit" value="Guardar Cambios">
+        <a href="ver_turnos.php">← Volver</a>
+    </form>
 </body>
 </html>
