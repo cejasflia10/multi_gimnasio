@@ -96,7 +96,7 @@ $graf_metodos_pago = obtenerPagosPorMetodo($conexion, $gimnasio_id);
         padding: 20px;
         padding-left: 260px;
     }
-    h2 { margin-top: 30px; }
+    h2 { margin-top: 30px; text-align: center; }
     .tabla-responsive { overflow-x: auto; margin-bottom: 20px; }
     table { width: 100%; border-collapse: collapse; background: #111; min-width: 600px; }
     th, td { border: 1px solid #333; padding: 8px; color: white; text-align: left; }
