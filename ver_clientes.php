@@ -67,6 +67,11 @@ $resultado = $conexion->query($query);
         a.btn:hover {
             background-color: #d4ac0d;
         }
+        .acciones a {
+            margin: 0 4px;
+            text-decoration: none;
+            font-size: 18px;
+        }
         @media (max-width: 768px) {
             table, thead, tbody, th, td, tr {
                 font-size: 14px;
@@ -89,24 +94,33 @@ $resultado = $conexion->query($query);
                     <th>Disciplina</th>
                     <th>QR</th>
                     <th>Gimnasio</th>
+                    <th>Acciones</th>
                 </tr>
             </thead>
             <tbody>
                 <?php while ($cliente = $resultado->fetch_assoc()) { ?>
                     <tr>
-                        <td><?= htmlspecialchars($cliente['apellido']) ?></td>
-                        <td><?= htmlspecialchars($cliente['nombre']) ?></td>
-                        <td><?= htmlspecialchars($cliente['dni']) ?></td>
-                        <td><?= htmlspecialchars($cliente['telefono']) ?></td>
-                        <td><?= htmlspecialchars($cliente['email']) ?></td>
-                        <td><?= htmlspecialchars($cliente['disciplina']) ?></td>
+                        <td><?= htmlspecialchars($cliente['apellido'] ?? '') ?></td>
+                        <td><?= htmlspecialchars($cliente['nombre'] ?? '') ?></td>
+                        <td><?= htmlspecialchars($cliente['dni'] ?? '') ?></td>
+                        <td><?= htmlspecialchars($cliente['telefono'] ?? '') ?></td>
+                        <td><?= htmlspecialchars($cliente['email'] ?? '') ?></td>
+                        <td><?= htmlspecialchars($cliente['disciplina'] ?? '') ?></td>
                         <td>
-                            <a href="generar_qr_individual.php?id=<?= $cliente['id'] ?>" title="Generar QR">
-                                📲
-                            </a>
+                            <a href="generar_qr_individual.php?id=<?= $cliente['id'] ?>" title="Generar QR">📲</a>
+                            <?php
+                            $qr_path = "qr_clientes/" . $cliente['id'] . ".png";
+                            if (file_exists($qr_path)) {
+                                echo '<a href="' . $qr_path . '" target="_blank" title="Ver QR">🖼️</a>';
+                                echo '<a href="' . $qr_path . '" download title="Descargar QR">⬇️</a>';
+                            }
+                            ?>
                         </td>
-                        <td><?= htmlspecialchars($variable ?? '')
-
+                        <td><?= htmlspecialchars($cliente['nombre_gimnasio'] ?? '') ?></td>
+                        <td class="acciones">
+                            <a href="editar_cliente.php?id=<?= $cliente['id'] ?>" title="Editar">✏️</a>
+                            <a href="eliminar_cliente.php?id=<?= $cliente['id'] ?>" title="Eliminar" onclick="return confirm('¿Estás seguro de eliminar este cliente?')">🗑️</a>
+                        </td>
                     </tr>
                 <?php } ?>
             </tbody>
