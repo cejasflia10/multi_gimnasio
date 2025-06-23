@@ -153,13 +153,11 @@ body {
         <a href="ventas_suplementos.php">Suplementos</a>
         <a href="reporte_ventas.php">Reportes</a>
     </div>
-    
-    <li class="submenu">
-  <a href="#">🔐 Acceso Cliente</a>
-  <ul>
-    <li><a href="cliente_acceso.php">Ingreso por DNI</a></li>
-  </ul>
-</li>
+
+   </div class="submenu">
+        <a href="#">🔐 Acceso Cliente</a>
+        <a href="cliente_acceso.php">Ingreso por DNI</a>
+
 
 </div>
 
