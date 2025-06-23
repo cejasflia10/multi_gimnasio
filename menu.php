@@ -153,6 +153,7 @@ body {
     <div class="submenu-toggle" onclick="toggleSubmenu('usuariosSubmenu')"><i class="fas fa-user-cog"></i> Usuarios</div>
     <div class="submenu" id="usuariosSubmenu">
         <a href="agregar_usuario.php">Agregar Usuario</a>
+        <a href="ver_planes.php">Planes por gimnasio</a>
         <a href="ver_usuarios.php">Ver Usuarios</a>
     </div>
 
