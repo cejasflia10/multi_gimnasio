@@ -1,8 +1,9 @@
 <?php
 include("conexion.php");
+include("phpqrcode/qrlib.php");
 
 if ($_SERVER["REQUEST_METHOD"] === "POST") {
-    // Recibir datos del formulario
+    // Recibir datos
     $apellido = $_POST["apellido"];
     $nombre = $_POST["nombre"];
     $dni = $_POST["dni"];
@@ -10,7 +11,6 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
     $domicilio = $_POST["domicilio"];
     $telefono = $_POST["telefono"];
     $email = $_POST["email"];
-    $rfid = $_POST["rfid_uid"] ?? '';
     $disciplina = $_POST["disciplina"];
     $gimnasio_id = $_POST["gimnasio_id"];
 
@@ -24,13 +24,21 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
     // Calcular edad automáticamente
     $edad = date_diff(date_create($fecha_nacimiento), date_create('today'))->y;
 
-    // Insertar el cliente en la base de datos
-    $stmt = $conexion->prepare("INSERT INTO clientes (apellido, nombre, dni, fecha_nacimiento, edad, domicilio, telefono, email, rfid_uid, disciplina, gimnasio_id)
+    // Generar código QR
+    $dir = "qrs/";
+    if (!file_exists($dir)) {
+        mkdir($dir, 0777, true);
+    }
+    $archivo_qr = $dir . "qr_" . $dni . ".png";
+    QRcode::png($dni, $archivo_qr, QR_ECLEVEL_L, 4);
+
+    // Insertar en la base de datos incluyendo qr_path
+    $stmt = $conexion->prepare("INSERT INTO clientes (apellido, nombre, dni, fecha_nacimiento, edad, domicilio, telefono, email, disciplina, gimnasio_id, qr_path)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
-    $stmt->bind_param("ssssisssssi", $apellido, $nombre, $dni, $fecha_nacimiento, $edad, $domicilio, $telefono, $email, $rfid, $disciplina, $gimnasio_id);
+    $stmt->bind_param("ssssissssis", $apellido, $nombre, $dni, $fecha_nacimiento, $edad, $domicilio, $telefono, $email, $disciplina, $gimnasio_id, $archivo_qr);
 
     if ($stmt->execute()) {
-        echo "<script>alert('Cliente registrado correctamente.'); window.location.href='cliente_acceso.php';</script>";
+        echo "<script>window.location.href='ver_qr.php?dni=$dni';</script>";
     } else {
         echo "<script>alert('Error al registrar el cliente.'); window.history.back();</script>";
     }
