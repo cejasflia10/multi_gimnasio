@@ -8,17 +8,17 @@ if (!isset($_GET['id'])) {
     die("ID de turno no especificado.");
 }
 
-$id = $_GET['id'];
+$id = intval($_GET['id']);
 
 // Procesar actualización
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $dia = $_POST['dia'];
-    $horario_inicio = $_POST['horario_inicio'];
-    $horario_fin = $_POST['horario_fin'];
-    $profesor_id = $_POST['profesor_id'];
+    $id_dia = $_POST['id_dia'];
+    $id_horario = $_POST['id_horario'];
+    $id_profesor = $_POST['id_profesor'];
+    $cupo_maximo = $_POST['cupo_maximo'];
 
-    $stmt = $conexion->prepare("UPDATE turnos SET dia = ?, horario_inicio = ?, horario_fin = ?, profesor_id = ? WHERE id = ?");
-    $stmt->bind_param("sssii", $dia, $horario_inicio, $horario_fin, $profesor_id, $id);
+    $stmt = $conexion->prepare("UPDATE turnos SET id_dia = ?, id_horario = ?, id_profesor = ?, cupo_maximo = ? WHERE id = ? AND gimnasio_id = ?");
+    $stmt->bind_param("iiiiii", $id_dia, $id_horario, $id_profesor, $cupo_maximo, $id, $gimnasio_id);
     $stmt->execute();
 
     header("Location: ver_turnos.php");
@@ -27,7 +27,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 // Cargar datos actuales del turno
 $turno = $conexion->query("SELECT * FROM turnos WHERE id = $id AND gimnasio_id = $gimnasio_id")->fetch_assoc();
-$profesores = $conexion->query("SELECT id, nombre FROM profesores WHERE gimnasio_id = $gimnasio_id");
+$dias = $conexion->query("SELECT * FROM dias");
+$horarios = $conexion->query("SELECT * FROM horarios");
+$profesores = $conexion->query("SELECT * FROM profesores WHERE gimnasio_id = $gimnasio_id");
 ?>
 
 <!DOCTYPE html>
@@ -79,29 +81,33 @@ $profesores = $conexion->query("SELECT id, nombre FROM profesores WHERE gimnasio
         <h2>Editar Turno</h2>
 
         <label>Día:</label>
-        <select name="dia" required>
-            <?php
-            $dias = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"];
-            foreach ($dias as $d) {
-                $selected = $turno['dia'] === $d ? 'selected' : '';
-                echo "<option value='$d' $selected>$d</option>";
-            }
-            ?>
-        </select>
-
-        <label>Horario de Inicio:</label>
-        <input type="time" name="horario_inicio" value="<?= $turno['horario_inicio'] ?>" required>
-
-        <label>Horario de Fin:</label>
-        <input type="time" name="horario_fin" value="<?= $turno['horario_fin'] ?>" required>
-
-        <label>Profesor:</label>
-        <select name="profesor_id" required>
-            <?php while ($p = $profesores->fetch_assoc()) {
-                $selected = $p['id'] == $turno['profesor_id'] ? 'selected' : '';
-                echo "<option value='{$p['id']}' $selected>{$p['nombre']}</option>";
+        <select name="id_dia" required>
+            <?php while ($d = $dias->fetch_assoc()) {
+                $selected = $d['id'] == $turno['id_dia'] ? 'selected' : '';
+                echo "<option value='{$d['id']}' $selected>{$d['nombre']}</option>";
             } ?>
         </select>
+
+        <label>Horario:</label>
+        <select name="id_horario" required>
+            <?php while ($h = $horarios->fetch_assoc()) {
+                $rango = substr($h['hora_inicio'], 0, 5) . ' - ' . substr($h['hora_fin'], 0, 5);
+                $selected = $h['id'] == $turno['id_horario'] ? 'selected' : '';
+                echo "<option value='{$h['id']}' $selected>$rango</option>";
+            } ?>
+        </select>
+
+        <label>Profesor:</label>
+        <select name="id_profesor" required>
+            <?php while ($p = $profesores->fetch_assoc()) {
+                $nombre = $p['apellido'] . ' ' . $p['nombre'];
+                $selected = $p['id'] == $turno['id_profesor'] ? 'selected' : '';
+                echo "<option value='{$p['id']}' $selected>$nombre</option>";
+            } ?>
+        </select>
+
+        <label>Cupo máximo:</label>
+        <input type="number" name="cupo_maximo" value="<?= $turno['cupo_maximo'] ?>" min="1">
 
         <input type="submit" value="Guardar Cambios">
         <a href="ver_turnos.php">← Volver</a>
