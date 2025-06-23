@@ -13,12 +13,14 @@ if ($resultado->num_rows === 0) {
 }
 $gimnasio = $resultado->fetch_assoc();
 
+$error = '';
+
 if ($_SERVER["REQUEST_METHOD"] === "POST") {
     $nombre = $_POST["nombre"];
     $direccion = $_POST["direccion"];
     $telefono = $_POST["telefono"];
     $email = $_POST["email"];
-    $plan = $_POST["plan"];
+    $plan = substr($_POST["plan"], 0, 100); // Máximo 100 caracteres
     $fecha_vencimiento = !empty($_POST["fecha_vencimiento"]) ? $_POST["fecha_vencimiento"] : null;
     $duracion = $_POST["duracion_plan"];
     $limite = $_POST["limite_clientes"];
@@ -32,35 +34,42 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
             duracion_plan=?, limite_clientes=?, acceso_panel=?, acceso_ventas=?, acceso_asistencias=? 
         WHERE id=?
     ");
+
+    if (!$stmt) {
+        die("Error en prepare(): " . $conexion->error);
+    }
+
     $stmt->bind_param(
         "ssssssiiiiii",
         $nombre, $direccion, $telefono, $email, $plan, $fecha_vencimiento,
         $duracion, $limite, $panel, $ventas, $asistencias, $id
     );
-    $stmt->execute();
 
-    // CREAR USUARIO SI FUE CARGADO Y NO EXISTE
-    if (!empty($_POST["usuario"]) && !empty($_POST["clave"])) {
-        $usuario = $_POST["usuario"];
+    if ($stmt->execute()) {
+        // CREAR USUARIO SI FUE CARGADO Y NO EXISTE
+        if (!empty($_POST["usuario"]) && !empty($_POST["clave"])) {
+            $usuario = $_POST["usuario"];
 
-        // Verificar si ya existe ese usuario
-        $verificar = $conexion->prepare("SELECT id FROM usuarios WHERE usuario = ?");
-        $verificar->bind_param("s", $usuario);
-        $verificar->execute();
-        $verificar->store_result();
+            $verificar = $conexion->prepare("SELECT id FROM usuarios WHERE usuario = ?");
+            $verificar->bind_param("s", $usuario);
+            $verificar->execute();
+            $verificar->store_result();
 
-        if ($verificar->num_rows === 0) {
-            $clave = password_hash($_POST["clave"], PASSWORD_BCRYPT);
-            $rol = "admin";
-            $stmt_user = $conexion->prepare("INSERT INTO usuarios (usuario, contrasena, rol, id_gimnasio) VALUES (?, ?, ?, ?)");
-            $stmt_user->bind_param("sssi", $usuario, $clave, $rol, $id);
-            $stmt_user->execute();
+            if ($verificar->num_rows === 0) {
+                $clave = password_hash($_POST["clave"], PASSWORD_BCRYPT);
+                $rol = "admin";
+                $stmt_user = $conexion->prepare("INSERT INTO usuarios (usuario, contrasena, rol, id_gimnasio) VALUES (?, ?, ?, ?)");
+                $stmt_user->bind_param("sssi", $usuario, $clave, $rol, $id);
+                $stmt_user->execute();
+            }
+            $verificar->close();
         }
-        $verificar->close();
-    }
 
-    header("Location: gimnasios.php");
-    exit;
+        header("Location: gimnasios.php");
+        exit;
+    } else {
+        $error = "Error al guardar los cambios: " . $stmt->error;
+    }
 }
 ?>
 
@@ -126,11 +135,20 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
             margin-top: 20px;
             text-decoration: underline;
         }
+        .error {
+            text-align: center;
+            color: red;
+            margin-top: 10px;
+        }
     </style>
 </head>
 <body>
 
 <h2>Editar Gimnasio</h2>
+
+<?php if (!empty($error)): ?>
+    <div class="error"><?= $error ?></div>
+<?php endif; ?>
 
 <form method="POST">
     <label>Nombre:</label>
@@ -146,7 +164,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
     <input type="email" name="email" value="<?= htmlspecialchars($gimnasio['email']) ?>">
 
     <label>Plan:</label>
-    <input type="text" name="plan" value="<?= htmlspecialchars($gimnasio['plan']) ?>">
+    <input type="text" name="plan" maxlength="100" value="<?= htmlspecialchars($gimnasio['plan']) ?>">
 
     <label>Fecha de vencimiento:</label>
     <input type="date" name="fecha_vencimiento" value="<?= $gimnasio['fecha_vencimiento'] ?>">
