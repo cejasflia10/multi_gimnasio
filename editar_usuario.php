@@ -79,7 +79,7 @@ $gimnasios_resultado = $conexion->query("SELECT id, nombre FROM gimnasios");
         <input type="text" name="usuario" value="<?= htmlspecialchars($usuario['usuario'] ?? '') ?>" required>
 
         <label>Email:</label>
-        <input type="text" name="email" value="<?= htmlspecialchars($usuario['email'] ?? '') ?>">
+        <input type="email" name="email" value="<?= htmlspecialchars($usuario['email'] ?? '') ?>">
 
         <label>Rol:</label>
         <select name="rol" required>
