@@ -111,6 +111,7 @@ body {
 
     <a href="#" class="submenu-toggle"><i class="fas fa-qrcode"></i> QR</a>
     <div class="submenu">
+      <li><a href="asistencia_qr.php">Escanear QR (Ingreso)</a></li>
         <a href="generar_qr.php">Generar QR</a>
         <a href="scanner_qr.php">Escanear QR</a>
     </div>
