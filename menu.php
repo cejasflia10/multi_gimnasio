@@ -152,16 +152,17 @@ body {
         <a href="ventas_protecciones.php">Protecciones</a>
         <a href="ventas_suplementos.php">Suplementos</a>
         <a href="reporte_ventas.php">Reportes</a>
-    </div>
-
-<li class="menu-item">
-    <a href="#" class="menu-link">👤 Acceso Clientes</a>
+        
+    </div class="menu-item">
+    <a href="#" class="menu-link">
+        <i class="fas fa-id-card"></i> Acceso Clientes
+    </a>
     <ul class="submenu">
-        <li><a href="reservar_turno.php">📅 Reservar Turno</a></li>
-        <li><a href="ver_turnos_cliente.php">🧾 Ver Mis Turnos</a></li>
-        <li><a href="estado_pagos.php">💳 Pagos y Estado</a></li>
-        <li><a href="mi_qr.php">📸 Mi Código QR</a></li>
-        <li><a href="historial_ingresos.php">📊 Historial de Ingresos</a></li>
+        <li><a href="cliente_acceso.php">Ingreso por DNI</a></li>
+        <li><a href="reservar_turno.php">Reservar Turno</a></li>
+        <li><a href="ver_turnos_cliente.php">Ver Mis Turnos</a></li>
+        <li><a href="estado_pagos.php">Estado de Pagos</a></li>
+        <li><a href="mi_qr.php">Mi Código QR</a></li>
     </ul>
 </li>
 
