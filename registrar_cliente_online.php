@@ -4,8 +4,9 @@ if (session_status() === PHP_SESSION_NONE) {
 }
 include 'conexion.php';
 
+// Obtener el gimnasio logueado
 $gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
-$nombre_gimnasio = '';
+$nombre_gimnasio = 'Gimnasio';
 
 if ($gimnasio_id > 0) {
     $resultado = $conexion->query("SELECT nombre FROM gimnasios WHERE id = $gimnasio_id");
@@ -18,8 +19,8 @@ if ($gimnasio_id > 0) {
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Registro de Cliente</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
         body {
             background-color: #111;
@@ -88,6 +89,7 @@ if ($gimnasio_id > 0) {
         <h2><?php echo strtoupper(htmlspecialchars($nombre_gimnasio)); ?></h2>
         <h3>Registro de Cliente</h3>
 
+        <!-- El gimnasio logueado se guarda automáticamente -->
         <input type="hidden" name="gimnasio_id" value="<?php echo $gimnasio_id; ?>">
 
         <label for="apellido">Apellido:</label>
@@ -111,6 +113,7 @@ if ($gimnasio_id > 0) {
         <label for="email">Email:</label>
         <input type="email" id="email" name="email" required>
 
+        <!-- RFID se deja vacío por defecto -->
         <input type="hidden" name="rfid_uid" value="">
 
         <label for="disciplina">Disciplina:</label>
