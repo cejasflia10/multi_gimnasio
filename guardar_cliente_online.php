@@ -1,38 +1,53 @@
 <?php
-if (session_status() === PHP_SESSION_NONE) {
-    session_start();
-}
-include("conexion.php");
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    include 'conexion.php';
 
-// Obtener datos del formulario
-$apellido = $_POST['apellido'];
-$nombre = $_POST['nombre'];
-$dni = $_POST['dni'];
-$fecha_nacimiento = $_POST['fecha_nacimiento'];
-$edad = $_POST['edad'];
-$domicilio = $_POST['domicilio'];
-$telefono = $_POST['telefono'];
-$email = $_POST['email'];
-$rfid = $_POST['rfid'];
-$disciplina = $_POST['disciplina'];
-$fecha_vencimiento = $_POST['fecha_vencimiento'];
+    $apellido = $_POST['apellido'] ?? '';
+    $nombre = $_POST['nombre'] ?? '';
+    $dni = $_POST['dni'] ?? '';
+    $fecha_nacimiento = $_POST['fecha_nacimiento'] ?? '';
+    $edad = $_POST['edad'] ?? null;
+    $domicilio = $_POST['domicilio'] ?? '';
+    $telefono = $_POST['telefono'] ?? '';
+    $email = $_POST['email'] ?? '';
+    $disciplina = $_POST['disciplina'] ?? '';
+    $gimnasio_id = $_POST['gimnasio_id'] ?? 0;
 
-// Obtener gimnasio desde sesión
-$gimnasio_id = $_SESSION['gimnasio_id'] ?? ($_GET['gimnasio'] ?? 0);
-
-if ($gimnasio_id > 0) {
-    $query = "INSERT INTO clientes (apellido, nombre, dni, fecha_nacimiento, edad, domicilio, telefono, email, rfid, disciplina, fecha_vencimiento, gimnasio_id) 
-              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
-
-    $stmt = $conexion->prepare($query);
-    $stmt->bind_param("ssssissssssi", $apellido, $nombre, $dni, $fecha_nacimiento, $edad, $domicilio, $telefono, $email, $rfid, $disciplina, $fecha_vencimiento, $gimnasio_id);
-    
-    if ($stmt->execute()) {
-        echo "<script>alert('Cliente registrado correctamente'); window.location.href='registro_online.php';</script>";
-    } else {
-        echo "Error: " . $stmt->error;
+    if (empty($apellido) || empty($nombre) || empty($dni) || $gimnasio_id == 0) {
+        echo "Error: datos incompletos o gimnasio no identificado.";
+        exit;
     }
+
+    // Validar si el DNI ya está registrado
+    $check = $conexion->prepare("SELECT id FROM clientes WHERE dni = ? AND gimnasio_id = ?");
+    $check->bind_param("si", $dni, $gimnasio_id);
+    $check->execute();
+    $check->store_result();
+    if ($check->num_rows > 0) {
+        echo "Error: ya existe un cliente con ese DNI en este gimnasio.";
+        exit;
+    }
+
+    // Insertar cliente
+    $stmt = $conexion->prepare("INSERT INTO clientes (apellido, nombre, dni, fecha_nacimiento, edad, domicilio, telefono, email, disciplina, gimnasio_id) 
+                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+    $stmt->bind_param("ssssissssi", $apellido, $nombre, $dni, $fecha_nacimiento, $edad, $domicilio, $telefono, $email, $disciplina, $gimnasio_id);
+
+    if ($stmt->execute()) {
+        $cliente_id = $stmt->insert_id;
+
+        // Crear QR con el DNI
+        $qr_nombre_archivo = "qr/cliente_" . $cliente_id . ".png";
+        include 'phpqrcode/qrlib.php';
+        QRcode::png($dni, $qr_nombre_archivo, QR_ECLEVEL_L, 4);
+
+        echo "Registro exitoso. <a href='cliente_acceso.php'>Volver</a>";
+    } else {
+        echo "Error al registrar: " . $stmt->error;
+    }
+
+    $stmt->close();
+    $conexion->close();
 } else {
-    echo "Error: gimnasio no identificado.";
+    echo "Acceso no autorizado.";
 }
-?>
