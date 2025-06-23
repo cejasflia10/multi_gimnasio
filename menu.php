@@ -106,7 +106,6 @@ body {
     <a href="#" class="submenu-toggle"><i class="fas fa-calendar-check"></i> Asistencias</a>
     <div class="submenu">
         <a href="registrar_asistencia.php">Registrar Asistencia</a>
-<       <a href="ver_asistencia_qr.php">📋 Ver Asistencia QR del Día</a></li>
         <a href="asistencias_index.php">Ver Asistencias</a>
         <a href="registro_online.php" target="_blank"><i class="fas fa-link"></i> Registro Online</a></li>
 
@@ -115,6 +114,7 @@ body {
     <a href="#" class="submenu-toggle"><i class="fas fa-qrcode"></i> QR</a>
     <div class="submenu">
         <a href="ver_asistencias_mes.php">📆 Asistencias del Mes</a></li>
+        <a href="ver_asistencia_qr.php">📋 Ver Asistencia QR del Día</a></li>
         <a href="generar_qr.php">Generar QR</a>
         <a href="scanner_qr.php">Escanear QR</a>
     </div>
