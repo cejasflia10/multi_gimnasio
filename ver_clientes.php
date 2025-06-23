@@ -90,7 +90,7 @@ $resultado = $conexion->query($query);
         }
     </style>
 </head>
-<body>
+<body style='margin-left:260px; padding: 20px;'>
 <div class="container">
     <h2>Clientes Registrados</h2>
     <a href="index.php" class="btn">← Volver al Menú</a>
@@ -99,7 +99,7 @@ $resultado = $conexion->query($query);
         <input type="text" id="filtro" placeholder="Buscar por nombre, apellido, DNI o disciplina...">
     </div>
 
-    <table id="tablaClientes">
+    <div style='overflow-x:auto;'><table id="tablaClientes">
         <thead>
         <tr>
             <th>Apellido</th>
@@ -124,14 +124,14 @@ $resultado = $conexion->query($query);
                 <td><?= htmlspecialchars($cliente['disciplina'] ?? '') ?></td>
                 <td>
                     <?php
-                    $qr_path = "qr_clientes/" . $cliente['id'] . ".png";
-                    if (file_exists($qr_path)) {
-                        echo '<a href="' . $qr_path . '" target="_blank" title="Ver QR">🖼️</a> ';
-                        echo '<a href="' . $qr_path . '" download title="Descargar QR">⬇️</a>';
-                    } else {
-                        echo '<a href="generar_qr_individual.php?id=' . $cliente['id'] . '" title="Generar QR">📲</a>';
-                    }
-                    ?>
+$qr_path = "qr/" . $cliente['dni'] . ".png";
+if (file_exists($qr_path)) {
+    echo "<a href='$qr_path' target='_blank' title='Ver QR'><i class='fas fa-qrcode'></i></a> ";
+    echo "<a href='$qr_path' download title='Descargar QR'><i class='fas fa-download'></i></a>";
+} else {
+    echo "<a href='generar_qr_individual.php?id=" . $cliente['id'] . "' title='Generar QR'><i class='fas fa-qrcode'></i></a>";
+}
+?>
                 </td>
                 <td><?= htmlspecialchars($cliente['nombre_gimnasio'] ?? '') ?></td>
                 <td class="acciones">
@@ -142,7 +142,7 @@ $resultado = $conexion->query($query);
             </tr>
         <?php } ?>
         </tbody>
-    </table>
+    </table></div>
 </div>
 
 <script>
