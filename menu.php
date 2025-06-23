@@ -97,6 +97,7 @@ body {
     <div class="submenu" id="asistenciasSubmenu">
         <a href="registrar_asistencia.php">Registrar Asistencia</a>
         <a href="ver_asistencia.php">Ver Asistencias</a>
+        <a href="registro_online.php" target="_blank"><i class="fas fa-link"></i> Registro Online</a>
     </div>
 
     <div class="submenu-toggle" onclick="toggleSubmenu('qrSubmenu')"><i class="fas fa-qrcode"></i> QR</div>
@@ -118,6 +119,15 @@ body {
         <a href="ventas_indumentaria.php">Indumentaria</a>
         <a href="ventas_suplementos.php">Suplementos</a>
         <a href="ventas_protecciones.php">Protecciones</a>
+    </div>
+
+    <div class="submenu-toggle" onclick="toggleSubmenu('accesoClientesSubmenu')"><i class="fas fa-id-badge"></i> Acceso Clientes</div>
+    <div class="submenu" id="accesoClientesSubmenu">
+        <a href="cliente_acceso.php"><i class="fas fa-user-check"></i> Ingreso por DNI</a>
+        <a href="reservar_turno.php"><i class="fas fa-calendar-plus"></i> Reservar Turno</a>
+        <a href="ver_turnos_cliente.php"><i class="fas fa-calendar-alt"></i> Ver Mis Turnos</a>
+        <a href="estado_pagos.php"><i class="fas fa-dollar-sign"></i> Estado de Pagos</a>
+        <a href="mi_qr.php"><i class="fas fa-qrcode"></i> Mi Código QR</a>
     </div>
     <?php endif; ?>
 
@@ -148,7 +158,6 @@ body {
 function toggleMenu() {
     document.getElementById('sidebar').classList.toggle('visible');
 }
-
 function toggleSubmenu(id) {
     var submenu = document.getElementById(id);
     submenu.style.display = submenu.style.display === 'block' ? 'none' : 'block';
