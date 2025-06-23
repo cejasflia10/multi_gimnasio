@@ -1,21 +1,50 @@
 <?php
-if (session_status() === PHP_SESSION_NONE) {
-    session_start();
-}
+if (session_status() === PHP_SESSION_NONE) session_start();
 include("conexion.php");
 
-// Obtener gimnasio desde sesión o URL
-$gimnasio_id = $_SESSION['gimnasio_id'] ?? ($_GET['gimnasio'] ?? 0);
-$nombre_gimnasio = "Gimnasio";
+$gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
 
-if ($gimnasio_id > 0) {
-    $resultado = $conexion->query("SELECT nombre FROM gimnasios WHERE id = $gimnasio_id");
-    if ($fila = $resultado->fetch_assoc()) {
-        $nombre_gimnasio = $fila['nombre'];
+if ($gimnasio_id <= 0) {
+    die("No hay un gimnasio logueado.");
+}
+
+$mensaje = '';
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $apellido = $_POST['apellido'];
+    $nombre = $_POST['nombre'];
+    $dni = $_POST['dni'];
+    $fecha_nac = $_POST['fecha_nacimiento'];
+    $domicilio = $_POST['domicilio'];
+    $telefono = $_POST['telefono'];
+    $email = $_POST['email'];
+    $rfid = $_POST['rfid'];
+    $disciplina = $_POST['disciplina'];
+    $fecha_vencimiento = $_POST['fecha_vencimiento'];
+
+    // Calcular edad
+    $edad = date_diff(date_create($fecha_nac), date_create('today'))->y;
+
+    // Verificar DNI duplicado
+    $consulta = $conexion->prepare("SELECT id FROM clientes WHERE dni = ?");
+    $consulta->bind_param("s", $dni);
+    $consulta->execute();
+    $consulta->store_result();
+
+    if ($consulta->num_rows > 0) {
+        $mensaje = "Ya existe un cliente con ese DNI.";
+    } else {
+        $stmt = $conexion->prepare("INSERT INTO clientes (apellido, nombre, dni, fecha_nacimiento, edad, domicilio, telefono, email, rfid, fecha_vencimiento, disciplina, gimnasio_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+        $stmt->bind_param("ssssisssssii", $apellido, $nombre, $dni, $fecha_nac, $edad, $domicilio, $telefono, $email, $rfid, $fecha_vencimiento, $disciplina, $gimnasio_id);
+        if ($stmt->execute()) {
+            $mensaje = "Cliente registrado correctamente.";
+        } else {
+            $mensaje = "Error al registrar el cliente.";
+        }
+        $stmt->close();
     }
-} else {
-    echo "<h2 style='color:red; text-align:center;'>Gimnasio no identificado</h2>";
-    exit;
+
+    $consulta->close();
 }
 ?>
 
@@ -23,7 +52,7 @@ if ($gimnasio_id > 0) {
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>Registro Cliente</title>
+    <title>Registro Online de Cliente</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
         body {
@@ -32,50 +61,86 @@ if ($gimnasio_id > 0) {
             font-family: Arial, sans-serif;
             padding: 20px;
         }
-        .formulario {
+        h2 {
+            text-align: center;
+        }
+        form {
             max-width: 600px;
             margin: auto;
-            background-color: #222;
-            padding: 20px;
-            border-radius: 10px;
+        }
+        label {
+            display: block;
+            margin-top: 10px;
         }
         input, select {
             width: 100%;
-            margin-bottom: 12px;
-            padding: 10px;
-            border-radius: 5px;
-            border: none;
+            padding: 8px;
+            background-color: #222;
+            border: 1px solid gold;
+            color: gold;
         }
-        input[type="submit"] {
+        button {
+            margin-top: 20px;
             background-color: gold;
             color: black;
+            padding: 10px;
+            width: 100%;
+            border: none;
             font-weight: bold;
         }
-        h1 {
+        .mensaje {
             text-align: center;
-            color: gold;
+            margin-top: 10px;
+            font-weight: bold;
         }
     </style>
 </head>
 <body>
 
-    <h1><?php echo strtoupper($nombre_gimnasio); ?></h1>
+<h2>Registro Online de Cliente</h2>
 
-    <div class="formulario">
-        <form action="guardar_cliente.php" method="POST">
-            <input type="text" name="apellido" placeholder="Apellido" required>
-            <input type="text" name="nombre" placeholder="Nombre" required>
-            <input type="number" name="dni" placeholder="DNI" required>
-            <input type="date" name="fecha_nacimiento" placeholder="Fecha de nacimiento" required>
-            <input type="number" name="edad" placeholder="Edad">
-            <input type="text" name="domicilio" placeholder="Domicilio">
-            <input type="text" name="telefono" placeholder="Teléfono">
-            <input type="email" name="email" placeholder="Email">
-            <input type="text" name="rfid" placeholder="RFID" required>
-            <input type="text" name="disciplina" placeholder="Disciplina">
-            <input type="date" name="fecha_vencimiento" placeholder="Fecha de vencimiento" required>
-            <input type="submit" value="Registrar Cliente">
-        </form>
-    </div>
+<?php if (!empty($mensaje)): ?>
+    <div class="mensaje"><?= $mensaje ?></div>
+<?php endif; ?>
+
+<form method="POST">
+    <label>Apellido:</label>
+    <input type="text" name="apellido" required>
+
+    <label>Nombre:</label>
+    <input type="text" name="nombre" required>
+
+    <label>DNI:</label>
+    <input type="text" name="dni" required>
+
+    <label>Fecha de nacimiento:</label>
+    <input type="date" name="fecha_nacimiento" required>
+
+    <label>Domicilio:</label>
+    <input type="text" name="domicilio" required>
+
+    <label>Teléfono:</label>
+    <input type="text" name="telefono" required>
+
+    <label>Email:</label>
+    <input type="email" name="email" required>
+
+    <label>RFID:</label>
+    <input type="text" name="rfid" required>
+
+    <label>Fecha de vencimiento:</label>
+    <input type="date" name="fecha_vencimiento" required>
+
+    <label>Disciplina:</label>
+    <select name="disciplina" required>
+        <option value="">Seleccione una</option>
+        <option value="Boxeo">Boxeo</option>
+        <option value="Kickboxing">Kickboxing</option>
+        <option value="MMA">MMA</option>
+    </select>
+
+    <button type="submit">Registrar Cliente</button>
+</form>
+
 </body>
 </html>
