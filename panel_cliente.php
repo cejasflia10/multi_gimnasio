@@ -99,15 +99,16 @@ $cliente = $resultado->fetch_assoc();
 
     <div class="qr-container">
         <h3>Tu Código QR</h3>
-        <?php
-        $qr_path = "qr/cliente_" . $cliente['id'] . ".png";
-        if (file_exists($qr_path)):
-        ?>
-            <img src="<?= $qr_path ?>" alt="Código QR"><br>
-            <a href="<?= $qr_path ?>" download="QR_<?= $cliente['dni'] ?>.png" class="btn-descargar">Descargar QR</a>
-        <?php else: ?>
-            <p style="color: #aaa;">Tu QR aún no ha sido generado.</p>
-        <?php endif; ?>
+<?php
+$qr_path = "qr/" . $cliente['dni'] . ".png";
+if (file_exists($qr_path)) {
+    echo "<img src='$qr_path' alt='QR del cliente' style='width:200px; height:auto;'>";
+} else {
+    echo "<p>Tu QR aún no ha sido generado.</p>";
+    echo "<a href='generar_qr_individual.php?id=" . $cliente['id'] . "' style='display:inline-block; margin-top:10px; padding:10px 15px; background-color:gold; color:black; border-radius:5px; text-decoration:none;'>Generar QR</a>";
+}
+?>
+
     </div>
 </div>
 
