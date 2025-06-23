@@ -8,12 +8,12 @@ $rol = $_SESSION['rol'] ?? '';
 
 $condicion = ($rol === 'admin') ? '1' : "a.id_gimnasio = $gimnasio_id";
 
-// Consulta para asistencias del mes
+// CONSULTA CORREGIDA: usamos m.cliente_id
 $sql = "
 SELECT a.fecha, a.hora, c.apellido, c.nombre, c.disciplina, m.clases_restantes
 FROM asistencias a
 JOIN clientes c ON a.id_cliente = c.id
-LEFT JOIN membresias m ON m.id_cliente = c.id
+LEFT JOIN membresias m ON m.cliente_id = c.id
 WHERE $condicion
 AND DATE_FORMAT(a.fecha, '%Y-%m') = DATE_FORMAT(CURDATE(), '%Y-%m')
 ORDER BY a.fecha DESC, a.hora DESC";
@@ -68,7 +68,7 @@ $res = $conexion->query($sql);
 </head>
 <body>
 
-<h2>Asistencias del Mes</h2>
+<h2>📆 Asistencias del Mes</h2>
 
 <table>
   <thead>
