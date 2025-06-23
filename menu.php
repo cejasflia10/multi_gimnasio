@@ -12,11 +12,17 @@ if (session_status() === PHP_SESSION_NONE) {
 <style>
 body {
     margin: 0;
+    padding-left: 260px; /* Deja espacio para el menú lateral */
+    background-color: #000;
+    color: gold;
+    font-family: Arial, sans-serif;
 }
 .sidebar {
     height: 100vh;
     width: 260px;
     position: fixed;
+    top: 0;
+    left: 0;
     background-color: #111;
     color: #fff;
     overflow-y: auto;
@@ -160,8 +166,7 @@ body {
         <a href="ver_turnos_cliente.php?dni=<?= $_SESSION['dni_cliente'] ?? '' ?>"><i class="fas fa-calendar-check"></i> Ver Mis Turnos</a>
         <a href="estado_pagos.php?dni=<?= $_SESSION['dni_cliente'] ?? '' ?>"><i class="fas fa-dollar-sign"></i> Estado de Pagos</a>
         <a href="mi_qr.php?dni=<?= $_SESSION['dni_cliente'] ?? '' ?>"><i class="fas fa-qrcode"></i> Mi Código QR</a>
-
-
+    </div>
 </div>
 
 <!-- JS PARA TOGGLE -->
