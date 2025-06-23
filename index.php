@@ -11,7 +11,7 @@ $gimnasio_id = $_SESSION['gimnasio_id'];
 
 // FUNCIONES
 function obtenerMonto($conexion, $tabla, $campo_fecha, $gimnasio_id, $modo = 'DIA') {
-    $condicion = $modo === 'MES' ? "MONTH($campo_fecha) = MONTH(CURDATE())" : "$campo_fecha = CURDATE()";
+    $condicion = $modo === 'MES' ? "MONTH($campo_fecha) = MONTH(CURDATE()) AND YEAR($campo_fecha) = YEAR(CURDATE())" : "$campo_fecha = CURDATE()";
     $columna = match($tabla) {
         'ventas' => 'monto_total',
         'pagos' => 'monto',
@@ -40,21 +40,28 @@ function obtenerVencimientos($conexion, $gimnasio_id) {
 }
 
 function obtenerAsistenciasClientes($conexion, $gimnasio_id) {
-    return $conexion->query("SELECT c.nombre, c.apellido, c.dni, c.disciplina, m.fecha_vencimiento, 
-        TIME(a.fecha_hora) AS hora 
-        FROM asistencias a 
-        INNER JOIN clientes c ON a.cliente_id = c.id 
-        LEFT JOIN membresias m ON m.cliente_id = c.id 
-        WHERE DATE(a.fecha_hora) = CURDATE() 
-        AND c.gimnasio_id = $gimnasio_id 
-        ORDER BY a.fecha_hora DESC");
+    return $conexion->query("
+        SELECT 
+            c.nombre, 
+            c.apellido, 
+            c.dni, 
+            c.disciplina, 
+            m.fecha_vencimiento, 
+            a.hora
+        FROM asistencias a
+        INNER JOIN clientes c ON a.cliente_id = c.id
+        LEFT JOIN membresias m ON m.cliente_id = c.id
+        WHERE a.fecha = CURDATE()
+          AND a.id_gimnasio = $gimnasio_id
+        ORDER BY a.hora DESC
+    ");
 }
 
 function obtenerAsistenciasProfesores($conexion, $gimnasio_id) {
     return $conexion->query("SELECT p.apellido, r.fecha, r.hora_entrada, r.hora_salida 
         FROM registro_asistencias_profesores r 
         INNER JOIN profesores p ON r.profesor_id = p.id 
-        WHERE r.fecha = CURDATE() AND p.gimnasio_id = $gimnasio_id 
+        WHERE r.fecha = CURDATE() AND r.gimnasio_id = $gimnasio_id 
         ORDER BY r.hora_entrada DESC");
 }
 
@@ -166,7 +173,7 @@ $profesores_dia = obtenerAsistenciasProfesores($conexion, $gimnasio_id);
           <td><?= $c['nombre'] . ' ' . $c['apellido'] ?></td>
           <td><?= $c['dni'] ?></td>
           <td><?= $c['disciplina'] ?></td>
-          <td><?= $c['fecha_vencimiento'] ?></td>
+          <td><?= $c['fecha_vencimiento'] ?? '---' ?></td>
           <td><?= $c['hora'] ?></td>
         </tr>
         <?php endwhile; ?>
