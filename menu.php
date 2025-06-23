@@ -20,13 +20,21 @@ body {
     transition: transform 0.3s ease-in-out;
     z-index: 999;
 }
-.sidebar h2 {
-    text-align: center;
-    font-size: 20px;
-    padding: 20px;
-    margin: 0;
+.sidebar-header {
     background-color: #222;
+    padding: 15px;
+    text-align: center;
+}
+.sidebar-header img {
+    height: 45px;
+    vertical-align: middle;
+}
+.sidebar-header span {
+    display: block;
+    margin-top: 5px;
+    font-weight: bold;
     color: gold;
+    font-size: 16px;
 }
 .sidebar a, .submenu-toggle {
     display: block;
@@ -73,7 +81,11 @@ body {
 <button class="menu-toggle" onclick="toggleMenu()">☰</button>
 
 <div class="sidebar" id="sidebar">
-    <h2>Fight Academy Scorpions</h2>
+    <!-- Encabezado con logo y nombre -->
+    <div class="sidebar-header">
+        <img src="assets/logo_gym_cjs.png" alt="Gym System CJS">
+        <span>Gym System CJS</span>
+    </div>
 
     <?php if (in_array($rol, ['admin', 'cliente_gym'])): ?>
     <div class="submenu-toggle" onclick="toggleSubmenu('clientesSubmenu')"><i class="fas fa-users"></i> Clientes</div>
