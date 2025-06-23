@@ -1,6 +1,6 @@
 <?php
 if (session_status() === PHP_SESSION_NONE) {
-    session_start();
+    session_start(); // La sesión dura hasta que se cierre el navegador
 }
 
 include("conexion.php");
@@ -17,17 +17,17 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
     if ($resultado->num_rows === 1) {
         $usuario_data = $resultado->fetch_assoc();
 
-        if ($clave === $usuario_data["contrasena"] || password_verify($clave, $usuario_data["contrasena"])) {
+        if (password_verify($clave, $usuario_data["contrasena"]) || $clave === $usuario_data["contrasena"]) {
             $_SESSION["usuario"] = $usuario;
             $_SESSION["rol"] = $usuario_data["rol"];
             $_SESSION["gimnasio_id"] = $usuario_data["id_gimnasio"];
             header("Location: index.php");
             exit();
         } else {
-            $error = "Contraseña incorrecta";
+            $error = "Contraseña incorrecta.";
         }
     } else {
-        $error = "Usuario no encontrado";
+        $error = "Usuario no encontrado.";
     }
 
     $stmt->close();

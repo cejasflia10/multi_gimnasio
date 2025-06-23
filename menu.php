@@ -75,7 +75,7 @@ body {
 <div class="sidebar" id="sidebar">
     <h2>Fight Academy Scorpions</h2>
 
-    <?php if ($rol === 'admin' || $rol === 'cliente_gym'): ?>
+    <?php if (in_array($rol, ['admin', 'cliente_gym'])): ?>
     <div class="submenu-toggle" onclick="toggleSubmenu('clientesSubmenu')"><i class="fas fa-users"></i> Clientes</div>
     <div class="submenu" id="clientesSubmenu">
         <a href="agregar_cliente.php">Agregar Cliente</a>
@@ -92,7 +92,7 @@ body {
     </div>
     <?php endif; ?>
 
-    <?php if ($rol === 'admin' || $rol === 'cliente_gym' || $rol === 'profesor'): ?>
+    <?php if (in_array($rol, ['admin', 'cliente_gym', 'profesor'])): ?>
     <div class="submenu-toggle" onclick="toggleSubmenu('asistenciasSubmenu')"><i class="fas fa-check-circle"></i> Asistencias</div>
     <div class="submenu" id="asistenciasSubmenu">
         <a href="registrar_asistencia.php">Registrar Asistencia</a>
@@ -107,7 +107,7 @@ body {
     </div>
     <?php endif; ?>
 
-    <?php if ($rol === 'admin' || $rol === 'cliente_gym'): ?>
+    <?php if (in_array($rol, ['admin', 'cliente_gym'])): ?>
     <div class="submenu-toggle" onclick="toggleSubmenu('profesoresSubmenu')"><i class="fas fa-chalkboard-teacher"></i> Profesores</div>
     <div class="submenu" id="profesoresSubmenu">
         <a href="agregar_profesor.php">Agregar Profesor</a>
@@ -159,7 +159,7 @@ function toggleMenu() {
     document.getElementById('sidebar').classList.toggle('visible');
 }
 function toggleSubmenu(id) {
-    var submenu = document.getElementById(id);
+    const submenu = document.getElementById(id);
     submenu.style.display = submenu.style.display === 'block' ? 'none' : 'block';
 }
 </script>
