@@ -6,28 +6,50 @@ if (!isset($_SESSION['rol']) || $_SESSION['rol'] !== 'admin') {
 include 'conexion.php';
 
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
-    // Validar que si es profesor, solo se permita QR
-    if ($rol === 'profesor') {
-        $permiso_clientes = 0;
-        $permiso_membresias = 0;
-        $permiso_profesores = 0;
-        $permiso_ventas = 0;
-        $permiso_panel = 0;
-        $permiso_asistencias = 0;
-    }
-
     $usuario = trim($_POST["usuario"]);
     $email = trim($_POST["email"]);
     $clave = password_hash(trim($_POST["clave"]), PASSWORD_BCRYPT);
     $rol = $_POST["rol"];
     $gimnasio_id = $_POST["gimnasio_id"];
 
-    $permiso_clientes = isset($_POST['permiso_clientes']) ? 1 : 0;
-    $permiso_membresias = isset($_POST['permiso_membresias']) ? 1 : 0;
-    $permiso_profesores = isset($_POST['permiso_profesores']) ? 1 : 0;
-    $permiso_ventas = isset($_POST['permiso_ventas']) ? 1 : 0;
-    $permiso_panel = isset($_POST['permiso_panel']) ? 1 : 0;
-    $permiso_asistencias = isset($_POST['permiso_asistencias']) ? 1 : 0;
+    // Permisos por defecto
+    $permiso_clientes = 0;
+    $permiso_membresias = 0;
+    $permiso_profesores = 0;
+    $permiso_ventas = 0;
+    $permiso_panel = 0;
+    $permiso_asistencias = 0;
+
+    // Asignación de permisos según rol
+    switch ($rol) {
+        case 'admin':
+            $permiso_clientes = 1;
+            $permiso_membresias = 1;
+            $permiso_profesores = 1;
+            $permiso_ventas = 1;
+            $permiso_panel = 1;
+            $permiso_asistencias = 1;
+            break;
+        case 'cliente_gym':
+            $permiso_clientes = 1;
+            $permiso_membresias = 1;
+            $permiso_profesores = 1;
+            $permiso_ventas = 1;
+            $permiso_asistencias = 1;
+            break;
+        case 'profesor':
+            $permiso_asistencias = 1;
+            $permiso_profesores = 1;
+            break;
+    }
+
+    // Si el admin seleccionó checkboxes, se sobrescriben los valores anteriores
+    $permiso_clientes = isset($_POST['permiso_clientes']) ? 1 : $permiso_clientes;
+    $permiso_membresias = isset($_POST['permiso_membresias']) ? 1 : $permiso_membresias;
+    $permiso_profesores = isset($_POST['permiso_profesores']) ? 1 : $permiso_profesores;
+    $permiso_ventas = isset($_POST['permiso_ventas']) ? 1 : $permiso_ventas;
+    $permiso_panel = isset($_POST['permiso_panel']) ? 1 : $permiso_panel;
+    $permiso_asistencias = isset($_POST['permiso_asistencias']) ? 1 : $permiso_asistencias;
 
     $stmt = $conexion->prepare("INSERT INTO usuarios (usuario, email, contrasena, rol, id_gimnasio, permiso_clientes, permiso_membresias, perm_profesores, perm_ventas, puede_ver_panel, puede_ver_asistencias) 
                                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
@@ -75,8 +97,8 @@ $gimnasios = $conexion->query("SELECT id, nombre FROM gimnasios");
       <label>Rol:
         <select name="rol">
           <option value="admin">Administrador</option>
+          <option value="cliente_gym">Cliente Gym</option>
           <option value="profesor">Profesor</option>
-          <option value="instructor">Instructor</option>
         </select>
       </label>
       <label>Gimnasio:
