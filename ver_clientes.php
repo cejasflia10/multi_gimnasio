@@ -94,11 +94,6 @@ $resultado = $conexion->query($query);
                 padding: 6px;
             }
 
-            img {
-                width: 60px;
-                height: 60px;
-            }
-
             .btn-generar {
                 font-size: 12px;
                 padding: 3px 6px;
@@ -138,44 +133,42 @@ $resultado = $conexion->query($query);
                 </tr>
             </thead>
             <tbody>
-                <?php while ($fila = $resultado->fetch_assoc()): ?>
-                    <tr>
-                        <td><?= htmlspecialchars($fila['apellido']) ?></td>
-                        <td><?= htmlspecialchars($fila['nombre']) ?></td>
-                        <td><?= htmlspecialchars($fila['dni']) ?></td>
-                        <td><?= htmlspecialchars($fila['telefono']) ?></td>
-                        <td><?= htmlspecialchars($fila['email']) ?></td>
-                        <td><?= htmlspecialchars($fila['disciplina']) ?></td>
-                        <td>
-                            <?php
-                            $qr_path = 'qr/cliente_' . $fila['id'] . '.png';
-                            if (file_exists($qr_path)) {
-                                echo "<img src='$qr_path' alt='QR' style='width: 80px; height: 80px; display:block; margin:auto;'><br>";
-                                echo "<a href='$qr_path' download style='color: gold;'>Descargar</a>";
-                            } else {
-                                echo "<a href='generar_qr_individual.php?id={$fila['id']}' class='btn-generar'>Generar QR</a>";
-                            }
-                            ?>
-                        </td>
-                        <td><?= htmlspecialchars($fila['nombre_gimnasio']) ?></td>
-                        <td>
-                            <a href="editar_cliente.php?id=<?= $fila['id'] ?>" style="color: gold;">✎</a>
-                        </td>
-                    </tr>
-                <?php endwhile; ?>
+                <?php while ($fila = $resultado->fetch_assoc()) {
+                    $qr_path = "qr/" . $fila['dni'] . ".png";
+                    echo "<tr>";
+                    echo "<td>" . htmlspecialchars($fila['apellido']) . "</td>";
+                    echo "<td>" . htmlspecialchars($fila['nombre']) . "</td>";
+                    echo "<td>" . htmlspecialchars($fila['dni']) . "</td>";
+                    echo "<td>" . htmlspecialchars($fila['telefono']) . "</td>";
+                    echo "<td>" . htmlspecialchars($fila['email']) . "</td>";
+                    echo "<td>" . htmlspecialchars($fila['disciplina']) . "</td>";
+                    echo "<td>";
+                    if (file_exists($qr_path)) {
+                        echo "<a class='btn-generar' href='$qr_path' target='_blank'>Ver QR</a>";
+                    } else {
+                        echo "<a class='btn-generar' href='generar_qr_individual.php?id=" . $fila['id'] . "'>Generar QR</a>";
+                    }
+                    echo "</td>";
+                    echo "<td>" . htmlspecialchars($fila['nombre_gimnasio']) . "</td>";
+                    echo "<td><a href='editar_cliente.php?id=" . $fila['id'] . "' style='color: gold;'>➤</a></td>";
+                    echo "</tr>";
+                } ?>
             </tbody>
         </table>
     </div>
 
     <script>
-        document.getElementById("buscador").addEventListener("input", function () {
-            let filtro = this.value.toLowerCase();
-            let filas = document.querySelectorAll("#tabla-clientes tbody tr");
-            filas.forEach(function (fila) {
-                let texto = fila.textContent.toLowerCase();
+        const buscador = document.getElementById("buscador");
+        buscador.addEventListener("input", function () {
+            const filtro = buscador.value.toLowerCase();
+            const filas = document.querySelectorAll("#tabla-clientes tbody tr");
+
+            filas.forEach(fila => {
+                const texto = fila.textContent.toLowerCase();
                 fila.style.display = texto.includes(filtro) ? "" : "none";
             });
         });
     </script>
+
 </body>
 </html>
