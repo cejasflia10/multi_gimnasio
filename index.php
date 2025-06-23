@@ -1,12 +1,11 @@
 <?php
 include 'menu.php';
 include 'conexion.php';
-include 'funciones.php';
+include_once 'funciones.php';
 
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
-
 if (!isset($_SESSION['gimnasio_id'])) {
     die("Acceso denegado.");
 }
@@ -44,16 +43,49 @@ $graf_metodos_pago = obtenerPagosPorMetodo($conexion, $gimnasio_id);
         font-family: Arial, sans-serif;
         margin: 0;
     }
+
     .contenido {
         padding: 20px;
         margin-left: 260px;
+        max-width: 1000px;
+        margin-right: auto;
     }
-    h2 { margin-top: 30px; }
-    .tabla-responsive { overflow-x: auto; margin-bottom: 20px; }
-    table { width: 100%; border-collapse: collapse; background: #111; min-width: 600px; }
-    th, td { border: 1px solid #333; padding: 8px; color: white; text-align: left; }
-    th { background: #444; }
-    .panel { display: flex; flex-wrap: wrap; gap: 15px; justify-content: center; }
+
+    h2 {
+        margin-top: 30px;
+        text-align: center;
+    }
+
+    .tabla-responsive {
+        overflow-x: auto;
+        margin-bottom: 20px;
+    }
+
+    table {
+        width: 100%;
+        border-collapse: collapse;
+        background: #111;
+        min-width: 600px;
+    }
+
+    th, td {
+        border: 1px solid #333;
+        padding: 8px;
+        color: white;
+        text-align: left;
+    }
+
+    th {
+        background: #444;
+    }
+
+    .panel {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 15px;
+        justify-content: center;
+    }
+
     .card {
         background: #222;
         padding: 15px;
@@ -61,6 +93,7 @@ $graf_metodos_pago = obtenerPagosPorMetodo($conexion, $gimnasio_id);
         box-shadow: 0 0 10px #000;
         width: 280px;
     }
+
     .graficos-container {
         display: flex;
         flex-wrap: wrap;
@@ -68,6 +101,7 @@ $graf_metodos_pago = obtenerPagosPorMetodo($conexion, $gimnasio_id);
         gap: 20px;
         margin: 20px 0;
     }
+
     .grafico-box {
         width: 260px;
         max-width: 90%;
@@ -75,14 +109,25 @@ $graf_metodos_pago = obtenerPagosPorMetodo($conexion, $gimnasio_id);
         padding: 10px;
         border-radius: 10px;
     }
-    ul { padding-left: 20px; }
+
+    ul {
+        padding-left: 20px;
+    }
+
     @media (max-width: 768px) {
         .contenido {
             margin-left: 0 !important;
             padding: 10px;
         }
-        .card { width: 100%; }
-        table { min-width: 100%; font-size: 14px; }
+
+        .card {
+            width: 100%;
+        }
+
+        table {
+            min-width: 100%;
+            font-size: 14px;
+        }
     }
   </style>
 </head>
@@ -90,7 +135,7 @@ $graf_metodos_pago = obtenerPagosPorMetodo($conexion, $gimnasio_id);
 
 <div class="contenido">
 
-  <h2><?= date('H') < 12 ? '¡Buenos días' : '¡Buenas tardes' ?>, <?= htmlspecialchars($usuario) ?>!</h2>
+  <h2><?= date('H') < 12 ? '¡Buenos días' : '¡Buenas tardes' ?>, <?= $usuario ?>!</h2>
 
   <h2>Ingresos del Día - Clientes</h2>
   <div class="tabla-responsive">
