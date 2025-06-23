@@ -106,6 +106,7 @@ body {
     <a href="#" class="submenu-toggle"><i class="fas fa-calendar-check"></i> Asistencias</a>
     <div class="submenu">
         <a href="registrar_asistencia.php">Registrar Asistencia</a>
+<       <a href="ver_asistencia_qr.php">📋 Ver Asistencia QR del Día</a></li>
         <a href="asistencias_index.php">Ver Asistencias</a>
     </div>
 
