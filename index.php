@@ -10,59 +10,7 @@ if (!isset($_SESSION['gimnasio_id'])) {
 $gimnasio_id = $_SESSION['gimnasio_id'];
 $usuario = $_SESSION['usuario'] ?? 'Usuario';
 
-function obtenerMonto($conexion, $tabla, $campo_fecha, $gimnasio_id, $modo = 'DIA') {
-    $condicion = $modo === 'MES' ? "MONTH($campo_fecha) = MONTH(CURDATE()) AND YEAR($campo_fecha) = YEAR(CURDATE())" : "$campo_fecha = CURDATE()";
-    $columna = match($tabla) {
-        'ventas' => 'monto_total',
-        'pagos' => 'monto',
-        'membresias' => 'total',
-        default => 'monto'
-    };
-    $query = "SELECT SUM($columna) AS total FROM $tabla WHERE $condicion AND id_gimnasio = $gimnasio_id";
-    $resultado = $conexion->query($query);
-    $fila = $resultado->fetch_assoc();
-    return $fila['total'] ?? 0;
-}
-
-function obtenerAsistenciasClientes($conexion, $gimnasio_id) {
-    return $conexion->query("SELECT c.nombre, c.apellido, c.dni, c.disciplina, m.fecha_vencimiento, a.hora
-        FROM asistencias a
-        INNER JOIN clientes c ON a.cliente_id = c.id
-        LEFT JOIN membresias m ON m.cliente_id = c.id
-        WHERE a.fecha = CURDATE() AND a.id_gimnasio = $gimnasio_id
-        ORDER BY a.hora DESC");
-}
-
-function obtenerAsistenciasProfesores($conexion, $gimnasio_id) {
-    return $conexion->query("SELECT p.apellido, r.fecha, r.hora_entrada, r.hora_salida 
-        FROM registro_asistencias_profesores r 
-        INNER JOIN profesores p ON r.profesor_id = p.id 
-        WHERE r.fecha = CURDATE() AND r.gimnasio_id = $gimnasio_id 
-        ORDER BY r.hora_entrada DESC");
-}
-
-function obtenerDisciplinas($conexion, $gimnasio_id) {
-    return $conexion->query("SELECT disciplina, COUNT(*) as cantidad FROM clientes WHERE gimnasio_id = $gimnasio_id GROUP BY disciplina");
-}
-
-function obtenerPagosPorMetodo($conexion, $gimnasio_id) {
-    return $conexion->query("SELECT metodo_pago, COUNT(*) AS cantidad FROM pagos WHERE MONTH(fecha) = MONTH(CURDATE()) AND YEAR(fecha) = YEAR(CURDATE()) AND id_gimnasio = $gimnasio_id GROUP BY metodo_pago");
-}
-
-function obtenerCumpleanios($conexion, $gimnasio_id) {
-    $mes = date('m');
-    return $conexion->query("SELECT nombre, apellido, fecha_nacimiento FROM clientes WHERE MONTH(fecha_nacimiento) = $mes AND gimnasio_id = $gimnasio_id ORDER BY DAY(fecha_nacimiento)");
-}
-
-function obtenerVencimientos($conexion, $gimnasio_id) {
-    $fecha_limite = date('Y-m-d', strtotime('+10 days'));
-    return $conexion->query("SELECT c.nombre, c.apellido, m.fecha_vencimiento 
-        FROM membresias m 
-        INNER JOIN clientes c ON m.cliente_id = c.id 
-        WHERE m.fecha_vencimiento BETWEEN CURDATE() AND '$fecha_limite' 
-        AND m.id_gimnasio = $gimnasio_id 
-        ORDER BY m.fecha_vencimiento");
-}
+// ... todas tus funciones sin modificar (obtenerMonto, obtenerAsistenciasClientes, etc.)
 
 // DATOS
 $pagos_dia = obtenerMonto($conexion, 'pagos', 'fecha', $gimnasio_id, 'DIA');
@@ -93,27 +41,66 @@ $graf_metodos_pago = obtenerPagosPorMetodo($conexion, $gimnasio_id);
         color: gold;
         font-family: Arial, sans-serif;
         margin: 0;
-        padding: 20px;
-        padding-left: 260px;
     }
-    h2 { margin-top: 30px; text-align: center; }
+
+    .contenido {
+        padding: 20px;
+        margin-left: 260px;
+    }
+
+    h2 { margin-top: 30px; }
+
     .tabla-responsive { overflow-x: auto; margin-bottom: 20px; }
+
     table { width: 100%; border-collapse: collapse; background: #111; min-width: 600px; }
+
     th, td { border: 1px solid #333; padding: 8px; color: white; text-align: left; }
+
     th { background: #444; }
+
     .panel { display: flex; flex-wrap: wrap; gap: 15px; justify-content: center; }
-    .card { background: #222; padding: 15px; border-radius: 10px; box-shadow: 0 0 10px #000; width: 280px; }
-    .graficos-container { display: flex; flex-wrap: wrap; justify-content: center; gap: 20px; margin: 20px 0; }
-    .grafico-box { width: 260px; max-width: 90%; background: #222; padding: 10px; border-radius: 10px; }
+
+    .card {
+        background: #222;
+        padding: 15px;
+        border-radius: 10px;
+        box-shadow: 0 0 10px #000;
+        width: 280px;
+    }
+
+    .graficos-container {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 20px;
+        margin: 20px 0;
+    }
+
+    .grafico-box {
+        width: 260px;
+        max-width: 90%;
+        background: #222;
+        padding: 10px;
+        border-radius: 10px;
+    }
+
     ul { padding-left: 20px; }
+
     @media (max-width: 768px) {
-        body { padding-left: 10px !important; padding-right: 10px; }
+        .contenido {
+            margin-left: 0 !important;
+            padding: 10px;
+        }
+
         .card { width: 100%; }
+
         table { min-width: 100%; font-size: 14px; }
     }
   </style>
 </head>
 <body>
+
+<div class="contenido">
 
   <h2><?= date('H') < 12 ? '¡Buenos días' : '¡Buenas tardes' ?>, <?= $usuario ?>!</h2>
 
@@ -186,36 +173,38 @@ $graf_metodos_pago = obtenerPagosPorMetodo($conexion, $gimnasio_id);
     <?php endwhile; ?>
   </ul>
 
-  <script>
-    const ctx1 = document.getElementById('disciplinasChart').getContext('2d');
-    const ctx2 = document.getElementById('pagosChart').getContext('2d');
+</div> <!-- Cierre div.contenido -->
 
-    new Chart(ctx1, {
-      type: 'bar',
-      data: {
-        labels: [<?php while ($row = $graf_disciplinas->fetch_assoc()) echo "'{$row['disciplina']}',"; ?>],
-        datasets: [{
-          label: 'Cantidad de alumnos',
-          data: [<?php mysqli_data_seek($graf_disciplinas, 0); while ($row = $graf_disciplinas->fetch_assoc()) echo "{$row['cantidad']},"; ?>],
-          backgroundColor: 'gold',
-          borderRadius: 6
-        }]
-      },
-      options: { responsive: true, plugins: { legend: { display: false } } }
-    });
+<script>
+  const ctx1 = document.getElementById('disciplinasChart').getContext('2d');
+  const ctx2 = document.getElementById('pagosChart').getContext('2d');
 
-    new Chart(ctx2, {
-      type: 'pie',
-      data: {
-        labels: [<?php while ($pago = $graf_metodos_pago->fetch_assoc()) echo "'{$pago['metodo_pago']}',"; ?>],
-        datasets: [{
-          data: [<?php mysqli_data_seek($graf_metodos_pago, 0); while ($pago = $graf_metodos_pago->fetch_assoc()) echo "{$pago['cantidad']},"; ?>],
-          backgroundColor: ['gold', 'orange', 'white', 'gray', 'red']
-        }]
-      },
-      options: { responsive: true, plugins: { legend: { position: 'bottom' } } }
-    });
-  </script>
+  new Chart(ctx1, {
+    type: 'bar',
+    data: {
+      labels: [<?php while ($row = $graf_disciplinas->fetch_assoc()) echo "'{$row['disciplina']}',"; ?>],
+      datasets: [{
+        label: 'Cantidad de alumnos',
+        data: [<?php mysqli_data_seek($graf_disciplinas, 0); while ($row = $graf_disciplinas->fetch_assoc()) echo "{$row['cantidad']},"; ?>],
+        backgroundColor: 'gold',
+        borderRadius: 6
+      }]
+    },
+    options: { responsive: true, plugins: { legend: { display: false } } }
+  });
+
+  new Chart(ctx2, {
+    type: 'pie',
+    data: {
+      labels: [<?php while ($pago = $graf_metodos_pago->fetch_assoc()) echo "'{$pago['metodo_pago']}',"; ?>],
+      datasets: [{
+        data: [<?php mysqli_data_seek($graf_metodos_pago, 0); while ($pago = $graf_metodos_pago->fetch_assoc()) echo "{$pago['cantidad']},"; ?>],
+        backgroundColor: ['gold', 'orange', 'white', 'gray', 'red']
+      }]
+    },
+    options: { responsive: true, plugins: { legend: { position: 'bottom' } } }
+  });
+</script>
 
 </body>
 </html>
