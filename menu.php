@@ -12,11 +12,12 @@ if (session_status() === PHP_SESSION_NONE) {
 <style>
 body {
     margin: 0;
-    padding-left: 260px; /* Deja espacio para el menú lateral */
+    padding-left: 260px;
     background-color: #000;
     color: gold;
     font-family: Arial, sans-serif;
 }
+
 .sidebar {
     height: 100vh;
     width: 260px;
@@ -28,10 +29,13 @@ body {
     overflow-y: auto;
     transition: transform 0.3s ease-in-out;
     z-index: 999;
+    transform: translateX(0); /* Por defecto visible */
 }
+
 .sidebar.hidden {
     transform: translateX(-100%);
 }
+
 .sidebar h2 {
     text-align: center;
     font-size: 20px;
@@ -40,6 +44,7 @@ body {
     background-color: #222;
     color: gold;
 }
+
 .sidebar a {
     display: block;
     color: #ccc;
@@ -47,27 +52,33 @@ body {
     text-decoration: none;
     transition: 0.3s;
 }
+
 .sidebar a:hover {
     background-color: #333;
     color: #fff;
 }
+
 .sidebar i {
     margin-right: 10px;
     color: gold;
 }
+
 .submenu {
     display: none;
     background-color: #1c1c1c;
 }
+
 .sidebar a.submenu-toggle:after {
     content: "\f0d7";
     font-family: "Font Awesome 6 Free";
     font-weight: 900;
     float: right;
 }
+
 .sidebar .active + .submenu {
     display: block;
 }
+
 .menu-toggle {
     display: none;
     position: fixed;
@@ -81,18 +92,33 @@ body {
     font-size: 24px;
     cursor: pointer;
 }
+
+/* Responsive para celulares */
 @media (max-width: 768px) {
     .menu-toggle {
         display: block;
     }
+
     body {
         padding-left: 0 !important;
+    }
+
+    .sidebar {
+        transform: translateX(-100%);
+    }
+
+    .sidebar.hidden {
+        transform: translateX(-100%);
+    }
+
+    .sidebar:not(.hidden) {
+        transform: translateX(0%);
     }
 }
 </style>
 
 <!-- MENÚ LATERAL -->
-<div class="sidebar hidden" id="sidebar">
+<div class="sidebar" id="sidebar">
     <h2><i class="fas fa-dumbbell"></i> Fight Academy</h2>
 
     <a href="#" class="submenu-toggle"><i class="fas fa-users"></i> Clientes</a>
@@ -169,15 +195,13 @@ body {
     </div>
 </div>
 
-<!-- JS PARA TOGGLE -->
+<!-- JS -->
 <script>
-  // Mostrar u ocultar el menú lateral en celulares
   function toggleMenu() {
     const sidebar = document.getElementById("sidebar");
     sidebar.classList.toggle("hidden");
   }
 
-  // Mostrar y ocultar submenús
   document.querySelectorAll(".submenu-toggle").forEach(toggle => {
     toggle.addEventListener("click", function(e) {
       e.preventDefault();
