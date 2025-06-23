@@ -12,12 +12,12 @@ $gimnasio_id = $_SESSION['gimnasio_id'];
 // FUNCIONES
 function obtenerMonto($conexion, $tabla, $campo_fecha, $gimnasio_id, $modo = 'DIA') {
     $condicion = $modo === 'MES' ? "MONTH($campo_fecha) = MONTH(CURDATE())" : "$campo_fecha = CURDATE()";
-    switch ($tabla) {
-        case 'ventas': $columna = 'monto_total'; break;
-        case 'pagos': $columna = 'monto'; break;
-        case 'membresias': $columna = 'total'; break;
-        default: $columna = 'monto';
-    }
+    $columna = match($tabla) {
+        'ventas' => 'monto_total',
+        'pagos' => 'monto',
+        'membresias' => 'total',
+        default => 'monto'
+    };
     $query = "SELECT SUM($columna) AS total FROM $tabla WHERE $condicion AND id_gimnasio = $gimnasio_id";
     $resultado = $conexion->query($query);
     $fila = $resultado->fetch_assoc();
@@ -146,27 +146,31 @@ $profesores_dia = obtenerAsistenciasProfesores($conexion, $gimnasio_id);
 
   <h2>Resumen Económico</h2>
   <div class="panel">
-    <div class="card"><h3>Pagos del Día</h3><p>$<?= number_format($pagos_dia, 2, ',', '.') ?></p></div>
-    <div class="card"><h3>Pagos del Mes</h3><p>$<?= number_format($pagos_mes, 2, ',', '.') ?></p></div>
-    <div class="card"><h3>Ventas del Día</h3><p>$<?= number_format($ventas_dia, 2, ',', '.') ?></p></div>
-    <div class="card"><h3>Ventas del Mes</h3><p>$<?= number_format($ventas_mes, 2, ',', '.') ?></p></div>
-    <div class="card"><h3>Membresías del Día</h3><p>$<?= number_format($membresias_dia, 2, ',', '.') ?></p></div>
-    <div class="card"><h3>Membresías del Mes</h3><p>$<?= number_format($membresias_mes, 2, ',', '.') ?></p></div>
+    <div class="card"><h3>Pagos del Día</h3><p>$<?= number_format($pagos_dia ?? 0, 2, ',', '.') ?></p></div>
+    <div class="card"><h3>Pagos del Mes</h3><p>$<?= number_format($pagos_mes ?? 0, 2, ',', '.') ?></p></div>
+    <div class="card"><h3>Ventas del Día</h3><p>$<?= number_format($ventas_dia ?? 0, 2, ',', '.') ?></p></div>
+    <div class="card"><h3>Ventas del Mes</h3><p>$<?= number_format($ventas_mes ?? 0, 2, ',', '.') ?></p></div>
+    <div class="card"><h3>Membresías del Día</h3><p>$<?= number_format($membresias_dia ?? 0, 2, ',', '.') ?></p></div>
+    <div class="card"><h3>Membresías del Mes</h3><p>$<?= number_format($membresias_mes ?? 0, 2, ',', '.') ?></p></div>
   </div>
 
   <h2>Ingresos del Día - Clientes</h2>
   <div class="tabla-responsive">
     <table>
       <tr><th>Nombre</th><th>DNI</th><th>Disciplina</th><th>Vencimiento</th><th>Hora</th></tr>
-      <?php while ($c = $clientes_dia->fetch_assoc()): ?>
-      <tr>
-        <td><?= $c['nombre'] . ' ' . $c['apellido'] ?></td>
-        <td><?= $c['dni'] ?></td>
-        <td><?= $c['disciplina'] ?></td>
-        <td><?= $c['fecha_vencimiento'] ?></td>
-        <td><?= $c['hora'] ?></td>
-      </tr>
-      <?php endwhile; ?>
+      <?php if ($clientes_dia->num_rows === 0): ?>
+        <tr><td colspan="5" style="text-align:center; color: orange;">Sin ingresos registrados hoy.</td></tr>
+      <?php else: ?>
+        <?php while ($c = $clientes_dia->fetch_assoc()): ?>
+        <tr>
+          <td><?= $c['nombre'] . ' ' . $c['apellido'] ?></td>
+          <td><?= $c['dni'] ?></td>
+          <td><?= $c['disciplina'] ?></td>
+          <td><?= $c['fecha_vencimiento'] ?></td>
+          <td><?= $c['hora'] ?></td>
+        </tr>
+        <?php endwhile; ?>
+      <?php endif; ?>
     </table>
   </div>
 
@@ -174,14 +178,18 @@ $profesores_dia = obtenerAsistenciasProfesores($conexion, $gimnasio_id);
   <div class="tabla-responsive">
     <table>
       <tr><th>Apellido</th><th>Fecha</th><th>Ingreso</th><th>Salida</th></tr>
-      <?php while ($p = $profesores_dia->fetch_assoc()): ?>
-      <tr>
-        <td><?= $p['apellido'] ?></td>
-        <td><?= $p['fecha'] ?></td>
-        <td><?= $p['hora_entrada'] ?></td>
-        <td><?= $p['hora_salida'] ?></td>
-      </tr>
-      <?php endwhile; ?>
+      <?php if ($profesores_dia->num_rows === 0): ?>
+        <tr><td colspan="4" style="text-align:center; color: orange;">Sin asistencias de profesores hoy.</td></tr>
+      <?php else: ?>
+        <?php while ($p = $profesores_dia->fetch_assoc()): ?>
+        <tr>
+          <td><?= $p['apellido'] ?></td>
+          <td><?= $p['fecha'] ?></td>
+          <td><?= $p['hora_entrada'] ?></td>
+          <td><?= $p['hora_salida'] ?></td>
+        </tr>
+        <?php endwhile; ?>
+      <?php endif; ?>
     </table>
   </div>
 
