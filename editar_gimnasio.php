@@ -39,13 +39,24 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
     );
     $stmt->execute();
 
+    // CREAR USUARIO SI FUE CARGADO Y NO EXISTE
     if (!empty($_POST["usuario"]) && !empty($_POST["clave"])) {
         $usuario = $_POST["usuario"];
-        $clave = password_hash($_POST["clave"], PASSWORD_BCRYPT);
-        $rol = "admin";
-        $stmt_user = $conexion->prepare("INSERT INTO usuarios (usuario, contraseña, rol, gimnasio_id) VALUES (?, ?, ?, ?)");
-        $stmt_user->bind_param("sssi", $usuario, $clave, $rol, $id);
-        $stmt_user->execute();
+
+        // Verificar si ya existe ese usuario
+        $verificar = $conexion->prepare("SELECT id FROM usuarios WHERE usuario = ?");
+        $verificar->bind_param("s", $usuario);
+        $verificar->execute();
+        $verificar->store_result();
+
+        if ($verificar->num_rows === 0) {
+            $clave = password_hash($_POST["clave"], PASSWORD_BCRYPT);
+            $rol = "admin";
+            $stmt_user = $conexion->prepare("INSERT INTO usuarios (usuario, contrasena, rol, id_gimnasio) VALUES (?, ?, ?, ?)");
+            $stmt_user->bind_param("sssi", $usuario, $clave, $rol, $id);
+            $stmt_user->execute();
+        }
+        $verificar->close();
     }
 
     header("Location: gimnasios.php");
