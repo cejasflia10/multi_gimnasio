@@ -154,10 +154,16 @@ body {
         <a href="reporte_ventas.php">Reportes</a>
     </div>
 
-   </div class="submenu">
-        <a href="#">🔐 Acceso Cliente</a>
-        <a href="cliente_acceso.php">Ingreso por DNI</a>
-
+<li class="menu-item">
+    <a href="#" class="menu-link">👤 Acceso Clientes</a>
+    <ul class="submenu">
+        <li><a href="reservar_turno.php">📅 Reservar Turno</a></li>
+        <li><a href="ver_turnos_cliente.php">🧾 Ver Mis Turnos</a></li>
+        <li><a href="estado_pagos.php">💳 Pagos y Estado</a></li>
+        <li><a href="mi_qr.php">📸 Mi Código QR</a></li>
+        <li><a href="historial_ingresos.php">📊 Historial de Ingresos</a></li>
+    </ul>
+</li>
 
 </div>
 
