@@ -4,7 +4,7 @@ if (session_status() === PHP_SESSION_NONE) {
 }
 include 'conexion.php';
 
-// Obtener el gimnasio logueado
+// Validar sesión activa de gimnasio
 $gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
 $nombre_gimnasio = 'Gimnasio';
 
@@ -13,6 +13,9 @@ if ($gimnasio_id > 0) {
     if ($fila = $resultado->fetch_assoc()) {
         $nombre_gimnasio = $fila['nombre'];
     }
+} else {
+    echo "<h2 style='color: red; text-align: center; padding-top: 50px;'>Acceso denegado. Debe estar logueado como gimnasio.</h2>";
+    exit;
 }
 ?>
 <!DOCTYPE html>
