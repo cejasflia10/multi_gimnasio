@@ -1,265 +1,156 @@
 <?php
-include 'menu.php';
-include 'conexion.php';
-
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
-if (!isset($_SESSION['gimnasio_id'])) {
-    die("Acceso denegado.");
-}
-
-$gimnasio_id = $_SESSION['gimnasio_id'];
-$usuario = $_SESSION['usuario'] ?? 'Usuario';
-
-// FUNCIONES
-function obtenerMonto($conexion, $tabla, $campo_fecha, $gimnasio_id, $modo = 'DIA') {
-    $condicion = $modo === 'MES' ? "MONTH($campo_fecha) = MONTH(CURDATE()) AND YEAR($campo_fecha) = YEAR(CURDATE())" : "$campo_fecha = CURDATE()";
-    $columna = match($tabla) {
-        'ventas' => 'monto_total',
-        'pagos' => 'monto',
-        'membresias' => 'total',
-        default => 'monto'
-    };
-    $query = "SELECT SUM($columna) AS total FROM $tabla WHERE $condicion AND id_gimnasio = $gimnasio_id";
-    $resultado = $conexion->query($query);
-    $fila = $resultado->fetch_assoc();
-    return $fila['total'] ?? 0;
-}
-
-function obtenerAsistenciasClientes($conexion, $gimnasio_id) {
-    return $conexion->query("SELECT c.nombre, c.apellido, c.dni, c.disciplina, m.fecha_vencimiento, a.hora
-        FROM asistencias a
-        INNER JOIN clientes c ON a.cliente_id = c.id
-        LEFT JOIN membresias m ON m.cliente_id = c.id
-        WHERE a.fecha = CURDATE() AND a.id_gimnasio = $gimnasio_id
-        ORDER BY a.hora DESC");
-}
-
-function obtenerAsistenciasProfesores($conexion, $gimnasio_id) {
-    return $conexion->query("SELECT p.apellido, r.fecha, r.hora_entrada, r.hora_salida 
-        FROM registro_asistencias_profesores r 
-        INNER JOIN profesores p ON r.profesor_id = p.id 
-        WHERE r.fecha = CURDATE() AND r.gimnasio_id = $gimnasio_id 
-        ORDER BY r.hora_entrada DESC");
-}
-
-function obtenerDisciplinas($conexion, $gimnasio_id) {
-    return $conexion->query("SELECT disciplina, COUNT(*) as cantidad FROM clientes WHERE gimnasio_id = $gimnasio_id GROUP BY disciplina");
-}
-
-function obtenerPagosPorMetodo($conexion, $gimnasio_id) {
-    return $conexion->query("SELECT metodo_pago, COUNT(*) AS cantidad FROM pagos WHERE MONTH(fecha) = MONTH(CURDATE()) AND YEAR(fecha) = YEAR(CURDATE()) AND id_gimnasio = $gimnasio_id GROUP BY metodo_pago");
-}
-
-function obtenerCumpleanios($conexion, $gimnasio_id) {
-    $mes = date('m');
-    return $conexion->query("SELECT nombre, apellido, fecha_nacimiento FROM clientes WHERE MONTH(fecha_nacimiento) = $mes AND gimnasio_id = $gimnasio_id ORDER BY DAY(fecha_nacimiento)");
-}
-
-function obtenerVencimientos($conexion, $gimnasio_id) {
-    $fecha_limite = date('Y-m-d', strtotime('+10 days'));
-    return $conexion->query("SELECT c.nombre, c.apellido, m.fecha_vencimiento 
-        FROM membresias m 
-        INNER JOIN clientes c ON m.cliente_id = c.id 
-        WHERE m.fecha_vencimiento BETWEEN CURDATE() AND '$fecha_limite' 
-        AND m.id_gimnasio = $gimnasio_id 
-        ORDER BY m.fecha_vencimiento");
-}
-
-// DATOS
-$pagos_dia = obtenerMonto($conexion, 'pagos', 'fecha', $gimnasio_id, 'DIA');
-$pagos_mes = obtenerMonto($conexion, 'pagos', 'fecha', $gimnasio_id, 'MES');
-$ventas_dia = obtenerMonto($conexion, 'ventas', 'fecha', $gimnasio_id, 'DIA');
-$ventas_mes = obtenerMonto($conexion, 'ventas', 'fecha', $gimnasio_id, 'MES');
-$membresias_dia = obtenerMonto($conexion, 'membresias', 'fecha_inicio', $gimnasio_id, 'DIA');
-$membresias_mes = obtenerMonto($conexion, 'membresias', 'fecha_inicio', $gimnasio_id, 'MES');
-
-$cumples = obtenerCumpleanios($conexion, $gimnasio_id);
-$vencimientos = obtenerVencimientos($conexion, $gimnasio_id);
-$clientes_dia = obtenerAsistenciasClientes($conexion, $gimnasio_id);
-$profesores_dia = obtenerAsistenciasProfesores($conexion, $gimnasio_id);
-$graf_disciplinas = obtenerDisciplinas($conexion, $gimnasio_id);
-$graf_metodos_pago = obtenerPagosPorMetodo($conexion, $gimnasio_id);
+$rol = $_SESSION['rol'] ?? '';
 ?>
 
-<!DOCTYPE html>
-<html lang="es">
-<head>
-  <meta charset="UTF-8">
-  <title>Panel de Control</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <style>
-    body {
-        background-color: #111;
-        color: gold;
-        font-family: Arial, sans-serif;
-        margin: 0;
+<link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet">
+<style>
+body {
+    margin: 0;
+}
+.sidebar {
+    height: 100vh;
+    width: 260px;
+    position: fixed;
+    background-color: #111;
+    color: gold;
+    overflow-y: auto;
+    transition: transform 0.3s ease-in-out;
+    z-index: 999;
+}
+.sidebar h2 {
+    text-align: center;
+    font-size: 20px;
+    padding: 20px;
+    margin: 0;
+    background-color: #222;
+    color: gold;
+}
+.sidebar a, .submenu-toggle {
+    display: block;
+    color: #ccc;
+    padding: 12px 20px;
+    text-decoration: none;
+    cursor: pointer;
+}
+.sidebar a:hover, .submenu-toggle:hover {
+    background-color: #333;
+}
+.submenu {
+    display: none;
+    background-color: #000;
+}
+.submenu a {
+    padding-left: 40px;
+}
+.menu-toggle {
+    display: none;
+    position: fixed;
+    top: 10px;
+    left: 10px;
+    z-index: 1000;
+    background-color: #111;
+    color: gold;
+    border: none;
+    font-size: 24px;
+}
+@media (max-width: 768px) {
+    .sidebar {
+        transform: translateX(-100%);
     }
-
-    .contenido {
-        padding: 20px;
-        margin-left: 260px;
+    .sidebar.visible {
+        transform: translateX(0);
     }
-
-    h2 { margin-top: 30px; }
-
-    .tabla-responsive { overflow-x: auto; margin-bottom: 20px; }
-
-    table { width: 100%; border-collapse: collapse; background: #111; min-width: 600px; }
-
-    th, td { border: 1px solid #333; padding: 8px; color: white; text-align: left; }
-
-    th { background: #444; }
-
-    .panel { display: flex; flex-wrap: wrap; gap: 15px; justify-content: center; }
-
-    .card {
-        background: #222;
-        padding: 15px;
-        border-radius: 10px;
-        box-shadow: 0 0 10px #000;
-        width: 280px;
+    .menu-toggle {
+        display: block;
     }
+}
+</style>
 
-    .graficos-container {
-        display: flex;
-        flex-wrap: wrap;
-        justify-content: center;
-        gap: 20px;
-        margin: 20px 0;
-    }
+<!-- BOTÓN ☰ PARA CELULARES -->
+<button class="menu-toggle" onclick="toggleMenu()">☰</button>
 
-    .grafico-box {
-        width: 260px;
-        max-width: 90%;
-        background: #222;
-        padding: 10px;
-        border-radius: 10px;
-    }
+<div class="sidebar" id="sidebar">
+    <h2>Fight Academy Scorpions</h2>
 
-    ul { padding-left: 20px; }
+    <?php if ($rol === 'admin' || $rol === 'cliente_gym'): ?>
+    <div class="submenu-toggle" onclick="toggleSubmenu('clientesSubmenu')"><i class="fas fa-users"></i> Clientes</div>
+    <div class="submenu" id="clientesSubmenu">
+        <a href="agregar_cliente.php">Agregar Cliente</a>
+        <a href="ver_clientes.php">Ver Clientes</a>
+        <a href="disciplinas.php">Disciplinas</a>
+    </div>
 
-    @media (max-width: 768px) {
-        .contenido {
-            margin-left: 0 !important;
-            padding: 10px;
-        }
+    <div class="submenu-toggle" onclick="toggleSubmenu('membresiasSubmenu')"><i class="fas fa-id-card"></i> Membresías</div>
+    <div class="submenu" id="membresiasSubmenu">
+        <a href="agregar_membresia.php">Agregar Membresía</a>
+        <a href="ver_membresias.php">Ver Membresías</a>
+        <a href="planes.php">Planes</a>
+        <a href="planes_adicionales.php">Planes Adicionales</a>
+    </div>
+    <?php endif; ?>
 
-        .card { width: 100%; }
+    <?php if ($rol === 'admin' || $rol === 'cliente_gym' || $rol === 'profesor'): ?>
+    <div class="submenu-toggle" onclick="toggleSubmenu('asistenciasSubmenu')"><i class="fas fa-check-circle"></i> Asistencias</div>
+    <div class="submenu" id="asistenciasSubmenu">
+        <a href="registrar_asistencia.php">Registrar Asistencia</a>
+        <a href="ver_asistencia.php">Ver Asistencias</a>
+    </div>
 
-        table { min-width: 100%; font-size: 14px; }
-    }
-  </style>
-</head>
-<body>
+    <div class="submenu-toggle" onclick="toggleSubmenu('qrSubmenu')"><i class="fas fa-qrcode"></i> QR</div>
+    <div class="submenu" id="qrSubmenu">
+        <a href="scanner_qr.php">Escanear QR</a>
+        <a href="generar_qr.php">Generar QR</a>
+    </div>
+    <?php endif; ?>
 
-<div class="contenido">
+    <?php if ($rol === 'admin' || $rol === 'cliente_gym'): ?>
+    <div class="submenu-toggle" onclick="toggleSubmenu('profesoresSubmenu')"><i class="fas fa-chalkboard-teacher"></i> Profesores</div>
+    <div class="submenu" id="profesoresSubmenu">
+        <a href="agregar_profesor.php">Agregar Profesor</a>
+        <a href="ver_profesores.php">Ver Profesores</a>
+    </div>
 
-  <h2><?= date('H') < 12 ? '¡Buenos días' : '¡Buenas tardes' ?>, <?= $usuario ?>!</h2>
+    <div class="submenu-toggle" onclick="toggleSubmenu('ventasSubmenu')"><i class="fas fa-shopping-cart"></i> Ventas</div>
+    <div class="submenu" id="ventasSubmenu">
+        <a href="ventas_indumentaria.php">Indumentaria</a>
+        <a href="ventas_suplementos.php">Suplementos</a>
+        <a href="ventas_protecciones.php">Protecciones</a>
+    </div>
+    <?php endif; ?>
 
-  <h2>Ingresos del Día - Clientes</h2>
-  <div class="tabla-responsive">
-    <table>
-      <tr><th>Nombre</th><th>DNI</th><th>Disciplina</th><th>Vencimiento</th><th>Hora</th></tr>
-      <?php if ($clientes_dia->num_rows === 0): ?>
-        <tr><td colspan="5" style="text-align:center; color: orange;">Sin ingresos registrados hoy.</td></tr>
-      <?php else: ?>
-        <?php while ($c = $clientes_dia->fetch_assoc()): ?>
-        <tr>
-          <td><?= $c['nombre'] . ' ' . $c['apellido'] ?></td>
-          <td><?= $c['dni'] ?></td>
-          <td><?= $c['disciplina'] ?></td>
-          <td><?= $c['fecha_vencimiento'] ?? '---' ?></td>
-          <td><?= $c['hora'] ?></td>
-        </tr>
-        <?php endwhile; ?>
-      <?php endif; ?>
-    </table>
-  </div>
+    <?php if ($rol === 'admin'): ?>
+    <div class="submenu-toggle" onclick="toggleSubmenu('gimnasiosSubmenu')"><i class="fas fa-dumbbell"></i> Gimnasios</div>
+    <div class="submenu" id="gimnasiosSubmenu">
+        <a href="agregar_gimnasio.php">Agregar Gimnasio</a>
+        <a href="ver_gimnasios.php">Ver Gimnasios</a>
+    </div>
 
-  <h2>Ingresos del Día - Profesores</h2>
-  <div class="tabla-responsive">
-    <table>
-      <tr><th>Apellido</th><th>Fecha</th><th>Ingreso</th><th>Salida</th></tr>
-      <?php if ($profesores_dia->num_rows === 0): ?>
-        <tr><td colspan="4" style="text-align:center; color: orange;">Sin asistencias de profesores hoy.</td></tr>
-      <?php else: ?>
-        <?php while ($p = $profesores_dia->fetch_assoc()): ?>
-        <tr>
-          <td><?= $p['apellido'] ?></td>
-          <td><?= $p['fecha'] ?></td>
-          <td><?= $p['hora_entrada'] ?></td>
-          <td><?= $p['hora_salida'] ?></td>
-        </tr>
-        <?php endwhile; ?>
-      <?php endif; ?>
-    </table>
-  </div>
+    <div class="submenu-toggle" onclick="toggleSubmenu('usuariosSubmenu')"><i class="fas fa-user-cog"></i> Usuarios</div>
+    <div class="submenu" id="usuariosSubmenu">
+        <a href="agregar_usuario.php">Agregar Usuario</a>
+        <a href="ver_usuarios.php">Ver Usuarios</a>
+    </div>
 
-  <h2>Estadísticas Visuales</h2>
-  <div class="graficos-container">
-    <div class="grafico-box"><canvas id="disciplinasChart"></canvas></div>
-    <div class="grafico-box"><canvas id="pagosChart"></canvas></div>
-  </div>
+    <div class="submenu-toggle" onclick="toggleSubmenu('configuracionesSubmenu')"><i class="fas fa-cogs"></i> Configuraciones</div>
+    <div class="submenu" id="configuracionesSubmenu">
+        <a href="configuracion_general.php">General</a>
+        <a href="panel_control.php">Panel General</a>
+    </div>
+    <?php endif; ?>
 
-  <h2>Resumen Económico</h2>
-  <div class="panel">
-    <div class="card"><h3>Pagos del Día</h3><p>$<?= number_format($pagos_dia, 2, ',', '.') ?></p></div>
-    <div class="card"><h3>Pagos del Mes</h3><p>$<?= number_format($pagos_mes, 2, ',', '.') ?></p></div>
-    <div class="card"><h3>Ventas del Día</h3><p>$<?= number_format($ventas_dia, 2, ',', '.') ?></p></div>
-    <div class="card"><h3>Ventas del Mes</h3><p>$<?= number_format($ventas_mes, 2, ',', '.') ?></p></div>
-    <div class="card"><h3>Membresías del Día</h3><p>$<?= number_format($membresias_dia, 2, ',', '.') ?></p></div>
-    <div class="card"><h3>Membresías del Mes</h3><p>$<?= number_format($membresias_mes, 2, ',', '.') ?></p></div>
-  </div>
-
-  <h2>Próximos Cumpleaños</h2>
-  <ul>
-    <?php while ($cumple = $cumples->fetch_assoc()): ?>
-      <li><?= $cumple['nombre'] . ' ' . $cumple['apellido'] ?> - <?= date('d/m', strtotime($cumple['fecha_nacimiento'])) ?></li>
-    <?php endwhile; ?>
-  </ul>
-
-  <h2>Próximos Vencimientos</h2>
-  <ul>
-    <?php while ($v = $vencimientos->fetch_assoc()): ?>
-      <li><?= $v['nombre'] . ' ' . $v['apellido'] ?> - <?= date('d/m/Y', strtotime($v['fecha_vencimiento'])) ?></li>
-    <?php endwhile; ?>
-  </ul>
-
+    <a href="logout.php"><i class="fas fa-sign-out-alt"></i> Cerrar Sesión</a>
 </div>
 
 <script>
-  const ctx1 = document.getElementById('disciplinasChart').getContext('2d');
-  const ctx2 = document.getElementById('pagosChart').getContext('2d');
+function toggleMenu() {
+    document.getElementById('sidebar').classList.toggle('visible');
+}
 
-  new Chart(ctx1, {
-    type: 'bar',
-    data: {
-      labels: [<?php while ($row = $graf_disciplinas->fetch_assoc()) echo "'{$row['disciplina']}',"; ?>],
-      datasets: [{
-        label: 'Cantidad de alumnos',
-        data: [<?php mysqli_data_seek($graf_disciplinas, 0); while ($row = $graf_disciplinas->fetch_assoc()) echo "{$row['cantidad']},"; ?>],
-        backgroundColor: 'gold',
-        borderRadius: 6
-      }]
-    },
-    options: { responsive: true, plugins: { legend: { display: false } } }
-  });
-
-  new Chart(ctx2, {
-    type: 'pie',
-    data: {
-      labels: [<?php while ($pago = $graf_metodos_pago->fetch_assoc()) echo "'{$pago['metodo_pago']}',"; ?>],
-      datasets: [{
-        data: [<?php mysqli_data_seek($graf_metodos_pago, 0); while ($pago = $graf_metodos_pago->fetch_assoc()) echo "{$pago['cantidad']},"; ?>],
-        backgroundColor: ['gold', 'orange', 'white', 'gray', 'red']
-      }]
-    },
-    options: { responsive: true, plugins: { legend: { position: 'bottom' } } }
-  });
+function toggleSubmenu(id) {
+    var submenu = document.getElementById(id);
+    submenu.style.display = submenu.style.display === 'block' ? 'none' : 'block';
+}
 </script>
-
-</body>
-</html>
