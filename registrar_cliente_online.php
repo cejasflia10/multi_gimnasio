@@ -2,6 +2,17 @@
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
+include 'conexion.php';
+
+$gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
+
+$nombre_gimnasio = '';
+if ($gimnasio_id > 0) {
+    $resultado = $conexion->query("SELECT nombre FROM gimnasios WHERE id = $gimnasio_id");
+    if ($fila = $resultado->fetch_assoc()) {
+        $nombre_gimnasio = $fila['nombre'];
+    }
+}
 ?>
 <!DOCTYPE html>
 <html lang="es">
@@ -27,10 +38,10 @@ if (session_status() === PHP_SESSION_NONE) {
             width: 90%;
             max-width: 400px;
         }
-        h2 {
+        h2, h3 {
             text-align: center;
             color: gold;
-            margin-bottom: 20px;
+            margin-bottom: 10px;
         }
         label {
             display: block;
@@ -67,6 +78,10 @@ if (session_status() === PHP_SESSION_NONE) {
 <body>
     <form class="form-container" action="guardar_cliente_online.php" method="POST">
         <h2>Registro de Cliente</h2>
+        <h3>Gimnasio: <?php echo htmlspecialchars($nombre_gimnasio); ?></h3>
+
+        <!-- Campo oculto para registrar el gimnasio asociado -->
+        <input type="hidden" name="gimnasio_id" value="<?php echo $gimnasio_id; ?>">
 
         <label for="apellido">Apellido:</label>
         <input type="text" id="apellido" name="apellido" required>
@@ -100,13 +115,7 @@ if (session_status() === PHP_SESSION_NONE) {
             <option value="MMA">MMA</option>
         </select>
 
-        <label for="academia">Academia:</label>
-        <select name="academia" id="academia" required>
-            <option value="">Seleccione una academia</option>
-            <option value="Fight Academy Scorpions">Fight Academy Scorpions</option>
-            <option value="Team La Gitana">Team La Gitana</option>
-            <!-- Agregar más academias si es necesario -->
-        </select>
+        <!-- Eliminado el selector de academia ya que se define automáticamente -->
 
         <button type="submit">Registrar</button>
     </form>
