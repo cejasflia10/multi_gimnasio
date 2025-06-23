@@ -4,7 +4,7 @@ include 'conexion.php';
 include 'menu.php';
 
 $gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
-$es_admin = $_SESSION['rol'] === 'admin';
+$es_admin = isset($_SESSION['rol']) && $_SESSION['rol'] === 'admin';
 $hoy = date('Y-m-d');
 
 // Condición por gimnasio
@@ -15,7 +15,7 @@ $sql_clientes = "
 SELECT c.nombre, c.apellido, c.dni, c.disciplina, m.fecha_vencimiento, m.clases_restantes, a.fecha, a.hora
 FROM asistencias a
 JOIN clientes c ON a.id_cliente = c.id
-LEFT JOIN membresias m ON m.id_cliente = c.id AND m.fecha_vencimiento >= CURDATE()
+LEFT JOIN membresias m ON m.cliente_id = c.id AND m.fecha_vencimiento >= CURDATE()
 WHERE $condicion AND a.fecha = CURDATE()
 ORDER BY a.hora DESC";
 $res_clientes = $conexion->query($sql_clientes);
@@ -90,7 +90,6 @@ $res_profesores = $conexion->query($sql_profesores);
                 font-weight: bold;
                 white-space: nowrap;
             }
-            /* Etiquetas para cada columna */
             td:nth-of-type(1)::before { content: "Nombre"; }
             td:nth-of-type(2)::before { content: "DNI"; }
             td:nth-of-type(3)::before { content: "Disciplina"; }
