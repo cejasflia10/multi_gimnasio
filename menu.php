@@ -174,6 +174,7 @@ body {
     <a href="#" class="submenu-toggle"><i class="fas fa-cogs"></i> Configuraciones</a>
     <div class="submenu">
         <a href="configuracion_general.php">General</a>
+        <a href="ver_turnos.php"><i class="fas fa-calendar-alt"></i> Turnos y Horarios</a>
         <a href="permisos.php">Permisos</a>
     </div>
 
