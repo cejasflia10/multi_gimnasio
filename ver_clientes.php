@@ -122,17 +122,17 @@ $resultado = $conexion->query($query);
                 <td><?= htmlspecialchars($cliente['telefono'] ?? '') ?></td>
                 <td><?= htmlspecialchars($cliente['email'] ?? '') ?></td>
                 <td><?= htmlspecialchars($cliente['disciplina'] ?? '') ?></td>
-                <td>
-                    <?php
-$qr_path = "qr/" . $cliente['dni'] . ".png";
-if (file_exists($qr_path)) {
-    echo "<a href='$qr_path' target='_blank' title='Ver QR'><i class='fas fa-qrcode'></i></a> ";
-    echo "<a href='$qr_path' download title='Descargar QR'><i class='fas fa-download'></i></a>";
-} else {
-    echo "<a href='generar_qr_individual.php?id=" . $cliente['id'] . "' title='Generar QR'><i class='fas fa-qrcode'></i></a>";
-}
-?>
-                </td>
+                <td style="text-align: center;">
+    <?php
+    $qr_path = 'qr/cliente_' . $fila['id'] . '.png';
+    if (file_exists($qr_path)) {
+        echo "<img src='$qr_path' alt='QR' style='width: 100px; height: 100px; display:block; margin:auto;'><br>";
+        echo "<a href='$qr_path' download='QR_{$fila['dni']}.png' style='color: gold; text-decoration: underline;'>Descargar</a>";
+    } else {
+        echo "<a href='generar_qr_individual.php?id={$fila['id']}' class='btn-generar'>Generar QR</a>";
+    }
+    ?>
+</td>
                 <td><?= htmlspecialchars($cliente['nombre_gimnasio'] ?? '') ?></td>
                 <td class="acciones">
                     <a href="editar_cliente.php?id=<?= $cliente['id'] ?>" title="Editar">✏️</a>
