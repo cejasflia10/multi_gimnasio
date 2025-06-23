@@ -1,46 +1,43 @@
 <?php
-if (session_status() === PHP_SESSION_NONE) {
-    session_start();
-}
-include 'conexion.php';
+include("conexion.php");
 
-// Validación básica
 if ($_SERVER["REQUEST_METHOD"] === "POST") {
-    $apellido = trim($_POST['apellido']);
-    $nombre = trim($_POST['nombre']);
-    $dni = trim($_POST['dni']);
-    $fecha_nacimiento = $_POST['fecha_nacimiento'];
-    $domicilio = trim($_POST['domicilio']);
-    $telefono = trim($_POST['telefono']);
-    $email = trim($_POST['email']);
-    $disciplina = $_POST['disciplina'];
-    $rfid_uid = $_POST['rfid_uid'] ?? '';
-    $gimnasio_id = intval($_POST['gimnasio_id']);
+    // Recibir datos del formulario
+    $apellido = $_POST["apellido"];
+    $nombre = $_POST["nombre"];
+    $dni = $_POST["dni"];
+    $fecha_nacimiento = $_POST["fecha_nacimiento"];
+    $domicilio = $_POST["domicilio"];
+    $telefono = $_POST["telefono"];
+    $email = $_POST["email"];
+    $rfid = $_POST["rfid_uid"] ?? '';
+    $disciplina = $_POST["disciplina"];
+    $gimnasio_id = $_POST["gimnasio_id"];
 
-    // Evitar duplicados por DNI
-    $verificar = $conexion->prepare("SELECT id FROM clientes WHERE dni = ? AND gimnasio_id = ?");
-    $verificar->bind_param("si", $dni, $gimnasio_id);
-    $verificar->execute();
-    $verificar->store_result();
-
+    // Verificar si el DNI ya existe en este gimnasio
+    $verificar = $conexion->query("SELECT id FROM clientes WHERE dni = '$dni' AND gimnasio_id = $gimnasio_id");
     if ($verificar->num_rows > 0) {
-        echo "<script>alert('Este DNI ya está registrado.'); window.location.href='registrar_cliente_online.php';</script>";
+        echo "<script>alert('Este DNI ya está registrado en este gimnasio.'); window.history.back();</script>";
         exit;
     }
-    $verificar->close();
 
-    // Insertar nuevo cliente
-    $stmt = $conexion->prepare("INSERT INTO clientes (apellido, nombre, dni, fecha_nacimiento, domicilio, telefono, email, disciplina, rfid_uid, gimnasio_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
-    $stmt->bind_param("sssssssssi", $apellido, $nombre, $dni, $fecha_nacimiento, $domicilio, $telefono, $email, $disciplina, $rfid_uid, $gimnasio_id);
+    // Calcular edad automáticamente
+    $edad = date_diff(date_create($fecha_nacimiento), date_create('today'))->y;
+
+    // Insertar el cliente en la base de datos
+    $stmt = $conexion->prepare("INSERT INTO clientes (apellido, nombre, dni, fecha_nacimiento, edad, domicilio, telefono, email, rfid_uid, disciplina, gimnasio_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+    $stmt->bind_param("ssssisssssi", $apellido, $nombre, $dni, $fecha_nacimiento, $edad, $domicilio, $telefono, $email, $rfid, $disciplina, $gimnasio_id);
 
     if ($stmt->execute()) {
-        echo "<script>alert('Cliente registrado correctamente'); window.location.href='registrar_cliente_online.php';</script>";
+        echo "<script>alert('Cliente registrado correctamente.'); window.location.href='cliente_acceso.php';</script>";
     } else {
-        echo "Error al registrar cliente: " . $stmt->error;
+        echo "<script>alert('Error al registrar el cliente.'); window.history.back();</script>";
     }
 
     $stmt->close();
+    $conexion->close();
 } else {
-    echo "Método no permitido.";
+    header("Location: registro_online.php");
+    exit;
 }
-?>
