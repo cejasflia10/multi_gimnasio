@@ -105,7 +105,8 @@ $resultado = $conexion->query($query);
                                 📲
                             </a>
                         </td>
-                        <td><?= htmlspecialchars($cliente['nombre_gimnasio']) ?></td>
+                        <td><?= htmlspecialchars($variable ?? '')
+
                     </tr>
                 <?php } ?>
             </tbody>
