@@ -64,22 +64,30 @@ $gimnasios_resultado = $conexion->query("SELECT id, nombre FROM gimnasios");
             color: black;
             cursor: pointer;
             margin-top: 20px;
+            font-weight: bold;
         }
         input[type="submit"]:hover {
             background-color: #e0c200;
+        }
+
+        @media screen and (max-width: 600px) {
+            form {
+                width: 100%;
+                padding: 15px;
+            }
         }
     </style>
 </head>
 <body>
     <h1>Editar Usuario</h1>
     <form action="guardar_edicion_usuario.php" method="POST">
-        <input type="hidden" name="id" value="<?= $usuario['id'] ?>">
+        <input type="hidden" name="id" value="<?= htmlspecialchars($usuario['id']) ?>">
 
         <label>Usuario:</label>
-        <input type="text" name="usuario" value="<?= htmlspecialchars($usuario['usuario'] ?? '') ?>" required>
+        <input type="text" name="usuario" value="<?= htmlspecialchars($usuario['usuario']) ?>" required>
 
         <label>Email:</label>
-        <input type="email" name="email" value="<?= htmlspecialchars($usuario['email'] ?? '') ?>">
+        <input type="email" name="email" value="<?= htmlspecialchars($usuario['email']) ?>">
 
         <label>Rol:</label>
         <select name="rol" required>
