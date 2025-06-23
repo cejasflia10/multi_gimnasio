@@ -89,7 +89,6 @@ if ($gimnasio_id > 0) {
         <h2><?php echo strtoupper(htmlspecialchars($nombre_gimnasio)); ?></h2>
         <h3>Registro de Cliente</h3>
 
-        <!-- El gimnasio logueado se guarda automáticamente -->
         <input type="hidden" name="gimnasio_id" value="<?php echo $gimnasio_id; ?>">
 
         <label for="apellido">Apellido:</label>
@@ -112,9 +111,6 @@ if ($gimnasio_id > 0) {
 
         <label for="email">Email:</label>
         <input type="email" id="email" name="email" required>
-
-        <!-- RFID se deja vacío por defecto -->
-        <input type="hidden" name="rfid_uid" value="">
 
         <label for="disciplina">Disciplina:</label>
         <select name="disciplina" id="disciplina" required>
