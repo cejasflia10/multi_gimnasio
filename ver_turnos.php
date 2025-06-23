@@ -1,10 +1,17 @@
 <?php
 include 'conexion.php';
 include 'menu.php';
+
+// Iniciar sesión y validar que exista gimnasio_id
 if (session_status() === PHP_SESSION_NONE) session_start();
+
+if (!isset($_SESSION['gimnasio_id'])) {
+    die("Acceso no autorizado. Inicie sesión.");
+}
 
 $gimnasio_id = $_SESSION['gimnasio_id'];
 
+// Consultas
 $dias = $conexion->query("SELECT * FROM dias");
 $horarios = $conexion->query("SELECT * FROM horarios");
 $profesores = $conexion->query("SELECT * FROM profesores WHERE gimnasio_id = $gimnasio_id");
