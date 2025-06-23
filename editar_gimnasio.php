@@ -1,5 +1,8 @@
 <?php
 include 'conexion.php';
+if (session_status() === PHP_SESSION_NONE) session_start();
+include 'menu.php';
+
 if (!isset($_GET['id'])) {
     die("ID de gimnasio no especificado.");
 }
@@ -29,17 +32,13 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
             duracion_plan=?, limite_clientes=?, acceso_panel=?, acceso_ventas=?, acceso_asistencias=? 
         WHERE id=?
     ");
-
-    // Si fecha es null, usar tipo "s" normal (MySQL lo interpreta como NULL)
     $stmt->bind_param(
         "ssssssiiiiii",
         $nombre, $direccion, $telefono, $email, $plan, $fecha_vencimiento,
         $duracion, $limite, $panel, $ventas, $asistencias, $id
     );
-
     $stmt->execute();
 
-    // Crear usuario si se cargó
     if (!empty($_POST["usuario"]) && !empty($_POST["clave"])) {
         $usuario = $_POST["usuario"];
         $clave = password_hash($_POST["clave"], PASSWORD_BCRYPT);
@@ -53,3 +52,113 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
     exit;
 }
 ?>
+
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Editar Gimnasio</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body {
+            background-color: #111;
+            color: gold;
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+        }
+        h2 {
+            text-align: center;
+            color: gold;
+        }
+        form {
+            max-width: 600px;
+            margin: auto;
+        }
+        label {
+            display: block;
+            margin-top: 15px;
+            font-weight: bold;
+        }
+        input[type="text"],
+        input[type="email"],
+        input[type="number"],
+        input[type="date"],
+        input[type="password"] {
+            width: 100%;
+            padding: 10px;
+            background-color: #222;
+            border: 1px solid gold;
+            color: gold;
+        }
+        .checkboxes {
+            margin-top: 15px;
+        }
+        .checkboxes label {
+            font-weight: normal;
+            display: block;
+        }
+        button {
+            margin-top: 20px;
+            padding: 12px;
+            width: 100%;
+            background-color: gold;
+            color: black;
+            font-weight: bold;
+            border: none;
+            cursor: pointer;
+        }
+        a {
+            display: block;
+            text-align: center;
+            color: gold;
+            margin-top: 20px;
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+
+<h2>Editar Gimnasio</h2>
+
+<form method="POST">
+    <label>Nombre:</label>
+    <input type="text" name="nombre" value="<?= htmlspecialchars($gimnasio['nombre']) ?>" required>
+
+    <label>Dirección:</label>
+    <input type="text" name="direccion" value="<?= htmlspecialchars($gimnasio['direccion']) ?>">
+
+    <label>Teléfono:</label>
+    <input type="text" name="telefono" value="<?= htmlspecialchars($gimnasio['telefono']) ?>">
+
+    <label>Email:</label>
+    <input type="email" name="email" value="<?= htmlspecialchars($gimnasio['email']) ?>">
+
+    <label>Plan:</label>
+    <input type="text" name="plan" value="<?= htmlspecialchars($gimnasio['plan']) ?>">
+
+    <label>Fecha de vencimiento:</label>
+    <input type="date" name="fecha_vencimiento" value="<?= $gimnasio['fecha_vencimiento'] ?>">
+
+    <label>Duración del plan (en meses):</label>
+    <input type="number" name="duracion_plan" value="<?= $gimnasio['duracion_plan'] ?>" min="1">
+
+    <label>Límite de clientes:</label>
+    <input type="number" name="limite_clientes" value="<?= $gimnasio['limite_clientes'] ?>" min="0">
+
+    <div class="checkboxes">
+        <label><input type="checkbox" name="acceso_panel" <?= $gimnasio['acceso_panel'] ? 'checked' : '' ?>> Acceso al panel</label>
+        <label><input type="checkbox" name="acceso_ventas" <?= $gimnasio['acceso_ventas'] ? 'checked' : '' ?>> Acceso a ventas</label>
+        <label><input type="checkbox" name="acceso_asistencias" <?= $gimnasio['acceso_asistencias'] ? 'checked' : '' ?>> Acceso a asistencias</label>
+    </div>
+
+    <label>Crear nuevo usuario (opcional):</label>
+    <input type="text" name="usuario" placeholder="Usuario">
+    <input type="password" name="clave" placeholder="Clave (mínimo 6 caracteres)">
+
+    <button type="submit">Guardar cambios</button>
+    <a href="gimnasios.php">Volver</a>
+</form>
+
+</body>
+</html>
