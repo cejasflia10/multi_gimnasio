@@ -1,9 +1,4 @@
-<?php
-if (session_status() === PHP_SESSION_NONE) {
-    session_start();
-}
-?>
-
+<?php include 'conexion.php'; ?>
 <!DOCTYPE html>
 <html lang="es">
 <head>
@@ -11,30 +6,20 @@ if (session_status() === PHP_SESSION_NONE) {
     <title>Agregar Plan</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
-        body { background-color: #111; color: gold; font-family: Arial, sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; }
-        form { background-color: #222; padding: 30px; border-radius: 10px; width: 90%; max-width: 400px; }
-        label { font-weight: bold; display: block; margin-top: 15px; }
-        input { width: 100%; padding: 10px; margin-top: 5px; background-color: #333; border: none; border-radius: 6px; color: white; }
-        button { margin-top: 20px; width: 100%; padding: 10px; background-color: gold; color: black; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; }
-        button:hover { background-color: orange; }
+        body { background-color: #111; color: gold; padding: 20px; font-family: Arial, sans-serif; }
+        input, button { padding: 10px; margin: 5px; width: 100%; }
+        label { display: block; margin-top: 10px; }
     </style>
 </head>
 <body>
+    <h2>Agregar Nuevo Plan</h2>
     <form action="guardar_plan.php" method="POST">
-        <h2 style="text-align:center;">Agregar Nuevo Plan</h2>
-        <label>Nombre del plan:</label>
-        <input type="text" name="nombre" required>
-
-        <label>Precio ($):</label>
-        <input type="number" name="precio" step="0.01" required>
-
-        <label>Cantidad de clases:</label>
-        <input type="number" name="clases" required>
-
-        <label>Duración (en meses):</label>
-        <input type="number" name="duracion_meses" required>
-
-        <button type="submit">Guardar Plan</button>
+        <label>Nombre: <input type="text" name="nombre" required></label>
+        <label>Precio: <input type="number" name="precio" required step="0.01"></label>
+        <label>Días disponibles: <input type="number" name="dias_disponibles" required></label>
+        <label>Duración (meses): <input type="number" name="duracion" required></label>
+        <button type="submit">Guardar</button>
     </form>
+    <a href="planes.php" class="boton">Volver</a>
 </body>
 </html>
