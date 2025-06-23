@@ -66,10 +66,10 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
             <input type="email" name="email" value="<?= htmlspecialchars($usuarioData['email']) ?>">
         </label>
         <label>Rol:
-            <select name="rol">
+            <select name="rol" required>
                 <option value="admin" <?= $usuarioData['rol'] === 'admin' ? 'selected' : '' ?>>Administrador</option>
+                <option value="cliente_gym" <?= $usuarioData['rol'] === 'cliente_gym' ? 'selected' : '' ?>>Cliente Gym</option>
                 <option value="profesor" <?= $usuarioData['rol'] === 'profesor' ? 'selected' : '' ?>>Profesor</option>
-                <option value="instructor" <?= $usuarioData['rol'] === 'instructor' ? 'selected' : '' ?>>Instructor</option>
             </select>
         </label>
         <label>Gimnasio:
