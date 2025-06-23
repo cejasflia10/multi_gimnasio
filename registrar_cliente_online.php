@@ -5,11 +5,11 @@ if (session_status() === PHP_SESSION_NONE) {
 include 'conexion.php';
 
 // Validar sesión activa de gimnasio
-$gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
+$id_gimnasio = $_SESSION['gimnasio_id'] ?? 0;
 $nombre_gimnasio = 'Gimnasio';
 
-if ($gimnasio_id > 0) {
-    $resultado = $conexion->query("SELECT nombre FROM gimnasios WHERE id = $gimnasio_id");
+if ($id_gimnasio > 0) {
+    $resultado = $conexion->query("SELECT nombre FROM gimnasios WHERE id = $id_gimnasio");
     if ($fila = $resultado->fetch_assoc()) {
         $nombre_gimnasio = $fila['nombre'];
     }
@@ -92,7 +92,8 @@ if ($gimnasio_id > 0) {
         <h2><?php echo strtoupper(htmlspecialchars($nombre_gimnasio)); ?></h2>
         <h3>Registro de Cliente</h3>
 
-        <input type="hidden" name="gimnasio_id" value="<?php echo $gimnasio_id; ?>">
+        <!-- Campo oculto con el id del gimnasio logueado -->
+        <input type="hidden" name="id_gimnasio" value="<?php echo $id_gimnasio; ?>">
 
         <label for="apellido">Apellido:</label>
         <input type="text" id="apellido" name="apellido" required>
