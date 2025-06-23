@@ -1,53 +1,18 @@
 <?php
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
 include 'conexion.php';
 
-if (session_status() === PHP_SESSION_NONE) session_start();
-
-// Tomamos el gimnasio desde la URL
-$gimnasio_id = isset($_GET['gimnasio']) ? intval($_GET['gimnasio']) : 0;
-if ($gimnasio_id === 0) {
-    die("Gimnasio no especificado.");
-}
-
-$error = '';
-$exito = '';
-
-if ($_SERVER["REQUEST_METHOD"] === "POST") {
-    $apellido = $_POST["apellido"];
-    $nombre = $_POST["nombre"];
-    $dni = $_POST["dni"];
-    $fecha_nac = $_POST["fecha_nacimiento"];
-    $domicilio = $_POST["domicilio"];
-    $telefono = $_POST["telefono"];
-    $email = $_POST["email"];
-    $rfid = $_POST["rfid"] ?? '';
-    $disciplina = $_POST["disciplina"];
-    $vencimiento = $_POST["fecha_vencimiento"];
-
-    $verificar = $conexion->prepare("SELECT id FROM clientes WHERE dni = ?");
-    $verificar->bind_param("s", $dni);
-    $verificar->execute();
-    $verificar->store_result();
-
-    if ($verificar->num_rows > 0) {
-        $error = "Ya existe un cliente con ese DNI.";
-    } else {
-        $stmt = $conexion->prepare("INSERT INTO clientes (apellido, nombre, dni, fecha_nacimiento, domicilio, telefono, email, rfid, disciplina, fecha_vencimiento, gimnasio_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
-        $stmt->bind_param("ssssssssssi", $apellido, $nombre, $dni, $fecha_nac, $domicilio, $telefono, $email, $rfid, $disciplina, $vencimiento, $gimnasio_id);
-
-        if ($stmt->execute()) {
-            $exito = "Cliente registrado exitosamente.";
-        } else {
-            $error = "Error al registrar cliente.";
-        }
-    }
-}
+$gimnasio_id = $_GET['gimnasio'] ?? '';
+$mensaje = $_GET['mensaje'] ?? '';
 ?>
+
 <!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>Registro Online</title>
+    <title>Registro de Cliente Online</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
         body {
@@ -61,89 +26,76 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
             color: gold;
         }
         form {
-            max-width: 600px;
+            max-width: 500px;
             margin: auto;
         }
         label {
             display: block;
-            margin-top: 15px;
+            margin-top: 12px;
         }
         input, select {
             width: 100%;
-            padding: 10px;
+            padding: 8px;
+            margin-top: 4px;
             background-color: #222;
+            color: white;
             border: 1px solid gold;
-            color: gold;
         }
-        button {
-            margin-top: 20px;
-            padding: 12px;
-            width: 100%;
+        input[type="submit"] {
             background-color: gold;
             color: black;
-            font-weight: bold;
-            border: none;
-            cursor: pointer;
-        }
-        .mensaje {
-            text-align: center;
-            font-weight: bold;
             margin-top: 20px;
+            font-weight: bold;
         }
         .error {
             color: red;
-        }
-        .exito {
-            color: lightgreen;
+            text-align: center;
+            margin-bottom: 10px;
         }
     </style>
 </head>
 <body>
-    <h2>Registro de Cliente Online</h2>
 
-    <?php if ($error): ?>
-        <div class="mensaje error"><?= $error ?></div>
-    <?php elseif ($exito): ?>
-        <div class="mensaje exito"><?= $exito ?></div>
-    <?php endif; ?>
+<h2>Registro de Cliente Online</h2>
 
-    <form method="POST">
-        <label>Apellido:</label>
-        <input type="text" name="apellido" required>
+<?php if ($mensaje): ?>
+    <p class="error"><?php echo htmlspecialchars($mensaje); ?></p>
+<?php endif; ?>
 
-        <label>Nombre:</label>
-        <input type="text" name="nombre" required>
+<form action="guardar_cliente_online.php" method="post">
+    <input type="hidden" name="gimnasio_id" value="<?php echo htmlspecialchars($gimnasio_id); ?>">
 
-        <label>DNI:</label>
-        <input type="text" name="dni" required>
+    <label>Apellido:</label>
+    <input type="text" name="apellido" required>
 
-        <label>Fecha de nacimiento:</label>
-        <input type="date" name="fecha_nacimiento" required>
+    <label>Nombre:</label>
+    <input type="text" name="nombre" required>
 
-        <label>Domicilio:</label>
-        <input type="text" name="domicilio">
+    <label>DNI:</label>
+    <input type="number" name="dni" required>
 
-        <label>Teléfono:</label>
-        <input type="text" name="telefono">
+    <label>Fecha de nacimiento:</label>
+    <input type="date" name="fecha_nacimiento" required>
 
-        <label>Email:</label>
-        <input type="email" name="email">
+    <label>Domicilio:</label>
+    <input type="text" name="domicilio" required>
 
-        <label>RFID (opcional):</label>
-        <input type="text" name="rfid">
+    <label>Teléfono:</label>
+    <input type="text" name="telefono" required>
 
-        <label>Disciplina:</label>
-        <select name="disciplina">
-            <option value="Boxeo">Boxeo</option>
-            <option value="Kickboxing">Kickboxing</option>
-            <option value="MMA">MMA</option>
-            <option value="Funcional">Funcional</option>
-        </select>
+    <label>Email:</label>
+    <input type="email" name="email" required>
 
-        <label>Fecha de vencimiento:</label>
-        <input type="date" name="fecha_vencimiento" required>
+    <label>Disciplina:</label>
+    <select name="disciplina" required>
+        <option value="Boxeo">Boxeo</option>
+        <option value="Kickboxing">Kickboxing</option>
+        <option value="MMA">MMA</option>
+        <option value="Funcional">Funcional</option>
+    </select>
 
-        <button type="submit">Registrar Cliente</button>
-    </form>
+    <input type="submit" value="Registrar Cliente">
+</form>
+
 </body>
 </html>
