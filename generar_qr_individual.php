@@ -1,20 +1,13 @@
 <?php
-if (session_status() === PHP_SESSION_NONE) {
-    session_start();
-}
 include 'conexion.php';
-require_once 'phpqrcode/qrlib.php'; // Ruta a la librería QR
+require 'phpqrcode/qrlib.php';
 
 if (!isset($_GET['id'])) {
-    die("ID no proporcionado.");
+    die("ID de cliente no especificado.");
 }
 
 $id = intval($_GET['id']);
-
-// Obtener datos del cliente
-$query = "SELECT dni FROM clientes WHERE id = $id";
-$resultado = $conexion->query($query);
-
+$resultado = $conexion->query("SELECT * FROM clientes WHERE id = $id");
 if ($resultado->num_rows === 0) {
     die("Cliente no encontrado.");
 }
@@ -22,18 +15,12 @@ if ($resultado->num_rows === 0) {
 $cliente = $resultado->fetch_assoc();
 $dni = $cliente['dni'];
 
-// Generar código QR con el DNI
-$qr_data = $dni;
-$qr_nombre_archivo = "qr/cliente_" . $id . ".png";
-
-// Crear directorio si no existe
-if (!file_exists('qr')) {
+if (!is_dir('qr')) {
     mkdir('qr', 0777, true);
 }
 
-// Generar el QR y guardarlo
-QRcode::png($qr_data, $qr_nombre_archivo, QR_ECLEVEL_L, 8);
+$filename = 'qr/' . $dni . '.png';
+QRcode::png($dni, $filename, 'H', 6, 2);
 
-// Redirigir de vuelta
-header("Location: ver_clientes.php");
+header("Location: $filename");
 exit;
