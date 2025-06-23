@@ -1,17 +1,23 @@
 <?php
-session_start();
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
 include 'conexion.php';
+include 'menu.php';
 
 $gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
 $rol = $_SESSION['rol'] ?? '';
 
-if (!isset($_SESSION['usuario'])) {
-    die("Acceso denegado.");
+if ($rol === 'admin') {
+    $query = "SELECT clientes.*, gimnasios.nombre AS nombre_gimnasio 
+              FROM clientes 
+              LEFT JOIN gimnasios ON clientes.gimnasio_id = gimnasios.id";
+} else {
+    $query = "SELECT clientes.*, gimnasios.nombre AS nombre_gimnasio 
+              FROM clientes 
+              LEFT JOIN gimnasios ON clientes.gimnasio_id = gimnasios.id
+              WHERE clientes.gimnasio_id = $gimnasio_id";
 }
-
-$query = ($rol === 'admin') 
-    ? "SELECT clientes.*, gimnasios.nombre AS nombre_gimnasio FROM clientes LEFT JOIN gimnasios ON clientes.gimnasio_id = gimnasios.id"
-    : "SELECT clientes.*, gimnasios.nombre AS nombre_gimnasio FROM clientes LEFT JOIN gimnasios ON clientes.gimnasio_id = gimnasios.id WHERE gimnasio_id = $gimnasio_id";
 
 $resultado = $conexion->query($query);
 ?>
@@ -24,151 +30,154 @@ $resultado = $conexion->query($query);
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
         body {
-            background-color: #000;
+            margin: 0;
+            background-color: #111;
             color: gold;
             font-family: Arial, sans-serif;
+        }
+
+        .container {
+            margin-left: 260px;
             padding: 20px;
-            margin: 0;
         }
 
         h1 {
             text-align: center;
-            font-size: 24px;
             color: gold;
-            margin-top: 80px;
-        }
-
-        .volver {
-            margin-bottom: 10px;
-            display: inline-block;
-            background-color: gold;
-            color: black;
-            padding: 8px 12px;
-            border-radius: 4px;
-            text-decoration: none;
-        }
-
-        .search-bar {
-            margin-bottom: 10px;
-            width: 100%;
-            max-width: 400px;
-            padding: 8px;
-            font-size: 16px;
-            border-radius: 4px;
-            border: none;
-        }
-
-        .tabla-container {
-            overflow-x: auto;
         }
 
         table {
             width: 100%;
             border-collapse: collapse;
-            color: gold;
+            margin-top: 20px;
+            overflow-x: auto;
         }
 
         th, td {
-            padding: 10px;
             border: 1px solid gold;
+            padding: 8px;
             text-align: center;
         }
 
-        .btn-generar {
+        th {
             background-color: #222;
-            color: gold;
-            padding: 4px 8px;
-            border-radius: 4px;
-            text-decoration: none;
-            font-size: 13px;
         }
 
-        .btn-generar:hover {
+        tr:nth-child(even) {
+            background-color: #1a1a1a;
+        }
+
+        .btn-volver {
             background-color: gold;
-            color: #000;
+            color: #111;
+            padding: 10px 20px;
+            border: none;
+            cursor: pointer;
+            text-decoration: none;
+            display: inline-block;
+            margin-bottom: 20px;
+        }
+
+        .btn-generar {
+            color: gold;
+            text-decoration: underline;
+        }
+
+        .acciones a {
+            margin: 0 5px;
+            color: gold;
+            text-decoration: none;
+            font-size: 18px;
+        }
+
+        .search-box {
+            margin-bottom: 15px;
+            text-align: right;
+        }
+
+        .search-box input {
+            padding: 8px;
+            border-radius: 5px;
+            border: 1px solid #ccc;
         }
 
         @media screen and (max-width: 768px) {
-            th, td {
-                font-size: 13px;
-                padding: 6px;
+            .container {
+                margin-left: 0;
+                padding: 10px;
             }
 
-            .btn-generar {
-                font-size: 12px;
-                padding: 3px 6px;
-            }
-
-            h1 {
-                font-size: 20px;
-            }
-
-            .volver {
+            table, thead, tbody, th, td, tr {
                 font-size: 14px;
-                padding: 6px 10px;
+            }
+
+            .search-box input {
+                width: 100%;
+                margin-top: 10px;
             }
         }
     </style>
+    <script>
+        function filtrarClientes() {
+            var input = document.getElementById("busqueda").value.toLowerCase();
+            var filas = document.getElementById("tablaClientes").getElementsByTagName("tr");
+            for (var i = 1; i < filas.length; i++) {
+                var fila = filas[i];
+                var textoFila = fila.textContent.toLowerCase();
+                fila.style.display = textoFila.includes(input) ? "" : "none";
+            }
+        }
+    </script>
 </head>
 <body>
-
+<div class="container">
     <h1>Clientes Registrados</h1>
-    <a class="volver" href="index.php">← Volver al Menú</a><br><br>
-
-    <input type="text" class="search-bar" id="buscador" placeholder="Buscar por nombre, apellido, DNI o disciplina...">
-
-    <div class="tabla-container">
-        <table id="tabla-clientes">
-            <thead>
-                <tr>
-                    <th>Apellido</th>
-                    <th>Nombre</th>
-                    <th>DNI</th>
-                    <th>Teléfono</th>
-                    <th>Email</th>
-                    <th>Disciplina</th>
-                    <th>QR</th>
-                    <th>Gimnasio</th>
-                    <th>Acción</th>
-                </tr>
-            </thead>
-            <tbody>
-                <?php while ($fila = $resultado->fetch_assoc()) {
-                    $qr_path = "qr/" . $fila['dni'] . ".png";
-                    echo "<tr>";
-                    echo "<td>" . htmlspecialchars($fila['apellido']) . "</td>";
-                    echo "<td>" . htmlspecialchars($fila['nombre']) . "</td>";
-                    echo "<td>" . htmlspecialchars($fila['dni']) . "</td>";
-                    echo "<td>" . htmlspecialchars($fila['telefono']) . "</td>";
-                    echo "<td>" . htmlspecialchars($fila['email']) . "</td>";
-                    echo "<td>" . htmlspecialchars($fila['disciplina']) . "</td>";
-                    echo "<td>";
+    <a href="index.php" class="btn-volver">← Volver al Menú</a>
+    <div class="search-box">
+        <input type="text" id="busqueda" placeholder="Buscar por nombre, apellido, DNI o disciplina..." onkeyup="filtrarClientes()">
+    </div>
+    <table id="tablaClientes">
+        <thead>
+            <tr>
+                <th>Apellido</th>
+                <th>Nombre</th>
+                <th>DNI</th>
+                <th>Teléfono</th>
+                <th>Email</th>
+                <th>Disciplina</th>
+                <th>QR</th>
+                <th>Gimnasio</th>
+                <th>Acciones</th>
+            </tr>
+        </thead>
+        <tbody>
+        <?php while ($fila = $resultado->fetch_assoc()) : ?>
+            <tr>
+                <td><?= htmlspecialchars($fila['apellido'] ?? '') ?></td>
+                <td><?= htmlspecialchars($fila['nombre'] ?? '') ?></td>
+                <td><?= htmlspecialchars($fila['dni'] ?? '') ?></td>
+                <td><?= htmlspecialchars($fila['telefono'] ?? '') ?></td>
+                <td><?= htmlspecialchars($fila['email'] ?? '') ?></td>
+                <td><?= htmlspecialchars($fila['disciplina'] ?? '') ?></td>
+                <td>
+                    <?php
+                    $qr_path = "qr/" . ($fila['dni'] ?? '') . ".png";
                     if (file_exists($qr_path)) {
                         echo "<a class='btn-generar' href='$qr_path' target='_blank'>Ver QR</a>";
                     } else {
-                        echo "<a class='btn-generar' href='generar_qr_individual.php?id=" . $fila['id'] . "'>Generar QR</a>";
+                        echo "<a class='btn-generar' href='generar_qr_individual.php?id=" . ($fila['id'] ?? '') . "'>Generar QR</a>";
                     }
-                    echo "</td>";
-                    echo "<td>" . htmlspecialchars($fila['nombre_gimnasio']) . "</td>";
-                    echo "<td><a href='editar_cliente.php?id=" . $fila['id'] . "' style='color: gold;'>➤</a></td>";
-                    echo "</tr>";
-                } ?>
-            </tbody>
-        </table>
-    </div>
-
-    <script>
-        const buscador = document.getElementById("buscador");
-        buscador.addEventListener("input", function () {
-            const filtro = buscador.value.toLowerCase();
-            const filas = document.querySelectorAll("#tabla-clientes tbody tr");
-
-            filas.forEach(fila => {
-                const texto = fila.textContent.toLowerCase();
-                fila.style.display = texto.includes(filtro) ? "" : "none";
-            });
-        });
-    </script>
-
+                    ?>
+                </td>
+                <td><?= htmlspecialchars($fila['nombre_gimnasio'] ?? '') ?></td>
+                <td class="acciones">
+                    <a href="editar_cliente.php?id=<?= $fila['id'] ?>"><i class="fas fa-edit"></i>✎</a>
+                    <a href="eliminar_cliente.php?id=<?= $fila['id'] ?>" onclick="return confirm('¿Estás seguro de que deseas eliminar este cliente?');">🗑️</a>
+                </td>
+            </tr>
+        <?php endwhile; ?>
+        </tbody>
+    </table>
+</div>
 </body>
 </html>
