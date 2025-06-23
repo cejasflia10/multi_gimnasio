@@ -6,18 +6,11 @@ if (!isset($_GET['dni'])) {
 }
 
 $dni = $_GET['dni'];
+$cliente = $conexion->query("SELECT * FROM clientes WHERE dni = '$dni' LIMIT 1")->fetch_assoc();
 
-// Buscamos al cliente
-$stmt = $conexion->prepare("SELECT * FROM clientes WHERE dni = ?");
-$stmt->bind_param("s", $dni);
-$stmt->execute();
-$resultado = $stmt->get_result();
-
-if ($resultado->num_rows === 0) {
+if (!$cliente) {
     die("Cliente no encontrado.");
 }
-
-$cliente = $resultado->fetch_assoc();
 ?>
 
 <!DOCTYPE html>
@@ -31,42 +24,51 @@ $cliente = $resultado->fetch_assoc();
             background-color: #111;
             color: gold;
             font-family: Arial, sans-serif;
-            margin: 0;
-            padding: 20px;
+            text-align: center;
+            padding: 40px;
         }
         .panel {
-            max-width: 600px;
-            margin: auto;
             background-color: #222;
-            padding: 30px;
             border-radius: 10px;
+            padding: 30px;
+            display: inline-block;
+            max-width: 400px;
+            width: 100%;
         }
-        h2, p {
-            margin-bottom: 15px;
+        h2 {
+            margin-top: 0;
         }
-        .dorado {
-            color: #ffd700;
-        }
-        .volver {
-            margin-top: 20px;
+        a.btn {
             display: block;
-            text-align: center;
-            color: gold;
+            margin: 10px auto;
+            padding: 10px 15px;
+            background-color: gold;
+            color: #111;
             text-decoration: none;
+            border-radius: 5px;
             font-weight: bold;
+        }
+        a.btn:hover {
+            background-color: #ffcc00;
         }
     </style>
 </head>
 <body>
-    <div class="panel">
-        <h2>Bienvenido, <?php echo $cliente['nombre'] . " " . $cliente['apellido']; ?></h2>
-        <p><span class="dorado">DNI:</span> <?php echo $cliente['dni']; ?></p>
-        <p><span class="dorado">Disciplina:</span> <?php echo $cliente['disciplina']; ?></p>
-        <p><span class="dorado">Fecha de nacimiento:</span> <?php echo $cliente['fecha_nacimiento']; ?></p>
-        <p><span class="dorado">Email:</span> <?php echo $cliente['email']; ?></p>
-        <p><span class="dorado">Teléfono:</span> <?php echo $cliente['telefono']; ?></p>
 
-        <a class="volver" href="cliente_acceso.php">← Volver</a>
-    </div>
+<div class="panel">
+    <h2>Bienvenido, <?= $cliente['nombre'] . ' ' . $cliente['apellido'] ?></h2>
+    <p><strong>DNI:</strong> <?= $cliente['dni'] ?></p>
+    <p><strong>Disciplina:</strong> <?= $cliente['disciplina'] ?></p>
+    <p><strong>Fecha de nacimiento:</strong> <?= $cliente['fecha_nacimiento'] ?></p>
+    <p><strong>Email:</strong> <?= $cliente['email'] ?></p>
+    <p><strong>Teléfono:</strong> <?= $cliente['telefono'] ?></p>
+
+    <a class="btn" href="reservar_turno.php?dni=<?= $cliente['dni'] ?>">📅 Reservar Turno</a>
+    <a class="btn" href="ver_qr.php?dni=<?= $cliente['dni'] ?>">📲 Ver mi QR</a>
+    <a class="btn" href="ver_asistencias.php?dni=<?= $cliente['dni'] ?>">📋 Ver Asistencias</a>
+    <a class="btn" href="ver_pagos.php?dni=<?= $cliente['dni'] ?>">💳 Ver Pagos</a>
+    <a class="btn" href="cliente_acceso.php">← Volver / Cerrar Sesión</a>
+</div>
+
 </body>
 </html>
