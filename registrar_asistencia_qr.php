@@ -21,7 +21,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST["dni"])) {
         $gimnasio_id = $cliente['gimnasio_id'];
 
         // Buscar membresía activa con clases disponibles
-        $queryMembresia = $conexion->prepare("SELECT id, clases_disponibles, fecha_vencimiento FROM membresias WHERE cliente_id = ? AND fecha_vencimiento >= ? AND clases_disponibles > 0 ORDER BY fecha_vencimiento DESC LIMIT 1");
+        $queryMembresia = $conexion->prepare("SELECT id, clases_restantes AS clases_disponibles, fecha_vencimiento FROM membresias WHERE cliente_id = ? AND fecha_vencimiento >= ? AND clases_restantes > 0 ORDER BY fecha_vencimiento DESC LIMIT 1");
         $queryMembresia->bind_param("is", $cliente_id, $fecha_hoy);
         $queryMembresia->execute();
         $resultadoMembresia = $queryMembresia->get_result();
