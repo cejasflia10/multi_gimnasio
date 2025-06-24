@@ -42,14 +42,17 @@ include 'conexion.php';
             color: lime;
             margin-top: 20px;
         }
+        .datos {
+            margin-top: 15px;
+            font-size: 18px;
+        }
     </style>
 </head>
 <body>
     <h1>Escaneo QR - Asistencia</h1>
-    <form method="POST">
-        <input type="text" name="dni" placeholder="Ingrese o escanee DNI" autofocus required>
-        <br>
-        <button type="submit">Registrar</button>
+
+    <form method="POST" id="form-qr">
+        <input type="text" name="dni" id="dni" autofocus autocomplete="off">
     </form>
 
     <?php
@@ -58,15 +61,18 @@ include 'conexion.php';
         $fecha_actual = date("Y-m-d");
         $hora_actual = date("H:i:s");
 
-        // Obtener cliente(s) con ese DNI
-        $clientes_result = $conexion->query("SELECT id FROM clientes WHERE dni = '$dni'");
+        $clientes_result = $conexion->query("SELECT * FROM clientes WHERE dni = '$dni' LIMIT 1");
         if ($clientes_result->num_rows === 0) {
-            echo "<div class='alerta'>❌ DNI no encontrado en la base de datos.</div>";
+            echo "<div class='alerta'>❌ DNI no encontrado.</div>";
         } else {
-            // Obtener membresía activa y con clases restantes
+            $cliente = $clientes_result->fetch_assoc();
+            $cliente_id = $cliente['id'];
+            $nombre_completo = $cliente['apellido'] . ' ' . $cliente['nombre'];
+
+            // Verificar membresía
             $membresia_result = $conexion->query("
                 SELECT * FROM membresias 
-                WHERE cliente_id IN (SELECT id FROM clientes WHERE dni = '$dni') 
+                WHERE cliente_id = $cliente_id 
                 AND fecha_vencimiento >= CURDATE() 
                 AND clases_restantes > 0 
                 ORDER BY fecha_vencimiento DESC 
@@ -74,26 +80,46 @@ include 'conexion.php';
             ");
 
             if ($membresia_result->num_rows === 0) {
-                echo "<div class='alerta'>⚠️ El DNI $dni no tiene una membresía activa o clases disponibles.</div>";
+                echo "<div class='alerta'>⚠️ $nombre_completo no tiene una membresía activa o clases disponibles.</div>";
             } else {
                 $membresia = $membresia_result->fetch_assoc();
                 $id_membresia = $membresia['id'];
                 $clases_restantes = $membresia['clases_restantes'] - 1;
+                $fecha_vencimiento = $membresia['fecha_vencimiento'];
 
                 // Descontar clase
                 $conexion->query("UPDATE membresias SET clases_restantes = $clases_restantes WHERE id = $id_membresia");
 
                 // Registrar asistencia
-                $cliente_id = $membresia['cliente_id'];
                 $conexion->query("INSERT INTO asistencias (cliente_id, fecha, hora) VALUES ($cliente_id, '$fecha_actual', '$hora_actual')");
 
-                echo "<div class='exito'>✅ Asistencia registrada correctamente. Clases restantes: $clases_restantes</div>";
+                echo "<div class='exito'>✅ $nombre_completo - Asistencia registrada</div>";
+                echo "<div class='datos'>
+                        Clases restantes: $clases_restantes<br>
+                        Fecha de vencimiento: $fecha_vencimiento<br>
+                        Hora: $hora_actual
+                      </div>";
             }
         }
+
+        // Refrescar en 3 segundos para nuevo escaneo
+        echo "<script>
+                setTimeout(() => {
+                    document.getElementById('dni').value = '';
+                    document.getElementById('dni').focus();
+                }, 3000);
+              </script>";
     }
     ?>
 
     <br><br>
     <a href="index.php"><button>Volver al menú</button></a>
+
+    <script>
+        // Enfocar automáticamente en el input cada vez
+        window.onload = () => {
+            document.getElementById('dni').focus();
+        }
+    </script>
 </body>
 </html>
