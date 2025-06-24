@@ -6,15 +6,8 @@ include 'conexion.php';
 
 $gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
 
-// Obtener planes
+$clientes = $conexion->query("SELECT id, nombre, apellido, dni FROM clientes WHERE gimnasio_id = $gimnasio_id");
 $planes = $conexion->query("SELECT * FROM planes WHERE gimnasio_id = $gimnasio_id");
-
-// Obtener clientes
-$clientes = $conexion->query("SELECT id, apellido, nombre, dni FROM clientes WHERE gimnasio_id = $gimnasio_id");
-$clientes_array = [];
-while ($c = $clientes->fetch_assoc()) {
-    $clientes_array[] = $c;
-}
 ?>
 
 <!DOCTYPE html>
@@ -30,31 +23,37 @@ while ($c = $clientes->fetch_assoc()) {
             font-family: Arial, sans-serif;
             padding: 20px;
         }
+
         h1 {
             text-align: center;
             color: gold;
         }
+
         label {
             display: block;
             margin-top: 15px;
+            font-weight: bold;
         }
+
         input, select, button {
             width: 100%;
             padding: 10px;
             margin-top: 5px;
             border-radius: 5px;
             border: none;
+            font-size: 16px;
         }
+
         button {
             background-color: gold;
             color: black;
             font-weight: bold;
             margin-top: 20px;
+            cursor: pointer;
         }
-        #resultados_busqueda {
-            background: #222;
-            padding: 10px;
-            border-radius: 5px;
+
+        #cliente_id option {
+            color: black;
         }
     </style>
 </head>
@@ -64,20 +63,20 @@ while ($c = $clientes->fetch_assoc()) {
 
 <form action="guardar_membresia.php" method="POST">
 
-    <label for="buscador_cliente">Buscar Cliente (DNI o Apellido):</label>
-    <input type="text" id="buscador_cliente" placeholder="Escribí DNI o apellido..." onkeyup="buscarCliente()">
-    
-    <label for="cliente_id">Seleccionar Cliente:</label>
+    <label>Buscar Cliente (DNI o Apellido):</label>
+    <input type="text" id="buscador" onkeyup="filtrarClientes()" placeholder="Ej: 24533 o GARCIA">
+
+    <label>Seleccionar Cliente:</label>
     <select name="cliente_id" id="cliente_id" required>
         <option value="">-- Seleccionar --</option>
-        <?php foreach ($clientes_array as $c): ?>
+        <?php while ($c = $clientes->fetch_assoc()): ?>
             <option value="<?= $c['id'] ?>">
                 <?= $c['apellido'] . ', ' . $c['nombre'] . ' (' . $c['dni'] . ')' ?>
             </option>
-        <?php endforeach; ?>
+        <?php endwhile; ?>
     </select>
 
-    <label for="plan_id">Seleccionar Plan:</label>
+    <label>Seleccionar Plan:</label>
     <select name="plan_id" id="plan_id" onchange="cargarDatosPlan(this.value)" required>
         <option value="">-- Seleccionar plan --</option>
         <?php while ($p = $planes->fetch_assoc()): ?>
@@ -85,56 +84,51 @@ while ($c = $clientes->fetch_assoc()) {
         <?php endwhile; ?>
     </select>
 
-    <label for="precio">Precio del Plan:</label>
+    <label>Precio del Plan:</label>
     <input type="number" name="precio" id="precio" readonly>
 
-    <label for="clases_disponibles">Clases Disponibles:</label>
+    <label>Clases Disponibles:</label>
     <input type="number" name="clases_disponibles" id="clases_disponibles" readonly>
 
-    <label for="fecha_inicio">Fecha de Inicio:</label>
-    <input type="date" name="fecha_inicio" id="fecha_inicio" onchange="calcularVencimiento()" required>
+    <label>Fecha de Inicio:</label>
+    <input type="date" name="fecha_inicio" id="fecha_inicio" required>
 
-    <label for="fecha_vencimiento">Fecha de Vencimiento:</label>
+    <label>Fecha de Vencimiento:</label>
     <input type="date" name="fecha_vencimiento" id="fecha_vencimiento" readonly>
 
-    <input type="hidden" id="duracion_meses" name="duracion_meses">
+    <input type="hidden" name="duracion_meses" id="duracion_meses">
 
-    <label for="otros_pagos">Otros Pagos (adicionales):</label>
-    <input type="number" name="otros_pagos" id="otros_pagos" value="0" oninput="actualizarTotal()">
+    <label>Otros Pagos:</label>
+    <input type="number" name="otros_pagos" id="otros_pagos" value="0" oninput="calcularTotal()">
 
-    <label for="forma_pago">Forma de Pago:</label>
-    <select name="forma_pago" id="forma_pago" onchange="actualizarTotal()" required>
-        <option value="">-- Seleccionar --</option>
+    <label>Forma de Pago:</label>
+    <select name="forma_pago" id="forma_pago" onchange="calcularTotal()" required>
         <option value="efectivo">Efectivo</option>
         <option value="transferencia">Transferencia</option>
-        <option value="debito">Tarjeta Débito</option>
-        <option value="credito">Tarjeta Crédito</option>
+        <option value="debito">Débito</option>
+        <option value="credito">Crédito</option>
         <option value="cuenta_corriente">Cuenta Corriente</option>
     </select>
 
-    <label for="total">Monto Total:</label>
+    <label>Total a Pagar:</label>
     <input type="number" name="total" id="total" readonly>
 
     <button type="submit">Registrar Membresía</button>
     <a href="index.php"><button type="button">Volver al Menú</button></a>
+
 </form>
 
 <script>
-const clientes = <?= json_encode($clientes_array) ?>;
+document.getElementById('fecha_inicio').valueAsDate = new Date();
 
-function buscarCliente() {
-    const texto = document.getElementById('buscador_cliente').value.toLowerCase();
-    const select = document.getElementById('cliente_id');
-    select.innerHTML = '<option value="">-- Seleccionar --</option>';
-    clientes.forEach(c => {
-        const combinado = (c.apellido + ' ' + c.nombre + ' ' + c.dni).toLowerCase();
-        if (combinado.includes(texto)) {
-            const opt = document.createElement('option');
-            opt.value = c.id;
-            opt.textContent = `${c.apellido}, ${c.nombre} (${c.dni})`;
-            select.appendChild(opt);
-        }
-    });
+function filtrarClientes() {
+    let filtro = document.getElementById('buscador').value.toLowerCase();
+    let select = document.getElementById('cliente_id');
+
+    for (let i = 0; i < select.options.length; i++) {
+        let texto = select.options[i].text.toLowerCase();
+        select.options[i].style.display = texto.includes(filtro) ? '' : 'none';
+    }
 }
 
 function cargarDatosPlan(planId) {
@@ -153,4 +147,34 @@ function cargarDatosPlan(planId) {
             document.getElementById('duracion_meses').value = data.duracion_meses;
 
             calcularVencimiento();
-            actualizarTo
+            calcularTotal();
+        });
+}
+
+function calcularVencimiento() {
+    const inicio = document.getElementById('fecha_inicio').value;
+    const meses = parseInt(document.getElementById('duracion_meses').value || 0);
+
+    if (inicio && meses > 0) {
+        let fecha = new Date(inicio);
+        fecha.setMonth(fecha.getMonth() + meses);
+        document.getElementById('fecha_vencimiento').value = fecha.toISOString().split('T')[0];
+    }
+}
+
+function calcularTotal() {
+    let precio = parseFloat(document.getElementById('precio').value || 0);
+    let otros = parseFloat(document.getElementById('otros_pagos').value || 0);
+    let forma = document.getElementById('forma_pago').value;
+
+    let total = precio + otros;
+    if (forma === 'cuenta_corriente') {
+        total = -Math.abs(total);
+    }
+
+    document.getElementById('total').value = total;
+}
+</script>
+
+</body>
+</html>
