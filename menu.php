@@ -119,6 +119,14 @@ body {
         <a href="ver_asistencia.php">Ver Asistencias</a>
         <a href="registro_online.php" target="_blank"><i class="fas fa-link"></i> Registro Online</a>
     </div>
+     <?php if ($rol === 'cliente'): ?>
+     <div class="submenu-toggle" onclick="toggleSubmenu('seguimientoClienteSubmenu')"><i class="fas fa-apple-alt"></i> Nutrición</div>
+     <div class="submenu" id="seguimientoClienteSubmenu">
+        <a href="ficha_habitos.php"><i class="fas fa-edit"></i> Ficha de Hábitos</a>
+        <a href="ver_habitos_profesor.php?id=<?= $_SESSION['cliente_id'] ?? 0 ?>"><i class="fas fa-eye"></i> Ver Ficha</a>
+        <a href="ver_seguimiento_cliente.php"><i class="fas fa-list"></i> Seguimiento Semanal</a>
+     </div>
+<?php endif; ?>
 
     <div class="submenu-toggle" onclick="toggleSubmenu('qrSubmenu')"><i class="fas fa-qrcode"></i> QR</div>
     <div class="submenu" id="qrSubmenu">
