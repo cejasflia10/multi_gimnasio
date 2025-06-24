@@ -26,6 +26,18 @@ include 'conexion.php';
         }
         .exito { color: lime; }
         .alerta { color: yellow; }
+        .volver {
+            margin-top: 30px;
+        }
+        .volver button {
+            background-color: gold;
+            color: black;
+            font-weight: bold;
+            padding: 10px 20px;
+            font-size: 18px;
+            border: none;
+            border-radius: 10px;
+        }
     </style>
 </head>
 <body>
@@ -62,7 +74,16 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             $clases = $membresia['clases_restantes'];
             $vto = $membresia['fecha_vencimiento'];
 
-            if ($clases > 0 && $vto >= $fecha) {
+            // Verificar si ya se registró asistencia hoy
+            $asistencia_q = $conexion->query("
+                SELECT * FROM asistencias 
+                WHERE cliente_id = $cliente_id AND fecha = '$fecha'
+            ");
+
+            if ($asistencia_q->num_rows > 0) {
+                echo "<div class='alerta'>⚠️ $nombre ya registró asistencia hoy.</div>
+                      <div class='info'>📅 Vence: $vto<br>🎯 Clases restantes: $clases</div>";
+            } else if ($clases > 0 && $vto >= $fecha) {
                 $conexion->query("UPDATE membresias SET clases_restantes = clases_restantes - 1 WHERE id = {$membresia['id']}");
                 $conexion->query("INSERT INTO asistencias (cliente_id, fecha, hora) VALUES ($cliente_id, '$fecha', '$hora')");
                 echo "<div class='exito'>✅ $nombre - Asistencia registrada</div>
@@ -78,31 +99,27 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         echo "<div class='alerta'>❌ DNI no encontrado</div>";
     }
 
-    // Reiniciar todo después de 3 segundos
-    echo "<script>
-        setTimeout(() => {
-            window.location.reload();
-        }, 3000);
-    </script>";
+    echo "<div class='volver'><button onclick='reiniciarEscaneo()'>Escanear otro</button></div>";
 }
 ?>
 </div>
 
 <script>
+function reiniciarEscaneo() {
+    window.location.href = window.location.href;
+}
+
 document.addEventListener("DOMContentLoaded", () => {
     const input = document.getElementById("dni");
-
-    // Enfocar y ocultar teclado
     input.focus();
 
-    // Detectar escaneo (cuando el lector QR pega algo)
     input.addEventListener("input", () => {
         if (input.value.trim() !== "") {
             document.getElementById("formulario").submit();
         }
     });
 
-    // Si el usuario toca por error, volver a enfocar
+    // Refocus automático por si se pierde el foco
     setInterval(() => {
         if (document.activeElement !== input) {
             input.focus();
