@@ -1,3 +1,4 @@
+
 <?php
 include 'conexion.php';
 session_start();
@@ -18,9 +19,14 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST["dni"])) {
         $cliente = $resultado->fetch_assoc();
         $cliente_id = $cliente['id'];
         $gimnasio_id = $cliente['gimnasio_id'];
+        $nombre = $cliente['nombre'];
+        $apellido = $cliente['apellido'];
+        $disciplina = $cliente['disciplina'];
 
         // Buscar membresía válida
-        $stmtM = $conexion->prepare("SELECT id, clases_restantes, fecha_vencimiento FROM membresias WHERE cliente_id = ? AND fecha_vencimiento >= ? AND clases_restantes > 0 ORDER BY fecha_vencimiento DESC LIMIT 1");
+        $stmtM = $conexion->prepare("SELECT id, clases_restantes, fecha_vencimiento FROM membresias 
+            WHERE cliente_id = ? AND fecha_vencimiento >= ? AND clases_restantes > 0 
+            ORDER BY fecha_vencimiento DESC LIMIT 1");
         $stmtM->bind_param("is", $cliente_id, $fecha_hoy);
         $stmtM->execute();
         $resM = $stmtM->get_result();
@@ -35,84 +41,36 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST["dni"])) {
             $stmtA->bind_param("iss", $cliente_id, $fecha_hoy, $hora_actual);
             $stmtA->execute();
 
-            // Actualizar clases
+            // Actualizar clases restantes
             $stmtU = $conexion->prepare("UPDATE membresias SET clases_restantes = ? WHERE id = ?");
             $stmtU->bind_param("ii", $clases_restantes, $membresia_id);
             $stmtU->execute();
 
-            echo "<div style='color:lime;font-size:22px;font-family:sans-serif;background:black;padding:20px;text-align:center'>";
-            echo "<h2>✅ Ingreso registrado</h2>";
-            echo "<p><strong>{$cliente['apellido']}, {$cliente['nombre']}</strong></p>";
-            echo "<p>Disciplina: <strong>{$cliente['disciplina']}</strong></p>";
-            echo "<p>Clases restantes: <strong>$clases_restantes</strong></p>";
-            echo "<p>Vence: <strong>{$membresia['fecha_vencimiento']}</strong></p>";
-            echo "<p>Hora: <strong>$hora_actual</strong></p>";
-            echo "<br><a href='scanner_qr.php' style='color:yellow'>⬅️ Escanear otro</a>";
-            echo "</div>";
-        } else {
-            echo "<div style='color:orange;font-size:20px;text-align:center;padding:20px;'>⚠️ Sin membresía activa o sin clases.<br><br><a href='scanner_qr.php' style='color:yellow'>⬅️ Escanear otro</a></div>";
+            echo "<!DOCTYPE html>
+            <html><head><meta name='viewport' content='width=device-width, initial-scale=1.0'>
+            <style>
+                body { background-color: #111; color: gold; font-family: sans-serif; text-align: center; padding: 40px; }
+                .box { background-color: #222; padding: 20px; border-radius: 10px; display: inline-block; }
+            </style></head><body>
+            <div class='box'>
+                <h2>✅ Ingreso registrado</h2>
+                <p><strong>$apellido, $nombre</strong></p>
+                <p>Disciplina: $disciplina</p>
+                <p>Clases restantes: $clases_restantes</p>
+                <p><a href='scanner_qr.php' style='color: lightgreen;'>📷 Escanear otro</a></p>
+            </div></body></html>";
+            exit;
         }
-    } else {
-        echo "<div style='color:red;font-size:20px;text-align:center;padding:20px;'>❌ Cliente no encontrado.<br><br><a href='scanner_qr.php' style='color:yellow'>⬅️ Escanear otro</a></div>";
     }
-    exit;
 }
+
+// Si no hay cliente o membresía válida
+echo "<!DOCTYPE html>
+<html><head><meta name='viewport' content='width=device-width, initial-scale=1.0'>
+<style>
+    body { background-color: #111; color: gold; font-family: sans-serif; text-align: center; padding: 40px; }
+</style></head><body>
+<p>⚠️ Sin membresía activa o sin clases.</p>
+<p><a href='scanner_qr.php' style='color: yellow;'>⬅️ Escanear otro</a></p>
+</body></html>";
 ?>
-
-<!DOCTYPE html>
-<html lang="es">
-<head>
-    <meta charset="UTF-8">
-    <title>Escaneo QR</title>
-    <style>
-        body {
-            background-color: black;
-            color: yellow;
-            font-family: Arial, sans-serif;
-            text-align: center;
-            margin: 0;
-        }
-        video {
-            width: 90%;
-            max-width: 400px;
-            margin-top: 20px;
-            border: 2px solid yellow;
-        }
-    </style>
-</head>
-<body style="background-color: #111; color: gold; font-family: Arial, sans-serif; margin: 0; padding: 0;">
-<div style="text-align:center; padding: 20px;">
-    <img src='logo.png' alt='Logo' style='max-width: 150px; margin-bottom: 20px;'>
-    <h2 style="color: gold;">Registro de Asistencia QR</h2>
-</div>
-<div style="padding: 10px; text-align: center;">
-
-    <h2>Escaneo QR para Ingreso</h2>
-    <div id="reader" style="width:100%; display: flex; justify-content: center;"></div>
-
-    <form id="formulario" method="POST" style="display: none;">
-        <input type="hidden" name="dni" id="dni_input">
-    </form>
-
-    <script src="https://unpkg.com/html5-qrcode"></script>
-    <script>
-        const qrScanner = new Html5Qrcode("reader");
-        const config = { fps: 10, qrbox: 250 };
-
-        qrScanner.start(
-            { facingMode: "environment" }, config,
-            (decodedText) => {
-                qrScanner.stop();
-                document.getElementById("dni_input").value = decodedText.trim();
-                document.getElementById("formulario").submit();
-            },
-            (errorMessage) => {}
-        ).catch((err) => {
-            alert("Error al acceder a la cámara: " + err);
-        });
-    </script>
-<br><div style="text-align:center; padding-bottom: 30px;">
-    <a href="scanner_qr.php" style="color: gold; text-decoration: none; font-weight: bold;">⬅️ Escanear otro</a>
-</div>
-</body>
-</html>
