@@ -17,116 +17,96 @@ include 'conexion.php';
             color: gold;
             font-family: Arial, sans-serif;
             text-align: center;
-            padding: 20px;
+            padding: 30px;
         }
-        video {
-            width: 100%;
+        input {
+            padding: 10px;
+            font-size: 18px;
+            width: 90%;
             max-width: 400px;
-            border: 2px solid gold;
-            margin-top: 10px;
+            margin-bottom: 15px;
+        }
+        button {
+            padding: 10px 20px;
+            font-size: 18px;
+            background-color: gold;
+            border: none;
+            color: black;
+            cursor: pointer;
         }
         .mensaje {
             margin-top: 20px;
             font-size: 20px;
         }
+        .exito {
+            color: lime;
+        }
+        .alerta {
+            color: red;
+        }
     </style>
+    <script>
+        // Reiniciar escaneo automáticamente después de 4 segundos
+        function reiniciarEscaneo() {
+            setTimeout(() => {
+                window.location.reload();
+            }, 4000);
+        }
+    </script>
 </head>
 <body>
-    <h2>Escaneá tu QR</h2>
-    <video id="preview"></video>
-    <div class="mensaje" id="mensaje"></div>
-
-    <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
-    <script>
-        const mensaje = document.getElementById("mensaje");
-
-        function procesarQR(dni) {
-            fetch("registrar_asistencia_qr.php?dni=" + dni)
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        mensaje.innerHTML = `
-                            ✅ ${data.nombre}<br>
-                            🗓️ Vence: ${data.vencimiento}<br>
-                            🎟️ Clases restantes: ${data.clases}<br>
-                        `;
-                    } else {
-                        mensaje.innerHTML = "⚠️ " + data.mensaje;
-                    }
-                    setTimeout(() => {
-                        mensaje.innerHTML = "";
-                        scanner.resume();
-                    }, 5000);
-                })
-                .catch(error => {
-                    mensaje.innerHTML = "❌ Error al procesar QR";
-                    setTimeout(() => {
-                        mensaje.innerHTML = "";
-                        scanner.resume();
-                    }, 5000);
-                });
-        }
-
-        const scanner = new Html5Qrcode("preview");
-        scanner.start(
-            { facingMode: "environment" },
-            { fps: 10, qrbox: 250 },
-            (decodedText) => {
-                scanner.pause();
-                procesarQR(decodedText.trim());
-            },
-            (errorMessage) => { /* Ignorar errores de escaneo */ }
-        );
-    </script>
+    <h1>Escaneo QR - Asistencia</h1>
+    <form method="POST">
+        <input type="text" name="dni" placeholder="Escaneá tu QR" autofocus required>
+        <br>
+        <button type="submit">Registrar</button>
+    </form>
 
 <?php
-// Si recibe solicitud por GET con el DNI
-if (isset($_GET['dni'])) {
-    $dni = $conexion->real_escape_string($_GET["dni"]);
+if ($_SERVER["REQUEST_METHOD"] == "POST") {
+    $dni = $conexion->real_escape_string($_POST["dni"]);
     $fecha_actual = date("Y-m-d");
     $hora_actual = date("H:i:s");
 
-    $clientes_result = $conexion->query("SELECT id, apellido, nombre FROM clientes WHERE dni = '$dni'");
-    if ($clientes_result->num_rows === 0) {
-        echo json_encode(["success" => false, "mensaje" => "DNI no encontrado."]);
-        exit;
+    $cliente_result = $conexion->query("SELECT id, apellido, nombre FROM clientes WHERE dni = '$dni'");
+    if ($cliente_result->num_rows === 0) {
+        echo "<div class='mensaje alerta'>❌ DNI no encontrado en la base de datos.</div>";
+        echo "<script>reiniciarEscaneo();</script>";
+    } else {
+        $cliente = $cliente_result->fetch_assoc();
+        $cliente_id = $cliente['id'];
+        $nombre_completo = $cliente['apellido'] . ' ' . $cliente['nombre'];
+
+        $membresia_result = $conexion->query("
+            SELECT * FROM membresias 
+            WHERE cliente_id = $cliente_id 
+              AND fecha_vencimiento >= CURDATE() 
+              AND clases_restantes > 0 
+            ORDER BY fecha_vencimiento DESC 
+            LIMIT 1
+        ");
+
+        if ($membresia_result->num_rows === 0) {
+            echo "<div class='mensaje alerta'>⚠️ $nombre_completo no tiene membresía activa o clases disponibles.</div>";
+            echo "<script>reiniciarEscaneo();</script>";
+        } else {
+            $membresia = $membresia_result->fetch_assoc();
+            $id_membresia = $membresia['id'];
+            $clases_restantes = $membresia['clases_restantes'] - 1;
+            $fecha_vencimiento = $membresia['fecha_vencimiento'];
+
+            // Descontar clase y registrar asistencia
+            $conexion->query("UPDATE membresias SET clases_restantes = $clases_restantes WHERE id = $id_membresia");
+            $conexion->query("INSERT INTO asistencias (cliente_id, fecha, hora) VALUES ($cliente_id, '$fecha_actual', '$hora_actual')");
+
+            echo "<div class='mensaje exito'>
+                    ✅ $nombre_completo<br>
+                    Fecha de vencimiento: $fecha_vencimiento<br>
+                    Clases restantes: $clases_restantes
+                  </div>";
+            echo "<script>reiniciarEscaneo();</script>";
+        }
     }
-
-    $cliente = $clientes_result->fetch_assoc();
-    $cliente_id = $cliente['id'];
-
-    $membresia_result = $conexion->query("
-        SELECT * FROM membresias 
-        WHERE cliente_id = $cliente_id
-        AND fecha_vencimiento >= CURDATE()
-        AND clases_restantes > 0
-        ORDER BY fecha_vencimiento DESC
-        LIMIT 1
-    ");
-
-    if ($membresia_result->num_rows === 0) {
-        echo json_encode(["success" => false, "mensaje" => "Sin membresía activa o sin clases."]);
-        exit;
-    }
-
-    $membresia = $membresia_result->fetch_assoc();
-    $id_membresia = $membresia['id'];
-    $clases_restantes = $membresia['clases_restantes'] - 1;
-    $vencimiento = $membresia['fecha_vencimiento'];
-
-    // Descontar clase
-    $conexion->query("UPDATE membresias SET clases_restantes = $clases_restantes WHERE id = $id_membresia");
-
-    // Registrar asistencia
-    $conexion->query("INSERT INTO asistencias (cliente_id, fecha, hora) VALUES ($cliente_id, '$fecha_actual', '$hora_actual')");
-
-    echo json_encode([
-        "success" => true,
-        "nombre" => $cliente['apellido'] . " " . $cliente['nombre'],
-        "clases" => $clases_restantes,
-        "vencimiento" => $vencimiento
-    ]);
-    exit;
 }
 ?>
 </body>
