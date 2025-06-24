@@ -55,14 +55,14 @@ include 'conexion.php';
                     }
                     setTimeout(() => {
                         mensaje.innerHTML = "";
-                        scanner.resume();
+                        scanner.resume(); // volver a escanear
                     }, 5000);
                 })
                 .catch(error => {
                     mensaje.innerHTML = "❌ Error al procesar QR";
                     setTimeout(() => {
                         mensaje.innerHTML = "";
-                        scanner.resume();
+                        scanner.resume(); // volver a escanear
                     }, 5000);
                 });
         }
@@ -75,12 +75,11 @@ include 'conexion.php';
                 scanner.pause();
                 procesarQR(decodedText.trim());
             },
-            (errorMessage) => { /* Ignorar errores de escaneo */ }
+            (errorMessage) => {}
         );
     </script>
 
 <?php
-// Si recibe solicitud por GET con el DNI
 if (isset($_GET['dni'])) {
     $dni = $conexion->real_escape_string($_GET["dni"]);
     $fecha_actual = date("Y-m-d");
