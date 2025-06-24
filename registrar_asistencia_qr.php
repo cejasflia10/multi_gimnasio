@@ -40,8 +40,8 @@ include 'conexion.php';
             font-size: 16px;
             margin-top: 10px;
         }
-        button {
-            display: none;
+        #respuesta {
+            transition: opacity 0.5s ease-in-out;
         }
     </style>
 </head>
@@ -52,75 +52,78 @@ include 'conexion.php';
         <input type="text" name="dni" id="dni" autofocus autocomplete="off">
     </form>
 
-<?php
-if ($_SERVER["REQUEST_METHOD"] == "POST") {
-    $dni = trim($_POST["dni"]);
-    $fecha_actual = date("Y-m-d");
-    $hora_actual = date("H:i:s");
+    <div id="respuesta">
+    <?php
+    if ($_SERVER["REQUEST_METHOD"] == "POST") {
+        $dni = trim($_POST["dni"]);
+        $fecha_actual = date("Y-m-d");
+        $hora_actual = date("H:i:s");
 
-    $cliente_q = $conexion->query("SELECT * FROM clientes WHERE dni = '$dni' LIMIT 1");
+        $cliente_q = $conexion->query("SELECT * FROM clientes WHERE dni = '$dni' LIMIT 1");
 
-    if ($cliente_q && $cliente_q->num_rows > 0) {
-        $cliente = $cliente_q->fetch_assoc();
-        $cliente_id = $cliente['id'];
-        $nombre = $cliente['apellido'] . ' ' . $cliente['nombre'];
+        if ($cliente_q && $cliente_q->num_rows > 0) {
+            $cliente = $cliente_q->fetch_assoc();
+            $cliente_id = $cliente['id'];
+            $nombre = $cliente['apellido'] . ' ' . $cliente['nombre'];
 
-        $membresia_q = $conexion->query("
-            SELECT * FROM membresias 
-            WHERE cliente_id = $cliente_id 
-            ORDER BY fecha_vencimiento DESC 
-            LIMIT 1
-        ");
+            $membresia_q = $conexion->query("
+                SELECT * FROM membresias 
+                WHERE cliente_id = $cliente_id 
+                ORDER BY fecha_vencimiento DESC 
+                LIMIT 1
+            ");
 
-        if ($membresia_q && $membresia_q->num_rows > 0) {
-            $membresia = $membresia_q->fetch_assoc();
-            $id_membresia = $membresia['id'];
-            $clases_restantes = $membresia['clases_restantes'];
-            $fecha_vencimiento = $membresia['fecha_vencimiento'];
+            if ($membresia_q && $membresia_q->num_rows > 0) {
+                $membresia = $membresia_q->fetch_assoc();
+                $id_membresia = $membresia['id'];
+                $clases_restantes = $membresia['clases_restantes'];
+                $fecha_vencimiento = $membresia['fecha_vencimiento'];
 
-            // Validar si puede registrar asistencia
-            if ($clases_restantes > 0 && $fecha_vencimiento >= $fecha_actual) {
-                $nuevas_clases = $clases_restantes - 1;
+                if ($clases_restantes > 0 && $fecha_vencimiento >= $fecha_actual) {
+                    $nuevas_clases = $clases_restantes - 1;
 
-                // Descontar clase
-                $conexion->query("UPDATE membresias SET clases_restantes = $nuevas_clases WHERE id = $id_membresia");
+                    $conexion->query("UPDATE membresias SET clases_restantes = $nuevas_clases WHERE id = $id_membresia");
 
-                // Registrar asistencia
-                $conexion->query("INSERT INTO asistencias (cliente_id, fecha, hora) VALUES ($cliente_id, '$fecha_actual', '$hora_actual')");
+                    $conexion->query("INSERT INTO asistencias (cliente_id, fecha, hora) VALUES ($cliente_id, '$fecha_actual', '$hora_actual')");
 
-                echo "<div class='exito'>✅ Asistencia registrada</div>";
+                    echo "<div class='exito'>✅ Asistencia registrada correctamente</div>";
+                    echo "<div class='info'>
+                            👤 <b>Cliente:</b> $nombre<br>
+                            📅 <b>Vencimiento:</b> $fecha_vencimiento<br>
+                            🎯 <b>Clases restantes:</b> $nuevas_clases<br>
+                            🕒 <b>Hora:</b> $hora_actual
+                          </div>";
+                } else {
+                    echo "<div class='alerta'>⚠️ $nombre no tiene clases o membresía activa. (Solo se muestran datos)</div>";
+                    echo "<div class='info'>
+                            👤 <b>Cliente:</b> $nombre<br>
+                            📅 <b>Vencimiento:</b> $fecha_vencimiento<br>
+                            🎯 <b>Clases restantes:</b> $clases_restantes<br>
+                            🕒 <b>Hora:</b> $hora_actual
+                          </div>";
+                }
             } else {
-                echo "<div class='alerta'>⚠️ $nombre no tiene clases o membresía activa. (Solo se muestran datos)</div>";
+                echo "<div class='alerta'>⚠️ $nombre no tiene membresía registrada.</div>";
             }
-
-            // Mostrar siempre los datos
-            echo "<div class='info'>
-                    👤 Cliente: <strong>$nombre</strong><br>
-                    📅 Vencimiento: <strong>$fecha_vencimiento</strong><br>
-                    🎯 Clases restantes: <strong>$clases_restantes</strong><br>
-                    🕒 Hora: <strong>$hora_actual</strong>
-                  </div>";
         } else {
-            echo "<div class='alerta'>⚠️ $nombre no tiene membresías registradas.</div>";
+            echo "<div class='alerta'>❌ DNI no encontrado.</div>";
         }
-    } else {
-        echo "<div class='alerta'>❌ DNI no encontrado.</div>";
+
+        echo "<script>
+            setTimeout(() => {
+                document.getElementById('dni').value = '';
+                document.getElementById('dni').focus();
+                document.getElementById('respuesta').style.opacity = 0;
+            }, 3000);
+        </script>";
     }
+    ?>
+    </div>
 
-    // Auto reset
-    echo "<script>
-        setTimeout(function() {
-            document.getElementById('dni').value = '';
-            document.getElementById('dni').focus();
-        }, 3000);
-    </script>";
-}
-?>
-
-<script>
-    window.onload = () => {
-        document.getElementById("dni").focus();
-    };
-</script>
+    <script>
+        window.onload = () => {
+            document.getElementById("dni").focus();
+        };
+    </script>
 </body>
 </html>
