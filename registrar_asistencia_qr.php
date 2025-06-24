@@ -1,7 +1,5 @@
 <?php
-if (session_status() === PHP_SESSION_NONE) {
-    session_start();
-}
+if (session_status() === PHP_SESSION_NONE) session_start();
 include 'conexion.php';
 ?>
 
@@ -17,13 +15,10 @@ include 'conexion.php';
             color: gold;
             font-family: Arial, sans-serif;
             text-align: center;
-            margin: 0;
             padding: 30px;
         }
-        input[type="text"] {
-            position: absolute;
-            top: -1000px; /* oculto fuera de pantalla */
-            opacity: 0;
+        #dni {
+            display: none;
         }
         .info, .exito, .alerta {
             margin-top: 20px;
@@ -38,15 +33,15 @@ include 'conexion.php';
 <h1>Escaneo QR - Asistencia</h1>
 
 <form method="POST" id="formulario">
-    <input type="text" name="dni" id="dni" autofocus autocomplete="off">
+    <input type="text" name="dni" id="dni" autocomplete="off">
 </form>
 
 <div id="respuesta">
 <?php
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
     $dni = trim($_POST["dni"]);
-    $fecha_actual = date("Y-m-d");
-    $hora_actual = date("H:i:s");
+    $fecha = date("Y-m-d");
+    $hora = date("H:i:s");
 
     $cliente_q = $conexion->query("SELECT * FROM clientes WHERE dni = '$dni' LIMIT 1");
 
@@ -64,30 +59,29 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 
         if ($membresia_q && $membresia_q->num_rows > 0) {
             $membresia = $membresia_q->fetch_assoc();
-            $clases_restantes = $membresia['clases_restantes'];
-            $fecha_vencimiento = $membresia['fecha_vencimiento'];
+            $clases = $membresia['clases_restantes'];
+            $vto = $membresia['fecha_vencimiento'];
 
-            if ($clases_restantes > 0 && $fecha_vencimiento >= $fecha_actual) {
+            if ($clases > 0 && $vto >= $fecha) {
                 $conexion->query("UPDATE membresias SET clases_restantes = clases_restantes - 1 WHERE id = {$membresia['id']}");
-                $conexion->query("INSERT INTO asistencias (cliente_id, fecha, hora) VALUES ($cliente_id, '$fecha_actual', '$hora_actual')");
-
+                $conexion->query("INSERT INTO asistencias (cliente_id, fecha, hora) VALUES ($cliente_id, '$fecha', '$hora')");
                 echo "<div class='exito'>✅ $nombre - Asistencia registrada</div>
-                      <div class='info'>📅 Vence: $fecha_vencimiento<br>🎯 Clases restantes: " . ($clases_restantes - 1) . "<br>🕒 $hora_actual</div>";
+                      <div class='info'>📅 Vence: $vto<br>🎯 Clases restantes: " . ($clases - 1) . "<br>🕒 $hora</div>";
             } else {
-                echo "<div class='alerta'>⚠️ $nombre no tiene clases disponibles o la membresía está vencida.</div>
-                      <div class='info'>📅 Vence: $fecha_vencimiento<br>🎯 Clases: $clases_restantes</div>";
+                echo "<div class='alerta'>⚠️ $nombre no tiene clases disponibles o está vencido</div>
+                      <div class='info'>📅 Vence: $vto<br>🎯 Clases: $clases</div>";
             }
         } else {
-            echo "<div class='alerta'>⚠️ $nombre no tiene membresía registrada.</div>";
+            echo "<div class='alerta'>⚠️ $nombre no tiene membresía registrada</div>";
         }
     } else {
-        echo "<div class='alerta'>❌ DNI no encontrado.</div>";
+        echo "<div class='alerta'>❌ DNI no encontrado</div>";
     }
 
-    // Recarga automática a los 3 segundos
+    // Reiniciar todo después de 3 segundos
     echo "<script>
         setTimeout(() => {
-            window.location.href = window.location.href;
+            window.location.reload();
         }, 3000);
     </script>";
 }
@@ -95,12 +89,20 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 </div>
 
 <script>
-// Auto-focus oculto al cargar
 document.addEventListener("DOMContentLoaded", () => {
     const input = document.getElementById("dni");
+
+    // Enfocar y ocultar teclado
     input.focus();
 
-    // Siempre vuelve el foco al input (lector QR)
+    // Detectar escaneo (cuando el lector QR pega algo)
+    input.addEventListener("input", () => {
+        if (input.value.trim() !== "") {
+            document.getElementById("formulario").submit();
+        }
+    });
+
+    // Si el usuario toca por error, volver a enfocar
     setInterval(() => {
         if (document.activeElement !== input) {
             input.focus();
