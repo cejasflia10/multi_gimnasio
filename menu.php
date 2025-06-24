@@ -76,6 +76,14 @@ body {
     }
 }
 </style>
+<?php if ($rol === 'admin' || $rol === 'escuela'): ?>
+    <a class="submenu-toggle" onclick="toggleSubmenu('submenu-pagos')">💰 Pagos</a>
+    <div id="submenu-pagos" class="submenu">
+        <a href="ver_pagos.php">Ver Pagos</a>
+        <a href="agregar_pago.php">Agregar Pago</a>
+    </div>
+<?php endif; ?>
+
 
 <!-- BOTÓN ☰ PARA CELULARES -->
 <button class="menu-toggle" onclick="toggleMenu()">☰</button>
