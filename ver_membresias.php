@@ -1,22 +1,24 @@
 <?php
-include 'conexion.php';
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
-$gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
-$rol = $_SESSION['rol'] ?? '';
+include 'conexion.php';
 
-// Consulta con JOIN para obtener nombre y apellido del cliente
-if ($rol === 'admin') {
-    $query = "SELECT membresias.*, clientes.nombre, clientes.apellido 
-              FROM membresias 
-              JOIN clientes ON membresias.cliente_id = clientes.id";
-} else {
-    $query = "SELECT membresias.*, clientes.nombre, clientes.apellido 
-              FROM membresias 
-              JOIN clientes ON membresias.cliente_id = clientes.id
-              WHERE membresias.id_gimnasio = $gimnasio_id";
-}
+$gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
+
+$query = "
+SELECT m.*, 
+       c.nombre AS cliente_nombre, c.apellido AS cliente_apellido,
+       p.nombre AS plan_nombre,
+       a.nombre AS adicional_nombre
+FROM membresias m
+JOIN clientes c ON m.cliente_id = c.id
+JOIN planes p ON m.plan_id = p.id
+LEFT JOIN planes_adicionales a ON m.adicional_id = a.id
+WHERE m.gimnasio_id = $gimnasio_id
+ORDER BY m.fecha_inicio DESC
+";
+
 $resultado = $conexion->query($query);
 ?>
 
@@ -24,84 +26,125 @@ $resultado = $conexion->query($query);
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>Membresías</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Membresías Registradas</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
         body {
             background-color: #111;
-            color: #f1c40f;
+            color: gold;
             font-family: Arial, sans-serif;
             margin: 0;
-            padding: 0;
+            padding: 15px;
         }
-        h2 {
+        h1 {
             text-align: center;
-            padding-top: 20px;
+            margin-bottom: 15px;
         }
         table {
-            width: 95%;
-            margin: 20px auto;
+            width: 100%;
             border-collapse: collapse;
-            background-color: #222;
+            margin-top: 10px;
         }
         th, td {
             padding: 10px;
-            text-align: center;
-            border: 1px solid #f1c40f;
+            border-bottom: 1px solid #444;
+            text-align: left;
         }
         th {
-            background-color: #000;
+            background-color: #222;
         }
-        .btn {
-            padding: 5px 10px;
-            margin: 2px;
-            background-color: #f1c40f;
+        tr.vencida {
+            background-color: #400;
+            color: white;
+        }
+        .boton {
+            background-color: gold;
             color: black;
-            font-weight: bold;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
+            padding: 6px 10px;
+            text-decoration: none;
+            border-radius: 5px;
+            font-size: 14px;
+            display: inline-block;
+            margin-bottom: 5px;
         }
         .volver {
             display: block;
-            width: 200px;
-            margin: 30px auto;
+            width: 100%;
             text-align: center;
+            margin-top: 25px;
+        }
+
+        @media screen and (max-width: 700px) {
+            table, thead, tbody, th, td, tr {
+                display: block;
+            }
+            thead {
+                display: none;
+            }
+            tr {
+                margin-bottom: 20px;
+                border: 1px solid #333;
+                padding: 10px;
+                border-radius: 6px;
+            }
+            td {
+                border: none;
+                padding: 6px 10px;
+            }
+            td::before {
+                content: attr(data-label);
+                display: block;
+                font-weight: bold;
+                margin-bottom: 5px;
+                color: #ccc;
+            }
         }
     </style>
 </head>
 <body>
-    <h2>Membresías Activas</h2>
-    <table>
-        <tr>
-            <th>Nombre</th>
-            <th>Apellido</th>
-            <th>Fecha Inicio</th>
-            <th>Fecha Vencimiento</th>
-            <th>Total</th>
-            <th>Clases Disp.</th>
-            <th>Clases Rest.</th>
-            <th>Acciones</th>
-        </tr>
-        <?php while ($row = $resultado->fetch_assoc()) { ?>
-            <tr>
-                <td><?php echo $row['nombre']; ?></td>
-                <td><?php echo $row['apellido']; ?></td>
-                <td><?php echo $row['fecha_inicio']; ?></td>
-                <td><?php echo $row['fecha_vencimiento']; ?></td>
-                <td>$<?php echo number_format($row['total'], 2, ',', '.'); ?></td>
-                <td><?php echo $row['clases_disponibles']; ?></td>
-                <td><?php echo $row['clases_restantes']; ?></td>
-                <td>
-                    <a href="editar_membresia.php?id=<?php echo $row['id']; ?>" class="btn">Editar</a>
-                    <a href="eliminar_membresia.php?id=<?php echo $row['id']; ?>" class="btn" onclick="return confirm('¿Eliminar esta membresía?');">Eliminar</a>
-                </td>
-            </tr>
-        <?php } ?>
-    </table>
 
-    <div class="volver">
-        <a href="index.php" class="btn">Volver al Menú</a>
-    </div>
+<h1>Membresías Registradas</h1>
+
+<table>
+    <thead>
+        <tr>
+            <th>Cliente</th>
+            <th>Plan</th>
+            <th>Adicional</th>
+            <th>Inicio</th>
+            <th>Vencimiento</th>
+            <th>Clases</th>
+            <th>Pago</th>
+            <th>Total</th>
+            <th>Acción</th>
+        </tr>
+    </thead>
+    <tbody>
+        <?php while ($fila = $resultado->fetch_assoc()):
+            $vencida = (strtotime($fila['fecha_vencimiento']) < strtotime(date('Y-m-d')) || $fila['activa'] == 0);
+        ?>
+        <tr class="<?= $vencida ? 'vencida' : '' ?>">
+            <td data-label="Cliente"><?= $fila['cliente_apellido'] . ', ' . $fila['cliente_nombre'] ?></td>
+            <td data-label="Plan"><?= $fila['plan_nombre'] ?></td>
+            <td data-label="Adicional"><?= $fila['adicional_nombre'] ?? '-' ?></td>
+            <td data-label="Inicio"><?= $fila['fecha_inicio'] ?></td>
+            <td data-label="Vencimiento"><?= $fila['fecha_vencimiento'] ?></td>
+            <td data-label="Clases"><?= $fila['clases_restantes'] ?></td>
+            <td data-label="Pago"><?= ucfirst($fila['metodo_pago']) ?></td>
+            <td data-label="Total">$<?= number_format($fila['total'], 2) ?></td>
+            <td data-label="Acción">
+                <a href="editar_membresia.php?id=<?= $fila['id'] ?>" class="boton">Editar</a><br>
+                <a href="eliminar_membresia.php?id=<?= $fila['id'] ?>" class="boton" onclick="return confirm('¿Seguro que desea eliminar esta membresía?')">Eliminar</a><br>
+                <a href="renovar_membresia.php?id=<?= $fila['id'] ?>" class="boton">Renovar</a>
+            </td>
+        </tr>
+        <?php endwhile; ?>
+    </tbody>
+</table>
+
+<div class="volver">
+    <a href="index.php" class="boton">Volver al menú</a>
+</div>
+
 </body>
 </html>
