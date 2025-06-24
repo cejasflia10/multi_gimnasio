@@ -1,89 +1,109 @@
 <?php
-if (session_status() === PHP_SESSION_NONE) {
-    session_start();
+include 'conexion.php';
+session_start();
+date_default_timezone_set('America/Argentina/Buenos_Aires');
+
+// POST tras escaneo QR
+if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST["dni"])) {
+    $dni = trim($_POST["dni"]);
+    $fecha_hoy = date('Y-m-d');
+    $hora_actual = date('H:i:s');
+
+    // Buscar cliente por DNI
+    $queryCliente = $conexion->prepare("SELECT id, nombre, apellido, disciplina, gimnasio_id FROM clientes WHERE dni = ?");
+    $queryCliente->bind_param("s", $dni);
+    $queryCliente->execute();
+    $resultadoCliente = $queryCliente->get_result();
+
+    if ($resultadoCliente->num_rows > 0) {
+        $cliente = $resultadoCliente->fetch_assoc();
+        $cliente_id = $cliente['id'];
+        $gimnasio_id = $cliente['gimnasio_id'];
+
+        // Buscar membresía activa con clases disponibles
+        $queryMembresia = $conexion->prepare("SELECT id, clases_disponibles, fecha_vencimiento FROM membresias WHERE cliente_id = ? AND fecha_vencimiento >= ? AND clases_disponibles > 0 ORDER BY fecha_vencimiento DESC LIMIT 1");
+        $queryMembresia->bind_param("is", $cliente_id, $fecha_hoy);
+        $queryMembresia->execute();
+        $resultadoMembresia = $queryMembresia->get_result();
+
+        if ($resultadoMembresia->num_rows > 0) {
+            $membresia = $resultadoMembresia->fetch_assoc();
+            $membresia_id = $membresia['id'];
+            $clases_restantes = $membresia['clases_disponibles'] - 1;
+
+            // Registrar asistencia
+            $insertAsistencia = $conexion->prepare("INSERT INTO asistencias (cliente_id, fecha, hora) VALUES (?, ?, ?)");
+            $insertAsistencia->bind_param("iss", $cliente_id, $fecha_hoy, $hora_actual);
+            $insertAsistencia->execute();
+
+            // Descontar clase
+            $updateClases = $conexion->prepare("UPDATE membresias SET clases_disponibles = ? WHERE id = ?");
+            $updateClases->bind_param("ii", $clases_restantes, $membresia_id);
+            $updateClases->execute();
+
+            echo "<div style='color:lime;font-size:22px;font-family:sans-serif;background:black;padding:20px;text-align:center'>";
+            echo "<h2>✅ Ingreso registrado</h2>";
+            echo "<p><strong>{$cliente['apellido']}, {$cliente['nombre']}</strong></p>";
+            echo "<p>Disciplina: <strong>{$cliente['disciplina']}</strong></p>";
+            echo "<p>Clases restantes: <strong>{$clases_restantes}</strong></p>";
+            echo "<p>Vence: <strong>{$membresia['fecha_vencimiento']}</strong></p>";
+            echo "<p>Hora: <strong>{$hora_actual}</strong></p>";
+            echo "</div>";
+        } else {
+            echo "<div style='color:orange;font-size:20px;text-align:center;padding:20px;'>⚠️ Sin membresía activa o sin clases.</div>";
+        }
+    } else {
+        echo "<div style='color:red;font-size:20px;text-align:center;padding:20px;'>❌ Cliente no encontrado.</div>";
+    }
+    exit;
 }
-include("conexion.php");
-
-$gimnasio_id = $_SESSION["gimnasio_id"] ?? 0;
-
-header("Content-Type: text/html; charset=UTF-8");
 ?>
+
 <!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>Registrar Asistencia QR</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Escaneo QR</title>
     <style>
         body {
-            background-color: #111;
-            color: gold;
+            background-color: black;
+            color: yellow;
             font-family: Arial, sans-serif;
             text-align: center;
-            padding: 20px;
+            margin: 0;
         }
-        .mensaje {
-            font-size: 18px;
+        video {
+            width: 90%;
+            max-width: 400px;
             margin-top: 20px;
-        }
-        .btn {
-            display: inline-block;
-            padding: 10px 20px;
-            margin-top: 30px;
-            background-color: gold;
-            color: #111;
-            text-decoration: none;
-            border-radius: 5px;
+            border: 2px solid yellow;
         }
     </style>
 </head>
 <body>
-<?php
-$dni = $_GET['dni'] ?? '';
+    <h2>Escaneo QR para Ingreso</h2>
+    <div id="reader" style="width:100%; display: flex; justify-content: center;"></div>
 
-if (!$dni || !$gimnasio_id) {
-    echo "<p class='mensaje'>❌ Error: DNI o gimnasio no válidos.</p>";
-    exit;
-}
+    <form id="formulario" method="POST" style="display: none;">
+        <input type="hidden" name="dni" id="dni_input">
+    </form>
 
-$consulta = "SELECT c.id, c.nombre, c.apellido, c.disciplina, m.clases_disponibles, m.fecha_vencimiento
-             FROM clientes c
-             JOIN membresias m ON c.id = m.cliente_id
-             WHERE c.dni = '$dni' AND c.gimnasio_id = $gimnasio_id
-             AND m.fecha_vencimiento >= CURDATE() AND m.clases_disponibles > 0
-             ORDER BY m.fecha_vencimiento DESC LIMIT 1";
-$resultado = $conexion->query($consulta);
+    <script src="https://unpkg.com/html5-qrcode"></script>
+    <script>
+        const qrScanner = new Html5Qrcode("reader");
+        const config = { fps: 10, qrbox: 250 };
 
-if ($resultado && $resultado->num_rows > 0) {
-    $cliente = $resultado->fetch_assoc();
-
-    // Registrar asistencia
-    $id_cliente = $cliente['id'];
-    $fecha = date("Y-m-d");
-    $hora = date("H:i:s");
-    $conexion->query("INSERT INTO asistencias (cliente_id, fecha, hora, gimnasio_id) VALUES ($id_cliente, '$fecha', '$hora', $gimnasio_id)");
-
-    // Descontar clase
-    $conexion->query("UPDATE membresias SET clases_disponibles = clases_disponibles - 1 WHERE cliente_id = $id_cliente AND fecha_vencimiento >= CURDATE() ORDER BY fecha_vencimiento DESC LIMIT 1");
-
-    echo "<h2>✅ Asistencia registrada</h2>";
-    echo "<div class='mensaje'>";
-    echo "👤 <strong>{$cliente['apellido']}, {$cliente['nombre']}</strong><br>";
-    echo "🥋 Disciplina: {$cliente['disciplina']}<br>";
-    echo "📅 Vencimiento: {$cliente['fecha_vencimiento']}<br>";
-
-    // Reconsultar clases disponibles
-    $nuevo = $conexion->query("SELECT clases_disponibles FROM membresias WHERE cliente_id = $id_cliente ORDER BY fecha_vencimiento DESC LIMIT 1");
-    $nueva = $nuevo->fetch_assoc();
-    $restantes = $nueva['clases_disponibles'];
-
-    echo "📉 Clases restantes: $restantes";
-    echo "</div>";
-} else {
-    echo "<p class='mensaje'>⚠️ Sin membresía activa o sin clases.</p>";
-}
-?>
-<br><br>
-<a href='scanner_qr.php' class='btn'>🔄 Escanear otro</a>
+        qrScanner.start(
+            { facingMode: "environment" }, config,
+            (decodedText) => {
+                qrScanner.stop();
+                document.getElementById("dni_input").value = decodedText.trim();
+                document.getElementById("formulario").submit();
+            },
+            (errorMessage) => {}
+        ).catch((err) => {
+            alert("Error al acceder a la cámara: " + err);
+        });
+    </script>
 </body>
 </html>
