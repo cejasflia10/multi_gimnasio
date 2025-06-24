@@ -4,91 +4,48 @@ if (session_status() === PHP_SESSION_NONE) {
 }
 include("conexion.php");
 
-$mensaje = "";
+$dni = $_POST['dni'] ?? '';
 
-if ($_SERVER["REQUEST_METHOD"] === "POST") {
-    $dni = trim($_POST["dni"]);
+if ($dni == '') {
+    echo "<p style='color: yellow;'>DNI no recibido.</p>";
+    exit;
+}
 
-    // Verificamos membresía activa
-    $query = "SELECT c.id AS cliente_id, c.nombre, c.apellido, m.clases_disponibles, m.fecha_vencimiento
-              FROM clientes c
-              JOIN membresias m ON c.id = m.cliente_id
-              WHERE c.dni = '$dni'
-              AND m.fecha_vencimiento >= CURDATE()
-              AND m.clases_disponibles > 0
-              ORDER BY m.fecha_vencimiento DESC
-              LIMIT 1";
-    $resultado = $conexion->query($query);
+// Aseguramos que DNI sea numérico
+$dni = intval($dni);
 
-    if ($resultado->num_rows > 0) {
-        $cliente = $resultado->fetch_assoc();
-        $cliente_id = $cliente['cliente_id'];
-        $clases = $cliente['clases_disponibles'] - 1;
+// Consulta para obtener cliente con membresía activa y clases disponibles
+$query = "
+SELECT c.id AS cliente_id, c.nombre, c.apellido, m.id AS membresia_id, m.clases_disponibles, m.fecha_vencimiento 
+FROM clientes c 
+JOIN membresias m ON c.id = m.cliente_id 
+WHERE c.dni = $dni 
+  AND m.fecha_vencimiento >= CURDATE()
+  AND m.clases_disponibles > 0 
+ORDER BY m.fecha_vencimiento DESC 
+LIMIT 1
+";
 
-        // Descontamos una clase
-        $conexion->query("UPDATE membresias SET clases_disponibles = $clases WHERE cliente_id = $cliente_id");
+$resultado = $conexion->query($query);
 
-        // Registramos asistencia
-        $conexion->query("INSERT INTO asistencias (cliente_id, fecha, hora) VALUES ($cliente_id, CURDATE(), CURTIME())");
+if ($resultado && $resultado->num_rows > 0) {
+    $cliente = $resultado->fetch_assoc();
+    $cliente_id = $cliente['cliente_id'];
+    $membresia_id = $cliente['membresia_id'];
+    $nombre = $cliente['nombre'];
+    $apellido = $cliente['apellido'];
+    $clases_disponibles = $cliente['clases_disponibles'] - 1;
 
-        $mensaje = "✅ Asistencia registrada correctamente para " . $cliente['nombre'] . " " . $cliente['apellido'];
-    } else {
-        $mensaje = "⚠️ El DNI $dni no tiene una membresía activa o clases disponibles.";
-    }
+    // Descontar clase
+    $conexion->query("UPDATE membresias SET clases_disponibles = $clases_disponibles WHERE id = $membresia_id");
+
+    // Registrar asistencia
+    $conexion->query("INSERT INTO asistencias_clientes (cliente_id, fecha_hora) VALUES ($cliente_id, NOW())");
+
+    echo "<p style='color: lightgreen;'>✅ Asistencia registrada: $nombre $apellido</p>";
+    echo "<p style='color: lightgreen;'>📅 Vencimiento: {$cliente['fecha_vencimiento']} | Clases restantes: $clases_disponibles</p>";
+
+} else {
+    echo "<p style='color: gold;'>⚠️ El DNI $dni no tiene una membresía activa o clases disponibles.</p>";
 }
 ?>
-
-<!DOCTYPE html>
-<html lang="es">
-<head>
-    <meta charset="UTF-8">
-    <title>Escaneo QR - Asistencia</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <style>
-        body {
-            background-color: black;
-            color: gold;
-            font-family: Arial, sans-serif;
-            text-align: center;
-            padding: 20px;
-        }
-        h1 {
-            margin-bottom: 30px;
-        }
-        input[type="text"] {
-            padding: 12px;
-            font-size: 18px;
-            width: 90%;
-            max-width: 400px;
-            margin-bottom: 20px;
-        }
-        .btn {
-            background-color: gold;
-            color: black;
-            padding: 10px 20px;
-            border: none;
-            font-weight: bold;
-            cursor: pointer;
-            margin-top: 15px;
-        }
-        .mensaje {
-            margin-top: 20px;
-            font-size: 18px;
-        }
-    </style>
-</head>
-<body>
-    <h1>Escaneo QR - Asistencia</h1>
-    
-    <form method="POST">
-        <input type="text" name="dni" placeholder="Ingrese o escanee DNI" autofocus required>
-        <br>
-        <button type="submit" class="btn">Registrar</button>
-    </form>
-
-    <div class="mensaje"><?= $mensaje ?></div>
-
-    <br><br>
-    <a href="index.php"><button class="btn">Volver al menú</button></a>
-</body>
-</html>
