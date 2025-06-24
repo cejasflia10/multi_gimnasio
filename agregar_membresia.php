@@ -140,7 +140,11 @@ $clientes = $conexion->query("SELECT id, nombre, apellido, dni FROM clientes WHE
 
     <button type="submit">Registrar Membresía</button>
     <a href="index.php"><button type="button">Volver al Menú</button></a>
-</form>
+<?php
+$adicionales = $conexion->query("SELECT id, nombre FROM planes_adicionales WHERE gimnasio_id = $gimnasio_id");
+?>
+
+  </form>
 </div>
 
 <script>

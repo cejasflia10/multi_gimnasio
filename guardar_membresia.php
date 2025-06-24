@@ -7,26 +7,25 @@ include 'conexion.php';
 if ($_SERVER["REQUEST_METHOD"] === "POST") {
     $cliente_id = $_POST['cliente_id'];
     $plan_id = $_POST['plan_id'];
-    $precio = $_POST['precio'];
-    $clases = $_POST['clases_disponibles'];
     $fecha_inicio = $_POST['fecha_inicio'];
     $fecha_vencimiento = $_POST['fecha_vencimiento'];
-    $pagos_adicionales = $_POST['pagos_adicionales'] ?? 0;
+    $clases_restantes = $_POST['clases_disponibles'];
+    $metodo_pago = $_POST['forma_pago'];
     $otros_pagos = $_POST['otros_pagos'] ?? 0;
-    $forma_pago = $_POST['forma_pago'];
     $total = $_POST['total'];
+    $adicional_id = $_POST['adicional_id'] ?? null;
     $gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
 
     $stmt = $conexion->prepare("INSERT INTO membresias (
-        cliente_id, plan_id, precio, clases_disponibles,
-        fecha_inicio, fecha_vencimiento, pagos_adicionales, otros_pagos,
-        forma_pago, total, gimnasio_id
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+        cliente_id, plan_id, fecha_inicio, fecha_vencimiento,
+        clases_restantes, metodo_pago, otros_pagos, total,
+        adicional_id, gimnasio_id
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
 
-    $stmt->bind_param("iidissddssi",
-        $cliente_id, $plan_id, $precio, $clases,
-        $fecha_inicio, $fecha_vencimiento, $pagos_adicionales, $otros_pagos,
-        $forma_pago, $total, $gimnasio_id
+    $stmt->bind_param("iississdii",
+        $cliente_id, $plan_id, $fecha_inicio, $fecha_vencimiento,
+        $clases_restantes, $metodo_pago, $otros_pagos, $total,
+        $adicional_id, $gimnasio_id
     );
 
     if ($stmt->execute()) {
