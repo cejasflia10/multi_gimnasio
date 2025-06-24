@@ -6,8 +6,8 @@ include 'conexion.php';
 
 $gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
 
-$clientes = $conexion->query("SELECT id, nombre, apellido, dni FROM clientes WHERE gimnasio_id = $gimnasio_id");
 $planes = $conexion->query("SELECT * FROM planes WHERE gimnasio_id = $gimnasio_id");
+$clientes = $conexion->query("SELECT id, nombre, apellido, dni FROM clientes WHERE gimnasio_id = $gimnasio_id");
 ?>
 
 <!DOCTYPE html>
@@ -21,29 +21,35 @@ $planes = $conexion->query("SELECT * FROM planes WHERE gimnasio_id = $gimnasio_i
             background-color: #111;
             color: gold;
             font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+        }
+        .container {
+            max-width: 600px;
+            margin: auto;
             padding: 20px;
         }
-
         h1 {
             text-align: center;
-            color: gold;
+            margin-top: 10px;
         }
-
         label {
             display: block;
             margin-top: 15px;
             font-weight: bold;
         }
-
         input, select, button {
             width: 100%;
             padding: 10px;
             margin-top: 5px;
-            border-radius: 5px;
+            border-radius: 6px;
             border: none;
             font-size: 16px;
         }
-
+        input[readonly] {
+            background-color: #333;
+            color: gold;
+        }
         button {
             background-color: gold;
             color: black;
@@ -51,22 +57,38 @@ $planes = $conexion->query("SELECT * FROM planes WHERE gimnasio_id = $gimnasio_i
             margin-top: 20px;
             cursor: pointer;
         }
+        .logo {
+            text-align: center;
+            padding: 15px;
+        }
+        .logo img {
+            width: 130px;
+        }
 
-        #cliente_id option {
-            color: black;
+        @media screen and (max-width: 600px) {
+            .container {
+                padding: 10px;
+            }
+            input, select, button {
+                font-size: 15px;
+            }
         }
     </style>
 </head>
 <body>
 
+<div class="logo">
+    <img src="logo.png" alt="Logo del gimnasio">
+</div>
+
+<div class="container">
 <h1>Agregar Membresía</h1>
 
 <form action="guardar_membresia.php" method="POST">
+    <label for="buscador">Buscar Cliente (DNI o Apellido):</label>
+    <input type="text" id="buscador" placeholder="Buscar..." onkeyup="filtrarClientes()">
 
-    <label>Buscar Cliente (DNI o Apellido):</label>
-    <input type="text" id="buscador" onkeyup="filtrarClientes()" placeholder="Ej: 24533 o GARCIA">
-
-    <label>Seleccionar Cliente:</label>
+    <label for="cliente_id">Seleccionar Cliente:</label>
     <select name="cliente_id" id="cliente_id" required>
         <option value="">-- Seleccionar --</option>
         <?php while ($c = $clientes->fetch_assoc()): ?>
@@ -76,10 +98,10 @@ $planes = $conexion->query("SELECT * FROM planes WHERE gimnasio_id = $gimnasio_i
         <?php endwhile; ?>
     </select>
 
-    <label>Seleccionar Plan:</label>
+    <label for="plan_id">Seleccionar Plan:</label>
     <select name="plan_id" id="plan_id" onchange="cargarDatosPlan(this.value)" required>
         <option value="">-- Seleccionar plan --</option>
-        <?php while ($p = $planes->fetch_assoc()): ?>
+        <?php mysqli_data_seek($planes, 0); while ($p = $planes->fetch_assoc()): ?>
             <option value="<?= $p['id'] ?>"><?= $p['nombre'] ?></option>
         <?php endwhile; ?>
     </select>
@@ -96,10 +118,13 @@ $planes = $conexion->query("SELECT * FROM planes WHERE gimnasio_id = $gimnasio_i
     <label>Fecha de Vencimiento:</label>
     <input type="date" name="fecha_vencimiento" id="fecha_vencimiento" readonly>
 
-    <input type="hidden" name="duracion_meses" id="duracion_meses">
+    <input type="hidden" id="duracion_meses" name="duracion_meses">
+
+    <label>Pagos Adicionales:</label>
+    <input type="number" id="pagos_adicionales" name="pagos_adicionales" value="0" oninput="calcularTotal()">
 
     <label>Otros Pagos:</label>
-    <input type="number" name="otros_pagos" id="otros_pagos" value="0" oninput="calcularTotal()">
+    <input type="number" id="otros_pagos" name="otros_pagos" value="0" oninput="calcularTotal()">
 
     <label>Forma de Pago:</label>
     <select name="forma_pago" id="forma_pago" onchange="calcularTotal()" required>
@@ -115,22 +140,10 @@ $planes = $conexion->query("SELECT * FROM planes WHERE gimnasio_id = $gimnasio_i
 
     <button type="submit">Registrar Membresía</button>
     <a href="index.php"><button type="button">Volver al Menú</button></a>
-
 </form>
+</div>
 
 <script>
-document.getElementById('fecha_inicio').valueAsDate = new Date();
-
-function filtrarClientes() {
-    let filtro = document.getElementById('buscador').value.toLowerCase();
-    let select = document.getElementById('cliente_id');
-
-    for (let i = 0; i < select.options.length; i++) {
-        let texto = select.options[i].text.toLowerCase();
-        select.options[i].style.display = texto.includes(filtro) ? '' : 'none';
-    }
-}
-
 function cargarDatosPlan(planId) {
     if (!planId) return;
 
@@ -164,15 +177,29 @@ function calcularVencimiento() {
 
 function calcularTotal() {
     let precio = parseFloat(document.getElementById('precio').value || 0);
+    let adicionales = parseFloat(document.getElementById('pagos_adicionales').value || 0);
     let otros = parseFloat(document.getElementById('otros_pagos').value || 0);
     let forma = document.getElementById('forma_pago').value;
+    let total = precio + adicionales + otros;
 
-    let total = precio + otros;
     if (forma === 'cuenta_corriente') {
         total = -Math.abs(total);
     }
 
     document.getElementById('total').value = total;
+}
+
+// Cargar fecha actual por defecto
+document.getElementById('fecha_inicio').valueAsDate = new Date();
+
+function filtrarClientes() {
+    let input = document.getElementById('buscador').value.toLowerCase();
+    let opciones = document.getElementById('cliente_id').options;
+
+    for (let i = 0; i < opciones.length; i++) {
+        let texto = opciones[i].text.toLowerCase();
+        opciones[i].style.display = texto.includes(input) ? '' : 'none';
+    }
 }
 </script>
 
