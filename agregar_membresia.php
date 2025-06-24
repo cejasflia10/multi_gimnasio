@@ -8,6 +8,7 @@ $gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
 
 $planes = $conexion->query("SELECT * FROM planes WHERE gimnasio_id = $gimnasio_id");
 $clientes = $conexion->query("SELECT id, nombre, apellido, dni FROM clientes WHERE gimnasio_id = $gimnasio_id");
+$adicionales = $conexion->query("SELECT id, nombre FROM planes_adicionales WHERE gimnasio_id = $gimnasio_id");
 ?>
 
 <!DOCTYPE html>
@@ -25,7 +26,7 @@ $clientes = $conexion->query("SELECT id, nombre, apellido, dni FROM clientes WHE
             padding: 0;
         }
         .container {
-            max-width: 600px;
+            max-width: 650px;
             margin: auto;
             padding: 20px;
         }
@@ -63,6 +64,17 @@ $clientes = $conexion->query("SELECT id, nombre, apellido, dni FROM clientes WHE
         }
         .logo img {
             width: 130px;
+        }
+        .descuentos button {
+            width: 24%;
+            margin: 2px;
+            background-color: #444;
+            color: gold;
+            font-size: 14px;
+        }
+        .descuentos button:hover {
+            background-color: gold;
+            color: black;
         }
 
         @media screen and (max-width: 600px) {
@@ -109,14 +121,22 @@ $clientes = $conexion->query("SELECT id, nombre, apellido, dni FROM clientes WHE
     <label>Precio del Plan:</label>
     <input type="number" name="precio" id="precio" readonly>
 
+    <div class="descuentos">
+        <label>Aplicar Descuento:</label>
+        <button type="button" onclick="aplicarDescuento(10)">-10%</button>
+        <button type="button" onclick="aplicarDescuento(15)">-15%</button>
+        <button type="button" onclick="aplicarDescuento(25)">-25%</button>
+        <button type="button" onclick="aplicarDescuento(50)">-50%</button>
+    </div>
+
     <label>Clases Disponibles:</label>
     <input type="number" name="clases_disponibles" id="clases_disponibles" readonly>
 
     <label>Fecha de Inicio:</label>
-    <input type="date" name="fecha_inicio" id="fecha_inicio" required>
+    <input type="date" name="fecha_inicio" id="fecha_inicio" onchange="calcularVencimiento()" required>
 
     <label>Fecha de Vencimiento:</label>
-    <input type="date" name="fecha_vencimiento" id="fecha_vencimiento" readonly>
+    <input type="date" name="fecha_vencimiento" id="fecha_vencimiento">
 
     <input type="hidden" id="duracion_meses" name="duracion_meses">
 
@@ -140,11 +160,7 @@ $clientes = $conexion->query("SELECT id, nombre, apellido, dni FROM clientes WHE
 
     <button type="submit">Registrar Membresía</button>
     <a href="index.php"><button type="button">Volver al Menú</button></a>
-<?php
-$adicionales = $conexion->query("SELECT id, nombre FROM planes_adicionales WHERE gimnasio_id = $gimnasio_id");
-?>
-
-  </form>
+</form>
 </div>
 
 <script>
@@ -190,11 +206,15 @@ function calcularTotal() {
         total = -Math.abs(total);
     }
 
-    document.getElementById('total').value = total;
+    document.getElementById('total').value = total.toFixed(2);
 }
 
-// Cargar fecha actual por defecto
-document.getElementById('fecha_inicio').valueAsDate = new Date();
+function aplicarDescuento(porcentaje) {
+    let original = parseFloat(document.getElementById('precio').value || 0);
+    let descuento = original * (porcentaje / 100);
+    document.getElementById('precio').value = (original - descuento).toFixed(2);
+    calcularTotal();
+}
 
 function filtrarClientes() {
     let input = document.getElementById('buscador').value.toLowerCase();
@@ -205,6 +225,9 @@ function filtrarClientes() {
         opciones[i].style.display = texto.includes(input) ? '' : 'none';
     }
 }
+
+// Fecha de hoy por defecto
+document.getElementById('fecha_inicio').valueAsDate = new Date();
 </script>
 
 </body>
