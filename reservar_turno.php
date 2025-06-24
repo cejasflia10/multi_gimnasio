@@ -117,9 +117,9 @@ $reservado_id = $reserva_existente['turno_id'] ?? null;
             <input type="hidden" name="turno_id" value="<?= $t['id'] ?>">
             <button class="reservar" style="background:red;color:white;">Cancelar</button>
           </form>
-        <?php elseif ($reservado_id) { ?>
+        <?php } else if ($reservado_id) { ?>
           <button class="reservar disabled" disabled>Ya reservado</button>
-        <?php else { ?>
+        <?php } else { ?>
           <form method="POST" action="guardar_reserva.php">
             <input type="hidden" name="turno_id" value="<?= $t['id'] ?>">
             <input type="hidden" name="cliente_id" value="<?= $cliente_id ?>">
