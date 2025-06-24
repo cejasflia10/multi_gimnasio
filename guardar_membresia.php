@@ -1,40 +1,40 @@
 <?php
 include 'conexion.php';
-if (session_status() === PHP_SESSION_NONE) {
-    session_start();
-}
+if (session_status() === PHP_SESSION_NONE) session_start();
 
-$cliente_id = $_POST['cliente_id'];
-$fecha_inicio = $_POST['fecha_inicio'];
-$plan_id = $_POST['plan_id'];
-$adicional_id = $_POST['adicional_id'] ?? null;
-$otros_pagos = $_POST['otros_pagos'] ?? 0;
 $gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
 
-$fecha_vencimiento = date('Y-m-d', strtotime($fecha_inicio . ' +1 month'));
+$cliente_id = $_POST['cliente_id'];
+$plan_id = $_POST['plan_id'];
+$clases_disponibles = $_POST['clases_disponibles'];
+$fecha_inicio = $_POST['fecha_inicio'];
+$fecha_vencimiento = $_POST['fecha_vencimiento'];
+$otros_pagos = $_POST['otros_pagos'] ?? 0;
+$metodo_pago = $_POST['metodo_pago'];
+$total = $_POST['total'] ?? 0;
+$adicionales = $_POST['adicionales'] ?? [];
 
-$stmt = $conexion->prepare("INSERT INTO membresias (cliente_id, fecha_inicio, fecha_vencimiento, plan_id, adicional_id, otros_pagos, total, id_gimnasio) 
-VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
+$conexion->begin_transaction();
 
-$total = 0;
+try {
+    // Insertar la membresía principal
+    $stmt = $conexion->prepare("INSERT INTO membresias (cliente_id, plan_id, clases_disponibles, fecha_inicio, fecha_vencimiento, otros_pagos, metodo_pago, total, id_gimnasio) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)");
+    $stmt->bind_param("iiisssdsi", $cliente_id, $plan_id, $clases_disponibles, $fecha_inicio, $fecha_vencimiento, $otros_pagos, $metodo_pago, $total, $gimnasio_id);
+    $stmt->execute();
+    $membresia_id = $stmt->insert_id;
 
-// Obtener precio del plan
-$plan = $conexion->query("SELECT precio FROM planes WHERE id = $plan_id")->fetch_assoc();
-$total += $plan['precio'];
+    // Insertar adicionales si los hay
+    foreach ($adicionales as $adicional_id) {
+        $stmt_ad = $conexion->prepare("INSERT INTO membresias_adicionales (membresia_id, adicional_id) VALUES (?, ?)");
+        $stmt_ad->bind_param("ii", $membresia_id, $adicional_id);
+        $stmt_ad->execute();
+    }
 
-// Obtener precio del adicional
-if ($adicional_id) {
-    $adicional = $conexion->query("SELECT precio FROM planes_adicionales WHERE id = $adicional_id")->fetch_assoc();
-    $total += $adicional['precio'];
-}
-
-$total += floatval($otros_pagos);
-
-$stmt->bind_param("isssiddi", $cliente_id, $fecha_inicio, $fecha_vencimiento, $plan_id, $adicional_id, $otros_pagos, $total, $gimnasio_id);
-
-if ($stmt->execute()) {
-    header("Location: ver_membresias.php?mensaje=Membresía registrada");
-} else {
-    echo "Error: " . $stmt->error;
+    $conexion->commit();
+    header("Location: ver_membresias.php");
+    exit;
+} catch (Exception $e) {
+    $conexion->rollback();
+    echo "Error al registrar la membresía: " . $e->getMessage();
 }
 ?>
