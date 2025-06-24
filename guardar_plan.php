@@ -1,21 +1,24 @@
 <?php
+include "conexion.php";
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
-include 'conexion.php';
 
 $nombre = $_POST['nombre'] ?? '';
 $precio = $_POST['precio'] ?? 0;
-$dias = $_POST['dias'] ?? 0;
+$dias_disponibles = $_POST['dias_disponibles'] ?? 0;
 $duracion = $_POST['duracion'] ?? 1;
 $gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
 
-$query = "INSERT INTO planes (nombre, precio, dias_disponibles, duracion, gimnasio_id)
-          VALUES ('$nombre', $precio, $dias, $duracion, $gimnasio_id)";
+$id = $_POST['id'] ?? null;
 
-if ($conexion->query($query)) {
-    header("Location: planes.php");
+if ($id) {
+    $query = "UPDATE planes SET nombre='$nombre', precio=$precio, dias_disponibles=$dias_disponibles, duracion=$duracion WHERE id=$id";
 } else {
-    echo "Error al guardar el plan: " . $conexion->error;
+    $query = "INSERT INTO planes (nombre, precio, dias_disponibles, duracion, gimnasio_id)
+              VALUES ('$nombre', $precio, $dias_disponibles, $duracion, $gimnasio_id)";
 }
-?>
+
+$conexion->query($query);
+header("Location: planes.php");
+exit;
