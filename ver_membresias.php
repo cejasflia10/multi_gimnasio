@@ -1,6 +1,5 @@
 <?php
 include 'conexion.php';
-include 'menu.php';
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
