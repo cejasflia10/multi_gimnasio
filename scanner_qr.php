@@ -1,80 +1,52 @@
-<?php
-if (session_status() === PHP_SESSION_NONE) {
-    session_start();
-}
-?>
 <!DOCTYPE html>
 <html lang="es">
 <head>
-    <meta charset="UTF-8">
-    <title>Escaneo QR - Asistencia</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <style>
-        body {
-            background-color: #000;
-            color: gold;
-            font-family: Arial, sans-serif;
-            text-align: center;
-            padding: 20px;
-        }
-        video {
-            width: 100%;
-            max-width: 400px;
-            border: 2px solid gold;
-            margin-top: 10px;
-        }
-        .mensaje {
-            margin-top: 20px;
-            font-size: 20px;
-        }
-    </style>
+  <meta charset="UTF-8">
+  <title>Escaneo QR para Ingreso</title>
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+  <style>
+    body {
+      background-color: black;
+      color: gold;
+      font-family: Arial, sans-serif;
+      text-align: center;
+      padding-top: 20px;
+    }
+    #reader {
+      width: 300px;
+      margin: auto;
+      border: 2px solid gold;
+    }
+  </style>
 </head>
 <body>
-    <h2>Escaneá tu QR</h2>
-    <video id="preview"></video>
-    <div class="mensaje" id="mensaje"></div>
 
-    <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
-    <script>
-        const mensaje = document.getElementById("mensaje");
+  <h2>📷 Escaneo QR para Ingreso</h2>
+  <div id="reader"></div>
 
-        function procesarQR(dni) {
-            fetch("registrar_asistencia_qr.php?dni=" + dni)
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        mensaje.innerHTML = `
-                            ✅ ${data.nombre}<br>
-                            🗓️ Vence: ${data.vencimiento}<br>
-                            🎟️ Clases restantes: ${data.clases}<br>
-                        `;
-                    } else {
-                        mensaje.innerHTML = "⚠️ " + data.mensaje;
-                    }
-                    setTimeout(() => {
-                        mensaje.innerHTML = "";
-                        scanner.resume();
-                    }, 5000);
-                })
-                .catch(error => {
-                    mensaje.innerHTML = "❌ Error al procesar QR";
-                    setTimeout(() => {
-                        mensaje.innerHTML = "";
-                        scanner.resume();
-                    }, 5000);
-                });
-        }
+  <form id="formulario" method="POST" action="registrar_asistencia_qr.php">
+    <input type="hidden" name="dni" id="dni">
+  </form>
 
-        const scanner = new Html5Qrcode("preview");
-        scanner.start(
-            { facingMode: "environment" },
-            { fps: 10, qrbox: 250 },
-            (decodedText) => {
-                scanner.pause();
-                procesarQR(decodedText.trim());
-            },
-            (errorMessage) => { /* ignorar */ }
-        );
-    </script>
+  <script>
+    function onScanSuccess(decodedText, decodedResult) {
+      // Detener escaneo
+      html5QrcodeScanner.clear().then(_ => {
+        // Enviar el DNI al backend
+        document.getElementById("dni").value = decodedText;
+        document.getElementById("formulario").submit();
+      }).catch(error => {
+        console.error("Error al detener escáner: ", error);
+      });
+    }
+
+    const html5QrcodeScanner = new Html5QrcodeScanner(
+      "reader", 
+      { fps: 10, qrbox: 250 },
+      /* verbose= */ false
+    );
+    html5QrcodeScanner.render(onScanSuccess);
+  </script>
+
 </body>
 </html>
