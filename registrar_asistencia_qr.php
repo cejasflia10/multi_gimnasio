@@ -33,14 +33,20 @@ include 'conexion.php';
             border: none;
             color: black;
             cursor: pointer;
+            margin: 5px;
         }
         .alerta {
-            color: yellow;
+            color: red;
             margin-top: 20px;
         }
         .exito {
             color: lime;
             margin-top: 20px;
+        }
+        .datos {
+            margin-top: 15px;
+            font-size: 18px;
+            color: #fff;
         }
     </style>
 </head>
@@ -58,42 +64,47 @@ include 'conexion.php';
         $fecha_actual = date("Y-m-d");
         $hora_actual = date("H:i:s");
 
-        // Obtener cliente(s) con ese DNI
-        $clientes_result = $conexion->query("SELECT id FROM clientes WHERE dni = '$dni'");
-        if ($clientes_result->num_rows === 0) {
+        // Obtener cliente
+        $cliente_result = $conexion->query("SELECT id, apellido, nombre FROM clientes WHERE dni = '$dni'");
+        if ($cliente_result->num_rows === 0) {
             echo "<div class='alerta'>❌ DNI no encontrado en la base de datos.</div>";
         } else {
-            // Obtener membresía activa y con clases restantes
+            $cliente = $cliente_result->fetch_assoc();
+            $cliente_id = $cliente['id'];
+            $nombre_completo = $cliente['apellido'] . ' ' . $cliente['nombre'];
+
+            // Buscar membresía activa
             $membresia_result = $conexion->query("
                 SELECT * FROM membresias 
-                WHERE cliente_id IN (SELECT id FROM clientes WHERE dni = '$dni') 
-                AND fecha_vencimiento >= CURDATE() 
-                AND clases_restantes > 0 
+                WHERE cliente_id = $cliente_id
+                AND fecha_vencimiento >= CURDATE()
+                AND clases_restantes > 0
                 ORDER BY fecha_vencimiento DESC 
                 LIMIT 1
             ");
 
             if ($membresia_result->num_rows === 0) {
-                echo "<div class='alerta'>⚠️ El DNI $dni no tiene una membresía activa o clases disponibles.</div>";
+                echo "<div class='alerta'>❌ No hay membresías activas o clases disponibles.</div>";
             } else {
                 $membresia = $membresia_result->fetch_assoc();
-                $id_membresia = $membresia['id'];
                 $clases_restantes = $membresia['clases_restantes'] - 1;
+                $fecha_vencimiento = $membresia['fecha_vencimiento'];
 
-                // Descontar clase
-                $conexion->query("UPDATE membresias SET clases_restantes = $clases_restantes WHERE id = $id_membresia");
+                // Actualizar clases
+                $conexion->query("UPDATE membresias SET clases_restantes = $clases_restantes WHERE id = {$membresia['id']}");
 
                 // Registrar asistencia
-                $cliente_id = $membresia['cliente_id'];
                 $conexion->query("INSERT INTO asistencias (cliente_id, fecha, hora) VALUES ($cliente_id, '$fecha_actual', '$hora_actual')");
 
                 echo "<div class='exito'>✅ Asistencia registrada correctamente. Clases restantes: $clases_restantes</div>";
+                echo "<div class='datos'>🧍 $nombre_completo<br>📅 Vence: $fecha_vencimiento</div>";
             }
         }
     }
     ?>
 
     <br><br>
+    <a href="registrar_asistencia_qr.php"><button>Volver a escanear</button></a>
     <a href="index.php"><button>Volver al menú</button></a>
 </body>
 </html>
