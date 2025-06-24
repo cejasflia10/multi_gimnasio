@@ -26,18 +26,6 @@ include 'conexion.php';
         }
         .exito { color: lime; }
         .alerta { color: yellow; }
-        .volver {
-            margin-top: 30px;
-        }
-        .volver button {
-            background-color: gold;
-            color: black;
-            font-weight: bold;
-            padding: 10px 20px;
-            font-size: 18px;
-            border: none;
-            border-radius: 10px;
-        }
     </style>
 </head>
 <body>
@@ -74,7 +62,6 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             $clases = $membresia['clases_restantes'];
             $vto = $membresia['fecha_vencimiento'];
 
-            // Verificar si ya se registró asistencia hoy
             $asistencia_q = $conexion->query("
                 SELECT * FROM asistencias 
                 WHERE cliente_id = $cliente_id AND fecha = '$fecha'
@@ -99,16 +86,17 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         echo "<div class='alerta'>❌ DNI no encontrado</div>";
     }
 
-    echo "<div class='volver'><button onclick='reiniciarEscaneo()'>Escanear otro</button></div>";
+    // Agrega reinicio automático luego de 4 segundos
+    echo "<script>
+        setTimeout(() => {
+            window.location.href = window.location.href;
+        }, 4000);
+    </script>";
 }
 ?>
 </div>
 
 <script>
-function reiniciarEscaneo() {
-    window.location.href = window.location.href;
-}
-
 document.addEventListener("DOMContentLoaded", () => {
     const input = document.getElementById("dni");
     input.focus();
@@ -119,7 +107,6 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     });
 
-    // Refocus automático por si se pierde el foco
     setInterval(() => {
         if (document.activeElement !== input) {
             input.focus();
