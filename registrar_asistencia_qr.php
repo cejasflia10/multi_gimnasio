@@ -9,7 +9,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST["dni"])) {
     $hora_actual = date('H:i:s');
 
     // Buscar cliente
-    $stmtM = $conexion->prepare("SELECT id, clases_restantes, fecha_vencimiento ...
+    $stmt = $conexion->prepare("SELECT id, nombre, apellido, disciplina, gimnasio_id FROM clientes WHERE dni = ?");
     $stmt->bind_param("s", $dni);
     $stmt->execute();
     $resultado = $stmt->get_result();
@@ -20,7 +20,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST["dni"])) {
         $gimnasio_id = $cliente['gimnasio_id'];
 
         // Buscar membresía válida
-        $stmtM = $conexion->prepare("SELECT id, clases_disponibles, fecha_vencimiento FROM membresias WHERE cliente_id = ? AND fecha_vencimiento >= ? AND clases_disponibles > 0 ORDER BY fecha_vencimiento DESC LIMIT 1");
+        $stmtM = $conexion->prepare("SELECT id, clases_restantes, fecha_vencimiento FROM membresias WHERE cliente_id = ? AND fecha_vencimiento >= ? AND clases_restantes > 0 ORDER BY fecha_vencimiento DESC LIMIT 1");
         $stmtM->bind_param("is", $cliente_id, $fecha_hoy);
         $stmtM->execute();
         $resM = $stmtM->get_result();
@@ -28,7 +28,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST["dni"])) {
         if ($resM->num_rows > 0) {
             $membresia = $resM->fetch_assoc();
             $membresia_id = $membresia['id'];
-            $clases_restantes = $membresia['clases_disponibles'] - 1;
+            $clases_restantes = $membresia['clases_restantes'] - 1;
 
             // Registrar asistencia
             $stmtA = $conexion->prepare("INSERT INTO asistencias (cliente_id, fecha, hora) VALUES (?, ?, ?)");
@@ -36,7 +36,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST["dni"])) {
             $stmtA->execute();
 
             // Actualizar clases
-            $stmtU = $conexion->prepare("UPDATE membresias SET clases_disponibles = ? WHERE id = ?");
+            $stmtU = $conexion->prepare("UPDATE membresias SET clases_restantes = ? WHERE id = ?");
             $stmtU->bind_param("ii", $clases_restantes, $membresia_id);
             $stmtU->execute();
 
@@ -80,7 +80,13 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST["dni"])) {
         }
     </style>
 </head>
-<body>
+<body style="background-color: #111; color: gold; font-family: Arial, sans-serif; margin: 0; padding: 0;">
+<div style="text-align:center; padding: 20px;">
+    <img src='logo.png' alt='Logo' style='max-width: 150px; margin-bottom: 20px;'>
+    <h2 style="color: gold;">Registro de Asistencia QR</h2>
+</div>
+<div style="padding: 10px; text-align: center;">
+
     <h2>Escaneo QR para Ingreso</h2>
     <div id="reader" style="width:100%; display: flex; justify-content: center;"></div>
 
@@ -105,5 +111,8 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST["dni"])) {
             alert("Error al acceder a la cámara: " + err);
         });
     </script>
+<br><div style="text-align:center; padding-bottom: 30px;">
+    <a href="scanner_qr.php" style="color: gold; text-decoration: none; font-weight: bold;">⬅️ Escanear otro</a>
+</div>
 </body>
 </html>
