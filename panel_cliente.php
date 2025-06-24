@@ -2,14 +2,12 @@
 session_start();
 include 'conexion.php';
 
-if (!isset($_GET['dni'])) {
-    die("DNI no proporcionado.");
+if (!isset($_SESSION['cliente_id'])) {
+    die("Acceso denegado.");
 }
 
-$dni = $_GET['dni'];
-
-// Buscar cliente
-$query = "SELECT * FROM clientes WHERE dni = '$dni'";
+$cliente_id = $_SESSION['cliente_id'];
+$query = "SELECT * FROM clientes WHERE id = $cliente_id";
 $resultado = $conexion->query($query);
 
 if ($resultado->num_rows === 0) {
@@ -29,8 +27,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['foto'])) {
     }
 }
 
-// Asistencias del cliente
-$asistencias = $conexion->query("SELECT fecha, hora FROM asistencias WHERE cliente_id = " . $cliente['id'] . " ORDER BY fecha DESC, hora DESC LIMIT 10");
+$asistencias = $conexion->query("SELECT fecha, hora FROM asistencias WHERE cliente_id = $cliente_id ORDER BY fecha DESC, hora DESC LIMIT 10");
 ?>
 
 <!DOCTYPE html>
@@ -90,6 +87,20 @@ $asistencias = $conexion->query("SELECT fecha, hora FROM asistencias WHERE clien
             padding: 6px;
             text-align: center;
         }
+        .nutricion {
+            text-align: center;
+            margin-top: 30px;
+        }
+        .nutricion a {
+            display: block;
+            margin: 8px 0;
+            color: black;
+            background: gold;
+            padding: 10px;
+            text-decoration: none;
+            border-radius: 6px;
+            font-weight: bold;
+        }
         @media (max-width: 600px) {
             .container { margin: 10px; padding: 15px; }
             .btn-descargar { padding: 8px 16px; font-size: 14px; }
@@ -97,7 +108,6 @@ $asistencias = $conexion->query("SELECT fecha, hora FROM asistencias WHERE clien
     </style>
 </head>
 <body>
-
 <div class="container">
     <h2>Bienvenido <?= htmlspecialchars($cliente['nombre'] . ' ' . $cliente['apellido']) ?></h2>
 
@@ -135,7 +145,13 @@ $asistencias = $conexion->query("SELECT fecha, hora FROM asistencias WHERE clien
             <tr><td><?= $a['fecha'] ?></td><td><?= $a['hora'] ?></td></tr>
         <?php } ?>
     </table>
-</div>
 
+    <div class="nutricion">
+        <h3>Seguimiento Nutricional</h3>
+        <a href="ficha_habitos.php">📝 Completar Ficha de Hábitos</a>
+        <a href="ver_habitos_profesor.php?id=<?= $cliente['id'] ?>">👁️ Ver Ficha de Hábitos</a>
+        <a href="ver_seguimiento_cliente.php">📋 Ver Seguimientos Semanales</a>
+    </div>
+</div>
 </body>
 </html>
