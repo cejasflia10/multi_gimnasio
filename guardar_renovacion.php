@@ -18,17 +18,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $duracion_meses = intval($_POST['duracion_meses']);
 
     $stmt = $conexion->prepare("INSERT INTO membresias (
-        cliente_id, plan_id, fecha_inicio, fecha_vencimiento, precio, clases_restantes,
-        otros_pagos, forma_pago, total, gimnasio_id, duracion_meses
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+        cliente_id, plan_id, fecha_inicio, fecha_vencimiento, precio,
+        clases_restantes, clases_disponibles, otros_pagos, forma_pago, total,
+        gimnasio_id, duracion_meses
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
 
     if ($stmt === false) {
         die("Error en la preparación de la consulta: " . $conexion->error);
     }
 
-    $stmt->bind_param("iissdidsdii",
+    $stmt->bind_param("iissddiisdii",
         $cliente_id, $plan_id, $fecha_inicio, $fecha_vencimiento, $precio,
-        $clases_disponibles, $otros_pagos, $forma_pago, $total, $gimnasio_id, $duracion_meses
+        $clases_disponibles, $clases_disponibles, $otros_pagos, $forma_pago, $total,
+        $gimnasio_id, $duracion_meses
     );
 
     if ($stmt->execute()) {
