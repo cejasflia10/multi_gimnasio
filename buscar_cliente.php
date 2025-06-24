@@ -1,26 +1,18 @@
+
 <?php
-include 'conexion.php';
-if (session_status() === PHP_SESSION_NONE) {
-    session_start();
+include "conexion.php";
+$q = $_GET['q'] ?? '';
+$gimnasio_id = $_SESSION['gimnasio_id'] ?? 1;
+
+$stmt = $conexion->prepare("SELECT id, nombre, apellido, dni FROM clientes WHERE (dni LIKE ? OR nombre LIKE ? OR apellido LIKE ?) AND gimnasio_id = ?");
+$q = "%$q%";
+$stmt->bind_param("sssi", $q, $q, $q, $gimnasio_id);
+$stmt->execute();
+$res = $stmt->get_result();
+
+$data = [];
+while ($row = $res->fetch_assoc()) {
+    $data[] = ['id' => $row['id'], 'text' => $row['apellido'] . ', ' . $row['nombre'] . ' - ' . $row['dni']];
 }
-$gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
-
-$termino = $_GET['term'] ?? '';
-$termino = $conexion->real_escape_string($termino);
-
-$query = "SELECT id, dni, apellido, nombre FROM clientes 
-          WHERE gimnasio_id = $gimnasio_id AND 
-          (dni LIKE '%$termino%' OR apellido LIKE '%$termino%' OR nombre LIKE '%$termino%') 
-          LIMIT 10";
-$resultado = $conexion->query($query);
-
-$clientes = [];
-while ($row = $resultado->fetch_assoc()) {
-    $clientes[] = [
-        'id' => $row['id'],
-        'texto' => "{$row['apellido']}, {$row['nombre']} - DNI {$row['dni']}"
-    ];
-}
-header('Content-Type: application/json');
-echo json_encode($clientes);
+echo json_encode($data);
 ?>
