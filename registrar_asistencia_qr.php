@@ -109,11 +109,12 @@ include 'conexion.php';
             echo "<div class='alerta'>❌ DNI no encontrado.</div>";
         }
 
+        // Esta parte reinicia el escaneo
         echo "<script>
             setTimeout(() => {
+                document.getElementById('respuesta').innerHTML = '';
                 document.getElementById('dni').value = '';
                 document.getElementById('dni').focus();
-                document.getElementById('respuesta').style.opacity = 0;
             }, 3000);
         </script>";
     }
@@ -122,7 +123,15 @@ include 'conexion.php';
 
     <script>
         window.onload = () => {
-            document.getElementById("dni").focus();
+            const input = document.getElementById("dni");
+            input.focus();
+
+            // Asegura que siempre quede enfocado
+            setInterval(() => {
+                if (document.activeElement !== input) {
+                    input.focus();
+                }
+            }, 1000);
         };
     </script>
 </body>
