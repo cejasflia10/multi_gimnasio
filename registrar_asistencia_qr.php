@@ -9,7 +9,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST["dni"])) {
     $hora_actual = date('H:i:s');
 
     // Buscar cliente
-    $stmt = $conexion->prepare("SELECT id, nombre, apellido, disciplina, gimnasio_id FROM clientes WHERE dni = ?");
+    $stmtM = $conexion->prepare("SELECT id, clases_restantes, fecha_vencimiento ...
     $stmt->bind_param("s", $dni);
     $stmt->execute();
     $resultado = $stmt->get_result();
