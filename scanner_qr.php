@@ -17,35 +17,67 @@
       margin: auto;
       border: 2px solid gold;
     }
+    #resultado {
+      margin-top: 20px;
+      font-size: 18px;
+    }
   </style>
 </head>
 <body>
 
   <h2>📷 Escaneo QR para Ingreso</h2>
   <div id="reader"></div>
-
-  <form id="formulario" method="POST" action="registrar_asistencia_qr.php">
-    <input type="hidden" name="dni" id="dni">
-  </form>
+  <div id="resultado"></div>
 
   <script>
-    function onScanSuccess(decodedText, decodedResult) {
-      // Detener escaneo
-      html5QrcodeScanner.clear().then(_ => {
-        // Enviar el DNI al backend
-        document.getElementById("dni").value = decodedText;
-        document.getElementById("formulario").submit();
-      }).catch(error => {
-        console.error("Error al detener escáner: ", error);
+    const scanner = new Html5Qrcode("reader");
+
+    function iniciarEscaneo() {
+      scanner.start(
+        { facingMode: "environment" },
+        {
+          fps: 10,
+          qrbox: { width: 250, height: 250 }
+        },
+        (decodedText, decodedResult) => {
+          scanner.stop().then(() => {
+            // Enviar DNI al backend
+            fetch("registrar_asistencia_qr.php", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/x-www-form-urlencoded"
+              },
+              body: "dni=" + encodeURIComponent(decodedText)
+            })
+            .then(response => response.text())
+            .then(data => {
+              document.getElementById("resultado").innerHTML = data;
+
+              // Reiniciar escaneo después de 4 segundos
+              setTimeout(() => {
+                document.getElementById("resultado").innerHTML = "";
+                iniciarEscaneo();
+              }, 4000);
+            })
+            .catch(error => {
+              document.getElementById("resultado").innerHTML = "<span style='color:red;'>❌ Error al registrar asistencia.</span>";
+              setTimeout(() => {
+                document.getElementById("resultado").innerHTML = "";
+                iniciarEscaneo();
+              }, 4000);
+            });
+          });
+        },
+        errorMessage => {
+          // Errores de lectura ignorados
+        }
+      ).catch(err => {
+        document.getElementById("resultado").innerHTML = "<span style='color:red;'>❌ Error al acceder a la cámara</span>";
       });
     }
 
-    const html5QrcodeScanner = new Html5QrcodeScanner(
-      "reader", 
-      { fps: 10, qrbox: 250 },
-      /* verbose= */ false
-    );
-    html5QrcodeScanner.render(onScanSuccess);
+    // Iniciar al cargar
+    window.onload = iniciarEscaneo;
   </script>
 
 </body>
