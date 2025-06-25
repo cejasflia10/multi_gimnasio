@@ -44,14 +44,7 @@ if ($gimnasio_id) {
  nav .dropdown-content a{color:gold;padding:10px;display:block}
  nav .dropdown:hover .dropdown-content{display:block}
  .container{padding:80px 20px 20px;position:relative;z-index:1}
- .stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:20px;text-align:center;margin-bottom:30px}
- .card{background:#1f1f1f;padding:20px;border-radius:12px;box-shadow:0 0 8px #000}
- .bar-section{margin-bottom:25px}
- .bar-title{font-weight:bold;margin-bottom:10px;color:gold}
- .bar-row{display:flex;gap:10px;justify-content:space-between}
- .bar{background:#444;border-radius:5px;height:18px;width:100%;overflow:hidden}
- .bar-inner-yellow{background:gold;height:100%;width:70%}
- .bar-inner-orange{background:orange;height:100%;width:40%}
+ .card{background:#1f1f1f;padding:20px;margin:20px;border-radius:12px;box-shadow:0 0 8px #000}
  footer{background:#222;color:gold;padding:10px;text-align:center;font-size:14px}
  .bottom-bar{display:none}
  @media(max-width:768px){
@@ -72,134 +65,68 @@ if ($gimnasio_id) {
 </header>
 
 <nav>
-  <div class="dropdown">
-    <span class="dropbtn">Clientes</span>
-    <div class="dropdown-content">
-      <a href="agregar_cliente.php">Agregar</a>
-      <a href="ver_clientes.php">Ver</a>
-      <a href="disciplinas.php">Disciplinas</a>
-    </div>
+  <div class="dropdown"><span class="dropbtn">Clientes</span>
+    <div class="dropdown-content"><a href="agregar_cliente.php">Agregar</a><a href="ver_clientes.php">Ver</a><a href="disciplinas.php">Disciplinas</a></div>
   </div>
-  <div class="dropdown">
-    <span class="dropbtn">Membresías</span>
-    <div class="dropdown-content">
-      <a href="nueva_membresia.php">Nueva</a>
-      <a href="ver_membresias.php">Ver</a>
-      <a href="planes.php">Planes</a>
-      <a href="adicionales.php">Adicionales</a>
-    </div>
+  <div class="dropdown"><span class="dropbtn">Membresías</span>
+    <div class="dropdown-content"><a href="nueva_membresia.php">Nueva</a><a href="ver_membresias.php">Ver</a><a href="planes.php">Planes</a><a href="adicionales.php">Adicionales</a></div>
   </div>
-  <div class="dropdown">
-    <span class="dropbtn">Asistencias</span>
-    <div class="dropdown-content">
-      <a href="registrar_asistencia.php">Registrar</a>
-      <a href="ver_asistencias.php">Ver</a>
-    </div>
+  <div class="dropdown"><span class="dropbtn">Asistencias</span>
+    <div class="dropdown-content"><a href="registrar_asistencia.php">Registrar</a><a href="ver_asistencias.php">Ver</a></div>
   </div>
-  <div class="dropdown">
-    <span class="dropbtn">QR</span>
-    <div class="dropdown-content">
-      <a href="scanner_qr.php">Escanear</a>
-      <a href="generar_qr.php">Generar</a>
-    </div>
+  <div class="dropdown"><span class="dropbtn">QR</span>
+    <div class="dropdown-content"><a href="scanner_qr.php">Escanear</a><a href="generar_qr.php">Generar</a></div>
   </div>
-  <div class="dropdown">
-    <span class="dropbtn">Profesores</span>
-    <div class="dropdown-content">
-      <a href="agregar_profesor.php">Agregar</a>
-      <a href="ver_profesores.php">Ver</a>
-      <a href="ver_pagos_profesor.php">Pagos</a>
-    </div>
+  <div class="dropdown"><span class="dropbtn">Profesores</span>
+    <div class="dropdown-content"><a href="agregar_profesor.php">Agregar</a><a href="ver_profesores.php">Ver</a><a href="ver_pagos_profesor.php">Pagos</a></div>
   </div>
-  <div class="dropdown">
-    <span class="dropbtn">Ventas</span>
-    <div class="
-dropdown-content">
-      <a href="ventas_protecciones.php">Protecciones</a>
-      <a href="ventas_indumentaria.php">Indumentaria</a>
-      <a href="ventas_suplementos.php">Suplementos</a>
-      <a href="ver_ventas.php">Ver Todas</a>
-    </div>
+  <div class="dropdown"><span class="dropbtn">Ventas</span>
+    <div class="dropdown-content"><a href="ventas_protecciones.php">Protecciones</a><a href="ventas_indumentaria.php">Indumentaria</a><a href="ventas_suplementos.php">Suplementos</a><a href="ver_ventas.php">Ver Todas</a></div>
   </div>
-  <div class="dropdown">
-    <span class="dropbtn">Gimnasios</span>
-    <div class="dropdown-content">
-      <a href="agregar_gimnasio.php">Agregar</a>
-      <a href="ver_gimnasios.php">Ver</a>
-    </div>
+  <div class="dropdown"><span class="dropbtn">Gimnasios</span>
+    <div class="dropdown-content"><a href="agregar_gimnasio.php">Agregar</a><a href="ver_gimnasios.php">Ver</a></div>
   </div>
-  <div class="dropdown">
-    <span class="dropbtn">Usuarios</span>
-    <div class="dropdown-content">
-      <a href="agregar_usuario.php">Agregar</a>
-      <a href="ver_usuarios.php">Ver</a>
-    </div>
+  <div class="dropdown"><span class="dropbtn">Usuarios</span>
+    <div class="dropdown-content"><a href="agregar_usuario.php">Agregar</a><a href="ver_usuarios.php">Ver</a></div>
   </div>
-  <div class="dropdown">
-    <span class="dropbtn">Configuraciones</span>
-    <div class="dropdown-content">
-      <a href="configurar_planes.php">Planes</a>
-      <a href="configurar_accesos.php">Accesos</a>
-    </div>
+  <div class="dropdown"><span class="dropbtn">Configuraciones</span>
+    <div class="dropdown-content"><a href="configurar_planes.php">Planes</a><a href="configurar_accesos.php">Accesos</a></div>
   </div>
-  <a href="logout.php" class="dropbtn">Cerrar Sesión</a>
+  <a href="logout.php" class="dropbtn">Cerrar Sesión</a>
 </nav>
 
-<!-- Ingresos del Día (conectado a asistencias) -->
-<div class="card" style="margin-bottom:20px;">
-  <h3>Ingresos del Día</h3>
-  <?php
-  $hoy = date('Y-m-d');
-  $query = "
-    SELECT c.nombre, c.apellido, a.hora
-    FROM asistencias a
-    JOIN clientes c ON a.cliente_id = c.id
-    WHERE a.fecha = '$hoy' AND c.gimnasio_id = $gimnasio_id
-    ORDER BY a.hora DESC
-  ";
-  $res = $conexion->query($query);
-  if ($res && $res->num_rows > 0): ?>
-    <ul style="list-style:none; padding:0; color:#fff;">
-      <?php while ($fila = $res->fetch_assoc()): ?>
-        <li><?= $fila['nombre'] . ' ' . $fila['apellido'] . ' – ' . date('H:i', strtotime($fila['hora'])) ?></li>
-      <?php endwhile; ?>
-    </ul>
-  <?php else: ?>
-    <p>No se registraron ingresos hoy.</p>
-  <?php endif; ?>
-</div>
+<div class="container">
 
-  <div class="bar-section">
-    <div class="bar-title">Próximos Vencimientos</div>
-    <ul><li>Lucia Ramírez – 28/06/2025</li><li>Diego Martínez – 03/07/2025</li></ul>
-    <div class="bar-title">Próximos Cumpleaños</div>
-    <ul><li>Sofía Fernández – 26/06</li><li>Tomás Aguirre – 30/06</li></ul>
+  <div class="card">
+    <h3>Ingresos del Día</h3>
+    <?php
+    $hoy = date('Y-m-d');
+    $query = "
+      SELECT c.nombre, c.apellido, a.hora
+      FROM asistencias a
+      JOIN clientes c ON a.cliente_id = c.id
+      WHERE a.fecha = '$hoy' AND c.gimnasio_id = $gimnasio_id
+      ORDER BY a.hora DESC
+    ";
+    $res = $conexion->query($query);
+    if ($res && $res->num_rows > 0): ?>
+      <ul style="list-style:none; padding:0; color:#fff;">
+        <?php while ($fila = $res->fetch_assoc()): ?>
+          <li><?= $fila['nombre'] . ' ' . $fila['apellido'] . ' – ' . date('H:i', strtotime($fila['hora'])) ?></li>
+        <?php endwhile; ?>
+      </ul>
+    <?php else: ?>
+      <p>No se registraron ingresos hoy.</p>
+    <?php endif; ?>
   </div>
 
-  <div class="bar-section">
-    <div class="bar-title">Estadísticas por Disciplina</div>
-    <div class="bar-row">
-      <div class="bar"><div class="bar-inner-yellow" style="width:70%"></div></div>
-      <div class="bar"><div class="bar-inner-orange" style="width:40%"></div></div>
-    </div>
+  <div class="card">
+    <h3>Próximos Vencimientos</h3>
+    <ul><li>Lucia Ramírez – 28/06/2025</li><li>Diego Martínez – 05/07/2025</li></ul>
+    <h3>Próximos Cumpleaños</h3>
+    <ul><li>Sofía Fernández – 26/06</li><li>Tomás Aguirre – 30/06</li></ul>
   </div>
 
-  <div class="bar-section">
-    <div class="bar-title">Ventas Mensuales</div>
-    <div class="bar-row">
-      <div class="bar"><div class="bar-inner-yellow" style="width:80%"></div></div>
-      <div class="bar"><div class="bar-inner-orange" style="width:30%"></div></div>
-    </div>
-  </div>
-
-  <div class="bar-section">
-    <div class="bar-title">Ingresos del Día</div>
-    <ul>
-      <li>08:45 – Juan Pérez</li>
-      <li>09:10 – Laura Díaz</li>
-      <li>10:20 – Martín Soto</li>
-    </ul>
-  </div>
 </div>
 
 <footer>Panel de administración – <?= $gimnasio_nombre ?></footer>
