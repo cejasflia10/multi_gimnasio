@@ -2,21 +2,25 @@
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
-if (!isset($_SESSION['gimnasio_id'])) {
-    die("Acceso denegado.");
-}
 include 'conexion.php';
 
-$gimnasio_id = $_SESSION['gimnasio_id'];
+$gimnasio_id = $_GET['gimnasio'] ?? '';
+$mensaje = $_GET['mensaje'] ?? '';
 
-$resultado = $conexion->query("SELECT id, nombre FROM disciplinas WHERE id_gimnasio = $gimnasio_id");
+$disciplinas = [];
+if ($gimnasio_id) {
+    $consulta = $conexion->query("SELECT id, nombre FROM disciplinas WHERE id_gimnasio = $gimnasio_id");
+    while ($fila = $consulta->fetch_assoc()) {
+        $disciplinas[] = $fila;
+    }
+}
 ?>
 
 <!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>Disciplinas</title>
+    <title>Registro de Cliente Online</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
         body {
@@ -24,116 +28,81 @@ $resultado = $conexion->query("SELECT id, nombre FROM disciplinas WHERE id_gimna
             color: gold;
             font-family: Arial, sans-serif;
             padding: 20px;
-            margin: 0;
         }
-
         h2 {
             text-align: center;
-            margin-bottom: 20px;
+            color: gold;
         }
-
-        .nuevo {
-            display: inline-block;
-            padding: 10px 20px;
+        form {
+            max-width: 500px;
+            margin: auto;
+        }
+        label {
+            display: block;
+            margin-top: 12px;
+        }
+        input, select {
+            width: 100%;
+            padding: 8px;
+            margin-top: 4px;
+            background-color: #222;
+            color: white;
+            border: 1px solid gold;
+        }
+        input[type="submit"] {
             background-color: gold;
             color: black;
-            text-decoration: none;
+            margin-top: 20px;
             font-weight: bold;
-            border-radius: 5px;
-            margin-bottom: 20px;
         }
-
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            background-color: #222;
-        }
-
-        th, td {
-            border: 1px solid gold;
-            padding: 10px;
+        .error {
+            color: red;
             text-align: center;
-        }
-
-        th {
-            background-color: #333;
-        }
-
-        a {
-            color: gold;
-            text-decoration: none;
-            font-weight: bold;
-        }
-
-        a:hover {
-            text-decoration: underline;
-        }
-
-        @media (max-width: 600px) {
-            body {
-                padding: 10px;
-            }
-
-            .nuevo {
-                display: block;
-                width: 100%;
-                text-align: center;
-                margin-bottom: 15px;
-            }
-
-            table, thead, tbody, th, td, tr {
-                display: block;
-                width: 100%;
-            }
-
-            thead tr {
-                display: none;
-            }
-
-            tr {
-                margin-bottom: 15px;
-                border-bottom: 2px solid gold;
-            }
-
-            td {
-                text-align: right;
-                padding-left: 50%;
-                position: relative;
-            }
-
-            td::before {
-                content: attr(data-label);
-                position: absolute;
-                left: 10px;
-                width: 45%;
-                white-space: nowrap;
-                font-weight: bold;
-                text-align: left;
-            }
+            margin-bottom: 10px;
         }
     </style>
 </head>
 <body>
-    <h2>Disciplinas</h2>
-    <a class="nuevo" href="crear_disciplina.php">+ Nueva Disciplina</a>
-    <table>
-        <thead>
-            <tr>
-                <th>Nombre</th>
-                <th>Acciones</th>
-            </tr>
-        </thead>
-        <tbody>
-            <?php while ($fila = $resultado->fetch_assoc()) : ?>
-                <tr>
-                    <td data-label="Nombre"><?= htmlspecialchars($fila['nombre']) ?></td>
-                    <td data-label="Acciones">
-                        <a href="editar_disciplina.php?id=<?= $fila['id'] ?>">Editar</a> |
-                        <a href="eliminar_disciplina.php?id=<?= $fila['id'] ?>" onclick="return confirm('¿Eliminar esta disciplina?')">Eliminar</a>
-                    </td>
-                </tr>
-            <?php endwhile; ?>
-        </tbody>
-    </table>
+
+<h2>Registro de Cliente Online</h2>
+
+<?php if ($mensaje): ?>
+    <p class="error"><?php echo htmlspecialchars($mensaje); ?></p>
+<?php endif; ?>
+
+<form action="guardar_cliente_online.php" method="post">
+    <input type="hidden" name="gimnasio_id" value="<?php echo htmlspecialchars($gimnasio_id); ?>">
+
+    <label>Apellido:</label>
+    <input type="text" name="apellido" required>
+
+    <label>Nombre:</label>
+    <input type="text" name="nombre" required>
+
+    <label>DNI:</label>
+    <input type="number" name="dni" required>
+
+    <label>Fecha de nacimiento:</label>
+    <input type="date" name="fecha_nacimiento" required>
+
+    <label>Domicilio:</label>
+    <input type="text" name="domicilio" required>
+
+    <label>Teléfono:</label>
+    <input type="text" name="telefono" required>
+
+    <label>Email:</label>
+    <input type="email" name="email" required>
+
+    <label>Disciplina:</label>
+    <select name="disciplina" required>
+        <?php foreach ($disciplinas as $disciplina): ?>
+            <option value="<?= htmlspecialchars($disciplina['nombre']) ?>"><?= htmlspecialchars($disciplina['nombre']) ?></option>
+        <?php endforeach; ?>
+    </select>
+
+    <input type="submit" value="Registrar Cliente">
+</form>
+
 </body>
 </html>
