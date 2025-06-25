@@ -145,13 +145,31 @@ dropdown-content">
   <a href="logout.php" class="dropbtn">Cerrar Sesión</a>
 </nav>
 
-<div class="container">
-  <div class="stats-grid">
-    <div class="card"><h3>Ingresos del Día</h3><p>$4.800</p></div>
-    <div class="card"><h3>Pagos del Día</h3><p>$3.500</p></div>
-    <div class="card"><h3>Pagos del Mes</h3><p>$27.400</p></div>
-    <div class="card"><h3>Ventas Totales</h3><p>$15.000</p></div>
-  </div>
+<?php
+// Mostrar ingresos del día
+$hoy = date('Y-m-d');
+$query_ingresos = "
+    SELECT clientes.nombre, clientes.apellido, asistencias.hora 
+    FROM asistencias 
+    JOIN clientes ON asistencias.cliente_id = clientes.id 
+    WHERE asistencias.fecha = '$hoy' AND asistencias.gimnasio_id = $gimnasio_id
+    ORDER BY asistencias.hora DESC
+";
+$resultado_ingresos = $conexion->query($query_ingresos);
+?>
+
+<div class="card" style="margin-bottom: 20px;">
+    <h3>Ingresos de Clientes Hoy</h3>
+    <?php if ($resultado_ingresos->num_rows > 0): ?>
+        <ul style="list-style: none; padding: 0; color: #fff;">
+            <?php while ($fila = $resultado_ingresos->fetch_assoc()): ?>
+                <li><?= $fila['nombre'] . ' ' . $fila['apellido'] ?> - <?= date('H:i', strtotime($fila['hora'])) ?></li>
+            <?php endwhile; ?>
+        </ul>
+    <?php else: ?>
+        <p>No se registraron ingresos hoy.</p>
+    <?php endif; ?>
+</div>
 
   <div class="bar-section">
     <div class="bar-title">Próximos Vencimientos</div>
