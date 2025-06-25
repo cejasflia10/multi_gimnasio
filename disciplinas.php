@@ -9,7 +9,7 @@ include 'conexion.php';
 
 $gimnasio_id = $_SESSION['gimnasio_id'];
 
-$resultado = $conexion->query("SELECT id, nombre FROM disciplinas WHERE (gimnasio_id = $gimnasio_id OR id_gimnasio = $gimnasio_id)");
+$resultado = $conexion->query("SELECT id, nombre FROM disciplinas WHERE id_gimnasio = $gimnasio_id");
 ?>
 
 <!DOCTYPE html>
@@ -17,30 +17,46 @@ $resultado = $conexion->query("SELECT id, nombre FROM disciplinas WHERE (gimnasi
 <head>
     <meta charset="UTF-8">
     <title>Disciplinas</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
         body {
-            background: #111;
+            background-color: #111;
             color: gold;
             font-family: Arial, sans-serif;
             padding: 20px;
+            margin: 0;
         }
 
         h2 {
             text-align: center;
+            margin-bottom: 20px;
+        }
+
+        .nuevo {
+            display: inline-block;
+            padding: 10px 20px;
+            background-color: gold;
+            color: black;
+            text-decoration: none;
+            font-weight: bold;
+            border-radius: 5px;
+            margin-bottom: 20px;
         }
 
         table {
             width: 100%;
             border-collapse: collapse;
             background-color: #222;
-            margin-top: 20px;
         }
 
         th, td {
             border: 1px solid gold;
-            padding: 12px;
+            padding: 10px;
             text-align: center;
+        }
+
+        th {
+            background-color: #333;
         }
 
         a {
@@ -49,9 +65,51 @@ $resultado = $conexion->query("SELECT id, nombre FROM disciplinas WHERE (gimnasi
             font-weight: bold;
         }
 
-        .nuevo {
-            margin: 20px 0;
-            display: inline-block;
+        a:hover {
+            text-decoration: underline;
+        }
+
+        @media (max-width: 600px) {
+            body {
+                padding: 10px;
+            }
+
+            .nuevo {
+                display: block;
+                width: 100%;
+                text-align: center;
+                margin-bottom: 15px;
+            }
+
+            table, thead, tbody, th, td, tr {
+                display: block;
+                width: 100%;
+            }
+
+            thead tr {
+                display: none;
+            }
+
+            tr {
+                margin-bottom: 15px;
+                border-bottom: 2px solid gold;
+            }
+
+            td {
+                text-align: right;
+                padding-left: 50%;
+                position: relative;
+            }
+
+            td::before {
+                content: attr(data-label);
+                position: absolute;
+                left: 10px;
+                width: 45%;
+                white-space: nowrap;
+                font-weight: bold;
+                text-align: left;
+            }
         }
     </style>
 </head>
@@ -59,19 +117,23 @@ $resultado = $conexion->query("SELECT id, nombre FROM disciplinas WHERE (gimnasi
     <h2>Disciplinas</h2>
     <a class="nuevo" href="crear_disciplina.php">+ Nueva Disciplina</a>
     <table>
-        <tr>
-            <th>Nombre</th>
-            <th>Acciones</th>
-        </tr>
-        <?php while ($fila = $resultado->fetch_assoc()) : ?>
+        <thead>
             <tr>
-                <td><?= htmlspecialchars($fila['nombre']) ?></td>
-                <td>
-                    <a href="editar_disciplina.php?id=<?= $fila['id'] ?>">Editar</a> |
-                    <a href="eliminar_disciplina.php?id=<?= $fila['id'] ?>" onclick="return confirm('¿Eliminar esta disciplina?')">Eliminar</a>
-                </td>
+                <th>Nombre</th>
+                <th>Acciones</th>
             </tr>
-        <?php endwhile; ?>
+        </thead>
+        <tbody>
+            <?php while ($fila = $resultado->fetch_assoc()) : ?>
+                <tr>
+                    <td data-label="Nombre"><?= htmlspecialchars($fila['nombre']) ?></td>
+                    <td data-label="Acciones">
+                        <a href="editar_disciplina.php?id=<?= $fila['id'] ?>">Editar</a> |
+                        <a href="eliminar_disciplina.php?id=<?= $fila['id'] ?>" onclick="return confirm('¿Eliminar esta disciplina?')">Eliminar</a>
+                    </td>
+                </tr>
+            <?php endwhile; ?>
+        </tbody>
     </table>
 </body>
 </html>
