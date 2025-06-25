@@ -89,5 +89,17 @@ function obtenerVencimientos($conexion, $gimnasio_id) {
         AND m.gimnasio_id = $gimnasio_id
         ORDER BY m.fecha_vencimiento
     ");
+function obtenerAsistenciasClientes($conexion, $gimnasio_id) {
+    return $conexion->query("
+        SELECT c.nombre, c.apellido, c.dni, c.disciplina, m.fecha_vencimiento, a.hora
+        FROM asistencias a
+        INNER JOIN clientes c ON a.cliente_id = c.id
+        LEFT JOIN membresias m ON m.cliente_id = c.id
+        WHERE a.fecha = CURDATE() AND c.gimnasio_id = $gimnasio_id
+        ORDER BY a.hora DESC
+    ");
 }
+
+}
+
 ?>
