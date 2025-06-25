@@ -76,23 +76,23 @@ body {
     }
 }
 </style>
-<?php if ($rol === 'admin' || $rol === 'escuela'): ?>
-    <a class="submenu-toggle" onclick="toggleSubmenu('submenu-pagos')">💰 Pagos</a>
-    <div id="submenu-pagos" class="submenu">
-        <a href="ver_pagos.php">Ver Pagos</a>
-        <a href="agregar_pago.php">Agregar Pago</a>
-    </div>
-<?php endif; ?>
 
 <!-- BOTÓN ☰ PARA CELULARES -->
 <button class="menu-toggle" onclick="toggleMenu()">☰</button>
 
 <div class="sidebar" id="sidebar">
-    <!-- Encabezado con logo y nombre -->
     <div class="sidebar-header">
         <img src="assets/logo_gym_cjs.png" alt="Gym System CJS">
         <span>Gym System CJS</span>
     </div>
+
+    <?php if ($rol === 'admin' || $rol === 'escuela'): ?>
+    <div class="submenu-toggle" onclick="toggleSubmenu('submenu-pagos')"><i class="fas fa-coins"></i> Pagos</div>
+    <div class="submenu" id="submenu-pagos">
+        <a href="ver_pagos.php">Ver Pagos</a>
+        <a href="agregar_pago.php">Agregar Pago</a>
+    </div>
+    <?php endif; ?>
 
     <?php if (in_array($rol, ['admin', 'cliente_gym'])): ?>
     <div class="submenu-toggle" onclick="toggleSubmenu('clientesSubmenu')"><i class="fas fa-users"></i> Clientes</div>
@@ -156,12 +156,6 @@ body {
         <a href="ficha_habitos.php"><i class="fas fa-edit"></i> Ficha de Hábitos</a>
         <a href="ver_habitos_profesor.php?id=<?= $_SESSION['cliente_id'] ?? 0 ?>"><i class="fas fa-eye"></i> Ver Ficha</a>
         <a href="ver_seguimiento_cliente.php"><i class="fas fa-list"></i> Seguimiento Semanal</a>
-    
-    <!-- NUEVA SECCIÓN: FICHA NUTRICIONAL -->
-    <div class="nutricion">
-        <h3>📋 Ficha Nutricional</h3>
-        <a href="ficha_habitos.php?dni=<?= $cliente['dni'] ?>" class="btn-descargar">Completar Hábitos Alimenticios</a><br><br>
-        <a href="ver_seguimiento_cliente.php?dni=<?= $cliente['dni'] ?>" class="btn-descargar">Ver Seguimiento Semanal</a>
     </div>
     <?php endif; ?>
 
