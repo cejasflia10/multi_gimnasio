@@ -1,6 +1,6 @@
 <?php
 include 'conexion.php';
-include 'menu.php';
+include 'menu_horizontal.php';
 
 $query = "SELECT u.id, u.usuario, u.rol, g.nombre AS gimnasio 
           FROM usuarios u 

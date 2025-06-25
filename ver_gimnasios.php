@@ -2,6 +2,8 @@
 
 <?php
 include 'conexion.php';
+include 'menu_horizontal.php';
+
 $resultado = $conexion->query("SELECT * FROM gimnasios");
 ?>
 

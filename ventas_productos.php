@@ -1,6 +1,6 @@
 <?php
 include 'conexion.php';
-include 'menu.php';
+include 'menu_horizontal.php';
 
 // Obtener lista de productos
 $productos = $conexion->query("SELECT id, nombre, categoria, precio_venta FROM productos_proteccion

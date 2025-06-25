@@ -1,5 +1,6 @@
 <?php include 'conexion.php'; ?>
-<?php include 'menu.php'; ?>
+include 'menu_horizontal.php';
+
 <!DOCTYPE html>
 <html lang="es">
 <head>

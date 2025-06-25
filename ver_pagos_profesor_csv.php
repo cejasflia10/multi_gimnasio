@@ -1,6 +1,7 @@
 <?php
 session_start();
 include 'conexion.php';
+include 'menu_horizontal.php';
 
 if (!isset($_SESSION['id_gimnasio'])) {
     die('Acceso no autorizado.');

@@ -4,6 +4,7 @@ if (!isset($_SESSION['gimnasio_id'])) {
     die("Acceso denegado.");
 }
 include 'conexion.php';
+include 'menu_horizontal.php';
 
 $gimnasio_id = $_SESSION['gimnasio_id'];
 

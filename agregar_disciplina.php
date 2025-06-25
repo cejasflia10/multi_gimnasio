@@ -1,6 +1,6 @@
 <?php
 include 'conexion.php';
-include 'menu.php';
+include 'menu_horizontal.php';
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $nombre = $_POST['nombre'];
     $descripcion = $_POST['descripcion'];

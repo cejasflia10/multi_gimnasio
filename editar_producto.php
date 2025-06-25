@@ -3,6 +3,7 @@ session_start();
 include 'conexion.php';
 
 if (!isset($_SESSION['id_gimnasio'])) die('Acceso denegado.');
+include 'menu_horizontal.php';
 
 $id_gimnasio = $_SESSION['id_gimnasio'];
 $tipo = $_GET['tipo'] ?? '';

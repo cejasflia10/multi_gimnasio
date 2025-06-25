@@ -5,6 +5,7 @@ if (!isset($_SESSION["gimnasio_id"])) {
 }
 $gimnasio_id = $_SESSION["gimnasio_id"];
 include 'conexion.php';
+include 'menu_horizontal.php';
 
 $query = "SELECT id, apellido, nombre, dni, telefono, email, fecha_nacimiento, domicilio, disciplina, rfid_uid, fecha_vencimiento FROM clientes WHERE gimnasio_id = ?";
 $stmt = $conexion->prepare($query);
