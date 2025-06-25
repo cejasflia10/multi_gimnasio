@@ -9,13 +9,11 @@ $rol = $_SESSION['rol'] ?? '';
 body { margin: 0; background-color: #111; color: gold; font-family: Arial, sans-serif; }
 nav.horizontal {
     display: flex;
-    background-color: #222;
+    background-color: #1a1a1a;
     justify-content: center;
     flex-wrap: wrap;
     padding: 0;
-    position: sticky;
-    top: 0;
-    z-index: 1000;
+    border-bottom: 1px solid #333;
 }
 nav.horizontal .dropdown {
     position: relative;
@@ -26,43 +24,28 @@ nav.horizontal a, nav.horizontal .dropbtn {
     text-decoration: none;
     display: block;
     cursor: pointer;
+    font-weight: bold;
 }
 nav.horizontal .dropdown-content {
     display: none;
     position: absolute;
     background-color: #333;
-    min-width: 180px;
+    min-width: 200px;
     z-index: 1000;
+    border-radius: 0 0 8px 8px;
+    overflow: hidden;
 }
 nav.horizontal .dropdown-content a {
-    padding: 10px;
+    padding: 12px;
     color: gold;
     display: block;
+    border-bottom: 1px solid #444;
 }
 nav.horizontal .dropdown:hover .dropdown-content {
     display: block;
 }
-.bottom-bar {
-    display: none;
-}
 @media (max-width: 768px) {
     nav.horizontal { display: none; }
-    .bottom-bar {
-        display: flex;
-        justify-content: space-around;
-        background-color: #222;
-        position: fixed;
-        bottom: 0;
-        width: 100%;
-        padding: 10px 0;
-        z-index: 999;
-    }
-    .bottom-bar a {
-        color: gold;
-        text-align: center;
-        font-size: 14px;
-        text-decoration: none;
-    }
 }
 </style>
 
@@ -127,13 +110,13 @@ nav.horizontal .dropdown:hover .dropdown-content {
       <a href="panel_control.php">Panel General</a>
     </div>
   </div>
+  <div class="dropdown"><div class="dropbtn">Panel del Cliente</div>
+    <div class="dropdown-content">
+      <a href="estado_pagos.php">Estado de Pagos</a>
+      <a href="ver_asistencias_cliente.php">Ver Asistencias</a>
+      <a href="ver_turnos_cliente.php">Ver Turnos</a>
+      <a href="mi_qr.php">Mi QR</a>
+    </div>
+  </div>
   <div class="dropdown"><a class="dropbtn" href="logout.php">Cerrar Sesión</a></div>
 </nav>
-
-<div class="bottom-bar">
-  <a href="index.php"><i class="fas fa-home"></i><br>Inicio</a>
-  <a href="ver_clientes.php"><i class="fas fa-users"></i><br>Clientes</a>
-  <a href="ver_membresias.php"><i class="fas fa-id-card"></i><br>Membresías</a>
-  <a href="scanner_qr.php"><i class="fas fa-qrcode"></i><br>QR</a>
-  <a href="ver_ventas.php"><i class="fas fa-shopping-cart"></i><br>Ventas</a>
-</div>
