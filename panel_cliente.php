@@ -2,11 +2,20 @@
 session_start();
 include 'conexion.php';
 
-if (!isset($_SESSION['cliente_id'])) {
+$rol = $_SESSION['rol'] ?? '';
+if (!in_array($rol, ['cliente', 'profesor'])) {
     die("Acceso denegado.");
 }
 
-$cliente_id = $_SESSION['cliente_id'];
+$cliente_id = $_SESSION['cliente_id'] ?? null;
+if ($rol === 'profesor') {
+    $cliente_id = $_GET['id'] ?? null;
+}
+
+if (!$cliente_id) {
+    die("ID de cliente no especificado.");
+}
+
 $query = "SELECT * FROM clientes WHERE id = $cliente_id";
 $resultado = $conexion->query($query);
 
@@ -16,7 +25,6 @@ if ($resultado->num_rows === 0) {
 
 $cliente = $resultado->fetch_assoc();
 
-// Manejar foto
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['foto'])) {
     $foto = $_FILES['foto'];
     $nombre_archivo = "fotos/cliente_" . $cliente['id'] . ".jpg";
@@ -113,10 +121,12 @@ $asistencias = $conexion->query("SELECT fecha, hora FROM asistencias WHERE clien
 
     <div class="foto">
         <img src="<?= $cliente['foto'] ?: 'fotos/default.jpg' ?>" alt="Foto de perfil">
+        <?php if ($rol === 'cliente'): ?>
         <form method="POST" enctype="multipart/form-data">
             <input type="file" name="foto" accept="image/*" required><br>
             <button type="submit">Actualizar Foto</button>
         </form>
+        <?php endif; ?>
     </div>
 
     <p><strong>DNI:</strong> <?= $cliente['dni'] ?></p>
