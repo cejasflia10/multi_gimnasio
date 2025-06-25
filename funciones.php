@@ -23,7 +23,6 @@ function obtenerMonto($conexion, $tabla, $campo_fecha, $gimnasio_id, $modo = 'DI
     return $fila['total'] ?? 0;
 }
 
-// Asistencias de clientes del día
 function obtenerAsistenciasClientes($conexion, $gimnasio_id) {
     return $conexion->query("
         SELECT c.nombre, c.apellido, c.dni, c.disciplina, m.fecha_vencimiento, a.hora
@@ -32,17 +31,6 @@ function obtenerAsistenciasClientes($conexion, $gimnasio_id) {
         LEFT JOIN membresias m ON m.cliente_id = c.id
         WHERE a.fecha = CURDATE() AND c.gimnasio_id = $gimnasio_id
         ORDER BY a.hora DESC
-    ");
-}
-
-// Asistencias de profesores del día
-function obtenerAsistenciasProfesores($conexion, $gimnasio_id) {
-    return $conexion->query("
-        SELECT p.apellido, r.fecha, r.hora_entrada, r.hora_salida
-        FROM registro_asistencias_profesores r
-        INNER JOIN profesores p ON r.profesor_id = p.id
-        WHERE a.fecha = CURDATE() AND c.gimnasio_id = $gimnasio_id
-        ORDER BY r.hora_entrada DESC
     ");
 }
 
