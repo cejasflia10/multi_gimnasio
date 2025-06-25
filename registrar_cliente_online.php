@@ -6,6 +6,9 @@ include 'conexion.php';
 
 $gimnasio_id = $_GET['gimnasio'] ?? '';
 $mensaje = $_GET['mensaje'] ?? '';
+
+// Obtener disciplinas del gimnasio
+$disciplinas = $conexion->query("SELECT id, nombre FROM disciplinas WHERE gimnasio_id = $gimnasio_id");
 ?>
 
 <!DOCTYPE html>
@@ -88,10 +91,10 @@ $mensaje = $_GET['mensaje'] ?? '';
 
     <label>Disciplina:</label>
     <select name="disciplina" required>
-        <option value="Boxeo">Boxeo</option>
-        <option value="Kickboxing">Kickboxing</option>
-        <option value="MMA">MMA</option>
-        <option value="Funcional">Funcional</option>
+        <option value="">-- Seleccionar disciplina --</option>
+        <?php while ($d = $disciplinas->fetch_assoc()): ?>
+            <option value="<?= htmlspecialchars($d['nombre']) ?>"><?= htmlspecialchars($d['nombre']) ?></option>
+        <?php endwhile; ?>
     </select>
 
     <input type="submit" value="Registrar Cliente">
