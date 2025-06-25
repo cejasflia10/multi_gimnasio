@@ -30,7 +30,7 @@ function obtenerAsistenciasClientes($conexion, $gimnasio_id) {
         FROM asistencias a
         INNER JOIN clientes c ON a.cliente_id = c.id
         LEFT JOIN membresias m ON m.cliente_id = c.id
-        WHERE a.fecha = CURDATE() AND a.gimnasio_id = $gimnasio_id
+        WHERE a.fecha = CURDATE() AND c.gimnasio_id = $gimnasio_id
         ORDER BY a.hora DESC
     ");
 }
