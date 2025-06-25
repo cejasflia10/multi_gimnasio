@@ -1,123 +1,105 @@
 <?php
-if (session_status() === PHP_SESSION_NONE) {
-    session_start();
-}
+if (session_status()===PHP_SESSION_NONE) session_start();
+include 'menu.php';
 include 'conexion.php';
 include 'funciones.php';
 
+// gimnasio nombre traído con login:
+$gymNombre = $_SESSION['gimnasio_nombre'] ?? 'Mi Gimnasio';
 $gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
-$rol = $_SESSION['rol'] ?? '';
+$usuario = $_SESSION['usuario'] ?? 'Usuario';
 
-// Totales
-$pagos_dia = obtenerMonto($conexion, 'pagos', 'fecha', $gimnasio_id, 'DIA');
-$pagos_mes = obtenerMonto($conexion, 'pagos', 'fecha', $gimnasio_id, 'MES');
-$ventas_dia = obtenerMonto($conexion, 'ventas', 'fecha', $gimnasio_id, 'DIA');
-$ventas_mes = obtenerMonto($conexion, 'ventas', 'fecha', $gimnasio_id, 'MES');
-
-// Ingresos clientes hoy
-$asistencias_clientes = obtenerAsistenciasClientes($conexion, $gimnasio_id);
-
-// Cumpleaños del mes
-$cumpleanios = obtenerCumpleanios($conexion, $gimnasio_id);
-
-// Vencimientos próximos
-$vencimientos = obtenerVencimientos($conexion, $gimnasio_id);
+// Cálculos datos:
+$pagos_dia = obtenerMonto($conexion,'pagos','fecha',$gimnasio_id,'DIA');
+$pagos_mes = obtenerMonto($conexion,'pagos','fecha',$gimnasio_id,'MES');
+$ventas_dia = obtenerMonto($conexion,'ventas','fecha',$gimnasio_id,'DIA');
+$ventas_mes = obtenerMonto($conexion,'ventas','fecha',$gimnasio_id,'MES');
+$clientesHoy = obtenerAsistenciasClientes($conexion,$gimnasio_id);
+$cumples = obtenerCumpleanios($conexion,$gimnasio_id);
+$vencimientos = obtenerVencimientos($conexion,$gimnasio_id);
 ?>
-
 <!DOCTYPE html>
 <html lang="es">
 <head>
-    <meta charset="UTF-8">
-    <title>Panel - Gym System</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <style>
-        body {
-            background-color: #111;
-            color: gold;
-            font-family: Arial, sans-serif;
-            padding: 20px;
-            margin-left: 270px;
-        }
-        h1, h2 {
-            text-align: center;
-        }
-        .cuadro {
-            background: #222;
-            padding: 20px;
-            margin: 10px auto;
-            width: 90%;
-            border-radius: 10px;
-        }
-        .cuadro h3 {
-            margin-top: 0;
-        }
-        table {
-            width: 100%;
-            color: white;
-            border-collapse: collapse;
-        }
-        table th, table td {
-            padding: 8px;
-            border-bottom: 1px solid #444;
-        }
-        .rojo { color: red; }
-        @media (max-width: 768px) {
-            body {
-                margin-left: 0;
-                padding-top: 60px;
-            }
-        }
-    </style>
+  <meta charset="UTF-8">
+  <title>Panel - <?= htmlspecialchars($gymNombre) ?></title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+  <style>
+    body{ background:#111; color:gold; font-family:Arial; margin:0; padding:20px; margin-left:260px; }
+    h1,h2{text-align:center;}
+    .cuadro{ background:#222; margin:15px auto; padding:15px; border-radius:8px; width:90%; }
+    table{ width:100%; border-collapse:collapse; margin-top:10px; }
+    th,td{ padding:6px; border-bottom:1px solid #444; color:#fff; }
+    .rojo{ color:red; }
+    @media(max-width:768px){
+      body{ margin-left:0; padding-bottom:70px; }
+      .sidebar{ display:none!important; }
+    }
+    .menu-inferior{ display:none; }
+    @media(max-width:768px){
+      .menu-inferior{ display:flex; justify-content:space-around; background:#111; position:fixed;
+        bottom:0; width:100%; border-top:1px solid gold; padding:6px 0; z-index:999; }
+      .menu-inferior a{ flex:1; text-align:center; font-size:12px; color:gold; text-decoration:none; }
+      .menu-inferior i{ font-size:18px; display:block; }
+    }
+  </style>
 </head>
 <body>
+  <h1><?= date('H')<12?'¡Buenos días':'¡Buenas tardes' ?>, <?= htmlspecialchars($usuario) ?>!</h1>
+  <h2><?= htmlspecialchars($gymNombre) ?></h2>
 
-<?php include 'menu.php'; ?>
+  <div class="cuadro">
+    <h2>💰 Totales</h2>
+    <p>Pagos hoy: $<?= $pagos_dia ?></p>
+    <p>Pagos mes: $<?= $pagos_mes ?></p>
+    <p>Ventas hoy: $<?= $ventas_dia ?></p>
+    <p>Ventas mes: $<?= $ventas_mes ?></p>
+  </div>
 
-<h1>Panel General - Gym System</h1>
-
-<div class="cuadro">
-    <h3>💰 Totales</h3>
-    <p>Pagos del día: $<?= $pagos_dia ?></p>
-    <p>Pagos del mes: $<?= $pagos_mes ?></p>
-    <p>Ventas del día: $<?= $ventas_dia ?></p>
-    <p>Ventas del mes: $<?= $ventas_mes ?></p>
-</div>
-
-<div class="cuadro">
-    <h3>👥 Ingresos de Clientes Hoy</h3>
+  <div class="cuadro">
+    <h2>👥 Ingresos Hoy - Clientes</h2>
     <table>
-        <tr><th>Nombre</th><th>DNI</th><th>Disciplina</th><th>Hora</th><th>Vencimiento</th></tr>
-        <?php while ($row = $asistencias_clientes->fetch_assoc()): ?>
-            <tr>
-                <td><?= $row['nombre'] . ' ' . $row['apellido'] ?></td>
-                <td><?= $row['dni'] ?></td>
-                <td><?= $row['disciplina'] ?></td>
-                <td><?= $row['hora'] ?></td>
-                <td class="<?= ($row['fecha_vencimiento'] < date('Y-m-d')) ? 'rojo' : '' ?>">
-                    <?= $row['fecha_vencimiento'] ?>
-                </td>
-            </tr>
-        <?php endwhile; ?>
+      <tr><th>Nombre</th><th>DNI</th><th>Disciplina</th><th>Hora</th><th>Vto.</th></tr>
+      <?php while($c=$clientesHoy->fetch_assoc()): ?>
+        <tr>
+          <td><?= $c['nombre'].' '.$c['apellido'] ?></td>
+          <td><?= $c['dni'] ?></td>
+          <td><?= $c['disciplina'] ?></td>
+          <td><?= $c['hora'] ?></td>
+          <td class="<?= ($c['fecha_vencimiento']<date('Y-m-d'))?'rojo':'' ?>">
+            <?= $c['fecha_vencimiento'] ?: '---' ?>
+          </td>
+        </tr>
+      <?php endwhile; ?>
     </table>
-</div>
+  </div>
 
-<div class="cuadro">
-    <h3>🎂 Próximos Cumpleaños del Mes</h3>
+  <div class="cuadro">
+    <h2>🎂 Cumpleaños del Mes</h2>
     <ul>
-        <?php while ($c = $cumpleanios->fetch_assoc()): ?>
-            <li><?= $c['nombre'] . ' ' . $c['apellido'] . ' - ' . $c['fecha_nacimiento'] ?></li>
-        <?php endwhile; ?>
+      <?php while($cf=$cumples->fetch_assoc()): ?>
+        <li><?= $cf['nombre'].' '.$cf['apellido'].' - '.date('d/m',strtotime($cf['fecha_nacimiento'])) ?></li>
+      <?php endwhile; ?>
     </ul>
-</div>
+  </div>
 
-<div class="cuadro">
-    <h3>📅 Vencimientos Próximos (10 días)</h3>
+  <div class="cuadro">
+    <h2>📅 Vencimientos (próx. 10 días)</h2>
     <ul>
-        <?php while ($v = $vencimientos->fetch_assoc()): ?>
-            <li><?= $v['nombre'] . ' ' . $v['apellido'] . ' - ' . $v['fecha_vencimiento'] ?></li>
-        <?php endwhile; ?>
+      <?php while($v=$vencimientos->fetch_assoc()): ?>
+        <li><?= $v['nombre'].' '.$v['apellido'].' - '.date('d/m/Y',strtotime($v['fecha_vencimiento'])) ?></li>
+      <?php endwhile; ?>
     </ul>
-</div>
+  </div>
 
+  <!-- Menú inferior móvil -->
+  <div class="menu-inferior">
+    <a href="index.php"><i class="fas fa-home"></i>Inicio</a>
+    <a href="ver_clientes.php"><i class="fas fa-users"></i>Clientes</a>
+    <a href="ver_membresias.php"><i class="fas fa-id-card-alt"></i>Membresías</a>
+    <a href="scanner_qr.php"><i class="fas fa-qrcode"></i>QR</a>
+    <a href="ver_asistencias.php"><i class="fas fa-calendar-check"></i>Asistencias</a>
+  </div>
 </body>
 </html>
