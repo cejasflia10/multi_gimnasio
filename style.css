@@ -1,4 +1,4 @@
-/* Estilos base (ya están bien definidos en tu sistema) */
+/* Estilos base */
 body {
   font-family: Arial, sans-serif;
   background-color: #111;
@@ -32,6 +32,30 @@ body {
   transition: margin-left 0.3s;
 }
 
+/* Iconos y links */
+.sidebar a {
+  display: block;
+  padding: 10px 20px;
+  color: #ccc;
+  text-decoration: none;
+  border-bottom: 1px solid #222;
+}
+
+.sidebar a:hover {
+  background-color: #222;
+  color: #fff;
+}
+
+/* Submenús */
+.submenu {
+  display: none;
+  background-color: #111;
+}
+
+.sidebar .has-submenu:hover .submenu {
+  display: block;
+}
+
 /* Estilos responsivos */
 @media screen and (max-width: 768px) {
   .sidebar {
@@ -62,28 +86,41 @@ body {
     background: none;
     border: none;
   }
-}
 
-/* Iconos y links */
-.sidebar a {
-  display: block;
-  padding: 10px 20px;
-  color: #ccc;
-  text-decoration: none;
-  border-bottom: 1px solid #222;
-}
+  /* Menú inferior solo en móviles */
+  .menu-inferior {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    background-color: #000;
+    display: flex;
+    justify-content: space-around;
+    padding: 10px 0;
+    z-index: 2000;
+    border-top: 1px solid #333;
+  }
 
-.sidebar a:hover {
-  background-color: #222;
-  color: #fff;
-}
+  .menu-inferior a {
+    color: gold;
+    text-decoration: none;
+    font-size: 13px;
+    text-align: center;
+  }
 
-/* Submenús */
-.submenu {
-  display: none;
-  background-color: #111;
-}
+  .menu-inferior a i {
+    display: block;
+    font-size: 18px;
+    margin-bottom: 4px;
+  }
 
-.sidebar .has-submenu:hover .submenu {
-  display: block;
+  .sidebar {
+    display: none !important;
+  }
+
+  .content,
+  .contenido {
+    margin-left: 0 !important;
+    padding-bottom: 80px;
+  }
 }
