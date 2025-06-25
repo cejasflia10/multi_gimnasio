@@ -1,6 +1,33 @@
 <?php
 session_start();
 include 'conexion.php';
+function obtenerMonto($conexion, $tabla, $campo_fecha, $gimnasio_id, $modo = 'DIA') {
+    $condicion = $modo === 'MES'
+        ? "MONTH($campo_fecha) = MONTH(CURDATE()) AND YEAR($campo_fecha) = YEAR(CURDATE())"
+        : "$campo_fecha = CURDATE()";
+
+    switch ($tabla) {
+        case 'ventas':
+            $columna = 'monto_total';
+            break;
+        case 'pagos':
+            $columna = 'monto';
+            break;
+        case 'membresias':
+            $columna = 'total';
+            break;
+        default:
+            $columna = 'monto';
+    }
+
+    $query = "SELECT SUM($columna) AS total FROM $tabla WHERE $condicion AND gimnasio_id = $gimnasio_id";
+    $res = $conexion->query($query);
+    if ($res && $fila = $res->fetch_assoc()) {
+        return $fila['total'] ?? 0;
+    }
+    return 0;
+}
+
 $gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
 $gimnasio_nombre = 'Gimnasio';
 $proximo_vencimiento = '';
@@ -66,7 +93,7 @@ if ($gimnasio_id) {
 
 <nav>
   
-  <div class="dropdown"><span class="dropbtn">Clientes</span>
+  <div class="dropdown"><span class="dropbtn"><i class="fas fa-users"></i> Clientes</span>
     <div class="dropdown-content">
       <a href="agregar_cliente.php">Agregar</a>
       <a href="ver_clientes.php">Ver</a>
@@ -74,28 +101,28 @@ if ($gimnasio_id) {
     </div>
   </div>
 
-  <div class="dropdown"><span class="dropbtn">Membresías</span>
+  <div class="dropdown"><span class="dropbtn"><i class="fas fa-id-card"></i> Membresías</span>
     <div class="dropdown-content"><a href="nueva_membresia.php">Nueva</a><a href="ver_membresias.php">Ver</a><a href="planes.php">Planes</a><a href="adicionales.php">Adicionales</a></div>
   </div>
-  <div class="dropdown"><span class="dropbtn">Asistencias</span>
+  <div class="dropdown"><span class="dropbtn"><i class="fas fa-calendar-check"></i> Asistencias</span>
     <div class="dropdown-content"><a href="registrar_asistencia.php">Registrar</a><a href="ver_asistencias.php">Ver</a></div>
   </div>
-  <div class="dropdown"><span class="dropbtn">QR</span>
+  <div class="dropdown"><span class="dropbtn"><i class="fas fa-qrcode"></i> QR</span>
     <div class="dropdown-content"><a href="scanner_qr.php">Escanear</a><a href="generar_qr.php">Generar</a></div>
   </div>
-  <div class="dropdown"><span class="dropbtn">Profesores</span>
+  <div class="dropdown"><span class="dropbtn"><i class="fas fa-user-tie"></i> Profesores</span>
     <div class="dropdown-content"><a href="agregar_profesor.php">Agregar</a><a href="ver_profesores.php">Ver</a><a href="ver_pagos_profesor.php">Pagos</a></div>
   </div>
-  <div class="dropdown"><span class="dropbtn">Ventas</span>
+  <div class="dropdown"><span class="dropbtn"><i class="fas fa-shopping-cart"></i> Ventas</span>
     <div class="dropdown-content"><a href="ventas_protecciones.php">Protecciones</a><a href="ventas_indumentaria.php">Indumentaria</a><a href="ventas_suplementos.php">Suplementos</a><a href="ver_ventas.php">Ver Todas</a></div>
   </div>
-  <div class="dropdown"><span class="dropbtn">Gimnasios</span>
+  <div class="dropdown"><span class="dropbtn"><i class="fas fa-dumbbell"></i> Gimnasios</span>
     <div class="dropdown-content"><a href="agregar_gimnasio.php">Agregar</a><a href="ver_gimnasios.php">Ver</a></div>
   </div>
-  <div class="dropdown"><span class="dropbtn">Usuarios</span>
+  <div class="dropdown"><span class="dropbtn"><i class="fas fa-user-cog"></i> Usuarios</span>
     <div class="dropdown-content"><a href="agregar_usuario.php">Agregar</a><a href="ver_usuarios.php">Ver</a></div>
   </div>
-  <div class="dropdown"><span class="dropbtn">Configuraciones</span>
+  <div class="dropdown"><span class="dropbtn"><i class="fas fa-cogs"></i> Configuraciones</span>
     <div class="dropdown-content"><a href="configurar_planes.php">Planes</a><a href="configurar_accesos.php">Accesos</a></div>
   </div>
   
@@ -106,52 +133,93 @@ if ($gimnasio_id) {
       <a href="cliente_acceso.php">Acceso DNI</a>
       <a href="cliente_reservas.php">Reservas</a>
       <a href="cliente_pagos.php">Pagos</a>
-      <a href="cliente_asistencias.php">Asistencias</a>
+      <a href="cliente_asistencias.php"><i class="fas fa-calendar-check"></i> Asistencias</a>
       <a href="cliente_qr.php">Ver QR</a>
     </div>
   </div>
-  <a href="logout.php" class="dropbtn">Cerrar Sesión</a>
+  <a href="logout.php" class="dropbtn"><i class="fas fa-sign-out-alt"></i> Cerrar Sesión</a>
 
 </nav>
 
 <div class="container">
   
+<div style="display: flex; flex-wrap: wrap; justify-content: space-around; gap: 20px; margin-top: 20px;">
+  <div style="flex: 1; min-width: 200px; background-color: #1f1f1f; padding: 20px; border-radius: 10px; text-align: center; color: gold;">
+    <h3>Pagos del Día</h3>
+    <p style="font-size: 22px;">
+      $<?= number_format(obtenerMonto($conexion, 'pagos', 'fecha', $gimnasio_id, 'DIA'), 0, ',', '.') ?>
+    </p>
+  </div>
+  <div style="flex: 1; min-width: 200px; background-color: #1f1f1f; padding: 20px; border-radius: 10px; text-align: center; color: gold;">
+    <h3>Pagos del Mes</h3>
+    <p style="font-size: 22px;">
+      $<?= number_format(obtenerMonto($conexion, 'pagos', 'fecha', $gimnasio_id, 'MES'), 0, ',', '.') ?>
+    </p>
+  </div>
+  <div style="flex: 1; min-width: 200px; background-color: #1f1f1f; padding: 20px; border-radius: 10px; text-align: center; color: gold;">
+    <h3>Ventas del Mes</h3>
+    <p style="font-size: 22px;">
+      $<?= number_format(obtenerMonto($conexion, 'ventas', 'fecha', $gimnasio_id, 'MES'), 0, ',', '.') ?>
+    </p>
+  </div>
+  <div style="flex: 1; min-width: 200px; background-color: #1f1f1f; padding: 20px; border-radius: 10px; text-align: center; color: gold;">
+    <h3>Total de Ventas</h3>
+    <p style="font-size: 22px;">
+      $<?= number_format(obtenerMonto($conexion, 'ventas', 'fecha', $gimnasio_id, 'DIA'), 0, ',', '.') ?>
+    </p>
+  </div>
+</div>
+<div style="display: flex; flex-wrap: wrap; gap: 20px; margin-top: 20px;">
+  <div style="flex: 1; background:#1f1f1f; padding: 20px; border-radius: 12px;">
+    <h3 style="color: gold;">Próximos Vencimientos</h3>
+    <ul style="color: #fff; padding-left: 20px;">
+      <?php
+      $query_venc = "
+        SELECT clientes.nombre, clientes.apellido, membresias.fecha_vencimiento
+        FROM clientes
+        JOIN membresias ON clientes.id = membresias.cliente_id
+        WHERE clientes.gimnasio_id = $gimnasio_id
+          AND membresias.fecha_vencimiento >= CURDATE()
+        ORDER BY membresias.fecha_vencimiento ASC
+        LIMIT 5
+      ";
+      $result_venc = $conexion->query($query_venc);
+      if ($result_venc && $result_venc->num_rows > 0) {
+          while ($v = $result_venc->fetch_assoc()) {
+              echo "<li>{$v['nombre']} {$v['apellido']} – " . date('d/m/Y', strtotime($v['fecha_vencimiento'])) . "</li>";
+          }
+      } else {
+          echo "<li>No hay vencimientos próximos.</li>";
+      }
+      ?>
+    </ul>
+  </div>
 
-  
-
+  <div style="flex: 1; background:#1f1f1f; padding: 20px; border-radius: 12px;">
+    <h3 style="color: gold;">Próximos Cumpleaños</h3>
+    <ul style="color: #fff; padding-left: 20px;">
+      <?php
+      $query_cump = "
+        SELECT nombre, apellido, fecha_nacimiento
+        FROM clientes
+        WHERE gimnasio_id = $gimnasio_id
+          AND MONTH(fecha_nacimiento) = MONTH(CURDATE())
+        ORDER BY DAY(fecha_nacimiento)
+        LIMIT 5
+      ";
+      $result_cump = $conexion->query($query_cump);
+      if ($result_cump && $result_cump->num_rows > 0) {
+          while ($c = $result_cump->fetch_assoc()) {
+              echo "<li>{$c['nombre']} {$c['apellido']} – " . date('d/m', strtotime($c['fecha_nacimiento'])) . "</li>";
+          }
+      } else {
+          echo "<li>No hay cumpleaños este mes.</li>";
+      }
+      ?>
+    </ul>
+  </div>
 </div>
 
-
-<div class="container">
-  <div class="stats-grid">
-    <div class="card"><h3>Ingresos del Día</h3><p>$4,800</p></div>
-
-  
-
-    <div class="card"><h3>Pagos del Día</h3><p>$3,500</p></div>
-    <div class="card"><h3>Pagos del Mes</h3><p>$27,400</p></div>
-    <div class="card"><h3>Ventas Totales</h3><p>$15,000</p></div>
-  </div>
-  
-      <div class="bar"><div class="bar-inner-orange" style="width: 50%;"></div></div>
-    </div>
-  </div>
-  
-      <div class="bar"><div class="bar-inner-orange" style="width: 30%;"></div></div>
-    </div>
-  </div>
-  <div class="bar-section">
-    <div class="bar-title">Próximos Vencimientos</div>
-    <ul>
-      <li>Lucia Ramírez - 28/06/2025</li>
-      <li>Diego Martínez - 03/07/2025</li>
-    </ul>
-    <div class="bar-title">Próximos Cumpleaños</div>
-    <ul>
-      <li>Sofía Fernández - 26/06</li>
-      <li>Tomás Aguirre - 30/06</li>
-    </ul>
-  </div>
 
 <div class="card">
     <h3>Ingresos del Día</h3>
@@ -175,29 +243,6 @@ if ($gimnasio_id) {
       <p>No se registraron ingresos hoy.</p>
     <?php endif; ?>
   </div>
-<div class="bar-section">
-    <div class="bar-title">Próximos Vencimientos</div>
-    <ul>
-      <?php
-      $query_venc = "
-        SELECT clientes.nombre, clientes.apellido, membresias.fecha_vencimiento
-        FROM clientes
-        JOIN membresias ON clientes.id = membresias.cliente_id
-        WHERE clientes.gimnasio_id = $gimnasio_id
-          AND membresias.fecha_vencimiento >= CURDATE()
-        ORDER BY membresias.fecha_vencimiento ASC
-        LIMIT 5
-      ";
-      $result_venc = $conexion->query($query_venc);
-      if ($result_venc && $result_venc->num_rows > 0) {
-          while ($v = $result_venc->fetch_assoc()) {
-              echo "<li>{$v['nombre']} {$v['apellido']} – " . date('d/m/Y', strtotime($v['fecha_vencimiento'])) . "</li>";
-          }
-      } else {
-          echo "<li>No hay vencimientos próximos.</li>";
-      }
-      ?>
-    </ul>
   </div>
 <div class="bar-section">
     <div class="bar-title">Estadísticas por Disciplina</div>
@@ -211,11 +256,36 @@ if ($gimnasio_id) {
 
 <div class="bottom-bar">
   <a href="index.php"><i class="fas fa-home"></i><br>Inicio</a>
-  <a href="ver_clientes.php"><i class="fas fa-users"></i><br>Clientes</a>
-  <a href="ver_membresias.php"><i class="fas fa-id-card"></i><br>Membresías</a>
-  <a href="scanner_qr.php"><i class="fas fa-qrcode"></i><br>QR</a>
-  <a href="registrar_asistencia.php"><i class="fas fa-calendar-check"></i><br>Asistencias</a>
-  <a href="ver_ventas.php"><i class="fas fa-shopping-cart"></i><br>Ventas</a>
+  <a href="ver_clientes.php"><i class="fas fa-users"></i><br><i class="fas fa-users"></i> Clientes</a>
+  <a href="ver_membresias.php"><i class="fas fa-id-card"></i><br><i class="fas fa-id-card"></i> Membresías</a>
+  <a href="scanner_qr.php"><i class="fas fa-qrcode"></i><br><i class="fas fa-qrcode"></i> QR</a>
+  <a href="registrar_asistencia.php"><i class="fas fa-calendar-check"></i><br><i class="fas fa-calendar-check"></i> Asistencias</a>
+  <a href="ver_ventas.php"><i class="fas fa-shopping-cart"></i><br><i class="fas fa-shopping-cart"></i> Ventas</a>
+</div>
+<div class="card">
+  <h3>Estadísticas por Disciplina (últimos 7 días)</h3>
+  <?php
+  $sql = "SELECT d.nombre AS disciplina, COUNT(*) AS total
+          FROM asistencias a
+          JOIN clientes c ON a.cliente_id = c.id
+          JOIN disciplinas d ON c.disciplina_id = d.id
+          WHERE c.gimnasio_id = $gimnasio_id
+            AND a.fecha >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)
+          GROUP BY d.nombre";
+  $res = $conexion->query($sql);
+  if ($res && $res->num_rows > 0): ?>
+    <ul style="list-style:none; padding:0;">
+      <?php while ($fila = $res->fetch_assoc()): ?>
+        <li><?= $fila['disciplina'] ?>: 
+          <div style="background:#444; width:100%; height:20px; margin:5px 0; border-radius:5px;">
+            <div style="background:gold; width:<?= min(100, $fila['total'] * 10) ?>%; height:100%; border-radius:5px;"></div>
+          </div>
+        </li>
+      <?php endwhile; ?>
+    </ul>
+  <?php else: ?>
+    <p>No hay datos disponibles.</p>
+  <?php endif; ?>
 </div>
 
 </body>
