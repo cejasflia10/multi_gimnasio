@@ -23,20 +23,38 @@
             font-size: 20px;
             margin: 0;
         }
+        header .sub {
+            font-size: 14px;
+            color: #ccc;
+        }
         nav {
             background-color: #333;
             display: flex;
             flex-wrap: wrap;
             justify-content: center;
         }
-        nav a {
+        nav .dropdown {
+            position: relative;
+        }
+        nav a, nav .dropbtn {
             color: gold;
             padding: 12px 20px;
             text-decoration: none;
             display: block;
+            cursor: pointer;
         }
-        nav a:hover {
+        nav .dropdown-content {
+            display: none;
+            position: absolute;
             background-color: #444;
+            min-width: 160px;
+            z-index: 1;
+        }
+        nav .dropdown-content a {
+            padding: 10px;
+        }
+        nav .dropdown:hover .dropdown-content {
+            display: block;
         }
         .container {
             padding: 20px;
@@ -62,11 +80,15 @@
             margin-bottom: 10px;
             font-weight: bold;
         }
+        .bar-container {
+            display: flex;
+            gap: 10px;
+        }
         .bar {
             background-color: #333;
             border-radius: 8px;
             overflow: hidden;
-            margin-bottom: 10px;
+            flex: 1;
         }
         .bar-inner {
             height: 20px;
@@ -92,17 +114,48 @@
     <header>
         <h1>Fight Academy Scorpions</h1>
         <div>
-            <strong>Próximo vencimiento:</strong> 28/06/2025
+            <div><strong>Próximo vencimiento del gimnasio:</strong> 28/07/2025</div>
+            <div class="sub">Cliente activo: Juan Pérez - Vence: 30/06/2025</div>
         </div>
     </header>
 
     <nav>
-        <a href="#">Clientes</a>
-        <a href="#">Membresías</a>
-        <a href="#">Asistencias</a>
-        <a href="#">Ventas</a>
-        <a href="#">Profesores</a>
-        <a href="#">Configuración</a>
+        <div class="dropdown">
+            <div class="dropbtn">Clientes</div>
+            <div class="dropdown-content">
+                <a href="#">Agregar Cliente</a>
+                <a href="#">Ver Clientes</a>
+            </div>
+        </div>
+        <div class="dropdown">
+            <div class="dropbtn">Membresías</div>
+            <div class="dropdown-content">
+                <a href="#">Nueva Membresía</a>
+                <a href="#">Ver Membresías</a>
+                <a href="#">Planes</a>
+            </div>
+        </div>
+        <div class="dropdown">
+            <div class="dropbtn">Asistencias</div>
+            <div class="dropdown-content">
+                <a href="#">Registrar</a>
+                <a href="#">Ver Asistencias</a>
+            </div>
+        </div>
+        <div class="dropdown">
+            <div class="dropbtn">Ventas</div>
+            <div class="dropdown-content">
+                <a href="#">Productos</a>
+                <a href="#">Ver Ventas</a>
+            </div>
+        </div>
+        <div class="dropdown">
+            <div class="dropbtn">Profesores</div>
+            <div class="dropdown-content">
+                <a href="#">Lista</a>
+                <a href="#">Asistencia</a>
+            </div>
+        </div>
     </nav>
 
     <div class="container">
@@ -127,14 +180,18 @@
 
         <div class="bar-section">
             <div class="bar-title">Estadísticas por Disciplina</div>
-            <div class="bar"><div class="bar-inner" style="width: 70%"></div></div>
-            <div class="bar"><div class="bar-inner" style="width: 45%"></div></div>
+            <div class="bar-container">
+                <div class="bar"><div class="bar-inner" style="width: 70%"></div></div>
+                <div class="bar"><div class="bar-inner" style="width: 45%"></div></div>
+            </div>
         </div>
 
         <div class="bar-section">
             <div class="bar-title">Ventas Mensuales</div>
-            <div class="bar"><div class="bar-inner" style="width: 80%"></div></div>
-            <div class="bar"><div class="bar-inner" style="width: 30%"></div></div>
+            <div class="bar-container">
+                <div class="bar"><div class="bar-inner" style="width: 80%"></div></div>
+                <div class="bar"><div class="bar-inner" style="width: 30%"></div></div>
+            </div>
         </div>
 
         <div class="bar-section">
