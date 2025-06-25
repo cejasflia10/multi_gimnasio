@@ -1,216 +1,139 @@
-<!DOCTYPE html>
-<html lang="es">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Panel Principal - Gimnasio</title>
-    <style>
-        body {
-            margin: 0;
-            background-color: #111;
-            color: gold;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-        }
-        header {
-            background-color: #222;
-            padding: 15px 20px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            flex-wrap: wrap;
-        }
-        header h1 {
-            font-size: 20px;
-            margin: 0;
-        }
-        header .sub {
-            font-size: 14px;
-            color: #ccc;
-        }
-        nav {
-            background-color: #333;
-            display: flex;
-            flex-wrap: wrap;
-            justify-content: center;
-        }
-        nav .dropdown {
-            position: relative;
-        }
-        nav a, nav .dropbtn {
-            color: gold;
-            padding: 12px 20px;
-            text-decoration: none;
-            display: block;
-            cursor: pointer;
-        }
-        nav .dropdown-content {
-            display: none;
-            position: absolute;
-            background-color: #444;
-            min-width: 160px;
-            z-index: 1;
-        }
-        nav .dropdown-content a {
-            padding: 10px;
-        }
-        nav .dropdown:hover .dropdown-content {
-            display: block;
-        }
-        .container {
-            padding: 20px;
-            max-width: 1200px;
-            margin: auto;
-        }
-        .stats-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-            gap: 20px;
-        }
-        .card {
-            background-color: #222;
-            border-radius: 10px;
-            padding: 20px;
-            text-align: center;
-            box-shadow: 0 0 10px #000;
-        }
-        .bar-section {
-            margin-top: 30px;
-        }
-        .bar-title {
-            margin-bottom: 10px;
-            font-weight: bold;
-        }
-        .bar-container {
-            display: flex;
-            gap: 10px;
-        }
-        .bar {
-            background-color: #333;
-            border-radius: 8px;
-            overflow: hidden;
-            flex: 1;
-        }
-        .bar-inner {
-            height: 20px;
-            background-color: gold;
-        }
-        footer {
-            background-color: #222;
-            color: gold;
-            text-align: center;
-            padding: 10px;
-            position: fixed;
-            bottom: 0;
-            width: 100%;
-        }
-        @media (max-width: 768px) {
-            nav {
-                display: none;
-            }
-        }
-    </style>
-</head>
-<body>
-    <header>
-        <h1>Fight Academy Scorpions</h1>
-        <div>
-            <div><strong>Próximo vencimiento del gimnasio:</strong> 28/07/2025</div>
-            <div class="sub">Cliente activo: Juan Pérez - Vence: 30/06/2025</div>
-        </div>
-    </header>
+<?php
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+$rol = $_SESSION['rol'] ?? '';
+?>
+<link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet">
+<style>
+body { margin: 0; background-color: #111; color: gold; font-family: Arial, sans-serif; }
+nav.horizontal {
+    display: flex;
+    background-color: #222;
+    justify-content: center;
+    flex-wrap: wrap;
+    padding: 0;
+    position: sticky;
+    top: 0;
+    z-index: 1000;
+}
+nav.horizontal .dropdown {
+    position: relative;
+}
+nav.horizontal a, nav.horizontal .dropbtn {
+    color: gold;
+    padding: 14px 20px;
+    text-decoration: none;
+    display: block;
+    cursor: pointer;
+}
+nav.horizontal .dropdown-content {
+    display: none;
+    position: absolute;
+    background-color: #333;
+    min-width: 180px;
+    z-index: 1000;
+}
+nav.horizontal .dropdown-content a {
+    padding: 10px;
+    color: gold;
+    display: block;
+}
+nav.horizontal .dropdown:hover .dropdown-content {
+    display: block;
+}
+.bottom-bar {
+    display: none;
+}
+@media (max-width: 768px) {
+    nav.horizontal { display: none; }
+    .bottom-bar {
+        display: flex;
+        justify-content: space-around;
+        background-color: #222;
+        position: fixed;
+        bottom: 0;
+        width: 100%;
+        padding: 10px 0;
+        z-index: 999;
+    }
+    .bottom-bar a {
+        color: gold;
+        text-align: center;
+        font-size: 14px;
+        text-decoration: none;
+    }
+}
+</style>
 
-    <nav>
-        <div class="dropdown">
-            <div class="dropbtn">Clientes</div>
-            <div class="dropdown-content">
-                <a href="#">Agregar Cliente</a>
-                <a href="#">Ver Clientes</a>
-            </div>
-        </div>
-        <div class="dropdown">
-            <div class="dropbtn">Membresías</div>
-            <div class="dropdown-content">
-                <a href="#">Nueva Membresía</a>
-                <a href="#">Ver Membresías</a>
-                <a href="#">Planes</a>
-            </div>
-        </div>
-        <div class="dropdown">
-            <div class="dropbtn">Asistencias</div>
-            <div class="dropdown-content">
-                <a href="#">Registrar</a>
-                <a href="#">Ver Asistencias</a>
-            </div>
-        </div>
-        <div class="dropdown">
-            <div class="dropbtn">Ventas</div>
-            <div class="dropdown-content">
-                <a href="#">Productos</a>
-                <a href="#">Ver Ventas</a>
-            </div>
-        </div>
-        <div class="dropdown">
-            <div class="dropbtn">Profesores</div>
-            <div class="dropdown-content">
-                <a href="#">Lista</a>
-                <a href="#">Asistencia</a>
-            </div>
-        </div>
-    </nav>
-
-    <div class="container">
-        <div class="stats-grid">
-            <div class="card">
-                <h3>Ingresos del Día</h3>
-                <p>$4,800</p>
-            </div>
-            <div class="card">
-                <h3>Pagos del Día</h3>
-                <p>$3,500</p>
-            </div>
-            <div class="card">
-                <h3>Pagos del Mes</h3>
-                <p>$27,400</p>
-            </div>
-            <div class="card">
-                <h3>Ventas Totales</h3>
-                <p>$15,000</p>
-            </div>
-        </div>
-
-        <div class="bar-section">
-            <div class="bar-title">Estadísticas por Disciplina</div>
-            <div class="bar-container">
-                <div class="bar"><div class="bar-inner" style="width: 70%"></div></div>
-                <div class="bar"><div class="bar-inner" style="width: 45%"></div></div>
-            </div>
-        </div>
-
-        <div class="bar-section">
-            <div class="bar-title">Ventas Mensuales</div>
-            <div class="bar-container">
-                <div class="bar"><div class="bar-inner" style="width: 80%"></div></div>
-                <div class="bar"><div class="bar-inner" style="width: 30%"></div></div>
-            </div>
-        </div>
-
-        <div class="bar-section">
-            <h3>Próximos Vencimientos</h3>
-            <ul>
-                <li>Lucia Ramírez - 28/06/2025</li>
-                <li>Diego Martínez - 03/07/2025</li>
-            </ul>
-
-            <h3>Próximos Cumpleaños</h3>
-            <ul>
-                <li>Lucas Gómez - 25/06</li>
-                <li>María Suárez - 28/06</li>
-            </ul>
-        </div>
+<nav class="horizontal">
+  <div class="dropdown"><div class="dropbtn">Clientes</div>
+    <div class="dropdown-content">
+      <a href="agregar_cliente.php">Agregar Cliente</a>
+      <a href="ver_clientes.php">Ver Clientes</a>
+      <a href="disciplinas.php">Disciplinas</a>
     </div>
+  </div>
+  <div class="dropdown"><div class="dropbtn">Membresías</div>
+    <div class="dropdown-content">
+      <a href="agregar_membresia.php">Agregar Membresía</a>
+      <a href="ver_membresias.php">Ver Membresías</a>
+      <a href="planes.php">Planes</a>
+      <a href="planes_adicionales.php">Planes Adicionales</a>
+    </div>
+  </div>
+  <div class="dropdown"><div class="dropbtn">Asistencias</div>
+    <div class="dropdown-content">
+      <a href="registrar_asistencia.php">Registrar Asistencia</a>
+      <a href="ver_asistencias.php">Ver Asistencias</a>
+      <a href="registro_online.php">Registro Online</a>
+    </div>
+  </div>
+  <div class="dropdown"><div class="dropbtn">QR</div>
+    <div class="dropdown-content">
+      <a href="scanner_qr.php">Escanear QR</a>
+      <a href="generar_qr.php">Generar QR</a>
+    </div>
+  </div>
+  <div class="dropdown"><div class="dropbtn">Profesores</div>
+    <div class="dropdown-content">
+      <a href="agregar_profesor.php">Agregar Profesor</a>
+      <a href="ver_profesores.php">Ver Profesores</a>
+    </div>
+  </div>
+  <div class="dropdown"><div class="dropbtn">Ventas</div>
+    <div class="dropdown-content">
+      <a href="ventas_indumentaria.php">Indumentaria</a>
+      <a href="ventas_suplementos.php">Suplementos</a>
+      <a href="ventas_protecciones.php">Protecciones</a>
+    </div>
+  </div>
+  <div class="dropdown"><div class="dropbtn">Gimnasios</div>
+    <div class="dropdown-content">
+      <a href="agregar_gimnasio.php">Agregar Gimnasio</a>
+      <a href="ver_gimnasios.php">Ver Gimnasios</a>
+    </div>
+  </div>
+  <div class="dropdown"><div class="dropbtn">Usuarios</div>
+    <div class="dropdown-content">
+      <a href="agregar_usuario.php">Agregar Usuario</a>
+      <a href="ver_usuarios.php">Ver Usuarios</a>
+      <a href="ver_planes.php">Planes por Gimnasio</a>
+    </div>
+  </div>
+  <div class="dropdown"><div class="dropbtn">Configuraciones</div>
+    <div class="dropdown-content">
+      <a href="configuracion_general.php">General</a>
+      <a href="panel_control.php">Panel General</a>
+    </div>
+  </div>
+  <div class="dropdown"><a class="dropbtn" href="logout.php">Cerrar Sesión</a></div>
+</nav>
 
-    <footer>
-        Sistema de Gestión Multi-Gimnasio - Versión App Profesional
-    </footer>
-</body>
-</html>
+<div class="bottom-bar">
+  <a href="index.php"><i class="fas fa-home"></i><br>Inicio</a>
+  <a href="ver_clientes.php"><i class="fas fa-users"></i><br>Clientes</a>
+  <a href="ver_membresias.php"><i class="fas fa-id-card"></i><br>Membresías</a>
+  <a href="scanner_qr.php"><i class="fas fa-qrcode"></i><br>QR</a>
+  <a href="ver_ventas.php"><i class="fas fa-shopping-cart"></i><br>Ventas</a>
+</div>
