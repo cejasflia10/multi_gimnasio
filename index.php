@@ -40,8 +40,11 @@ if ($gimnasio_id > 0) {
     .info-header { text-align: right; font-size: 14px; color: #ccc; }
     nav {
       background-color: #222;
-      display: flex; flex-wrap: wrap;
+      display: flex;
+      flex-wrap: wrap;
       justify-content: center;
+      position: relative;
+      z-index: 10;
     }
     nav .dropdown {
       position: relative;
@@ -58,7 +61,7 @@ if ($gimnasio_id > 0) {
       position: absolute;
       background-color: #333;
       min-width: 180px;
-      z-index: 1;
+      z-index: 1000;
     }
     nav .dropdown-content a {
       color: gold;
@@ -69,7 +72,11 @@ if ($gimnasio_id > 0) {
     nav .dropdown:hover .dropdown-content {
       display: block;
     }
-    .container { padding: 20px; }
+    .container {
+      padding: 80px 20px 20px 20px;
+      position: relative;
+      z-index: 1;
+    }
     .stats-grid {
       display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
       gap: 20px; text-align: center; margin-bottom: 30px;
@@ -117,71 +124,73 @@ if ($gimnasio_id > 0) {
 </header>
 <nav>
   <div class="dropdown">
-    <div class="dropbtn">Clientes</div>
+    <span class="dropbtn">Clientes</span>
     <div class="dropdown-content">
-      <a href="agregar_cliente.php">Agregar Cliente</a>
-      <a href="ver_clientes.php">Ver Clientes</a>
+      <a href="agregar_cliente.php">Agregar</a>
+      <a href="ver_clientes.php">Ver</a>
       <a href="disciplinas.php">Disciplinas</a>
     </div>
   </div>
   <div class="dropdown">
-    <div class="dropbtn">Membresías</div>
+    <span class="dropbtn">Membresías</span>
     <div class="dropdown-content">
-      <a href="agregar_membresia.php">Agregar Membresía</a>
-      <a href="ver_membresias.php">Ver Membresías</a>
+      <a href="nueva_membresia.php">Nueva</a>
+      <a href="ver_membresias.php">Ver</a>
       <a href="planes.php">Planes</a>
-      <a href="planes_adicionales.php">Planes Adicionales</a>
+      <a href="adicionales.php">Adicionales</a>
     </div>
   </div>
   <div class="dropdown">
-    <div class="dropbtn">Asistencias</div>
+    <span class="dropbtn">Asistencias</span>
     <div class="dropdown-content">
-      <a href="registrar_asistencia.php">Registrar Asistencia</a>
-      <a href="ver_asistencias.php">Ver Asistencias</a>
+      <a href="registrar_asistencia.php">Registrar</a>
+      <a href="ver_asistencias.php">Ver</a>
     </div>
   </div>
   <div class="dropdown">
-    <div class="dropbtn">QR</div>
+    <span class="dropbtn">QR</span>
     <div class="dropdown-content">
-      <a href="scanner_qr.php">Escanear QR</a>
-      <a href="generar_qr.php">Generar QR</a>
+      <a href="scanner_qr.php">Escanear</a>
+      <a href="generar_qr.php">Generar</a>
     </div>
   </div>
   <div class="dropdown">
-    <div class="dropbtn">Profesores</div>
+    <span class="dropbtn">Profesores</span>
     <div class="dropdown-content">
-      <a href="agregar_profesor.php">Agregar Profesor</a>
-      <a href="ver_profesores.php">Ver Profesores</a>
+      <a href="agregar_profesor.php">Agregar</a>
+      <a href="ver_profesores.php">Ver</a>
+      <a href="ver_pagos_profesor.php">Pagos</a>
     </div>
   </div>
   <div class="dropdown">
-    <div class="dropbtn">Ventas</div>
+    <span class="dropbtn">Ventas</span>
     <div class="dropdown-content">
+      <a href="ventas_protecciones.php">Protecciones</a>
       <a href="ventas_indumentaria.php">Indumentaria</a>
       <a href="ventas_suplementos.php">Suplementos</a>
-      <a href="ventas_protecciones.php">Protecciones</a>
+      <a href="ver_ventas.php">Ver Todas</a>
     </div>
   </div>
   <div class="dropdown">
-    <div class="dropbtn">Gimnasios</div>
+    <span class="dropbtn">Gimnasios</span>
     <div class="dropdown-content">
-      <a href="agregar_gimnasio.php">Agregar Gimnasio</a>
-      <a href="ver_gimnasios.php">Ver Gimnasios</a>
+      <a href="agregar_gimnasio.php">Agregar</a>
+      <a href="ver_gimnasios.php">Ver</a>
     </div>
   </div>
   <div class="dropdown">
-    <div class="dropbtn">Usuarios</div>
+    <span class="dropbtn">Usuarios</span>
     <div class="dropdown-content">
-      <a href="agregar_usuario.php">Agregar Usuario</a>
-      <a href="ver_usuarios.php">Ver Usuarios</a>
+      <a href="agregar_usuario.php">Agregar</a>
+      <a href="ver_usuarios.php">Ver</a>
     </div>
   </div>
   <div class="dropdown">
-    <div class="dropbtn">Configuraciones</div>
+    <span class="dropbtn">Configuraciones</span>
     <div class="dropdown-content">
-      <a href="configuracion_general.php">General</a>
-      <a href="panel_control.php">Panel General</a>
+      <a href="configurar_planes.php">Planes</a>
+      <a href="configurar_accesos.php">Accesos</a>
     </div>
   </div>
-  <div class="dropdown"><a class="dropbtn" href="logout.php">Cerrar Sesión</a></div>
+  <a href="logout.php" class="dropbtn">Cerrar Sesión</a>
 </nav>
