@@ -34,6 +34,7 @@ $graf_metodos_pago = obtenerPagosPorMetodo($conexion, $gimnasio_id);
   <meta charset="UTF-8">
   <title>Panel de Control</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
     body {
@@ -42,41 +43,49 @@ $graf_metodos_pago = obtenerPagosPorMetodo($conexion, $gimnasio_id);
         font-family: Arial, sans-serif;
         margin: 0;
     }
+
     .contenido {
         padding: 20px;
         margin-left: 260px;
         max-width: 1000px;
         margin-right: auto;
     }
+
     h2 {
         margin-top: 30px;
         text-align: center;
     }
+
     .tabla-responsive {
         overflow-x: auto;
         margin-bottom: 20px;
     }
+
     table {
         width: 100%;
         border-collapse: collapse;
         background: #111;
         min-width: 600px;
     }
+
     th, td {
         border: 1px solid #333;
         padding: 8px;
         color: white;
         text-align: left;
     }
+
     th {
         background: #444;
     }
+
     .panel {
         display: flex;
         flex-wrap: wrap;
         gap: 15px;
         justify-content: center;
     }
+
     .card {
         background: #222;
         padding: 15px;
@@ -84,6 +93,7 @@ $graf_metodos_pago = obtenerPagosPorMetodo($conexion, $gimnasio_id);
         box-shadow: 0 0 10px #000;
         width: 280px;
     }
+
     .graficos-container {
         display: flex;
         flex-wrap: wrap;
@@ -91,57 +101,67 @@ $graf_metodos_pago = obtenerPagosPorMetodo($conexion, $gimnasio_id);
         gap: 20px;
         margin: 20px 0;
     }
+
     .grafico-box {
         width: 260px;
         max-width: 90%;
         background: #222;
         padding: 10px;
         border-radius: 10px;
-        height: 180px;
     }
+
     ul {
         padding-left: 20px;
     }
 
-    /* Menú inferior (solo móviles) */
     .menu-inferior {
         display: none;
     }
+
     @media (max-width: 768px) {
         .contenido {
             margin-left: 0 !important;
             padding: 10px;
         }
+
         .card {
             width: 100%;
         }
+
         table {
             min-width: 100%;
             font-size: 14px;
         }
+
+        .sidebar {
+            display: none !important;
+        }
+
         .menu-inferior {
             display: flex;
             justify-content: space-around;
+            background-color: #111;
+            color: gold;
             position: fixed;
             bottom: 0;
             left: 0;
             width: 100%;
-            background: #000;
-            border-top: 1px solid gold;
-            z-index: 1000;
+            padding: 10px 0;
+            border-top: 2px solid gold;
+            z-index: 9999;
         }
+
         .menu-inferior a {
+            text-align: center;
+            flex: 1;
+            font-size: 12px;
             color: gold;
             text-decoration: none;
-            padding: 10px 5px;
-            font-size: 14px;
-            flex: 1;
-            text-align: center;
         }
+
         .menu-inferior i {
             display: block;
             font-size: 18px;
-            margin-bottom: 3px;
         }
     }
   </style>
@@ -181,13 +201,8 @@ $graf_metodos_pago = obtenerPagosPorMetodo($conexion, $gimnasio_id);
 
   <h2>Estadísticas Visuales</h2>
   <div class="graficos-container">
-    <?php if ($graf_disciplinas->num_rows > 0): ?>
     <div class="grafico-box"><canvas id="disciplinasChart"></canvas></div>
-    <?php endif; ?>
-
-    <?php if ($graf_metodos_pago->num_rows > 0): ?>
     <div class="grafico-box"><canvas id="pagosChart"></canvas></div>
-    <?php endif; ?>
   </div>
 
   <h2>Próximos Cumpleaños</h2>
@@ -208,55 +223,45 @@ $graf_metodos_pago = obtenerPagosPorMetodo($conexion, $gimnasio_id);
   </div>
 </div>
 
-<!-- Menú inferior solo móviles -->
+<!-- Menú inferior solo para móviles -->
 <div class="menu-inferior">
-  <a href="index.php"><i class="fas fa-home"></i>Inicio</a>
-  <a href="ver_clientes.php"><i class="fas fa-users"></i>Clientes</a>
-  <a href="ver_membresias.php"><i class="fas fa-id-card"></i>Membresías</a>
-  <a href="scanner_qr.php"><i class="fas fa-qrcode"></i>QR</a>
-  <a href="asistencias.php"><i class="fas fa-calendar-check"></i>Asistencias</a>
+  <a href="index.php"><i class="fas fa-home"></i><span>Inicio</span></a>
+  <a href="ver_clientes.php"><i class="fas fa-users"></i><span>Clientes</span></a>
+  <a href="ver_membresias.php"><i class="fas fa-id-card-alt"></i><span>Membresías</span></a>
+  <a href="scanner_qr.php"><i class="fas fa-qrcode"></i><span>QR</span></a>
+  <a href="ver_asistencias.php"><i class="fas fa-calendar-check"></i><span>Asistencias</span></a>
 </div>
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
 
 <script>
-<?php if ($graf_disciplinas->num_rows > 0): ?>
-const ctx1 = document.getElementById('disciplinasChart').getContext('2d');
-new Chart(ctx1, {
-  type: 'bar',
-  data: {
-    labels: [<?php mysqli_data_seek($graf_disciplinas, 0); while ($row = $graf_disciplinas->fetch_assoc()) echo "'{$row['disciplina']}',"; ?>],
-    datasets: [{
-      label: 'Cantidad de alumnos',
-      data: [<?php mysqli_data_seek($graf_disciplinas, 0); while ($row = $graf_disciplinas->fetch_assoc()) echo "{$row['cantidad']},"; ?>],
-      backgroundColor: ['gold', 'orange', 'white', 'gray', 'red'],
-      borderRadius: 4
-    }]
-  },
-  options: {
-    responsive: true,
-    plugins: { legend: { display: false } },
-    scales: { y: { beginAtZero: true } }
-  }
-});
-<?php endif; ?>
+  const ctx1 = document.getElementById('disciplinasChart').getContext('2d');
+  const ctx2 = document.getElementById('pagosChart').getContext('2d');
 
-<?php if ($graf_metodos_pago->num_rows > 0): ?>
-const ctx2 = document.getElementById('pagosChart').getContext('2d');
-new Chart(ctx2, {
-  type: 'pie',
-  data: {
-    labels: [<?php mysqli_data_seek($graf_metodos_pago, 0); while ($pago = $graf_metodos_pago->fetch_assoc()) echo "'{$pago['metodo_pago']}',"; ?>],
-    datasets: [{
-      data: [<?php mysqli_data_seek($graf_metodos_pago, 0); while ($pago = $graf_metodos_pago->fetch_assoc()) echo "{$pago['cantidad']},"; ?>],
-      backgroundColor: ['gold', 'orange', 'white', 'gray', 'red']
-    }]
-  },
-  options: {
-    responsive: true,
-    plugins: { legend: { position: 'bottom' } }
-  }
-});
-<?php endif; ?>
+  new Chart(ctx1, {
+    type: 'bar',
+    data: {
+      labels: [<?php while ($row = $graf_disciplinas->fetch_assoc()) echo "'{$row['disciplina']}',"; ?>],
+      datasets: [{
+        label: 'Cantidad de alumnos',
+        data: [<?php mysqli_data_seek($graf_disciplinas, 0); while ($row = $graf_disciplinas->fetch_assoc()) echo "{$row['cantidad']},"; ?>],
+        backgroundColor: ['#f1c40f', '#e67e22', '#ecf0f1', '#2ecc71', '#3498db'],
+        borderRadius: 4,
+        barThickness: 40
+      }]
+    },
+    options: { responsive: true, plugins: { legend: { display: false } } }
+  });
+
+  new Chart(ctx2, {
+    type: 'pie',
+    data: {
+      labels: [<?php while ($pago = $graf_metodos_pago->fetch_assoc()) echo "'{$pago['metodo_pago']}',"; ?>],
+      datasets: [{
+        data: [<?php mysqli_data_seek($graf_metodos_pago, 0); while ($pago = $graf_metodos_pago->fetch_assoc()) echo "{$pago['cantidad']},"; ?>],
+        backgroundColor: ['gold', 'orange', 'white', 'gray', 'red']
+      }]
+    },
+    options: { responsive: true, plugins: { legend: { position: 'bottom' } } }
+  });
 </script>
 
 </body>
