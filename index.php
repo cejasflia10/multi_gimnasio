@@ -13,7 +13,6 @@ if (!isset($_SESSION['gimnasio_id'])) {
 $gimnasio_id = $_SESSION['gimnasio_id'];
 $usuario = $_SESSION['usuario'] ?? 'Usuario';
 
-// DATOS
 $pagos_dia = obtenerMonto($conexion, 'pagos', 'fecha', $gimnasio_id, 'DIA');
 $pagos_mes = obtenerMonto($conexion, 'pagos', 'fecha', $gimnasio_id, 'MES');
 $ventas_dia = obtenerMonto($conexion, 'ventas', 'fecha', $gimnasio_id, 'DIA');
@@ -24,7 +23,6 @@ $membresias_mes = obtenerMonto($conexion, 'membresias', 'fecha_inicio', $gimnasi
 $cumples = obtenerCumpleanios($conexion, $gimnasio_id);
 $vencimientos = obtenerVencimientos($conexion, $gimnasio_id);
 $clientes_dia = obtenerAsistenciasClientes($conexion, $gimnasio_id);
-$profesores_dia = obtenerAsistenciasProfesores($conexion, $gimnasio_id);
 $graf_disciplinas = obtenerDisciplinas($conexion, $gimnasio_id);
 $graf_metodos_pago = obtenerPagosPorMetodo($conexion, $gimnasio_id);
 ?>
@@ -37,104 +35,27 @@ $graf_metodos_pago = obtenerPagosPorMetodo($conexion, $gimnasio_id);
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
-    body {
-        background-color: #111;
-        color: gold;
-        font-family: Arial, sans-serif;
-        margin: 0;
-    }
-
-    .contenido {
-        padding: 20px;
-        margin-left: 260px;
-        max-width: 1000px;
-        margin-right: auto;
-    }
-
-    h2 {
-        margin-top: 30px;
-        text-align: center;
-    }
-
-    .tabla-responsive {
-        overflow-x: auto;
-        margin-bottom: 20px;
-    }
-
-    table {
-        width: 100%;
-        border-collapse: collapse;
-        background: #111;
-        min-width: 600px;
-    }
-
-    th, td {
-        border: 1px solid #333;
-        padding: 8px;
-        color: white;
-        text-align: left;
-    }
-
-    th {
-        background: #444;
-    }
-
-    .panel {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 15px;
-        justify-content: center;
-    }
-
-    .card {
-        background: #222;
-        padding: 15px;
-        border-radius: 10px;
-        box-shadow: 0 0 10px #000;
-        width: 280px;
-    }
-
-    .graficos-container {
-        display: flex;
-        flex-wrap: wrap;
-        justify-content: center;
-        gap: 20px;
-        margin: 20px 0;
-    }
-
-    .grafico-box {
-        width: 260px;
-        max-width: 90%;
-        background: #222;
-        padding: 10px;
-        border-radius: 10px;
-    }
-
-    ul {
-        padding-left: 20px;
-    }
-
+    body { background-color: #111; color: gold; font-family: Arial, sans-serif; margin: 0; }
+    .contenido { padding: 20px; margin-left: 260px; max-width: 1000px; margin-right: auto; }
+    h2 { margin-top: 30px; text-align: center; }
+    .tabla-responsive { overflow-x: auto; margin-bottom: 20px; }
+    table { width: 100%; border-collapse: collapse; background: #111; min-width: 600px; }
+    th, td { border: 1px solid #333; padding: 8px; color: white; text-align: left; }
+    th { background: #444; }
+    .panel { display: flex; flex-wrap: wrap; gap: 15px; justify-content: center; }
+    .card { background: #222; padding: 15px; border-radius: 10px; box-shadow: 0 0 10px #000; width: 280px; }
+    .graficos-container { display: flex; flex-wrap: wrap; justify-content: center; gap: 20px; margin: 20px 0; }
+    .grafico-box { width: 260px; max-width: 90%; background: #222; padding: 10px; border-radius: 10px; }
+    ul { padding-left: 20px; }
     @media (max-width: 768px) {
-        .contenido {
-            margin-left: 0 !important;
-            padding: 10px;
-        }
-
-        .card {
-            width: 100%;
-        }
-
-        table {
-            min-width: 100%;
-            font-size: 14px;
-        }
+        .contenido { margin-left: 0 !important; padding: 10px; }
+        .card { width: 100%; }
+        table { min-width: 100%; font-size: 14px; }
     }
   </style>
 </head>
 <body>
-
 <div class="contenido">
-
   <h2><?= date('H') < 12 ? '¡Buenos días' : '¡Buenas tardes' ?>, <?= $usuario ?>!</h2>
 
   <h2>Ingresos del Día - Clientes</h2>
@@ -151,25 +72,6 @@ $graf_metodos_pago = obtenerPagosPorMetodo($conexion, $gimnasio_id);
           <td><?= $c['disciplina'] ?></td>
           <td><?= $c['fecha_vencimiento'] ?? '---' ?></td>
           <td><?= $c['hora'] ?></td>
-        </tr>
-        <?php endwhile; ?>
-      <?php endif; ?>
-    </table>
-  </div>
-
-  <h2>Ingresos del Día - Profesores</h2>
-  <div class="tabla-responsive">
-    <table>
-      <tr><th>Apellido</th><th>Fecha</th><th>Ingreso</th><th>Salida</th></tr>
-      <?php if ($profesores_dia->num_rows === 0): ?>
-        <tr><td colspan="4" style="text-align:center; color: orange;">Sin asistencias de profesores hoy.</td></tr>
-      <?php else: ?>
-        <?php while ($p = $profesores_dia->fetch_assoc()): ?>
-        <tr>
-          <td><?= $p['apellido'] ?></td>
-          <td><?= $p['fecha'] ?></td>
-          <td><?= $p['hora_entrada'] ?></td>
-          <td><?= $p['hora_salida'] ?></td>
         </tr>
         <?php endwhile; ?>
       <?php endif; ?>
@@ -205,39 +107,37 @@ $graf_metodos_pago = obtenerPagosPorMetodo($conexion, $gimnasio_id);
       <li><?= $v['nombre'] . ' ' . $v['apellido'] ?> - <?= date('d/m/Y', strtotime($v['fecha_vencimiento'])) ?></li>
     <?php endwhile; ?>
   </ul>
-
 </div>
 
 <script>
-  const ctx1 = document.getElementById('disciplinasChart').getContext('2d');
-  const ctx2 = document.getElementById('pagosChart').getContext('2d');
+const ctx1 = document.getElementById('disciplinasChart').getContext('2d');
+const ctx2 = document.getElementById('pagosChart').getContext('2d');
 
-  new Chart(ctx1, {
-    type: 'bar',
-    data: {
-      labels: [<?php while ($row = $graf_disciplinas->fetch_assoc()) echo "'{$row['disciplina']}',"; ?>],
-      datasets: [{
-        label: 'Cantidad de alumnos',
-        data: [<?php mysqli_data_seek($graf_disciplinas, 0); while ($row = $graf_disciplinas->fetch_assoc()) echo "{$row['cantidad']},"; ?>],
-        backgroundColor: 'gold',
-        borderRadius: 6
-      }]
-    },
-    options: { responsive: true, plugins: { legend: { display: false } } }
-  });
+new Chart(ctx1, {
+  type: 'bar',
+  data: {
+    labels: [<?php while ($row = $graf_disciplinas->fetch_assoc()) echo "'{$row['disciplina']}',"; ?>],
+    datasets: [{
+      label: 'Cantidad de alumnos',
+      data: [<?php mysqli_data_seek($graf_disciplinas, 0); while ($row = $graf_disciplinas->fetch_assoc()) echo "{$row['cantidad']},"; ?>],
+      backgroundColor: 'gold',
+      borderRadius: 6
+    }]
+  },
+  options: { responsive: true, plugins: { legend: { display: false } } }
+});
 
-  new Chart(ctx2, {
-    type: 'pie',
-    data: {
-      labels: [<?php while ($pago = $graf_metodos_pago->fetch_assoc()) echo "'{$pago['metodo_pago']}',"; ?>],
-      datasets: [{
-        data: [<?php mysqli_data_seek($graf_metodos_pago, 0); while ($pago = $graf_metodos_pago->fetch_assoc()) echo "{$pago['cantidad']},"; ?>],
-        backgroundColor: ['gold', 'orange', 'white', 'gray', 'red']
-      }]
-    },
-    options: { responsive: true, plugins: { legend: { position: 'bottom' } } }
-  });
+new Chart(ctx2, {
+  type: 'pie',
+  data: {
+    labels: [<?php while ($pago = $graf_metodos_pago->fetch_assoc()) echo "'{$pago['metodo_pago']}',"; ?>],
+    datasets: [{
+      data: [<?php mysqli_data_seek($graf_metodos_pago, 0); while ($pago = $graf_metodos_pago->fetch_assoc()) echo "{$pago['cantidad']},"; ?>],
+      backgroundColor: ['gold', 'orange', 'white', 'gray', 'red']
+    }]
+  },
+  options: { responsive: true, plugins: { legend: { position: 'bottom' } } }
+});
 </script>
-
 </body>
 </html>
