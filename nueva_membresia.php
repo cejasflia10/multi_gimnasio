@@ -116,53 +116,55 @@ $profesores = $conexion->query("SELECT id, apellido, nombre FROM profesores");
     <button type="submit">Guardar Membresía</button>
   </form>
 
-  <script>
-    function mostrarMontoOtrosPagos() {
-      const select = document.getElementById("otros_pagos_tipo");
-      const monto = document.getElementById("monto_otros_pagos");
-      if (select.value !== "") {
-        monto.disabled = false;
-        monto.required = true;
-      } else {
-        monto.disabled = true;
-        monto.value = "";
-        monto.required = false;
-      }
-      calcularTotal();
+<script>
+  function mostrarMontoOtrosPagos() {
+    const select = document.getElementById("otros_pagos_tipo");
+    const monto = document.getElementById("monto_otros_pagos");
+    if (select.value !== "") {
+      monto.disabled = false;
+      monto.required = true;
+    } else {
+      monto.disabled = true;
+      monto.value = "";
+      monto.required = false;
     }
+    calcularTotal();
+  }
 
-    function calcularTotal() {
-      const plan = parseFloat(document.querySelector('#plan_id option:checked')?.dataset.precio || 0);
-      const adicional = parseFloat(document.querySelector('#adicional_id option:checked')?.dataset.precio || 0);
-      const otros = parseFloat(document.getElementById('monto_otros_pagos').value || 0);
-      const total = plan + adicional + otros;
-      document.getElementById('total').textContent = 'Total: $' + total.toFixed(2);
+  function calcularTotal() {
+    const plan = parseFloat(document.querySelector('#plan_id option:checked')?.dataset.precio || 0);
+    const adicional = parseFloat(document.querySelector('#adicional_id option:checked')?.dataset.precio || 0);
+    const otros = parseFloat(document.getElementById('monto_otros_pagos').value || 0);
+    const total = plan + adicional + otros;
+    document.getElementById('total').textContent = 'Total: $' + total.toFixed(2);
+  }
+
+  document.getElementById("monto_otros_pagos").addEventListener("input", calcularTotal);
+
+  document.getElementById("dni_buscar").addEventListener("input", function() {
+    const valor = this.value;
+    if (valor.length >= 2) {
+      fetch("buscar_cliente.php?filtro=" + encodeURIComponent(valor))
+        .then(r => r.json())
+        .then(data => {
+          if (data.length > 0) {
+            const cliente = data[0];
+            document.getElementById("cliente_id").value = cliente.id;
+            document.getElementById("resultado_cliente").innerHTML =
+              `<strong>Cliente:</strong> ${cliente.apellido}, ${cliente.nombre}<br>
+               <strong>DNI:</strong> ${cliente.dni}`;
+          } else {
+            document.getElementById("cliente_id").value = "";
+            document.getElementById("resultado_cliente").innerHTML = "Cliente no encontrado";
+          }
+        });
+    } else {
+      document.getElementById("cliente_id").value = "";
+      document.getElementById("resultado_cliente").innerHTML = "Cliente no encontrado";
     }
+  });
+</script>
 
-    document.getElementById("monto_otros_pagos").addEventListener("input", calcularTotal);
-
-    document.getElementById("dni_buscar").addEventListener("input", function() {
-      const valor = this.value;
-      if (valor.length >= 2) {
-        fetch("buscar_cliente.php?filtro=" + valor)
-          .then(r => r.json())
-          .then(data => {
-            if (data.length > 0) {
-              const cliente = data[0];
-              document.getElementById("cliente_id").value = cliente.id;
-              document.getElementById("resultado_cliente").innerHTML = 
-                `<strong>Cliente:</strong> ${cliente.apellido}, ${cliente.nombre}<br>
-                 <strong>DNI:</strong> ${cliente.dni}`;
-            } else {
-              document.getElementById("cliente_id").value = "";
-              document.getElementById("resultado_cliente").innerHTML = "Cliente no encontrado";
-            }
-          });
-      } else {
-        document.getElementById("cliente_id").value = "";
-        document.getElementById("resultado_cliente").innerHTML = "Cliente no encontrado";
-      }
-    });
   </script>
 </body>
 </html>
