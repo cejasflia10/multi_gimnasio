@@ -194,3 +194,32 @@ if ($gimnasio_id > 0) {
   </div>
   <a href="logout.php" class="dropbtn">Cerrar Sesión</a>
 </nav>
+<div class="container">
+  <div class="stats-grid">
+    <div class="card"><h3>Ingresos del Día</h3><p>$4,800</p></div>
+    <div class="card"><h3>Pagos del Día</h3><p>$3,500</p></div>
+    <div class="card"><h3>Pagos del Mes</h3><p>$27,400</p></div>
+    <div class="card"><h3>Ventas Totales</h3><p>$15,000</p></div>
+  </div>
+  <div class="bar-section">
+    <div class="bar-title">Próximos Vencimientos</div>
+    <ul>
+      <li>Lucia Ramírez - 28/06/2025</li>
+      <li>Diego Martínez - 03/07/2025</li>
+    </ul>
+  </div>
+  <div class="bar-section">
+    <div class="bar-title">Estadísticas por Disciplina</div>
+    <div class="bar-row">
+      <div class="bar"><div class="bar-inner-yellow"></div></div>
+      <div class="bar"><div class="bar-inner-orange"></div></div>
+    </div>
+  </div>
+  <div class="bar-section">
+    <div class="bar-title">Ventas Mensuales</div>
+    <div class="bar-row">
+      <div class="bar"><div class="bar-inner-yellow" style="width:80%"></div></div>
+      <div class="bar"><div class="bar-inner-orange" style="width:30%"></div></div>
+    </div>
+  </div>
+</div>
