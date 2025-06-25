@@ -4,6 +4,8 @@ if (session_status() === PHP_SESSION_NONE) {
 }
 include 'conexion.php';
 
+$gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
+
 // Obtener montos (pagos, ventas, membresías)
 function obtenerMonto($conexion, $tabla, $campo_fecha, $gimnasio_id, $modo = 'DIA') {
     $condicion = $modo === 'MES' 
@@ -17,7 +19,7 @@ function obtenerMonto($conexion, $tabla, $campo_fecha, $gimnasio_id, $modo = 'DI
         default => 'monto'
     };
 
-    $query = "SELECT SUM($columna) AS total FROM $tabla WHERE $condicion AND id_gimnasio = $gimnasio_id";
+    $query = "SELECT SUM($columna) AS total FROM $tabla WHERE $condicion AND gimnasio_id = $gimnasio_id";
     $resultado = $conexion->query($query);
     $fila = $resultado->fetch_assoc();
     return $fila['total'] ?? 0;
@@ -30,7 +32,7 @@ function obtenerAsistenciasClientes($conexion, $gimnasio_id) {
         FROM asistencias a
         INNER JOIN clientes c ON a.cliente_id = c.id
         LEFT JOIN membresias m ON m.cliente_id = c.id
-        WHERE a.fecha = CURDATE() AND a.id_gimnasio = $gimnasio_id
+        WHERE a.fecha = CURDATE() AND a.gimnasio_id = $gimnasio_id
         ORDER BY a.hora DESC
     ");
 }
@@ -62,7 +64,7 @@ function obtenerPagosPorMetodo($conexion, $gimnasio_id) {
         SELECT metodo_pago, COUNT(*) AS cantidad
         FROM pagos
         WHERE MONTH(fecha) = MONTH(CURDATE()) AND YEAR(fecha) = YEAR(CURDATE())
-        AND id_gimnasio = $gimnasio_id
+        AND gimnasio_id = $gimnasio_id
         GROUP BY metodo_pago
     ");
 }
@@ -86,7 +88,7 @@ function obtenerVencimientos($conexion, $gimnasio_id) {
         FROM membresias m
         INNER JOIN clientes c ON m.cliente_id = c.id
         WHERE m.fecha_vencimiento BETWEEN CURDATE() AND '$fecha_limite'
-        AND m.id_gimnasio = $gimnasio_id
+        AND m.gimnasio_id = $gimnasio_id
         ORDER BY m.fecha_vencimiento
     ");
 }
