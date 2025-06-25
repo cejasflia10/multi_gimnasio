@@ -7,22 +7,17 @@ if (!isset($_SESSION['gimnasio_id'])) {
 }
 include 'conexion.php';
 
-if ($_SERVER["REQUEST_METHOD"] == "POST") {
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $nombre = trim($_POST['nombre']);
-    $descripcion = trim($_POST['descripcion']);
-    $id_gimnasio = $_SESSION['gimnasio_id'];
+    $descripcion = trim($_POST['descripcion'] ?? '');
+    $gimnasio_id = $_SESSION['gimnasio_id'];
 
     $stmt = $conexion->prepare("INSERT INTO disciplinas (nombre, descripcion, id_gimnasio) VALUES (?, ?, ?)");
-    $stmt->bind_param("ssi", $nombre, $descripcion, $id_gimnasio);
+    $stmt->bind_param("ssi", $nombre, $descripcion, $gimnasio_id);
+    $stmt->execute();
 
-    if ($stmt->execute()) {
-        echo "<script>alert('Disciplina creada correctamente.'); window.location.href='disciplinas.php';</script>";
-    } else {
-        echo "Error: " . $stmt->error;
-    }
-
-    $stmt->close();
-    $conexion->close();
+    echo "<script>alert('Disciplina agregada correctamente'); window.location.href='disciplinas.php';</script>";
+    exit;
 }
 ?>
 
@@ -30,75 +25,73 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>Crear Disciplina</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Nueva Disciplina</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
         body {
             background-color: #111;
             color: gold;
             font-family: Arial, sans-serif;
-            margin: 0;
             padding: 20px;
+            margin: 0;
         }
 
         h2 {
             text-align: center;
-            margin-bottom: 30px;
         }
 
         form {
-            background-color: #222;
-            padding: 20px;
-            border-radius: 15px;
             max-width: 500px;
             margin: auto;
-            box-shadow: 0 0 15px rgba(255, 215, 0, 0.2);
+            background-color: #222;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 0 10px gold;
         }
 
         label {
             display: block;
-            margin-top: 15px;
+            margin-bottom: 8px;
             font-weight: bold;
         }
 
-        input[type="text"],
-        textarea {
+        input[type="text"], textarea {
             width: 100%;
             padding: 10px;
-            margin-top: 5px;
-            background-color: #333;
-            color: #fff;
+            margin-bottom: 15px;
             border: 1px solid gold;
-            border-radius: 8px;
+            border-radius: 5px;
+            background-color: #333;
+            color: gold;
         }
 
         button {
-            margin-top: 20px;
             background-color: gold;
-            color: #111;
-            padding: 12px;
+            color: black;
+            padding: 10px 20px;
             border: none;
-            width: 100%;
-            border-radius: 10px;
+            border-radius: 5px;
             font-weight: bold;
             cursor: pointer;
         }
 
-        button:hover {
-            background-color: #e0b800;
+        @media (max-width: 600px) {
+            form {
+                padding: 15px;
+            }
         }
     </style>
 </head>
 <body>
-    <h2>Registrar Nueva Disciplina</h2>
+    <h2>Nueva Disciplina</h2>
     <form method="POST">
-        <label for="nombre">Nombre de la disciplina:</label>
+        <label for="nombre">Nombre:</label>
         <input type="text" name="nombre" id="nombre" required>
 
-        <label for="descripcion">Descripción (opcional):</label>
+        <label for="descripcion">Descripción:</label>
         <textarea name="descripcion" id="descripcion" rows="4"></textarea>
 
-        <button type="submit">Guardar Disciplina</button>
+        <button type="submit">Guardar</button>
     </form>
 </body>
 </html>
