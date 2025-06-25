@@ -155,20 +155,28 @@ $query_ingresos = "
     WHERE asistencias.fecha = '$hoy' AND asistencias.gimnasio_id = $gimnasio_id
     ORDER BY asistencias.hora DESC
 ";
-$resultado_ingresos = $conexion->query($query_ingresos);
-?>
-
-<div class="card" style="margin-bottom: 20px;">
-    <h3>Ingresos de Clientes Hoy</h3>
-    <?php if ($resultado_ingresos->num_rows > 0): ?>
-        <ul style="list-style: none; padding: 0; color: #fff;">
-            <?php while ($fila = $resultado_ingresos->fetch_assoc()): ?>
-                <li><?= $fila['nombre'] . ' ' . $fila['apellido'] ?> - <?= date('H:i', strtotime($fila['hora'])) ?></li>
-            <?php endwhile; ?>
-        </ul>
-    <?php else: ?>
-        <p>No se registraron ingresos hoy.</p>
-    <?php endif; ?>
+<!-- Ingresos del Día (conectado a asistencias) -->
+<div class="card" style="margin-bottom:20px;">
+  <h3>Ingresos del Día</h3>
+  <?php
+  $hoy = date('Y-m-d');
+  $query = "
+    SELECT c.nombre, c.apellido, a.hora
+    FROM asistencias a
+    JOIN clientes c ON a.cliente_id = c.id
+    WHERE a.fecha = '$hoy' AND c.gimnasio_id = $gimnasio_id
+    ORDER BY a.hora DESC
+  ";
+  $res = $conexion->query($query);
+  if ($res && $res->num_rows > 0): ?>
+    <ul style="list-style:none; padding:0; color:#fff;">
+      <?php while ($fila = $res->fetch_assoc()): ?>
+        <li><?= $fila['nombre'] . ' ' . $fila['apellido'] . ' – ' . date('H:i', strtotime($fila['hora'])) ?></li>
+      <?php endwhile; ?>
+    </ul>
+  <?php else: ?>
+    <p>No se registraron ingresos hoy.</p>
+  <?php endif; ?>
 </div>
 
   <div class="bar-section">
