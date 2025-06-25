@@ -145,16 +145,6 @@ dropdown-content">
   <a href="logout.php" class="dropbtn">Cerrar Sesión</a>
 </nav>
 
-<?php
-// Mostrar ingresos del día
-$hoy = date('Y-m-d');
-$query_ingresos = "
-    SELECT clientes.nombre, clientes.apellido, asistencias.hora 
-    FROM asistencias 
-    JOIN clientes ON asistencias.cliente_id = clientes.id 
-    WHERE asistencias.fecha = '$hoy' AND asistencias.gimnasio_id = $gimnasio_id
-    ORDER BY asistencias.hora DESC
-";
 <!-- Ingresos del Día (conectado a asistencias) -->
 <div class="card" style="margin-bottom:20px;">
   <h3>Ingresos del Día</h3>
