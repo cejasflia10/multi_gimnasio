@@ -13,10 +13,10 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
     $gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
 
     $stmt = $conexion->prepare("INSERT INTO pagos 
-        (cliente_id, membresia_id, fecha, monto, forma_pago, gimnasio_id) 
-        VALUES (?, ?, ?, ?, ?, ?)");
+        (cliente_id, membresia_id, fecha, monto, forma_pago, gimnasio_id, fecha_pago) 
+        VALUES (?, ?, ?, ?, ?, ?, CURDATE())");
 
-    $stmt->bind_param("iisdsi", $cliente_id, $membresia_id, $fecha, $monto, $forma_pago, $gimnasio_id);
+    $stmt->bind_param("iidsis", $cliente_id, $membresia_id, $fecha, $monto, $forma_pago, $gimnasio_id);
 
     if ($stmt->execute()) {
         echo "<script>alert('Pago registrado correctamente'); window.location.href='ver_pagos.php';</script>";
