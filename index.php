@@ -26,7 +26,7 @@ $vencimientos = obtenerVencimientos($conexion,$gimnasio_id);
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
   <style>
-    body { background:#111; color:gold; font-family:Arial; margin:0; padding:20px 40px 20px 260px; }
+    body{ background:#111; color:gold; font-family:Arial; margin:0; padding:20px; margin-left:260px; }
     h1,h2{text-align:center;}
     .cuadro{ background:#222; margin:15px auto; padding:15px; border-radius:8px; width:90%; }
     table{ width:100%; border-collapse:collapse; margin-top:10px; }
