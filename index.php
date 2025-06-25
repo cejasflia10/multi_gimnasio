@@ -102,6 +102,11 @@ $graf_metodos_pago = obtenerPagosPorMetodo($conexion, $gimnasio_id);
     ul {
         padding-left: 20px;
     }
+
+    /* Menú inferior (solo móviles) */
+    .menu-inferior {
+        display: none;
+    }
     @media (max-width: 768px) {
         .contenido {
             margin-left: 0 !important;
@@ -113,6 +118,30 @@ $graf_metodos_pago = obtenerPagosPorMetodo($conexion, $gimnasio_id);
         table {
             min-width: 100%;
             font-size: 14px;
+        }
+        .menu-inferior {
+            display: flex;
+            justify-content: space-around;
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            background: #000;
+            border-top: 1px solid gold;
+            z-index: 1000;
+        }
+        .menu-inferior a {
+            color: gold;
+            text-decoration: none;
+            padding: 10px 5px;
+            font-size: 14px;
+            flex: 1;
+            text-align: center;
+        }
+        .menu-inferior i {
+            display: block;
+            font-size: 18px;
+            margin-bottom: 3px;
         }
     }
   </style>
@@ -178,6 +207,16 @@ $graf_metodos_pago = obtenerPagosPorMetodo($conexion, $gimnasio_id);
     <div class="card"><h3>Membresías del Mes</h3><p>$<?= number_format($membresias_mes, 2, ',', '.') ?></p></div>
   </div>
 </div>
+
+<!-- Menú inferior solo móviles -->
+<div class="menu-inferior">
+  <a href="index.php"><i class="fas fa-home"></i>Inicio</a>
+  <a href="ver_clientes.php"><i class="fas fa-users"></i>Clientes</a>
+  <a href="ver_membresias.php"><i class="fas fa-id-card"></i>Membresías</a>
+  <a href="scanner_qr.php"><i class="fas fa-qrcode"></i>QR</a>
+  <a href="asistencias.php"><i class="fas fa-calendar-check"></i>Asistencias</a>
+</div>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
 
 <script>
 <?php if ($graf_disciplinas->num_rows > 0): ?>
