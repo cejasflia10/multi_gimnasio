@@ -1,4 +1,3 @@
-
 <?php
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
@@ -99,7 +98,7 @@ if ($gimnasio_id > 0) {
     .bar-inner-orange { background-color: orange; height: 100%; width: 40%; }
     footer {
       text-align: center; background-color: #222; color: gold;
-      padding: 10px; position: fixed; bottom: 0; width: 100%; font-size: 14px;
+      padding: 10px; font-size: 14px;
     }
     .bottom-bar { display: none; }
     @media (max-width: 768px) {
@@ -195,38 +194,16 @@ if ($gimnasio_id > 0) {
   </div>
   <a href="logout.php" class="dropbtn">Cerrar Sesión</a>
 </nav>
-<div class="container">
-  <div class="stats-grid">
-    <div class="card"><h3>Ingresos del Día</h3><p>$4,800</p></div>
-    <div class="card"><h3>Pagos del Día</h3><p>$3,500</p></div>
-    <div class="card"><h3>Pagos del Mes</h3><p>$27,400</p></div>
-    <div class="card"><h3>Ventas Totales</h3><p>$15,000</p></div>
-  </div>
-  <div class="bar-section">
-    <div class="bar-title">Próximos Vencimientos</div>
-    <ul>
-      <li>Lucia Ramírez - 28/06/2025</li>
-      <li>Diego Martínez - 03/07/2025</li>
-    </ul>
-    <div class="bar-title">Próximos Cumpleaños</div>
-    <ul>
-      <li>Sofía Fernández - 26/06</li>
-      <li>Tomás Aguirre - 30/06</li>
-    </ul>
-  </div>
-  </div>
-  <div class="bar-section">
-    <div class="bar-title">Estadísticas por Disciplina</div>
-    <div class="bar-row">
-      <div class="bar"><div class="bar-inner-yellow"></div></div>
-      <div class="bar"><div class="bar-inner-orange"></div></div>
-    </div>
-  </div>
-  <div class="bar-section">
-    <div class="bar-title">Ventas Mensuales</div>
-    <div class="bar-row">
-      <div class="bar"><div class="bar-inner-yellow" style="width:80%"></div></div>
-      <div class="bar"><div class="bar-inner-orange" style="width:30%"></div></div>
-    </div>
-  </div>
+<footer>
+  Panel de administración - <?= $gimnasio_nombre ?>
+</footer>
+<div class="bottom-bar">
+  <a href="index.php"><i class="fas fa-home"></i><br>Inicio</a>
+  <a href="ver_clientes.php"><i class="fas fa-users"></i><br>Clientes</a>
+  <a href="ver_membresias.php"><i class="fas fa-id-card"></i><br>Membresías</a>
+  <a href="scanner_qr.php"><i class="fas fa-qrcode"></i><br>QR</a>
+  <a href="registrar_asistencia.php"><i class="fas fa-calendar-check"></i><br>Asistencias</a>
+  <a href="ver_ventas.php"><i class="fas fa-shopping-cart"></i><br>Ventas</a>
 </div>
+</body>
+</html>
