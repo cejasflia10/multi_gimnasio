@@ -156,6 +156,12 @@ body {
         <a href="ficha_habitos.php"><i class="fas fa-edit"></i> Ficha de Hábitos</a>
         <a href="ver_habitos_profesor.php?id=<?= $_SESSION['cliente_id'] ?? 0 ?>"><i class="fas fa-eye"></i> Ver Ficha</a>
         <a href="ver_seguimiento_cliente.php"><i class="fas fa-list"></i> Seguimiento Semanal</a>
+    
+    <!-- NUEVA SECCIÓN: FICHA NUTRICIONAL -->
+    <div class="nutricion">
+        <h3>📋 Ficha Nutricional</h3>
+        <a href="ficha_habitos.php?dni=<?= $cliente['dni'] ?>" class="btn-descargar">Completar Hábitos Alimenticios</a><br><br>
+        <a href="ver_seguimiento_cliente.php?dni=<?= $cliente['dni'] ?>" class="btn-descargar">Ver Seguimiento Semanal</a>
     </div>
     <?php endif; ?>
 
