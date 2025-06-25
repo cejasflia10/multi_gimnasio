@@ -127,8 +127,6 @@ if ($gimnasio_id) {
     <div class="dropdown-content"><a href="configurar_planes.php">Planes</a><a href="configurar_accesos.php">Accesos</a></div>
   </div>
   
-  
-  
   <div class="dropdown"><span class="dropbtn">Panel del Cliente</span>
     <div class="dropdown-content">
       <a href="cliente_acceso.php">Acceso DNI</a>
