@@ -125,4 +125,11 @@ if ($gimnasio_id > 0) {
   <a href="ver_clientes.php"><i class="fas fa-users"></i><br>Clientes</a>
   <a href="ver_membresias.php"><i class="fas fa-id-card"></i><br>Membresías</a>
   <a href="scanner_qr.php"><i class="fas fa-qrcode"></i><br>QR</a>
-  <a href="registrar_asistencia
+  <a href="registrar_asistencia.php"><i class="fas fa-calendar-check"></i><br>Asistencias</a>
+  <a href="ver_ventas.php"><i class="fas fa-shopping-cart"></i><br>Ventas</a>
+</div>
+<footer>
+  Sistema de Gestión Multi-Gimnasio - Versión App Profesional
+</footer>
+</body>
+</html>
