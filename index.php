@@ -38,6 +38,20 @@ if ($gimnasio_id > 0) {
     }
     header h1 { font-size: 22px; color: gold; margin: 0; }
     .info-header { text-align: right; font-size: 14px; color: #ccc; }
+    nav {
+      background-color: #222;
+      display: flex; flex-wrap: wrap;
+      justify-content: center;
+    }
+    nav a {
+      color: gold;
+      padding: 12px 20px;
+      text-decoration: none;
+      display: block;
+    }
+    nav a:hover {
+      background-color: #333;
+    }
     .container { padding: 20px; }
     .stats-grid {
       display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
@@ -62,10 +76,9 @@ if ($gimnasio_id > 0) {
       text-align: center; background-color: #222; color: gold;
       padding: 10px; position: fixed; bottom: 0; width: 100%; font-size: 14px;
     }
-    .bottom-bar {
-      display: none;
-    }
+    .bottom-bar { display: none; }
     @media (max-width: 768px) {
+      nav { display: none; }
       .bottom-bar {
         display: flex; justify-content: space-around;
         background-color: #222; padding: 10px 0;
@@ -85,7 +98,18 @@ if ($gimnasio_id > 0) {
     Cliente activo: <?= $cliente_activo ?>
   </div>
 </header>
-<?php include 'menu.php'; ?>
+<nav>
+  <a href="ver_clientes.php">Clientes</a>
+  <a href="ver_membresias.php">Membresías</a>
+  <a href="ver_asistencias.php">Asistencias</a>
+  <a href="scanner_qr.php">QR</a>
+  <a href="ver_profesores.php">Profesores</a>
+  <a href="ver_ventas.php">Ventas</a>
+  <a href="ver_gimnasios.php">Gimnasios</a>
+  <a href="ver_usuarios.php">Usuarios</a>
+  <a href="configuracion_general.php">Configuraciones</a>
+  <a href="logout.php">Cerrar Sesión</a>
+</nav>
 <div class="container">
   <div class="stats-grid">
     <div class="card"><h3>Ingresos del Día</h3><p>$4,800</p></div>
@@ -125,7 +149,7 @@ if ($gimnasio_id > 0) {
   <a href="ver_clientes.php"><i class="fas fa-users"></i><br>Clientes</a>
   <a href="ver_membresias.php"><i class="fas fa-id-card"></i><br>Membresías</a>
   <a href="scanner_qr.php"><i class="fas fa-qrcode"></i><br>QR</a>
-  <a href="registrar_asistencia.php"><i class="fas fa-calendar-check"></i><br>Asistencias</a>
+  <a href="ver_asistencias.php"><i class="fas fa-calendar-check"></i><br>Asistencias</a>
   <a href="ver_ventas.php"><i class="fas fa-shopping-cart"></i><br>Ventas</a>
 </div>
 <footer>
