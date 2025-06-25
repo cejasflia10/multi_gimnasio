@@ -3,7 +3,7 @@ if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 include 'conexion.php';
-include 'funciones_panel.php'; // Asegurate que este archivo esté con las funciones actualizadas
+include 'funciones.php'; // Asegurate que este archivo esté con las funciones actualizadas
 
 $gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
 $rol = $_SESSION['rol'] ?? '';
