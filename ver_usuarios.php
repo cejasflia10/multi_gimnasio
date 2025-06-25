@@ -1,7 +1,6 @@
 <?php
 include 'conexion.php';
 if (session_status() === PHP_SESSION_NONE) session_start();
-include 'menu.php';
 
 $resultado = $conexion->query("SELECT * FROM usuarios");
 ?>
