@@ -4,8 +4,6 @@ if (session_status() === PHP_SESSION_NONE) {
 }
 include 'conexion.php';
 
-$gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
-
 // Obtener montos (pagos, ventas, membresías)
 function obtenerMonto($conexion, $tabla, $campo_fecha, $gimnasio_id, $modo = 'DIA') {
     $condicion = $modo === 'MES' 
