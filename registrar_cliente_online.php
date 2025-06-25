@@ -7,8 +7,13 @@ include 'conexion.php';
 $gimnasio_id = $_GET['gimnasio'] ?? '';
 $mensaje = $_GET['mensaje'] ?? '';
 
-// Obtener disciplinas del gimnasio
-$disciplinas = $conexion->query("SELECT id, nombre FROM disciplinas WHERE gimnasio_id = $gimnasio_id");
+$disciplinas = [];
+if ($gimnasio_id) {
+    $consulta = $conexion->query("SELECT id, nombre FROM disciplinas WHERE id_gimnasio = $gimnasio_id");
+    while ($fila = $consulta->fetch_assoc()) {
+        $disciplinas[] = $fila;
+    }
+}
 ?>
 
 <!DOCTYPE html>
@@ -91,10 +96,9 @@ $disciplinas = $conexion->query("SELECT id, nombre FROM disciplinas WHERE gimnas
 
     <label>Disciplina:</label>
     <select name="disciplina" required>
-        <option value="">-- Seleccionar disciplina --</option>
-        <?php while ($d = $disciplinas->fetch_assoc()): ?>
-            <option value="<?= htmlspecialchars($d['nombre']) ?>"><?= htmlspecialchars($d['nombre']) ?></option>
-        <?php endwhile; ?>
+        <?php foreach ($disciplinas as $disciplina): ?>
+            <option value="<?= htmlspecialchars($disciplina['nombre']) ?>"><?= htmlspecialchars($disciplina['nombre']) ?></option>
+        <?php endforeach; ?>
     </select>
 
     <input type="submit" value="Registrar Cliente">
