@@ -207,6 +207,12 @@ if ($gimnasio_id > 0) {
       <li>Lucia Ramírez - 28/06/2025</li>
       <li>Diego Martínez - 03/07/2025</li>
     </ul>
+    <div class="bar-title">Próximos Cumpleaños</div>
+    <ul>
+      <li>Sofía Fernández - 26/06</li>
+      <li>Tomás Aguirre - 30/06</li>
+    </ul>
+  </div>
   </div>
   <div class="bar-section">
     <div class="bar-title">Estadísticas por Disciplina</div>
