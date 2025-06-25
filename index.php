@@ -8,11 +8,12 @@ $gimnasio_nombre = 'Gimnasio';
 $proximo_vencimiento = '';
 $cliente_activo = '';
 if ($gimnasio_id > 0) {
-    $res = $conexion->query("SELECT nombre, fecha_vencimiento FROM gimnasios WHERE id = $gimnasio_id LIMIT 1");
-    if ($fila = $res->fetch_assoc()) {
-        $gimnasio_nombre = $fila['nombre'];
-        $proximo_vencimiento = $fila['fecha_vencimiento'];
-    }
+    $res_cli = $conexion->query("SELECT clientes.nombre, clientes.apellido, membresias.fecha_vencimiento 
+       FROM clientes 
+       JOIN membresias ON clientes.id = membresias.cliente_id 
+       WHERE clientes.gimnasio_id = $gimnasio_id 
+       ORDER BY membresias.fecha_vencimiento ASC LIMIT 1");
+    
     $res_cli = $conexion->query("SELECT nombre, apellido, fecha_vencimiento FROM clientes 
         JOIN membresias ON clientes.id = membresias.cliente_id 
         WHERE clientes.gimnasio_id = $gimnasio_id 
