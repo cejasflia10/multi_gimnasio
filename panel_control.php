@@ -1,75 +1,95 @@
 <?php
-session_start();
-if (!isset($_SESSION['rol']) || $_SESSION['rol'] !== 'admin') {
-    die("Acceso denegado.");
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
 }
 include 'conexion.php';
+include 'funciones.php';
 
-$consulta = "SELECT u.id, u.usuario, u.email, u.rol, g.nombre AS gimnasio, 
-                    u.permiso_clientes, u.permiso_membresias, u.perm_profesores, 
-                    u.perm_ventas, u.puede_ver_panel, u.puede_ver_asistencias
-             FROM usuarios u 
-             LEFT JOIN gimnasios g ON u.id_gimnasio = g.id";
-$resultado = $conexion->query($consulta);
+$gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
+$rol = $_SESSION['rol'] ?? '';
+$nombre_gimnasio = '';
+
+if ($gimnasio_id) {
+    $res = $conexion->query("SELECT nombre FROM gimnasios WHERE id = $gimnasio_id");
+    if ($fila = $res->fetch_assoc()) {
+        $nombre_gimnasio = $fila['nombre'];
+    }
+}
+
+$pagos_dia = obtenerMonto($conexion, 'membresias', 'fecha_pago', $gimnasio_id, 'DIA');
+$pagos_mes = obtenerMonto($conexion, 'membresias', 'fecha_pago', $gimnasio_id, 'MES');
+$ventas_mes = obtenerVentasTotales($conexion, $gimnasio_id);
+$asistencias_clientes = obtenerAsistenciasClientes($conexion, $gimnasio_id);
+$cumpleanios = obtenerCumpleanios($conexion, $gimnasio_id);
+$vencimientos = obtenerVencimientos($conexion, $gimnasio_id);
 ?>
 
 <!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>Usuarios</title>
+    <title>Panel General - <?= $nombre_gimnasio ?></title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet">
     <style>
-        body { background-color: #111; color: gold; font-family: Arial; margin: 0; padding: 20px; }
-        h2 { text-align: center; }
-        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-        th, td { border: 1px solid gold; padding: 10px; text-align: center; }
-        th { background-color: #222; }
-        td { background-color: #000; }
-        a.button { padding: 6px 12px; background-color: gold; color: black; text-decoration: none; border-radius: 5px; }
-        .acciones { display: flex; gap: 10px; justify-content: center; }
-        @media (max-width: 768px) {
-            table, thead, tbody, th, td, tr { display: block; }
-            td { text-align: left; position: relative; padding-left: 50%; }
-            td::before { position: absolute; left: 10px; color: #ccc; }
+        body {
+            background: #111;
+            color: gold;
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px 40px 20px 260px;
+        }
+        h1, h2 {
+            text-align: center;
+        }
+        .cuadro {
+            background: #222;
+            margin: 15px 0;
+            padding: 20px;
+            border-radius: 8px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+        }
+        th, td {
+            padding: 10px;
+            text-align: left;
+            border-bottom: 1px solid #444;
+        }
+        .rojo {
+            color: red;
+        }
+        ul {
+            padding-left: 20px;
         }
     </style>
 </head>
 <body>
-<h2>Listado de Usuarios</h2>
-<table>
-    <thead>
-        <tr>
-            <th>Usuario</th>
-            <th>Email</th>
-            <th>Rol</th>
-            <th>Gimnasio</th>
-            <th>Permisos</th>
-            <th>Acciones</th>
-        </tr>
-    </thead>
-    <tbody>
-        <?php while ($fila = $resultado->fetch_assoc()): ?>
-            <tr>
-                <td><?= htmlspecialchars($fila['usuario']) ?></td>
-                <td><?= htmlspecialchars($fila['email']) ?></td>
-                <td><?= htmlspecialchars($fila['rol']) ?></td>
-                <td><?= htmlspecialchars($fila['gimnasio']) ?></td>
-                <td>
-                    <?= $fila['permiso_clientes'] ? 'Clientes | ' : '' ?>
-                    <?= $fila['permiso_membresias'] ? 'Membresías | ' : '' ?>
-                    <?= $fila['perm_profesores'] ? 'Profesores | ' : '' ?>
-                    <?= $fila['perm_ventas'] ? 'Ventas | ' : '' ?>
-                    <?= $fila['puede_ver_panel'] ? 'Panel | ' : '' ?>
-                    <?= $fila['puede_ver_asistencias'] ? 'Asistencias' : '' ?>
-                </td>
-                <td class="acciones">
-                    <a class="button" href="editar_usuario.php?id=<?= $fila['id'] ?>">Editar</a>
-                    <a class="button" href="eliminar_usuario.php?id=<?= $fila['id'] ?>" onclick="return confirm('¿Estás seguro?')">Eliminar</a>
-                </td>
-            </tr>
-        <?php endwhile; ?>
-    </tbody>
-</table>
+    <?php include 'menu.php'; ?>
+    <h1>Panel General - <?= $nombre_gimnasio ?></h1>
+
+    <div class="cuadro">
+        <h2>Resumen Económico</h2>
+        <p><strong>Pagos del Día:</strong> $<?= $pagos_dia ?></p>
+        <p><strong>Pagos del Mes:</strong> $<?= $pagos_mes ?></p>
+        <p><strong>Ventas del Mes (Total):</strong> $<?= $ventas_mes ?></p>
+    </div>
+
+    <div class="cuadro">
+        <h2>Asistencias del Día</h2>
+        <?= $asistencias_clientes ?>
+    </div>
+
+    <div class="cuadro">
+        <h2>Próximos Cumpleaños</h2>
+        <?= $cumpleanios ?>
+    </div>
+
+    <div class="cuadro">
+        <h2>Vencimientos Próximos</h2>
+        <?= $vencimientos ?>
+    </div>
 </body>
 </html>
