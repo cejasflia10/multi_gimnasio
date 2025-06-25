@@ -1,5 +1,6 @@
 <?php
 include 'conexion.php';
+include 'menu_horizontal.php';
 
 // Agregar nuevo producto
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['nombre'])) {

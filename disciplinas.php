@@ -8,6 +8,8 @@ if (!isset($_SESSION['gimnasio_id'])) {
 }
 
 include 'conexion.php';
+include 'menu_horizontal.php';
+
 $gimnasio_id = intval($_SESSION['gimnasio_id']);
 
 $resultado = $conexion->query("SELECT id, nombre FROM disciplinas WHERE id_gimnasio = $gimnasio_id");

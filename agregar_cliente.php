@@ -1,6 +1,7 @@
 <?php
 session_start();
 include 'conexion.php';
+include 'menu_horizontal.php';
 require_once 'phpqrcode/qrlib.php'; // Asegúrate de tener esta librería instalada
 
 $gimnasio_id = $_SESSION['gimnasio_id'] ?? null;

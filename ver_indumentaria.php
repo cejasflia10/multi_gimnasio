@@ -1,5 +1,7 @@
 <?php
 include 'conexion.php';
+include 'menu_horizontal.php';
+
 $result = $conexion->query("SELECT * FROM indumentaria");
 ?>
 <table>

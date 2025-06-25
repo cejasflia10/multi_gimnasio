@@ -1,5 +1,7 @@
 <?php
 include 'conexion.php';
+include 'menu_horizontal.php';
+
 if (!isset($_GET['dni'])) {
     die("Acceso inválido.");
 }

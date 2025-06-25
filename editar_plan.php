@@ -3,6 +3,7 @@ if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 include 'conexion.php';
+include 'menu_horizontal.php';
 
 if (!isset($_GET['id'])) {
     die("ID de plan no especificado.");

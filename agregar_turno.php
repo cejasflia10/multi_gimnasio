@@ -1,5 +1,6 @@
 <?php
 include 'conexion.php';
+include 'menu_horizontal.php';
 
 $dias = $conexion->query("SELECT * FROM dias");
 $horarios = $conexion->query("SELECT * FROM horarios");

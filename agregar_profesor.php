@@ -4,6 +4,7 @@ if (!isset($_SESSION['gimnasio_id'])) {
     die("Error: sesión no iniciada.");
 }
 include 'conexion.php';
+include 'menu_horizontal.php';
 
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
     $apellido = trim($_POST["apellido"]);

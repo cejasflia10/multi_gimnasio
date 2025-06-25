@@ -3,6 +3,8 @@ if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 include 'conexion.php';
+include 'menu_horizontal.php';
+
 $gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
 $resultado = $conexion->query("SELECT * FROM planes WHERE gimnasio_id = $gimnasio_id");
 ?>

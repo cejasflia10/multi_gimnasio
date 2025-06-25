@@ -3,7 +3,7 @@ if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 include 'conexion.php';
-include 'menu.php';
+include 'menu_horizontal.php';
 
 if (!isset($_GET['id'])) {
     echo "<div class='error'>ID de cliente no proporcionado.</div>";

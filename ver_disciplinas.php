@@ -1,6 +1,8 @@
 <?php
 session_start();
 include 'conexion.php';
+include 'menu_horizontal.php';
+
 if (!isset($_SESSION['gimnasio_id'])) die("Acceso denegado.");
 $gimnasio_id = $_SESSION['gimnasio_id'];
 $disciplinas = $conexion->query("SELECT * FROM disciplinas WHERE gimnasio_id = $gimnasio_id");

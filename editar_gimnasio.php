@@ -2,6 +2,7 @@
 include 'conexion.php';
 if (session_status() === PHP_SESSION_NONE) session_start();
 include 'menu.php';
+include 'menu_horizontal.php';
 
 if (!isset($_GET['id'])) {
     die("ID de gimnasio no especificado.");

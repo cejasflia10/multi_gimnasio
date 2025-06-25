@@ -1,5 +1,7 @@
 <?php
 include 'conexion.php';
+include 'menu_horizontal.php';
+
 session_start();
 
 if (!isset($_SESSION['usuario'])) {

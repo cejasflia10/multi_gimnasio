@@ -4,6 +4,7 @@ if (!isset($_SESSION['usuario_id'])) {
     die("Acceso denegado.");
 }
 include 'conexion.php';
+include 'menu_horizontal.php';
 
 if (!isset($_GET['usuario_id'])) {
     die("ID de usuario no proporcionado.");

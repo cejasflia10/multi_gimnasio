@@ -1,5 +1,6 @@
 <?php
 include 'conexion.php';
+include 'menu_horizontal.php';
 
 $categoria_id = isset($_GET['categoria']) ? $_GET['categoria'] : '';
 $condicion = $categoria_id ? "WHERE p.categoria = $categoria_id" : '';

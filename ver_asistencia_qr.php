@@ -1,7 +1,7 @@
 <?php
 session_start();
 include 'conexion.php';
-include 'menu.php';
+include 'menu_horizontal.php';
 
 $gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
 $es_admin = $_SESSION['rol'] === 'admin';

@@ -1,6 +1,7 @@
 <?php
 session_start();
 include 'conexion.php';
+include 'menu_horizontal.php';
 
 // Verificamos si hay sesión y el gimnasio_id está presente
 if (!isset($_SESSION['gimnasio_id'])) {

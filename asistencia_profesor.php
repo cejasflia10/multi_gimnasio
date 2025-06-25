@@ -5,6 +5,7 @@ if (!isset($_SESSION['usuario'])) {
     exit();
 }
 include 'conexion.php';
+include 'menu_horizontal.php';
 
 $mensaje = "";
 if ($_SERVER["REQUEST_METHOD"] === "POST") {
