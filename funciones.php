@@ -41,7 +41,7 @@ function obtenerAsistenciasProfesores($conexion, $gimnasio_id) {
         SELECT p.apellido, r.fecha, r.hora_entrada, r.hora_salida
         FROM registro_asistencias_profesores r
         INNER JOIN profesores p ON r.profesor_id = p.id
-        WHERE r.fecha = CURDATE() AND r.gimnasio_id = $gimnasio_id
+        WHERE a.fecha = CURDATE() AND c.gimnasio_id = $gimnasio_id
         ORDER BY r.hora_entrada DESC
     ");
 }
