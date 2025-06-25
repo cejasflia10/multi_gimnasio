@@ -8,27 +8,32 @@ include 'menu.php';
 $gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
 $rol = $_SESSION['rol'] ?? '';
 
-// Funciones para obtener montos
+// FUNCIONES
 function obtenerMonto($conexion, $tabla, $campo_fecha, $gimnasio_id, $modo = 'DIA') {
     $condicion = $modo === 'MES'
         ? "MONTH($campo_fecha) = MONTH(CURDATE()) AND YEAR($campo_fecha) = YEAR(CURDATE())"
         : "$campo_fecha = CURDATE()";
-    $columna = ($tabla === 'ventas') ? 'monto_total' : (($tabla === 'membresias') ? 'total' : 'monto');
-    $sql = "SELECT SUM($columna) AS total FROM $tabla WHERE $condicion AND gimnasio_id = $gimnasio_id";
-    $resultado = $conexion->query($sql);
+
+    $columna = match ($tabla) {
+        'ventas' => 'monto_total',
+        'membresias' => 'total',
+        default => 'monto'
+    };
+
+    $query = "SELECT SUM($columna) AS total FROM $tabla 
+              WHERE $condicion AND gimnasio_id = $gimnasio_id";
+    $resultado = $conexion->query($query);
     $fila = $resultado->fetch_assoc();
     return $fila['total'] ?? 0;
 }
 
-// Función para cumpleaños
 function obtenerCumpleanios($conexion, $gimnasio_id) {
-    $hoy_mes = date('m');
+    $mes_actual = date('m');
     $sql = "SELECT nombre, apellido, fecha_nacimiento FROM clientes 
-            WHERE MONTH(fecha_nacimiento) = $hoy_mes AND gimnasio_id = $gimnasio_id";
+            WHERE MONTH(fecha_nacimiento) = $mes_actual AND gimnasio_id = $gimnasio_id";
     return $conexion->query($sql);
 }
 
-// Función para vencimientos próximos
 function obtenerVencimientos($conexion, $gimnasio_id) {
     $hoy = date('Y-m-d');
     $limite = date('Y-m-d', strtotime('+10 days'));
@@ -36,10 +41,11 @@ function obtenerVencimientos($conexion, $gimnasio_id) {
             FROM membresias 
             JOIN clientes ON clientes.id = membresias.cliente_id 
             WHERE membresias.fecha_vencimiento BETWEEN '$hoy' AND '$limite'
-            AND membresias.gimnasio_id = $gimnasio_id";
+              AND membresias.gimnasio_id = $gimnasio_id";
     return $conexion->query($sql);
 }
 
+// DATOS
 $pagos_dia = obtenerMonto($conexion, 'pagos', 'fecha', $gimnasio_id, 'DIA');
 $pagos_mes = obtenerMonto($conexion, 'pagos', 'fecha', $gimnasio_id, 'MES');
 $ventas_dia = obtenerMonto($conexion, 'ventas', 'fecha', $gimnasio_id, 'DIA');
