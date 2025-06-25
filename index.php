@@ -118,6 +118,13 @@ if ($gimnasio_id > 0) {
     <div class="card"><h3>Ventas Totales</h3><p>$15,000</p></div>
   </div>
   <div class="bar-section">
+    <div class="bar-title">Próximos Vencimientos</div>
+    <ul>
+      <li>Lucia Ramírez - 28/06/2025</li>
+      <li>Diego Martínez - 03/07/2025</li>
+    </ul>
+  </div>
+  <div class="bar-section">
     <div class="bar-title">Estadísticas por Disciplina</div>
     <div class="bar-row">
       <div class="bar"><div class="bar-inner-yellow"></div></div>
@@ -130,18 +137,6 @@ if ($gimnasio_id > 0) {
       <div class="bar"><div class="bar-inner-yellow" style="width:80%"></div></div>
       <div class="bar"><div class="bar-inner-orange" style="width:30%"></div></div>
     </div>
-  </div>
-  <div class="bar-section">
-    <div class="bar-title">Próximos Vencimientos</div>
-    <ul>
-      <li>Lucia Ramírez - 28/06/2025</li>
-      <li>Diego Martínez - 03/07/2025</li>
-    </ul>
-    <div class="bar-title">Próximos Cumpleaños</div>
-    <ul>
-      <li>Lucas Gómez - 25/06</li>
-      <li>María Suárez - 28/06</li>
-    </ul>
   </div>
 </div>
 <div class="bottom-bar">
