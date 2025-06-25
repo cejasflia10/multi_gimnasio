@@ -43,7 +43,7 @@ if ($gimnasio_id) {
  nav .dropdown-content{display:none;position:absolute;background:#333;min-width:180px;z-index:1000}
  nav .dropdown-content a{color:gold;padding:10px;display:block}
  nav .dropdown:hover .dropdown-content{display:block}
- .container{padding:80px 20px 20px;position:relative;z-index:1}
+ .container{padding:30px 10px 5px;position:relative;z-index:1}
  .card{background:#1f1f1f;padding:20px;margin:20px;border-radius:12px;box-shadow:0 0 8px #000}
  footer{background:#222;color:gold;padding:10px;text-align:center;font-size:14px}
  .bottom-bar{display:none}
@@ -65,9 +65,15 @@ if ($gimnasio_id) {
 </header>
 
 <nav>
+  
   <div class="dropdown"><span class="dropbtn">Clientes</span>
-    <div class="dropdown-content"><a href="agregar_cliente.php">Agregar</a><a href="ver_clientes.php">Ver</a><a href="disciplinas.php">Disciplinas</a></div>
+    <div class="dropdown-content">
+      <a href="agregar_cliente.php">Agregar</a>
+      <a href="ver_clientes.php">Ver</a>
+      <a href="disciplinas.php">Disciplinas</a>
+    </div>
   </div>
+
   <div class="dropdown"><span class="dropbtn">Membresías</span>
     <div class="dropdown-content"><a href="nueva_membresia.php">Nueva</a><a href="ver_membresias.php">Ver</a><a href="planes.php">Planes</a><a href="adicionales.php">Adicionales</a></div>
   </div>
@@ -92,12 +98,62 @@ if ($gimnasio_id) {
   <div class="dropdown"><span class="dropbtn">Configuraciones</span>
     <div class="dropdown-content"><a href="configurar_planes.php">Planes</a><a href="configurar_accesos.php">Accesos</a></div>
   </div>
+  
+  
+  
+  <div class="dropdown"><span class="dropbtn">Panel del Cliente</span>
+    <div class="dropdown-content">
+      <a href="cliente_acceso.php">Acceso DNI</a>
+      <a href="cliente_reservas.php">Reservas</a>
+      <a href="cliente_pagos.php">Pagos</a>
+      <a href="cliente_asistencias.php">Asistencias</a>
+      <a href="cliente_qr.php">Ver QR</a>
+    </div>
+  </div>
   <a href="logout.php" class="dropbtn">Cerrar Sesión</a>
+
 </nav>
 
 <div class="container">
+  
 
-  <div class="card">
+  
+
+</div>
+
+
+<div class="container">
+  <div class="stats-grid">
+    <div class="card"><h3>Ingresos del Día</h3><p>$4,800</p></div>
+
+  
+
+    <div class="card"><h3>Pagos del Día</h3><p>$3,500</p></div>
+    <div class="card"><h3>Pagos del Mes</h3><p>$27,400</p></div>
+    <div class="card"><h3>Ventas Totales</h3><p>$15,000</p></div>
+  </div>
+  
+      <div class="bar"><div class="bar-inner-orange" style="width: 50%;"></div></div>
+    </div>
+  </div>
+  
+      <div class="bar"><div class="bar-inner-orange" style="width: 30%;"></div></div>
+    </div>
+  </div>
+  <div class="bar-section">
+    <div class="bar-title">Próximos Vencimientos</div>
+    <ul>
+      <li>Lucia Ramírez - 28/06/2025</li>
+      <li>Diego Martínez - 03/07/2025</li>
+    </ul>
+    <div class="bar-title">Próximos Cumpleaños</div>
+    <ul>
+      <li>Sofía Fernández - 26/06</li>
+      <li>Tomás Aguirre - 30/06</li>
+    </ul>
+  </div>
+
+<div class="card">
     <h3>Ingresos del Día</h3>
     <?php
     $hoy = date('Y-m-d');
@@ -119,16 +175,38 @@ if ($gimnasio_id) {
       <p>No se registraron ingresos hoy.</p>
     <?php endif; ?>
   </div>
-
-  <div class="card">
-    <h3>Próximos Vencimientos</h3>
-    <ul><li>Lucia Ramírez – 28/06/2025</li><li>Diego Martínez – 05/07/2025</li></ul>
-    <h3>Próximos Cumpleaños</h3>
-    <ul><li>Sofía Fernández – 26/06</li><li>Tomás Aguirre – 30/06</li></ul>
+<div class="bar-section">
+    <div class="bar-title">Próximos Vencimientos</div>
+    <ul>
+      <?php
+      $query_venc = "
+        SELECT clientes.nombre, clientes.apellido, membresias.fecha_vencimiento
+        FROM clientes
+        JOIN membresias ON clientes.id = membresias.cliente_id
+        WHERE clientes.gimnasio_id = $gimnasio_id
+          AND membresias.fecha_vencimiento >= CURDATE()
+        ORDER BY membresias.fecha_vencimiento ASC
+        LIMIT 5
+      ";
+      $result_venc = $conexion->query($query_venc);
+      if ($result_venc && $result_venc->num_rows > 0) {
+          while ($v = $result_venc->fetch_assoc()) {
+              echo "<li>{$v['nombre']} {$v['apellido']} – " . date('d/m/Y', strtotime($v['fecha_vencimiento'])) . "</li>";
+          }
+      } else {
+          echo "<li>No hay vencimientos próximos.</li>";
+      }
+      ?>
+    </ul>
   </div>
-
-</div>
-
+<div class="bar-section">
+    <div class="bar-title">Estadísticas por Disciplina</div>
+    <div class="bar-row">
+      <div class="bar"><div class="bar-inner-yellow" style="width: 70%;"></div></div>
+<div class="bar-section">
+    <div class="bar-title">Ventas Mensuales</div>
+    <div class="bar-row">
+      <div class="bar"><div class="bar-inner-yellow" style="width: 80%;"></div></div>
 <footer>Panel de administración – <?= $gimnasio_nombre ?></footer>
 
 <div class="bottom-bar">
