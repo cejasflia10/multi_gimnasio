@@ -1,127 +1,76 @@
 <?php
-if (session_status() === PHP_SESSION_NONE) {
-    session_start();
-}
+session_start();
 include 'conexion.php';
 $gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
 $gimnasio_nombre = 'Gimnasio';
 $proximo_vencimiento = '';
 $cliente_activo = '';
-if ($gimnasio_id > 0) {
-    $res = $conexion->query("SELECT nombre, fecha_vencimiento FROM gimnasios WHERE id = $gimnasio_id LIMIT 1");
-    if ($fila = $res->fetch_assoc()) {
-        $gimnasio_nombre = $fila['nombre'];
-        $proximo_vencimiento = $fila['fecha_vencimiento'];
+
+if ($gimnasio_id) {
+    $r = $conexion->query("SELECT nombre, fecha_vencimiento FROM gimnasios WHERE id=$gimnasio_id");
+    if ($f = $r->fetch_assoc()) {
+        $gimnasio_nombre = $f['nombre'];
+        $proximo_vencimiento = $f['fecha_vencimiento'];
     }
-    $res_cli = $conexion->query("SELECT clientes.nombre, clientes.apellido, membresias.fecha_vencimiento 
-        FROM clientes 
-        JOIN membresias ON clientes.id = membresias.cliente_id 
-        WHERE clientes.gimnasio_id = $gimnasio_id 
-        ORDER BY membresias.fecha_vencimiento ASC LIMIT 1");
-    if ($c = $res_cli->fetch_assoc()) {
-        $cliente_activo = $c['nombre'] . ' ' . $c['apellido'] . ' – Vence: ' . date('d/m/Y', strtotime($c['fecha_vencimiento']));
+    $r2 = $conexion->query("
+      SELECT c.nombre, c.apellido, m.fecha_vencimiento
+      FROM clientes c
+      JOIN membresias m ON c.id = m.cliente_id
+      WHERE c.gimnasio_id = $gimnasio_id
+      ORDER BY m.fecha_vencimiento ASC
+      LIMIT 1
+    ");
+    if ($c = $r2->fetch_assoc()) {
+        $cliente_activo = "{$c['nombre']} {$c['apellido']} – Vence: " . date('d/m/Y', strtotime($c['fecha_vencimiento']));
     }
 }
 ?>
 <!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Panel Principal</title>
-  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet">
-  <style>
-    body { background: #111; color: gold; font-family: Arial, sans-serif; margin: 0; padding-bottom: 60px; }
-    header {
-      display: flex; justify-content: space-between; align-items: center;
-      background-color: #1a1a1a; padding: 15px 20px; flex-wrap: wrap;
-    }
-    header h1 { font-size: 22px; color: gold; margin: 0; }
-    .info-header { text-align: right; font-size: 14px; color: #ccc; }
-    nav {
-      background-color: #222;
-      display: flex;
-      flex-wrap: wrap;
-      justify-content: center;
-      position: relative;
-      z-index: 10;
-    }
-    nav .dropdown {
-      position: relative;
-    }
-    nav a, nav .dropbtn {
-      color: gold;
-      padding: 12px 20px;
-      text-decoration: none;
-      display: block;
-      cursor: pointer;
-    }
-    nav .dropdown-content {
-      display: none;
-      position: absolute;
-      background-color: #333;
-      min-width: 180px;
-      z-index: 1000;
-    }
-    nav .dropdown-content a {
-      color: gold;
-      padding: 10px;
-      text-decoration: none;
-      display: block;
-    }
-    nav .dropdown:hover .dropdown-content {
-      display: block;
-    }
-    .container {
-      padding: 80px 20px 20px 20px;
-      position: relative;
-      z-index: 1;
-    }
-    .stats-grid {
-      display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-      gap: 20px; text-align: center; margin-bottom: 30px;
-    }
-    .card {
-      background-color: #1f1f1f; padding: 20px; border-radius: 12px;
-      box-shadow: 0 0 8px #000;
-    }
-    .bar-section { margin-bottom: 25px; }
-    .bar-title { font-weight: bold; margin-bottom: 10px; color: gold; }
-    .bar-row {
-      display: flex; gap: 10px; justify-content: space-between;
-    }
-    .bar {
-      background-color: #444; border-radius: 5px; height: 18px;
-      width: 100%; overflow: hidden;
-    }
-    .bar-inner-yellow { background-color: gold; height: 100%; width: 70%; }
-    .bar-inner-orange { background-color: orange; height: 100%; width: 40%; }
-    footer {
-      text-align: center; background-color: #222; color: gold;
-      padding: 10px; font-size: 14px;
-    }
-    .bottom-bar { display: none; }
-    @media (max-width: 768px) {
-      nav { display: none; }
-      .bottom-bar {
-        display: flex; justify-content: space-around;
-        background-color: #222; padding: 10px 0;
-        position: fixed; bottom: 0; width: 100%; z-index: 999;
-      }
-      .bottom-bar a {
-        color: gold; text-align: center; text-decoration: none; font-size: 13px;
-      }
-    }
-  </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Panel Principal</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+<style>
+ body { background:#111; color:gold; font-family:Arial,sans-serif; margin:0; padding-bottom:60px }
+ header{display:flex;justify-content:space-between;align-items:center;background:#1a1a1a;padding:15px 20px}
+ header h1{margin:0;font-size:22px;color:gold}
+ .info-header{font-size:14px;color:#ccc;text-align:right}
+ nav{display:flex;flex-wrap:wrap;justify-content:center;background:#222;position:relative;z-index:10}
+ nav .dropdown{position:relative}
+ nav a, nav .dropbtn{color:gold;padding:12px 20px;text-decoration:none;display:block;cursor:pointer}
+ nav .dropdown-content{display:none;position:absolute;background:#333;min-width:180px;z-index:1000}
+ nav .dropdown-content a{color:gold;padding:10px;display:block}
+ nav .dropdown:hover .dropdown-content{display:block}
+ .container{padding:80px 20px 20px;position:relative;z-index:1}
+ .stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:20px;text-align:center;margin-bottom:30px}
+ .card{background:#1f1f1f;padding:20px;border-radius:12px;box-shadow:0 0 8px #000}
+ .bar-section{margin-bottom:25px}
+ .bar-title{font-weight:bold;margin-bottom:10px;color:gold}
+ .bar-row{display:flex;gap:10px;justify-content:space-between}
+ .bar{background:#444;border-radius:5px;height:18px;width:100%;overflow:hidden}
+ .bar-inner-yellow{background:gold;height:100%;width:70%}
+ .bar-inner-orange{background:orange;height:100%;width:40%}
+ footer{background:#222;color:gold;padding:10px;text-align:center;font-size:14px}
+ .bottom-bar{display:none}
+ @media(max-width:768px){
+   nav{display:none}
+   .bottom-bar{display:flex;justify-content:space-around;background:#222;padding:10px 0;position:fixed;bottom:0;width:100%;z-index:999}
+   .bottom-bar a{color:gold;text-decoration:none;text-align:center;font-size:13px}
+ }
+</style>
 </head>
 <body>
+
 <header>
   <h1><?= $gimnasio_nombre ?></h1>
   <div class="info-header">
     <strong>Próximo vencimiento del gimnasio:</strong> <?= date('d/m/Y', strtotime($proximo_vencimiento)) ?><br>
-    Cliente activo: <?= $cliente_activo ?>
+    <?= $cliente_activo ?>
   </div>
 </header>
+
 <nav>
   <div class="dropdown">
     <span class="dropbtn">Clientes</span>
@@ -164,7 +113,8 @@ if ($gimnasio_id > 0) {
   </div>
   <div class="dropdown">
     <span class="dropbtn">Ventas</span>
-    <div class="dropdown-content">
+    <div class="
+dropdown-content">
       <a href="ventas_protecciones.php">Protecciones</a>
       <a href="ventas_indumentaria.php">Indumentaria</a>
       <a href="ventas_suplementos.php">Suplementos</a>
@@ -192,11 +142,52 @@ if ($gimnasio_id > 0) {
       <a href="configurar_accesos.php">Accesos</a>
     </div>
   </div>
-  <a href="logout.php" class="dropbtn">Cerrar Sesión</a>
+  <a href="logout.php" class="dropbtn">Cerrar Sesión</a>
 </nav>
-<footer>
-  Panel de administración - <?= $gimnasio_nombre ?>
-</footer>
+
+<div class="container">
+  <div class="stats-grid">
+    <div class="card"><h3>Ingresos del Día</h3><p>$4.800</p></div>
+    <div class="card"><h3>Pagos del Día</h3><p>$3.500</p></div>
+    <div class="card"><h3>Pagos del Mes</h3><p>$27.400</p></div>
+    <div class="card"><h3>Ventas Totales</h3><p>$15.000</p></div>
+  </div>
+
+  <div class="bar-section">
+    <div class="bar-title">Próximos Vencimientos</div>
+    <ul><li>Lucia Ramírez – 28/06/2025</li><li>Diego Martínez – 03/07/2025</li></ul>
+    <div class="bar-title">Próximos Cumpleaños</div>
+    <ul><li>Sofía Fernández – 26/06</li><li>Tomás Aguirre – 30/06</li></ul>
+  </div>
+
+  <div class="bar-section">
+    <div class="bar-title">Estadísticas por Disciplina</div>
+    <div class="bar-row">
+      <div class="bar"><div class="bar-inner-yellow" style="width:70%"></div></div>
+      <div class="bar"><div class="bar-inner-orange" style="width:40%"></div></div>
+    </div>
+  </div>
+
+  <div class="bar-section">
+    <div class="bar-title">Ventas Mensuales</div>
+    <div class="bar-row">
+      <div class="bar"><div class="bar-inner-yellow" style="width:80%"></div></div>
+      <div class="bar"><div class="bar-inner-orange" style="width:30%"></div></div>
+    </div>
+  </div>
+
+  <div class="bar-section">
+    <div class="bar-title">Ingresos del Día</div>
+    <ul>
+      <li>08:45 – Juan Pérez</li>
+      <li>09:10 – Laura Díaz</li>
+      <li>10:20 – Martín Soto</li>
+    </ul>
+  </div>
+</div>
+
+<footer>Panel de administración – <?= $gimnasio_nombre ?></footer>
+
 <div class="bottom-bar">
   <a href="index.php"><i class="fas fa-home"></i><br>Inicio</a>
   <a href="ver_clientes.php"><i class="fas fa-users"></i><br>Clientes</a>
@@ -205,5 +196,6 @@ if ($gimnasio_id > 0) {
   <a href="registrar_asistencia.php"><i class="fas fa-calendar-check"></i><br>Asistencias</a>
   <a href="ver_ventas.php"><i class="fas fa-shopping-cart"></i><br>Ventas</a>
 </div>
+
 </body>
 </html>
