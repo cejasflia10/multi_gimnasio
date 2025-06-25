@@ -8,13 +8,13 @@ $gimnasio_nombre = 'Gimnasio';
 $proximo_vencimiento = '';
 $cliente_activo = '';
 if ($gimnasio_id > 0) {
+    $res = $conexion->query("SELECT nombre, fecha_vencimiento FROM gimnasios WHERE id = $gimnasio_id LIMIT 1");
+    if ($fila = $res->fetch_assoc()) {
+        $gimnasio_nombre = $fila['nombre'];
+        $proximo_vencimiento = $fila['fecha_vencimiento'];
+    }
     $res_cli = $conexion->query("SELECT clientes.nombre, clientes.apellido, membresias.fecha_vencimiento 
-       FROM clientes 
-       JOIN membresias ON clientes.id = membresias.cliente_id 
-       WHERE clientes.gimnasio_id = $gimnasio_id 
-       ORDER BY membresias.fecha_vencimiento ASC LIMIT 1");
-    
-    $res_cli = $conexion->query("SELECT nombre, apellido, fecha_vencimiento FROM clientes 
+        FROM clientes 
         JOIN membresias ON clientes.id = membresias.cliente_id 
         WHERE clientes.gimnasio_id = $gimnasio_id 
         ORDER BY membresias.fecha_vencimiento ASC LIMIT 1");
@@ -31,32 +31,13 @@ if ($gimnasio_id > 0) {
   <title>Panel Principal</title>
   <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet">
   <style>
-    body { background: #111; color: gold; font-family: Arial, sans-serif; margin: 0; }
+    body { background: #111; color: gold; font-family: Arial, sans-serif; margin: 0; padding-bottom: 60px; }
     header {
       display: flex; justify-content: space-between; align-items: center;
       background-color: #1a1a1a; padding: 15px 20px; flex-wrap: wrap;
     }
     header h1 { font-size: 22px; color: gold; margin: 0; }
     .info-header { text-align: right; font-size: 14px; color: #ccc; }
-    nav.horizontal {
-      display: flex; flex-wrap: wrap; justify-content: center;
-      background-color: #1a1a1a; border-bottom: 1px solid #333;
-    }
-    nav.horizontal .dropdown { position: relative; }
-    nav.horizontal a, nav.horizontal .dropbtn {
-      color: gold; padding: 14px 20px; text-decoration: none;
-      display: block; cursor: pointer; font-weight: bold;
-    }
-    nav.horizontal .dropdown-content {
-      display: none; position: absolute; background-color: #333;
-      min-width: 180px; z-index: 1000; border-radius: 0 0 8px 8px;
-    }
-    nav.horizontal .dropdown-content a {
-      padding: 12px; color: gold; display: block;
-    }
-    nav.horizontal .dropdown:hover .dropdown-content {
-      display: block;
-    }
     .container { padding: 20px; }
     .stats-grid {
       display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
@@ -81,8 +62,10 @@ if ($gimnasio_id > 0) {
       text-align: center; background-color: #222; color: gold;
       padding: 10px; position: fixed; bottom: 0; width: 100%; font-size: 14px;
     }
+    .bottom-bar {
+      display: none;
+    }
     @media (max-width: 768px) {
-      nav.horizontal { display: none; }
       .bottom-bar {
         display: flex; justify-content: space-around;
         background-color: #222; padding: 10px 0;
@@ -142,11 +125,4 @@ if ($gimnasio_id > 0) {
   <a href="ver_clientes.php"><i class="fas fa-users"></i><br>Clientes</a>
   <a href="ver_membresias.php"><i class="fas fa-id-card"></i><br>Membresías</a>
   <a href="scanner_qr.php"><i class="fas fa-qrcode"></i><br>QR</a>
-  <a href="registrar_asistencia.php"><i class="fas fa-calendar-check"></i><br>Asistencias</a>
-  <a href="ver_ventas.php"><i class="fas fa-shopping-cart"></i><br>Ventas</a>
-</div>
-<footer>
-  Sistema de Gestión Multi-Gimnasio - Versión App Profesional
-</footer>
-</body>
-</html>
+  <a href="registrar_asistencia
