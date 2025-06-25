@@ -4,14 +4,15 @@ if (session_status() === PHP_SESSION_NONE) {
 }
 include 'conexion.php';
 
-$gimnasio_id = $_GET['gimnasio'] ?? '';
+$id_gimnasio = $_GET['gimnasio'] ?? '';
 $mensaje = $_GET['mensaje'] ?? '';
 
+// Obtener disciplinas del gimnasio
 $disciplinas = [];
-if ($gimnasio_id) {
-    $consulta = $conexion->query("SELECT id, nombre FROM disciplinas WHERE id_gimnasio = $gimnasio_id");
-    while ($fila = $consulta->fetch_assoc()) {
-        $disciplinas[] = $fila;
+if ($id_gimnasio !== '') {
+    $consulta = $conexion->query("SELECT id, nombre FROM disciplinas WHERE id_gimnasio = $id_gimnasio");
+    while ($row = $consulta->fetch_assoc()) {
+        $disciplinas[] = $row;
     }
 }
 ?>
@@ -31,7 +32,6 @@ if ($gimnasio_id) {
         }
         h2 {
             text-align: center;
-            color: gold;
         }
         form {
             max-width: 500px;
@@ -43,7 +43,7 @@ if ($gimnasio_id) {
         }
         input, select {
             width: 100%;
-            padding: 8px;
+            padding: 10px;
             margin-top: 4px;
             background-color: #222;
             color: white;
@@ -52,13 +52,13 @@ if ($gimnasio_id) {
         input[type="submit"] {
             background-color: gold;
             color: black;
-            margin-top: 20px;
             font-weight: bold;
+            margin-top: 20px;
         }
-        .error {
-            color: red;
+        .mensaje {
             text-align: center;
-            margin-bottom: 10px;
+            color: yellow;
+            margin: 10px 0;
         }
     </style>
 </head>
@@ -67,11 +67,11 @@ if ($gimnasio_id) {
 <h2>Registro de Cliente Online</h2>
 
 <?php if ($mensaje): ?>
-    <p class="error"><?php echo htmlspecialchars($mensaje); ?></p>
+    <div class="mensaje"><?= htmlspecialchars($mensaje) ?></div>
 <?php endif; ?>
 
 <form action="guardar_cliente_online.php" method="post">
-    <input type="hidden" name="gimnasio_id" value="<?php echo htmlspecialchars($gimnasio_id); ?>">
+    <input type="hidden" name="id_gimnasio" value="<?= htmlspecialchars($id_gimnasio) ?>">
 
     <label>Apellido:</label>
     <input type="text" name="apellido" required>
@@ -96,6 +96,7 @@ if ($gimnasio_id) {
 
     <label>Disciplina:</label>
     <select name="disciplina" required>
+        <option value="">-- Seleccionar disciplina --</option>
         <?php foreach ($disciplinas as $disciplina): ?>
             <option value="<?= htmlspecialchars($disciplina['nombre']) ?>"><?= htmlspecialchars($disciplina['nombre']) ?></option>
         <?php endforeach; ?>
