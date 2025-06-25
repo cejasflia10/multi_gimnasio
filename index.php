@@ -43,14 +43,31 @@ if ($gimnasio_id > 0) {
       display: flex; flex-wrap: wrap;
       justify-content: center;
     }
-    nav a {
+    nav .dropdown {
+      position: relative;
+    }
+    nav a, nav .dropbtn {
       color: gold;
       padding: 12px 20px;
       text-decoration: none;
       display: block;
+      cursor: pointer;
     }
-    nav a:hover {
+    nav .dropdown-content {
+      display: none;
+      position: absolute;
       background-color: #333;
+      min-width: 180px;
+      z-index: 1;
+    }
+    nav .dropdown-content a {
+      color: gold;
+      padding: 10px;
+      text-decoration: none;
+      display: block;
+    }
+    nav .dropdown:hover .dropdown-content {
+      display: block;
     }
     .container { padding: 20px; }
     .stats-grid {
@@ -99,56 +116,72 @@ if ($gimnasio_id > 0) {
   </div>
 </header>
 <nav>
-  <a href="ver_clientes.php">Clientes</a>
-  <a href="ver_membresias.php">Membresías</a>
-  <a href="ver_asistencias.php">Asistencias</a>
-  <a href="scanner_qr.php">QR</a>
-  <a href="ver_profesores.php">Profesores</a>
-  <a href="ver_ventas.php">Ventas</a>
-  <a href="ver_gimnasios.php">Gimnasios</a>
-  <a href="ver_usuarios.php">Usuarios</a>
-  <a href="configuracion_general.php">Configuraciones</a>
-  <a href="logout.php">Cerrar Sesión</a>
+  <div class="dropdown">
+    <div class="dropbtn">Clientes</div>
+    <div class="dropdown-content">
+      <a href="agregar_cliente.php">Agregar Cliente</a>
+      <a href="ver_clientes.php">Ver Clientes</a>
+      <a href="disciplinas.php">Disciplinas</a>
+    </div>
+  </div>
+  <div class="dropdown">
+    <div class="dropbtn">Membresías</div>
+    <div class="dropdown-content">
+      <a href="agregar_membresia.php">Agregar Membresía</a>
+      <a href="ver_membresias.php">Ver Membresías</a>
+      <a href="planes.php">Planes</a>
+      <a href="planes_adicionales.php">Planes Adicionales</a>
+    </div>
+  </div>
+  <div class="dropdown">
+    <div class="dropbtn">Asistencias</div>
+    <div class="dropdown-content">
+      <a href="registrar_asistencia.php">Registrar Asistencia</a>
+      <a href="ver_asistencias.php">Ver Asistencias</a>
+    </div>
+  </div>
+  <div class="dropdown">
+    <div class="dropbtn">QR</div>
+    <div class="dropdown-content">
+      <a href="scanner_qr.php">Escanear QR</a>
+      <a href="generar_qr.php">Generar QR</a>
+    </div>
+  </div>
+  <div class="dropdown">
+    <div class="dropbtn">Profesores</div>
+    <div class="dropdown-content">
+      <a href="agregar_profesor.php">Agregar Profesor</a>
+      <a href="ver_profesores.php">Ver Profesores</a>
+    </div>
+  </div>
+  <div class="dropdown">
+    <div class="dropbtn">Ventas</div>
+    <div class="dropdown-content">
+      <a href="ventas_indumentaria.php">Indumentaria</a>
+      <a href="ventas_suplementos.php">Suplementos</a>
+      <a href="ventas_protecciones.php">Protecciones</a>
+    </div>
+  </div>
+  <div class="dropdown">
+    <div class="dropbtn">Gimnasios</div>
+    <div class="dropdown-content">
+      <a href="agregar_gimnasio.php">Agregar Gimnasio</a>
+      <a href="ver_gimnasios.php">Ver Gimnasios</a>
+    </div>
+  </div>
+  <div class="dropdown">
+    <div class="dropbtn">Usuarios</div>
+    <div class="dropdown-content">
+      <a href="agregar_usuario.php">Agregar Usuario</a>
+      <a href="ver_usuarios.php">Ver Usuarios</a>
+    </div>
+  </div>
+  <div class="dropdown">
+    <div class="dropbtn">Configuraciones</div>
+    <div class="dropdown-content">
+      <a href="configuracion_general.php">General</a>
+      <a href="panel_control.php">Panel General</a>
+    </div>
+  </div>
+  <div class="dropdown"><a class="dropbtn" href="logout.php">Cerrar Sesión</a></div>
 </nav>
-<div class="container">
-  <div class="stats-grid">
-    <div class="card"><h3>Ingresos del Día</h3><p>$4,800</p></div>
-    <div class="card"><h3>Pagos del Día</h3><p>$3,500</p></div>
-    <div class="card"><h3>Pagos del Mes</h3><p>$27,400</p></div>
-    <div class="card"><h3>Ventas Totales</h3><p>$15,000</p></div>
-  </div>
-  <div class="bar-section">
-    <div class="bar-title">Próximos Vencimientos</div>
-    <ul>
-      <li>Lucia Ramírez - 28/06/2025</li>
-      <li>Diego Martínez - 03/07/2025</li>
-    </ul>
-  </div>
-  <div class="bar-section">
-    <div class="bar-title">Estadísticas por Disciplina</div>
-    <div class="bar-row">
-      <div class="bar"><div class="bar-inner-yellow"></div></div>
-      <div class="bar"><div class="bar-inner-orange"></div></div>
-    </div>
-  </div>
-  <div class="bar-section">
-    <div class="bar-title">Ventas Mensuales</div>
-    <div class="bar-row">
-      <div class="bar"><div class="bar-inner-yellow" style="width:80%"></div></div>
-      <div class="bar"><div class="bar-inner-orange" style="width:30%"></div></div>
-    </div>
-  </div>
-</div>
-<div class="bottom-bar">
-  <a href="index.php"><i class="fas fa-home"></i><br>Inicio</a>
-  <a href="ver_clientes.php"><i class="fas fa-users"></i><br>Clientes</a>
-  <a href="ver_membresias.php"><i class="fas fa-id-card"></i><br>Membresías</a>
-  <a href="scanner_qr.php"><i class="fas fa-qrcode"></i><br>QR</a>
-  <a href="ver_asistencias.php"><i class="fas fa-calendar-check"></i><br>Asistencias</a>
-  <a href="ver_ventas.php"><i class="fas fa-shopping-cart"></i><br>Ventas</a>
-</div>
-<footer>
-  Sistema de Gestión Multi-Gimnasio - Versión App Profesional
-</footer>
-</body>
-</html>
