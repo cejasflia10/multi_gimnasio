@@ -3,7 +3,7 @@
 session_start();
 include 'menu.php';
 include 'conexion.php';
-include 'funciones_panel.php'; // funciones: obtenerMonto(), obtenerAsistenciasClientes(), obtenerCumpleanios(), obtenerVencimientos()
+include 'funciones.php';
 
 if (!isset($_SESSION['gimnasio_id'])) {
     die("Acceso denegado.");
