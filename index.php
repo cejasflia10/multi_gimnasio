@@ -1,7 +1,6 @@
 <?php
 session_start();
 include 'conexion.php';
-
 function obtenerMonto($conexion, $tabla, $campo_fecha, $gimnasio_id, $modo = 'DIA') {
     $condicion = $modo === 'MES'
         ? "MONTH($campo_fecha) = MONTH(CURDATE()) AND YEAR($campo_fecha) = YEAR(CURDATE())"
@@ -51,11 +50,9 @@ if ($gimnasio_id) {
     if ($c = $r2->fetch_assoc()) {
         $cliente_activo = "{$c['nombre']} {$c['apellido']} – Vence: " . date('d/m/Y', strtotime($c['fecha_vencimiento']));
     }
-
 }
 ?>
 <!DOCTYPE html>
-
 <html lang="es">
 <head>
 <meta charset="UTF-8">
@@ -98,10 +95,6 @@ if ($gimnasio_id) {
 <nav>
   <div class="menu_horizontal solo-pc">
   <!-- Todo tu menú original aquí -->
-
-</div>
-   <a href="subir_logo.php" class="menu-link">🖼️ Subir Logo</a>
-
 </div>
 
   <div class="dropdown"><span class="dropbtn"><i class="fas fa-users"></i> Clientes</span>
@@ -117,6 +110,9 @@ if ($gimnasio_id) {
   </div>
   <div class="dropdown"><span class="dropbtn"><i class="fas fa-calendar-check"></i> Asistencias</span>
     <div class="dropdown-content"><a href="registrar_asistencia.php">Registrar</a><a href="ver_asistencias.php">Ver</a></div>
+  </div>
+  <div class="dropdown"><span class="dropbtn"><i class="fas fa-qrcode"></i> QR</span>
+    <div class="dropdown-content"><a href="scanner_qr.php">Escanear</a><a href="generar_qr.php">Generar</a></div>
   </div>
   <div class="dropdown"><span class="dropbtn"><i class="fas fa-user-tie"></i> Profesores</span>
     <div class="dropdown-content"><a href="agregar_profesor.php">Agregar</a><a href="ver_profesores.php">Ver</a><a href="ver_pagos_profesor.php">Pagos</a></div>
