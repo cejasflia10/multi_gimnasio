@@ -7,7 +7,7 @@ if (session_status() === PHP_SESSION_NONE) {
 $permisos = [
     'admin' => [
         'clientes', 'membresias', 'qr', 'agregar_gimnasio','asistencias', 'profesores',
-        'ventas', 'configuraciones', 'panel', 'usuarios',
+        'ventas', 'configuraciones', 'panel', 'usuarios','ver_gimnasios',
         'planes', 'ver_usuarios', 'asistencia_profesor', 'gimnasios'
     ],
     'usuario' => [
