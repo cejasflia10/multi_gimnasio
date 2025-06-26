@@ -138,7 +138,7 @@ if ($gimnasio_id) {
       <a href="cliente_asistencias.php"><i class="fas fa-calendar-check"></i> Asistencias</a>
       <a href="cliente_qr.php">Ver QR</a>
     </div>
-  </div> </div>
+  </div>
   <a href="logout.php" class="dropbtn"><i class="fas fa-sign-out-alt"></i> Cerrar Sesión</a>
 
 </nav>
