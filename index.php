@@ -170,7 +170,7 @@ if ($gimnasio_id) {
   </div>
 <?php endif; ?>
 
-<?php if (in_array($rol, ['admin', 'usuario'])): ?>
+<?php if (in_array($rol, ['admin', 'Cliente Gym'])): ?>
   <div class="dropdown">
     <span class="dropbtn"><i class="fas fa-shopping-cart"></i> Ventas</span>
     <div class="dropdown-content">
