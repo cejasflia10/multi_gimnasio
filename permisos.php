@@ -11,7 +11,7 @@ $permisos = [
         'planes', 'ver_usuarios', 'asistencia_profesor', 'gimnasios'
     ],
     'usuario' => [
-        'clientes', 'membresias', 'qr', 'ventas', 'panel'
+        'clientes', 'ver_clientes','membresias', 'qr', 'ventas', 'panel'
     ],
     'profesor' => [
         'asistencias', 'profesores', 'membresias', 'qr'
