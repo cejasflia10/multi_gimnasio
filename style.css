@@ -1,3 +1,10 @@
+
+/* Ocultar menú superior en celulares */
+@media (max-width: 768px) {
+  .menu-pc {
+    display: none;
+  }
+}
 body {
     margin: 0;
     background-color: #000;
