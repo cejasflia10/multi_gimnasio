@@ -98,13 +98,18 @@
             <a href="generar_qr.php">Generar</a>
         </div>
     </div>
-    <div class="dropdown">
-        <span class="dropbtn"><i class="fas fa-user-tie"></i> Profesores</span>
-        <div class="dropdown-content">
-            <a href="agregar_profesor.php">Agregar</a>
-            <a href="ver_profesores.php">Ver</a>
-            <a href="ver_pagos_profesor.php">Pagos</a>
-        </div>
+    <?php if (tiene_permiso('profesores')): ?>
+<li class="submenu">
+    <a href="#">👨‍🏫 Profesores</a>
+    <ul>
+        <li><a href="agregar_profesor.php">➕ Agregar Profesor</a></li>
+        <li><a href="ver_profesores.php">📋 Ver Profesores</a></li>
+        <li><a href="plan_profesor.php">💵 Plan por Hora</a></li>
+        <li><a href="ver_pagos_profesor.php">💰 Ver Pagos</a></li>
+    </ul>
+</li>
+<?php endif; ?>
+
     </div>
     <div class="dropdown">
         <span class="dropbtn"><i class="fas fa-shopping-cart"></i> Ventas</span>
