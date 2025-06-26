@@ -144,3 +144,13 @@
     </div>
   </div>
 </div>
+<script>
+  document.addEventListener("DOMContentLoaded", function() {
+    if (window.innerWidth <= 768) {
+      const menu = document.querySelector('.menu-horizontal-pc');
+      if (menu) {
+        menu.style.display = 'none';
+      }
+    }
+  });
+</script>
