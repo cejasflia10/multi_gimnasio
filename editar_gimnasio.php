@@ -1,8 +1,7 @@
 <?php
 include 'conexion.php';
 if (session_status() === PHP_SESSION_NONE) session_start();
-include 'menu.php';
-include 'menu_horizontal.php';
+include __DIR__ . '/menu.php'; // Corrección de ruta
 
 if (!isset($_GET['id'])) {
     die("ID de gimnasio no especificado.");
@@ -21,7 +20,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
     $direccion = $_POST["direccion"];
     $telefono = $_POST["telefono"];
     $email = $_POST["email"];
-    $plan = substr($_POST["plan"], 0, 100); // Máximo 100 caracteres
+    $plan = substr($_POST["plan"], 0, 100);
     $fecha_vencimiento = !empty($_POST["fecha_vencimiento"]) ? $_POST["fecha_vencimiento"] : null;
     $duracion = $_POST["duracion_plan"];
     $limite = $_POST["limite_clientes"];
@@ -47,7 +46,6 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
     );
 
     if ($stmt->execute()) {
-        // CREAR USUARIO SI FUE CARGADO Y NO EXISTE
         if (!empty($_POST["usuario"]) && !empty($_POST["clave"])) {
             $usuario = $_POST["usuario"];
 
@@ -141,11 +139,26 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
             color: red;
             margin-top: 10px;
         }
+        .logo-preview {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        .logo-preview img {
+            max-height: 80px;
+            border-radius: 10px;
+            border: 2px solid gold;
+        }
     </style>
 </head>
 <body>
 
 <h2>Editar Gimnasio</h2>
+
+<?php if (!empty($gimnasio['logo'])): ?>
+<div class="logo-preview">
+    <img src="logos/<?= htmlspecialchars($gimnasio['logo']) ?>" alt="Logo del gimnasio">
+</div>
+<?php endif; ?>
 
 <?php if (!empty($error)): ?>
     <div class="error"><?= htmlspecialchars($error, ENT_QUOTES) ?></div>

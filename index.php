@@ -1,6 +1,7 @@
 <?php
 session_start();
 include 'conexion.php';
+
 function obtenerMonto($conexion, $tabla, $campo_fecha, $gimnasio_id, $modo = 'DIA') {
     $condicion = $modo === 'MES'
         ? "MONTH($campo_fecha) = MONTH(CURDATE()) AND YEAR($campo_fecha) = YEAR(CURDATE())"
@@ -39,20 +40,35 @@ if ($gimnasio_id) {
         $gimnasio_nombre = $f['nombre'];
         $proximo_vencimiento = $f['fecha_vencimiento'];
     }
+
     $r2 = $conexion->query("
-      SELECT c.nombre, c.apellido, m.fecha_vencimiento
-      FROM clientes c
-      JOIN membresias m ON c.id = m.cliente_id
-      WHERE c.gimnasio_id = $gimnasio_id
-      ORDER BY m.fecha_vencimiento ASC
-      LIMIT 1
+        SELECT c.nombre, c.apellido, m.fecha_vencimiento
+        FROM clientes c
+        JOIN membresias m ON c.id = m.cliente_id
+        WHERE c.gimnasio_id = $gimnasio_id
+        ORDER BY m.fecha_vencimiento ASC
+        LIMIT 1
     ");
     if ($c = $r2->fetch_assoc()) {
         $cliente_activo = "{$c['nombre']} {$c['apellido']} – Vence: " . date('d/m/Y', strtotime($c['fecha_vencimiento']));
     }
 }
+
+// ✅ Agregado: Datos del usuario logueado y su logo
+$id_usuario = $_SESSION['id'] ?? 0;
+$nombre_usuario = 'Usuario';
+$logo = '';
+
+if ($id_usuario > 0) {
+    $res = $conexion->query("SELECT nombre_completo, logo FROM usuarios WHERE id = $id_usuario");
+    if ($res && $fila = $res->fetch_assoc()) {
+        $nombre_usuario = $fila['nombre_completo'] ?? 'Usuario';
+$logo = !empty($fila['logo']) ? $fila['logo'] : 'imagenes/logo-default.png';
+
+}
 ?>
 <!DOCTYPE html>
+
 <html lang="es">
 <head>
 <meta charset="UTF-8">
@@ -85,16 +101,26 @@ if ($gimnasio_id) {
 
 <header>
   <h1><?= $gimnasio_nombre ?></h1>
+
   <div class="info-header">
-<strong>Próximo vencimiento del gimnasio:</strong>
-<?= $proximo_vencimiento ? date('d/m/Y', strtotime($proximo_vencimiento)) : 'No disponible' ?><br>
+    <strong>Próximo vencimiento del gimnasio:</strong>
+    <?= $proximo_vencimiento ? date('d/m/Y', strtotime($proximo_vencimiento)) : 'No disponible' ?><br>
     <?= $cliente_activo ?>
   </div>
+
+  <div class="usuario-logo" style="display: flex; align-items: center; gap: 10px; margin-top: 10px;">
+    <?php if (!empty($logo) && file_exists($logo)): ?>
+      <img src="<?= htmlspecialchars($logo) ?>" alt="Logo" style="height: 40px; width: 40px; border-radius: 50%; object-fit: cover;">
+    <?php endif; ?>
+    <span style="color: gold; font-weight: bold;"><?= htmlspecialchars($nombre_usuario ?? 'Usuario') ?></span>
+  </div>
 </header>
+
 
 <nav>
   <div class="menu_horizontal solo-pc">
   <!-- Todo tu menú original aquí -->
+
 </div>
    <a href="subir_logo.php" class="menu-link">🖼️ Subir Logo</a>
 
