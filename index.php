@@ -190,7 +190,9 @@ if ($gimnasio_id) {
       <a href="ver_gimnasios.php">Ver</a>
     </div>
   </div>
+  <?php endif; ?>
 
+<?php if ($rol === 'admin'): ?>
   <div class="dropdown">
     <span class="dropbtn"><i class="fas fa-user-cog"></i> Usuarios</span>
     <div class="dropdown-content">
@@ -198,7 +200,9 @@ if ($gimnasio_id) {
       <a href="ver_usuarios.php">Ver</a>
     </div>
   </div>
+<?php endif; ?>
 
+<?php if ($rol === 'admin'): ?>
   <div class="dropdown">
     <span class="dropbtn"><i class="fas fa-cogs"></i> Configuraciones</span>
     <div class="dropdown-content">
@@ -208,6 +212,7 @@ if ($gimnasio_id) {
   </div>
 <?php endif; ?>
 
+<?php if (in_array($rol, ['admin','usuarios', ' profesores'])): ?>
   <div class="dropdown"><span class="dropbtn">Panel del Cliente</span>
     <div class="dropdown-content">
       <a href="cliente_acceso.php">Acceso DNI</a>
@@ -218,6 +223,7 @@ if ($gimnasio_id) {
     </div>
   </div>
   <a href="logout.php" class="dropbtn"><i class="fas fa-sign-out-alt"></i> Cerrar Sesión</a>
+<?php endif; ?>
 
 </nav>
 
