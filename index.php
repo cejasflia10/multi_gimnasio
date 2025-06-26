@@ -88,21 +88,12 @@ if ($gimnasio_id) {
 
 <header>
   <h1><?= $gimnasio_nombre ?></h1>
-
   <div class="info-header">
-    <strong>Próximo vencimiento del gimnasio:</strong>
-    <?= $proximo_vencimiento ? date('d/m/Y', strtotime($proximo_vencimiento)) : 'No disponible' ?><br>
+<strong>Próximo vencimiento del gimnasio:</strong>
+<?= $proximo_vencimiento ? date('d/m/Y', strtotime($proximo_vencimiento)) : 'No disponible' ?><br>
     <?= $cliente_activo ?>
   </div>
-
-  <div class="usuario-logo" style="display: flex; align-items: center; gap: 10px; margin-top: 10px;">
-    <?php if (!empty($logo) && file_exists($logo)): ?>
-      <img src="<?= htmlspecialchars($logo) ?>" alt="Logo" style="height: 40px; width: 40px; border-radius: 50%; object-fit: cover;">
-    <?php endif; ?>
-    <span style="color: gold; font-weight: bold;"><?= htmlspecialchars($nombre_usuario ?? 'Usuario') ?></span>
-  </div>
 </header>
-
 
 <nav>
   <div class="menu_horizontal solo-pc">
