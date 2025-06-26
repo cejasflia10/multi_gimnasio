@@ -229,7 +229,6 @@ if ($gimnasio_id) {
       ?>
     </ul>
   </div>
-
   <div style="flex: 1; background:#1f1f1f; padding: 20px; border-radius: 12px;">
     <h3 style="color: gold;">Próximos Cumpleaños</h3>
     <ul style="color: #fff; padding-left: 20px;">
