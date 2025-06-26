@@ -96,6 +96,9 @@ if ($gimnasio_id) {
   <div class="menu_horizontal solo-pc">
   <!-- Todo tu menú original aquí -->
 </div>
+   <a href="subir_logo.php" class="menu-link">🖼️ Subir Logo</a>
+
+</div>
 
   <div class="dropdown"><span class="dropbtn"><i class="fas fa-users"></i> Clientes</span>
     <div class="dropdown-content">
