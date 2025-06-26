@@ -1,6 +1,7 @@
 <?php
 if (session_status() === PHP_SESSION_NONE) session_start();
 $rol = $_SESSION['rol'] ?? '';
+
 include 'conexion.php';
 function obtenerMonto($conexion, $tabla, $campo_fecha, $gimnasio_id, $modo = 'DIA') {
     $condicion = $modo === 'MES'
@@ -92,127 +93,42 @@ if ($gimnasio_id) {
     <?= $cliente_activo ?>
   </div>
 </header>
-<div class="menu-pc">
+
 <nav>
-  <?php if (in_array($rol, ['admin', 'usuario'])): ?>
-  <div class="dropdown">
-    <span class="dropbtn"><i class="fas fa-users"></i> Clientes</span>
+  
+  <div class="dropdown"><span class="dropbtn"><i class="fas fa-users"></i> Clientes</span>
     <div class="dropdown-content">
       <a href="agregar_cliente.php">Agregar</a>
       <a href="ver_clientes.php">Ver</a>
       <a href="disciplinas.php">Disciplinas</a>
     </div>
   </div>
-<?php endif; ?>
 
-<?php if (in_array($rol, ['admin', 'usuario', 'profesor'])): ?>
-  <div class="dropdown">
-    <span class="dropbtn"><i class="fas fa-id-card"></i> Membresías</span>
-    <div class="dropdown-content">
-      <a href="nueva_membresia.php">Nueva</a>
-      <a href="ver_membresias.php">Ver</a>
-      <a href="planes.php">Planes</a>
-      <a href="adicionales.php">Adicionales</a>
-    </div>
+  <div class="dropdown"><span class="dropbtn"><i class="fas fa-id-card"></i> Membresías</span>
+    <div class="dropdown-content"><a href="nueva_membresia.php">Nueva</a><a href="ver_membresias.php">Ver</a><a href="planes.php">Planes</a><a href="adicionales.php">Adicionales</a></div>
   </div>
-<?php endif; ?>
-  <?php if (in_array($rol, ['admin', 'usuario'])): ?>
-  <div class="dropdown">
-    <span class="dropbtn"><i class="fas fa-users"></i> Clientes</span>
-    <div class="dropdown-content">
-      <a href="agregar_cliente.php">Agregar</a>
-      <a href="ver_clientes.php">Ver</a>
-      <a href="disciplinas.php">Disciplinas</a>
-    </div>
+  <div class="dropdown"><span class="dropbtn"><i class="fas fa-calendar-check"></i> Asistencias</span>
+    <div class="dropdown-content"><a href="registrar_asistencia.php">Registrar</a><a href="ver_asistencias.php">Ver</a></div>
   </div>
-<?php endif; ?>
-
-<?php if (in_array($rol, ['admin', 'usuario', 'profesor'])): ?>
-  <div class="dropdown">
-    <span class="dropbtn"><i class="fas fa-id-card"></i> Membresías</span>
-    <div class="dropdown-content">
-      <a href="nueva_membresia.php">Nueva</a>
-      <a href="ver_membresias.php">Ver</a>
-      <a href="planes.php">Planes</a>
-      <a href="adicionales.php">Adicionales</a>
-    </div>
+  <div class="dropdown"><span class="dropbtn"><i class="fas fa-qrcode"></i> QR</span>
+    <div class="dropdown-content"><a href="scanner_qr.php">Escanear</a><a href="generar_qr.php">Generar</a></div>
   </div>
-<?php endif; ?>
-
-<?php if (in_array($rol, ['admin', 'usuario', 'profesor'])): ?>
-  <div class="dropdown">
-    <span class="dropbtn"><i class="fas fa-calendar-check"></i> Asistencias</span>
-    <div class="dropdown-content">
-      <a href="registrar_asistencia.php">Registrar</a>
-      <a href="ver_asistencias.php">Ver</a>
-    </div>
+  <div class="dropdown"><span class="dropbtn"><i class="fas fa-user-tie"></i> Profesores</span>
+    <div class="dropdown-content"><a href="agregar_profesor.php">Agregar</a><a href="ver_profesores.php">Ver</a><a href="ver_pagos_profesor.php">Pagos</a></div>
   </div>
-<?php endif; ?>
-
-<?php if (in_array($rol, ['admin', 'usuario', 'profesor'])): ?>
-  <div class="dropdown">
-    <span class="dropbtn"><i class="fas fa-qrcode"></i> QR</span>
-    <div class="dropdown-content">
-      <a href="scanner_qr.php">Escanear</a>
-      <a href="generar_qr.php">Generar</a>
-    </div>
+  <div class="dropdown"><span class="dropbtn"><i class="fas fa-shopping-cart"></i> Ventas</span>
+    <div class="dropdown-content"><a href="ventas_protecciones.php">Protecciones</a><a href="ventas_indumentaria.php">Indumentaria</a><a href="ventas_suplementos.php">Suplementos</a><a href="ver_ventas.php">Ver Todas</a></div>
   </div>
-<?php endif; ?>
-
-<?php if (in_array($rol, ['admin', 'usuario'])): ?>
-  <div class="dropdown">
-    <span class="dropbtn"><i class="fas fa-user-tie"></i> Profesores</span>
-    <div class="dropdown-content">
-      <a href="agregar_profesor.php">Agregar</a>
-      <a href="ver_profesores.php">Ver</a>
-      <a href="ver_pagos_profesor.php">Pagos</a>
-    </div>
+  <div class="dropdown"><span class="dropbtn"><i class="fas fa-dumbbell"></i> Gimnasios</span>
+    <div class="dropdown-content"><a href="agregar_gimnasio.php">Agregar</a><a href="ver_gimnasios.php">Ver</a></div>
   </div>
-<?php endif; ?>
-
-<?php if (in_array($rol, ['admin', 'Cliente Gym'])): ?>
-  <div class="dropdown">
-    <span class="dropbtn"><i class="fas fa-shopping-cart"></i> Ventas</span>
-    <div class="dropdown-content">
-      <a href="ventas_protecciones.php">Protecciones</a>
-      <a href="ventas_indumentaria.php">Indumentaria</a>
-      <a href="ventas_suplementos.php">Suplementos</a>
-      <a href="ver_ventas.php">Ver Todas</a>
-    </div>
+  <div class="dropdown"><span class="dropbtn"><i class="fas fa-user-cog"></i> Usuarios</span>
+    <div class="dropdown-content"><a href="agregar_usuario.php">Agregar</a><a href="ver_usuarios.php">Ver</a></div>
   </div>
-<?php endif; ?>
-
-<?php if ($rol === 'admin'): ?>
-  <div class="dropdown">
-    <span class="dropbtn"><i class="fas fa-dumbbell"></i> Gimnasios</span>
-    <div class="dropdown-content">
-      <a href="agregar_gimnasio.php">Agregar</a>
-      <a href="ver_gimnasios.php">Ver</a>
-    </div>
+  <div class="dropdown"><span class="dropbtn"><i class="fas fa-cogs"></i> Configuraciones</span>
+    <div class="dropdown-content"><a href="configurar_planes.php">Planes</a><a href="configurar_accesos.php">Accesos</a></div>
   </div>
-  <?php endif; ?>
-
-<?php if ($rol === 'admin'): ?>
-  <div class="dropdown">
-    <span class="dropbtn"><i class="fas fa-user-cog"></i> Usuarios</span>
-    <div class="dropdown-content">
-      <a href="agregar_usuario.php">Agregar</a>
-      <a href="ver_usuarios.php">Ver</a>
-    </div>
-  </div>
-<?php endif; ?>
-
-<?php if ($rol === 'admin'): ?>
-  <div class="dropdown">
-    <span class="dropbtn"><i class="fas fa-cogs"></i> Configuraciones</span>
-    <div class="dropdown-content">
-      <a href="configurar_planes.php">Planes</a>
-      <a href="configurar_accesos.php">Accesos</a>
-    </div>
-  </div>
-<?php endif; ?>
-
-<?php if (in_array($rol, ['admin','clientes', ' profesores'])): ?>
+  
   <div class="dropdown"><span class="dropbtn">Panel del Cliente</span>
     <div class="dropdown-content">
       <a href="cliente_acceso.php">Acceso DNI</a>
@@ -222,10 +138,7 @@ if ($gimnasio_id) {
       <a href="cliente_qr.php">Ver QR</a>
     </div>
   </div>
-</div>
-
   <a href="logout.php" class="dropbtn"><i class="fas fa-sign-out-alt"></i> Cerrar Sesión</a>
-<?php endif; ?>
 
 </nav>
 
