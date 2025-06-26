@@ -40,30 +40,17 @@ if ($gimnasio_id) {
         $gimnasio_nombre = $f['nombre'];
         $proximo_vencimiento = $f['fecha_vencimiento'];
     }
-
     $r2 = $conexion->query("
-        SELECT c.nombre, c.apellido, m.fecha_vencimiento
-        FROM clientes c
-        JOIN membresias m ON c.id = m.cliente_id
-        WHERE c.gimnasio_id = $gimnasio_id
-        ORDER BY m.fecha_vencimiento ASC
-        LIMIT 1
+      SELECT c.nombre, c.apellido, m.fecha_vencimiento
+      FROM clientes c
+      JOIN membresias m ON c.id = m.cliente_id
+      WHERE c.gimnasio_id = $gimnasio_id
+      ORDER BY m.fecha_vencimiento ASC
+      LIMIT 1
     ");
     if ($c = $r2->fetch_assoc()) {
         $cliente_activo = "{$c['nombre']} {$c['apellido']} – Vence: " . date('d/m/Y', strtotime($c['fecha_vencimiento']));
     }
-}
-
-// ✅ Agregado: Datos del usuario logueado y su logo
-$id_usuario = $_SESSION['id'] ?? 0;
-$nombre_usuario = 'Usuario';
-$logo = '';
-
-if ($id_usuario > 0) {
-    $res = $conexion->query("SELECT nombre_completo, logo FROM usuarios WHERE id = $id_usuario");
-    if ($res && $fila = $res->fetch_assoc()) {
-        $nombre_usuario = $fila['nombre_completo'] ?? 'Usuario';
-        $logo = $fila['logo'] ?
 
 }
 ?>
