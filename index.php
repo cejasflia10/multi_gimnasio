@@ -288,16 +288,6 @@ if ($gimnasio_id) {
     <div class="bar-row">
       <div class="bar"><div class="bar-inner-yellow" style="width: 80%;"></div></div>
 <footer>Panel de administración – <?= $gimnasio_nombre ?></footer>
-
-<div class="bottom-bar">
-  <a href="index.php"><i class="fas fa-home"></i><br>Inicio</a>
-  <a href="ver_clientes.php"><i class="fas fa-users"></i><br>Clientes</a>
-  <a href="ver_membresias.php"><i class="fas fa-id-card"></i><br>Membresías</a>
-  <a href="scanner_qr.php"><i class="fas fa-qrcode"></i><br>QR</a>
-  <a href="registrar_asistencia.php"><i class="fas fa-calendar-check"></i><br>Asistencias</a>
-  <a href="ver_ventas.php"><i class="fas fa-shopping-cart"></i><br>Ventas</a>
-</div>
-<div class="card">
   <h3>Estadísticas por Disciplina (últimos 7 días)</h3>
   <?php
   $sql = "SELECT d.nombre AS disciplina, COUNT(*) AS total
