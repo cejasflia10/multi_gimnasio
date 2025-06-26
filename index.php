@@ -93,7 +93,10 @@ if ($gimnasio_id) {
 </header>
 
 <nav>
-  
+  <div class="menu_horizontal solo-pc">
+  <!-- Todo tu menú original aquí -->
+</div>
+
   <div class="dropdown"><span class="dropbtn"><i class="fas fa-users"></i> Clientes</span>
     <div class="dropdown-content">
       <a href="agregar_cliente.php">Agregar</a>
@@ -107,9 +110,6 @@ if ($gimnasio_id) {
   </div>
   <div class="dropdown"><span class="dropbtn"><i class="fas fa-calendar-check"></i> Asistencias</span>
     <div class="dropdown-content"><a href="registrar_asistencia.php">Registrar</a><a href="ver_asistencias.php">Ver</a></div>
-  </div>
-  <div class="dropdown"><span class="dropbtn"><i class="fas fa-qrcode"></i> QR</span>
-    <div class="dropdown-content"><a href="scanner_qr.php">Escanear</a><a href="generar_qr.php">Generar</a></div>
   </div>
   <div class="dropdown"><span class="dropbtn"><i class="fas fa-user-tie"></i> Profesores</span>
     <div class="dropdown-content"><a href="agregar_profesor.php">Agregar</a><a href="ver_profesores.php">Ver</a><a href="ver_pagos_profesor.php">Pagos</a></div>
@@ -136,6 +136,7 @@ if ($gimnasio_id) {
       <a href="cliente_qr.php">Ver QR</a>
     </div>
   </div>
+ </div>
   <a href="logout.php" class="dropbtn"><i class="fas fa-sign-out-alt"></i> Cerrar Sesión</a>
 
 </nav>
