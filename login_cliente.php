@@ -1,23 +1,23 @@
 <?php
-if (session_status() === PHP_SESSION_NONE) {
-    session_start();
-}
-
 include 'conexion.php';
+session_start();
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $dni = trim($_POST['dni']);
+    $dni = $_POST['dni'] ?? '';
 
-    $resultado = $conexion->query("SELECT * FROM clientes WHERE dni = '$dni'");
+    if ($dni) {
+        $resultado = $conexion->query("SELECT * FROM clientes WHERE dni = '$dni' LIMIT 1");
 
-    if ($resultado && $resultado->num_rows > 0) {
-        $cliente = $resultado->fetch_assoc();
-        $_SESSION['cliente_id'] = $cliente['id'];
-        $_SESSION['cliente_nombre'] = $cliente['nombre'] . ' ' . $cliente['apellido'];
-        header("Location: panel_cliente.php");
-        exit;
+        if ($resultado && $resultado->num_rows > 0) {
+            $cliente = $resultado->fetch_assoc();
+            $_SESSION['cliente_id'] = $cliente['id'];
+            header("Location: panel_cliente.php");
+            exit;
+        } else {
+            $error = "DNI no encontrado.";
+        }
     } else {
-        $error = "DNI no encontrado.";
+        $error = "Debe ingresar su DNI.";
     }
 }
 ?>
@@ -26,35 +26,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>Ingreso Cliente</title>
+    <title>Ingreso de Cliente</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
         body {
             background-color: #000;
             color: gold;
             font-family: Arial, sans-serif;
+            padding: 20px;
             text-align: center;
-            padding: 40px;
         }
-        input {
-            padding: 10px;
+        input, button {
+            padding: 12px;
+            margin: 10px;
             font-size: 18px;
-            width: 80%;
-            max-width: 300px;
-        }
-        button {
-            padding: 10px 20px;
-            background-color: gold;
-            border: none;
-            font-weight: bold;
-            margin-top: 10px;
         }
     </style>
 </head>
 <body>
     <h2>Ingresar con DNI</h2>
-    <form method="POST">
-        <input type="number" name="dni" placeholder="Ingrese su DNI" required><br>
+    <form method="post">
+        <input type="text" name="dni" placeholder="Ingrese su DNI" required><br>
         <button type="submit">Ingresar</button>
     </form>
     <?php if (isset($error)) echo "<p style='color: red;'>$error</p>"; ?>
