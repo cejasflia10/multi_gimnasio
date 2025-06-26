@@ -1,7 +1,7 @@
 <?php
 include 'conexion.php';
 if (session_status() === PHP_SESSION_NONE) session_start();
-include __DIR__ . '/menu.php'; // Corrección de ruta
+include 'menu_horizontal.php'; // Este es el menú correcto según lo que pediste
 
 if (!isset($_GET['id'])) {
     die("ID de gimnasio no especificado.");
