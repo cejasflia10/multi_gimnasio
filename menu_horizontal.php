@@ -72,7 +72,9 @@ $rol = $_SESSION['rol'] ?? '';
     </style>
 </head>
 <body>
-<div class="solo-pc">   
+<div class="menu_horizontal solo-pc">
+  <!-- Todo tu menú original aquí -->
+</div>
     <div>Clientes
         <div class="submenu">
             <a href="agregar_cliente.php">Agregar</a>
@@ -127,7 +129,6 @@ $rol = $_SESSION['rol'] ?? '';
             <a href="ver_gimnasios.php">Ver</a>
         </div>
     </div>
-<div class="solo-pc">
     <div>Usuarios
         <div class="submenu">
             <a href="agregar_usuario.php">Agregar</a>
