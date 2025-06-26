@@ -1,29 +1,38 @@
 <?php
-session_start();
-if (!isset($_SESSION['gimnasio_id'])) {
-    die("Error: sesión no iniciada.");
-}
+if (session_status() === PHP_SESSION_NONE) session_start();
 include 'conexion.php';
-include 'menu_horizontal.php';
+include 'permisos.php';
 
-if ($_SERVER["REQUEST_METHOD"] == "POST") {
-    $apellido = trim($_POST["apellido"]);
-    $nombre = trim($_POST["nombre"]);
-    $domicilio = trim($_POST["domicilio"]);
-    $telefono = trim($_POST["telefono"]);
-    $rfid = trim($_POST["rfid"]);
-    $gimnasio_id = $_SESSION["gimnasio_id"];
+if (!tiene_permiso('profesores')) {
+    echo "<h2 style='color:red;'>⛔ Acceso denegado</h2>";
+    exit;
+}
 
-    $stmt = $conexion->prepare("INSERT INTO profesores (apellido, nombre, domicilio, telefono, rfid, gimnasio_id) VALUES (?, ?, ?, ?, ?, ?)");
-    $stmt->bind_param("sssssi", $apellido, $nombre, $domicilio, $telefono, $rfid, $gimnasio_id);
+// Función para generar QR en base64
+function generarQR($dni) {
+    include_once 'phpqrcode/qrlib.php';
+    $tempDir = 'qrs/';
+    if (!file_exists($tempDir)) mkdir($tempDir);
+    $filename = $tempDir . 'qr_' . $dni . '.png';
+    QRcode::png($dni, $filename, QR_ECLEVEL_H, 4);
+    return $filename;
+}
 
-    if ($stmt->execute()) {
-        echo "<script>alert('Profesor agregado correctamente'); window.location.href='ver_profesores.php';</script>";
-    } else {
-        echo "Error: " . $stmt->error;
-    }
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $apellido = $_POST['apellido'];
+    $nombre = $_POST['nombre'];
+    $domicilio = $_POST['domicilio'];
+    $telefono = $_POST['telefono'];
+    $dni = $_POST['dni'];
 
-    $stmt->close();
+    $qr_path = generarQR($dni);
+
+    $stmt = $conexion->prepare("INSERT INTO profesores (apellido, nombre, domicilio, telefono, dni, qr_codigo) VALUES (?, ?, ?, ?, ?, ?)");
+    $stmt->bind_param("ssssss", $apellido, $nombre, $domicilio, $telefono, $dni, $qr_path);
+    $stmt->execute();
+
+    header("Location: ver_profesores.php");
+    exit;
 }
 ?>
 
@@ -34,91 +43,48 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     <title>Agregar Profesor</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
-        body {
-            background-color: #111;
-            color: #f1f1f1;
-            font-family: 'Segoe UI', sans-serif;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            min-height: 100vh;
-            padding: 20px;
+        body { background-color: #111; color: gold; font-family: Arial; padding: 20px; }
+        form { max-width: 400px; margin: auto; }
+        label { display: block; margin-top: 10px; }
+        input[type="text"], input[type="number"] {
+            width: 100%; padding: 8px; background: #222; color: gold; border: 1px solid #444;
         }
-
-        form {
-            background-color: #1a1a1a;
-            padding: 30px;
-            border-radius: 10px;
-            box-shadow: 0 0 10px #000;
-            width: 100%;
-            max-width: 500px;
-        }
-
-        h2 {
-            color: #f7d774;
-            margin-bottom: 20px;
-            text-align: center;
-        }
-
-        label {
-            display: block;
-            margin-top: 10px;
-            font-weight: bold;
-        }
-
-        input[type="text"] {
-            width: 100%;
-            padding: 10px;
-            margin-top: 5px;
-            background-color: #222;
-            color: #f1f1f1;
-            border: 1px solid #555;
-            border-radius: 5px;
-        }
-
         .botones {
             margin-top: 20px;
             display: flex;
             justify-content: space-between;
         }
-
-        button, a {
-            background-color: #f7d774;
-            color: #111;
-            padding: 10px 20px;
-            text-decoration: none;
-            border: none;
-            border-radius: 5px;
-            font-weight: bold;
+        input[type="submit"], a {
+            background: gold; color: black; padding: 10px 20px; text-decoration: none;
+            font-weight: bold; border: none; border-radius: 5px;
         }
-
-        button:hover, a:hover {
-            background-color: #ffe700;
+        input[type="submit"]:hover, a:hover {
+            background: #ffd700;
         }
     </style>
 </head>
 <body>
 
-<form method="POST" action="">
-    <h2>Agregar Profesor</h2>
-    <label>Apellido</label>
+<h1>➕ Agregar Profesor</h1>
+
+<form method="POST">
+    <label>Apellido:</label>
     <input type="text" name="apellido" required>
 
-    <label>Nombre</label>
+    <label>Nombre:</label>
     <input type="text" name="nombre" required>
 
-    <label>Domicilio</label>
-    <input type="text" name="domicilio" required>
+    <label>Domicilio:</label>
+    <input type="text" name="domicilio">
 
-    <label>Teléfono</label>
-    <input type="text" name="telefono" required>
+    <label>Teléfono:</label>
+    <input type="text" name="telefono">
 
-    <label>RFID</label>
-    <input type="text" name="rfid" required>
+    <label>DNI:</label>
+    <input type="text" name="dni" required>
 
     <div class="botones">
-        <button type="submit">Guardar</button>
+        <input type="submit" value="Guardar">
         <a href="index.php">Volver al menú</a>
     </div>
 </form>
