@@ -63,7 +63,7 @@ if ($id_usuario > 0) {
     $res = $conexion->query("SELECT nombre_completo, logo FROM usuarios WHERE id = $id_usuario");
     if ($res && $fila = $res->fetch_assoc()) {
         $nombre_usuario = $fila['nombre_completo'] ?? 'Usuario';
-$logo = !empty($fila['logo']) ? $fila['logo'] : 'imagenes/logo-default.png';
+        $logo = $fila['logo'] ?
 
 }
 ?>
