@@ -93,10 +93,7 @@ if ($gimnasio_id) {
 </header>
 
 <nav>
-  <div class="menu_horizontal solo-pc">
-  <!-- Todo tu menú original aquí -->
-</div>
-
+  
   <div class="dropdown"><span class="dropbtn"><i class="fas fa-users"></i> Clientes</span>
     <div class="dropdown-content">
       <a href="agregar_cliente.php">Agregar</a>
