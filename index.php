@@ -159,17 +159,6 @@ if ($gimnasio_id) {
   <div class="dropdown"><a href="cerrar_sesion.php"><i class="fas fa-sign-out-alt"></i> Cerrar sesión</a></div>
 </div>
 
-<!-- CONTENIDO DEL PANEL -->
-<div class="contenido">
-  <h2>Bienvenido al Panel</h2>
-  <!-- Acá podés incluir las tarjetas o estadísticas del panel -->
-</div>
-
-</div>
-  <a href="logout.php" class="dropbtn"><i class="fas fa-sign-out-alt"></i> Cerrar Sesión</a>
-
-</nav>
-
 <div class="container">
   
 <div style="display: flex; flex-wrap: wrap; justify-content: space-around; gap: 20px; margin-top: 20px;">
