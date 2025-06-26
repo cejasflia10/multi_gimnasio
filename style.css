@@ -1,3 +1,22 @@
+/* Ocultar menú de PC en móviles */
+@media (max-width: 768px) {
+  .menu-pc {
+    display: none;
+  }
+}
+
+/* Mostrar menú inferior (mobile-footer) solo en móviles */
+@media (max-width: 768px) {
+  .mobile-footer {
+    display: flex;
+  }
+}
+@media (min-width: 769px) {
+  .mobile-footer {
+    display: none;
+  }
+}
+
 body {
     margin: 0;
     background-color: #000;
