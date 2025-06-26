@@ -1,6 +1,7 @@
 <?php
-include 'conexion.php';
 if (session_status() === PHP_SESSION_NONE) session_start();
+include 'conexion.php';
+include 'permisos.php';
 
 $resultado = $conexion->query("SELECT * FROM usuarios");
 ?>
