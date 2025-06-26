@@ -1,7 +1,10 @@
 <?php
 include 'conexion.php';
 session_start();
-
+$rol = $_SESSION['rol'] ?? '';
+if (!in_array($rol, ['cliente','admin', 'profesor'])) {
+    die("Acceso denegado.");
+}
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $dni = $_POST['dni'] ?? '';
 
