@@ -141,6 +141,8 @@ $rol = $_SESSION['rol'] ?? '';
         </div>
      </div>
    </div>
+</div>
+   
     <div><a href="logout.php" style="color: gold; text-decoration: none;">Cerrar sesión</a></div>
 </div>
 
