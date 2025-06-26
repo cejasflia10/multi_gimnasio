@@ -63,8 +63,11 @@
 <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet">
 
 <!-- MENÚ -->
-<div class="menu-horizontal">
-    <div class="dropdown">
+<div class="menu-horizontal-pc">
+  <!-- Todo el menú con iconos y submenús -->
+
+   <div class="menu-horizontal">
+       <div class="dropdown">
         <span class="dropbtn"><i class="fas fa-users"></i> Clientes</span>
         <div class="dropdown-content">
             <a href="ver_clientes.php">Ver Clientes</a>
@@ -139,4 +142,5 @@
     <div class="dropdown">
         <a href="logout.php" class="dropbtn"><i class="fas fa-sign-out-alt"></i> Cerrar sesión</a>
     </div>
+  </div>
 </div>
