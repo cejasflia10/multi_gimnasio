@@ -3,7 +3,7 @@ session_start();
 include 'conexion.php';
 
 $rol = $_SESSION['rol'] ?? '';
-if (!in_array($rol, ['cliente', 'profesor'])) {
+if (!in_array($rol, ['cliente','admin', 'profesor'])) {
     die("Acceso denegado.");
 }
 
