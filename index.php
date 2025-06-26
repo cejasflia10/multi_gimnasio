@@ -376,4 +376,5 @@ if ($gimnasio_id) {
   <a href="scanner_qr.php"><i class="fas fa-qrcode"></i><small>QR</small></a>
   <a href="ventas.php"><i class="fas fa-shopping-cart"></i><small>Ventas</small></a>
 </div>
+</body>
 </html>
