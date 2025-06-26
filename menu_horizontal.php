@@ -94,11 +94,6 @@ $rol = $_SESSION['rol'] ?? '';
             <a href="ver_asistencias.php">Ver</a>
         </div>
     </div>
-    <div>QR
-        <div class="submenu">
-            <a href="scanner_qr.php">Escáner</a>
-        </div>
-    </div>
     <div>Profesores
         <div class="submenu">
             <a href="agregar_profesor.php">Agregar</a>
@@ -114,6 +109,18 @@ $rol = $_SESSION['rol'] ?? '';
             <a href="ventas.php">Crear venta</a>
         </div>
     </div>
+
+    <div>Panel Cliente
+        <div class="submenu">
+            <a href="cliente_acceso.php"><i class="fas fa-id-card"></i> Ingresar con DNI</a>
+            <a href="ver_pagos_cliente.php"><i class="fas fa-money-bill-wave"></i> Ver Pagos</a>
+            <a href="ver_asistencias_cliente.php"><i class="fas fa-calendar-check"></i> Ver Asistencias</a>
+            <a href="ver_qr_cliente.php"><i class="fas fa-qrcode"></i> Ver QR</a>
+            <a href="ver_reservas_cliente.php"><i class="fas fa-calendar-alt"></i> Ver Reservas</a>
+            <a href="datos_contacto.php"><i class="fas fa-address-book"></i> Datos de Contacto</a>
+            <a href="subir_foto.php"><i class="fas fa-camera"></i> Subir/Cambiar Foto</a>
+      </div>
+   </div>
     <div>Gimnasios
         <div class="submenu">
             <a href="agregar_gimnasio.php">Crear</a>
