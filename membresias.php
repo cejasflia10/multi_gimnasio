@@ -69,7 +69,10 @@ $resultado = $conexion->query($sql);
             border: none;
             border-radius: 4px;
             text-decoration: none;
-            font-size: 14px;
+link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+
+<body            font-size: 14px;
             margin-right: 5px;
         }
         .boton:hover {
@@ -89,7 +92,7 @@ $resultado = $conexion->query($sql);
         }
     </style>
 </head>
-<body>
+<>
 
 <h2>Listado de Membresías</h2>
 
