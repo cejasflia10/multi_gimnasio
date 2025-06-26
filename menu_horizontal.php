@@ -73,7 +73,6 @@ $rol = $_SESSION['rol'] ?? '';
 </head>
 <body>
 <div class="solo-pc">   
-  <div class="navbar">
     <div>Clientes
         <div class="submenu">
             <a href="agregar_cliente.php">Agregar</a>
