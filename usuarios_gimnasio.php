@@ -1,13 +1,14 @@
 <?php
+if (session_status() === PHP_SESSION_NONE) session_start();
 include 'conexion.php';
-include 'menu_horizontal.php';
+include 'permisos.php';
 
-$query = "SELECT u.id, u.usuario, u.rol, g.nombre AS gimnasio,
-                 u.clientes, u.membresias, u.profesores, u.ventas, u.asistencias
-          FROM usuarios u 
-          LEFT JOIN gimnasios g ON u.id_gimnasio = g.id";
-$resultado = $conexion->query($query);
+if (!tiene_permiso('usuarios_gimnasio')) {
+    echo "<h2 style='color:red;'>Acceso denegado</h2>";
+    exit;
+}
 ?>
+
 <!DOCTYPE html>
 <html lang="es">
 <head>
