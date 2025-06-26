@@ -1,7 +1,15 @@
 <?php
-session_start();
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
 include 'conexion.php';
-include 'menu_horizontal.php';
+include 'permisos.php';
+
+if (!tiene_permiso('agregar_gimnasio')) {
+    echo "<h2 style='color:red;'>⛔ Acceso denegado</h2>";
+    exit;
+}
+
 // Validar si se ha enviado el formulario
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
     $nombre = $_POST["nombre"];
