@@ -14,7 +14,9 @@ $stmt->execute();
 $resultado = $stmt->get_result();
 ?>
 <!DOCTYPE html>
+
 <html lang="es">
+    
 <head>
     <meta charset="UTF-8">
     <title>Clientes</title>
