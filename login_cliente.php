@@ -12,7 +12,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if ($resultado && $resultado->num_rows > 0) {
         $cliente = $resultado->fetch_assoc();
-        $_SESSION['rol'] = 'cliente_id';
+        $_SESSION['rol'] = 'cliente';
         $_SESSION['cliente_id'] = $cliente['id'];
 
         header("Location: panel_cliente.php");
