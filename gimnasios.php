@@ -4,7 +4,7 @@ include 'conexion.php';
 include 'menu_horizontal.php';
 include 'permisos.php';
 
-if (!tiene_permiso('clientes')) {
+if (!tiene_permiso('gimnasios')) {
     echo "<h2 style='color:red;'>Acceso denegado</h2>";
     exit;
 }
