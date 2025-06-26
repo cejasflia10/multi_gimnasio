@@ -165,12 +165,6 @@ if ($gimnasio_id) {
   <!-- Acá podés incluir las tarjetas o estadísticas del panel -->
 </div>
 
-<!-- FOOTER APP SOLO PARA CELULARES -->
-<div class="mobile-footer">
-  <a href="clientes.php"><i class="fas fa-users"></i><small>Clientes</small></a>
-  <a href="ver_membresias.php"><i class="fas fa-id-card"></i><small>Membresías</small></a>
-  <a href="scanner_qr.php"><i class="fas fa-qrcode"></i><small>QR</small></a>
-  <a href="ventas.php"><i class="fas fa-shopping-cart"></i><small>Ventas</small></a>
 </div>
   <a href="logout.php" class="dropbtn"><i class="fas fa-sign-out-alt"></i> Cerrar Sesión</a>
 
