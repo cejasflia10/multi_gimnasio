@@ -92,7 +92,7 @@ if ($gimnasio_id) {
     <?= $cliente_activo ?>
   </div>
 </header>
-
+<div class="menu-pc">
 <nav>
   <?php if (in_array($rol, ['admin', 'usuario'])): ?>
   <div class="dropdown">
@@ -222,6 +222,8 @@ if ($gimnasio_id) {
       <a href="cliente_qr.php">Ver QR</a>
     </div>
   </div>
+      </div>
+
   <a href="logout.php" class="dropbtn"><i class="fas fa-sign-out-alt"></i> Cerrar Sesión</a>
 <?php endif; ?>
 
