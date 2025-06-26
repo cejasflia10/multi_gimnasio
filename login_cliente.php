@@ -1,26 +1,24 @@
 <?php
-include 'conexion.php';
-session_start();
-$rol = $_SESSION['rol'] ?? '';
-if (!in_array($rol, ['cliente','admin', 'profesor'])) {
-    die("Acceso denegado.");
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
 }
+include 'conexion.php';
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $dni = $_POST['dni'] ?? '';
+    $dni = trim($_POST['dni'] ?? '');
 
-    if ($dni) {
-        $resultado = $conexion->query("SELECT * FROM clientes WHERE dni = '$dni' LIMIT 1");
+    $query = "SELECT * FROM clientes WHERE dni = '$dni'";
+    $resultado = $conexion->query($query);
 
-        if ($resultado && $resultado->num_rows > 0) {
-            $cliente = $resultado->fetch_assoc();
-            $_SESSION['cliente_id'] = $cliente['id'];
-            header("Location: panel_cliente.php");
-            exit;
-        } else {
-            $error = "DNI no encontrado.";
-        }
+    if ($resultado && $resultado->num_rows > 0) {
+        $cliente = $resultado->fetch_assoc();
+        $_SESSION['rol'] = 'cliente_id';
+        $_SESSION['cliente_id'] = $cliente['id'];
+
+        header("Location: panel_cliente.php");
+        exit;
     } else {
-        $error = "Debe ingresar su DNI.";
+        $error = "DNI no encontrado. Verifica los datos.";
     }
 }
 ?>
@@ -29,29 +27,57 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>Ingreso de Cliente</title>
+    <title>Ingreso Cliente</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
         body {
-            background-color: #000;
+            background-color: #111;
             color: gold;
             font-family: Arial, sans-serif;
-            padding: 20px;
             text-align: center;
+            padding: 50px;
         }
-        input, button {
-            padding: 12px;
-            margin: 10px;
-            font-size: 18px;
+        h2 {
+            color: gold;
+        }
+        form {
+            margin-top: 20px;
+        }
+        input[type="text"] {
+            padding: 10px;
+            font-size: 16px;
+            width: 80%;
+            max-width: 300px;
+            border: none;
+            border-radius: 5px;
+        }
+        input[type="submit"] {
+            margin-top: 15px;
+            padding: 10px 20px;
+            font-size: 16px;
+            background-color: gold;
+            border: none;
+            color: black;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        .error {
+            color: red;
+            margin-top: 15px;
         }
     </style>
 </head>
 <body>
-    <h2>Ingresar con DNI</h2>
-    <form method="post">
-        <input type="text" name="dni" placeholder="Ingrese su DNI" required><br>
-        <button type="submit">Ingresar</button>
+
+    <h2>Ingreso de Cliente</h2>
+    <form method="POST">
+        <input type="text" name="dni" placeholder="Ingresá tu DNI" required><br>
+        <input type="submit" value="Ingresar">
     </form>
-    <?php if (isset($error)) echo "<p style='color: red;'>$error</p>"; ?>
+
+    <?php if (isset($error)): ?>
+        <p class="error"><?= $error ?></p>
+    <?php endif; ?>
+
 </body>
 </html>
