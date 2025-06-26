@@ -1,30 +1,37 @@
 <?php
-if (session_status() === PHP_SESSION_NONE) session_start();
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
 include 'conexion.php';
 
+// Validar usuario logueado
 $id_usuario = $_SESSION['id'] ?? 0;
+if ($id_usuario === 0) {
+    die("Acceso no autorizado.");
+}
+
+$mensaje = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['logo'])) {
-    $nombre = $_FILES['logo']['name'];
-    $tmp = $_FILES['logo']['tmp_name'];
-    $ext = strtolower(pathinfo($nombre, PATHINFO_EXTENSION));
+    $archivo = $_FILES['logo'];
 
-    if (in_array($ext, ['png', 'jpg', 'jpeg'])) {
-        $carpeta = "logos/";
-        if (!file_exists($carpeta)) mkdir($carpeta);
-        
-        $nombre_archivo = "logo_usuario_" . $id_usuario . "." . $ext;
-        $destino = $carpeta . $nombre_archivo;
+    if ($archivo['error'] === UPLOAD_ERR_OK) {
+        $nombre_temporal = $archivo['tmp_name'];
+        $nombre_archivo = 'logos/' . uniqid('logo_') . '_' . basename($archivo['name']);
 
-        move_uploaded_file($tmp, $destino);
+        // Crear carpeta si no existe
+        if (!is_dir('logos')) {
+            mkdir('logos', 0777, true);
+        }
 
-        // Guardar en la BD
-        $conexion->query("UPDATE usuarios SET logo = '$destino' WHERE id = $id_usuario");
-
-        header("Location: index.php");
-        exit;
+        if (move_uploaded_file($nombre_temporal, $nombre_archivo)) {
+            $conexion->query("UPDATE usuarios SET logo = '$nombre_archivo' WHERE id = $id_usuario");
+            $mensaje = "Logo actualizado correctamente.";
+        } else {
+            $mensaje = "Error al subir el archivo.";
+        }
     } else {
-        echo "<p style='color:red'>Solo se permiten archivos JPG o PNG.</p>";
+        $mensaje = "Error en la subida del archivo.";
     }
 }
 ?>
@@ -35,26 +42,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['logo'])) {
     <meta charset="UTF-8">
     <title>Subir Logo</title>
     <style>
-        body { background-color: #111; color: gold; font-family: Arial; padding: 20px; text-align: center; }
-        input[type="file"] { margin: 20px 0; }
-        input[type="submit"] {
-            background: gold; color: black; padding: 10px 20px;
-            border: none; font-weight: bold; border-radius: 5px;
+        body {
+            background-color: #000;
+            color: gold;
+            font-family: Arial, sans-serif;
+            padding: 30px;
+            text-align: center;
         }
-        input[type="submit"]:hover {
-            background: #ffd700;
+        input[type="file"], input[type="submit"] {
+            margin: 15px;
+            padding: 10px;
         }
     </style>
 </head>
 <body>
+    <h2>Subir Logo del Usuario</h2>
 
-<h1>📤 Subir Logo Personalizado</h1>
+    <?php if ($mensaje): ?>
+        <p><?= htmlspecialchars($mensaje) ?></p>
+    <?php endif; ?>
 
-<form method="POST" enctype="multipart/form-data">
-    <input type="file" name="logo" accept=".jpg,.jpeg,.png" required>
-    <br>
-    <input type="submit" value="Subir Logo">
-</form>
+    <form method="POST" enctype="multipart/form-data">
+        <input type="file" name="logo" accept="image/*" required><br>
+        <input type="submit" value="Subir Logo">
+    </form>
 
+    <a href="index.php" style="color: gold;">Volver al panel</a>
 </body>
 </html>
