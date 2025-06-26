@@ -95,7 +95,7 @@ if ($gimnasio_id) {
 </header>
 
 <nav>
-  
+<div class="menu-pc">  
   <div class="dropdown"><span class="dropbtn"><i class="fas fa-users"></i> Clientes</span>
     <div class="dropdown-content">
       <a href="agregar_cliente.php">Agregar</a>
@@ -138,6 +138,8 @@ if ($gimnasio_id) {
       <a href="cliente_qr.php">Ver QR</a>
     </div>
   </div>
+</div>
+
   <a href="logout.php" class="dropbtn"><i class="fas fa-sign-out-alt"></i> Cerrar Sesión</a>
 
 </nav>
