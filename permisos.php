@@ -1,12 +1,27 @@
 <?php
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+
 // Definición global de permisos por rol
 $permisos = [
-    'admin' => ['clientes', 'membresias', 'qr', 'asistencias', 'profesores', 'ventas', 'configuraciones', 'panel'],
-    'usuario' => ['clientes', 'membresias', 'qr', 'ventas', 'panel'],
-    'profesor' => ['asistencias', 'profesores', 'membresias', 'qr'],
-    'cliente' => ['panel_cliente']
+    'admin' => [
+        'clientes', 'membresias', 'qr', 'asistencias', 'profesores',
+        'ventas', 'configuraciones', 'panel', 'usuarios_gimnasio',
+        'planes', 'ver_usuarios', 'asistencia_profesor', 'gimnasios'
+    ],
+    'usuario' => [
+        'clientes', 'membresias', 'qr', 'ventas', 'panel'
+    ],
+    'profesor' => [
+        'asistencias', 'profesores', 'membresias', 'qr'
+    ],
+    'cliente' => [
+        'panel_cliente'
+    ]
 ];
 
+// Función para validar permiso por sección
 function tiene_permiso($seccion) {
     global $permisos;
     $rol = $_SESSION['rol'] ?? '';
