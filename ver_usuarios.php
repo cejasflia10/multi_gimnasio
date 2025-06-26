@@ -3,8 +3,16 @@ if (session_status() === PHP_SESSION_NONE) session_start();
 include 'conexion.php';
 include 'permisos.php';
 
+// VALIDACIÓN DE PERMISO
+if (!tiene_permiso('ver_usuarios')) {
+    echo "<h2 style='color:red;'>⛔ Acceso denegado</h2>";
+    exit;
+}
+
+// Consulta solo si tiene permiso
 $resultado = $conexion->query("SELECT * FROM usuarios");
 ?>
+
 
 <!DOCTYPE html>
 <html lang="es">
