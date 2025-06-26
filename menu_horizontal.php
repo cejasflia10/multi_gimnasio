@@ -72,7 +72,8 @@ $rol = $_SESSION['rol'] ?? '';
     </style>
 </head>
 <body>
-<div class="navbar">
+<div class="solo-pc">   
+  <div class="navbar">
     <div>Clientes
         <div class="submenu">
             <a href="agregar_cliente.php">Agregar</a>
@@ -138,9 +139,11 @@ $rol = $_SESSION['rol'] ?? '';
             <a href="ver_planes.php">Planes</a>
             <a href="accesos.php">Accesos</a>
         </div>
-    </div>
+     </div>
+   </div>
     <div><a href="logout.php" style="color: gold; text-decoration: none;">Cerrar sesión</a></div>
 </div>
+
 </body>
 </html>
 
