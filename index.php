@@ -360,7 +360,6 @@ if ($gimnasio_id) {
       <a href="configurar_accesos.php">Accesos</a>
     </div>
   </div>
-  <div class="dropdown"><a href="cerrar_sesion.php"><i class="fas fa-sign-out-alt"></i> Cerrar sesión</a></div>
 </div>
 
 <!-- CONTENIDO DEL PANEL -->
