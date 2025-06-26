@@ -1,9 +1,14 @@
-<?php include 'verificar_sesion.php'; ?>
-
 <?php
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
 include 'conexion.php';
-include 'menu_horizontal.php';
+include 'permisos.php';
 
+if (!tiene_permiso('ver_gimnasios')) {
+    echo "<h2 style='color:red;'>⛔ Acceso denegado</h2>";
+    exit;
+}
 $resultado = $conexion->query("SELECT * FROM gimnasios");
 ?>
 
