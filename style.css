@@ -119,21 +119,22 @@ ul {
         margin-bottom: 2px;
     }
 }
-/* Ocultar menú de PC en móviles */
+/* Oculta el menú superior en celulares */
 @media (max-width: 768px) {
   .menu-pc {
-    display: none;
+    display: none !important;
   }
 }
 
-/* Mostrar menú inferior (mobile-footer) solo en móviles */
+/* Opcional: muestra el menú app en celulares */
 @media (max-width: 768px) {
   .mobile-footer {
-    display: flex;
+    display: flex !important;
   }
 }
+
 @media (min-width: 769px) {
   .mobile-footer {
-    display: none;
+    display: none !important;
   }
 }
