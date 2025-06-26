@@ -128,6 +128,7 @@ $rol = $_SESSION['rol'] ?? '';
             <a href="ver_gimnasios.php">Ver</a>
         </div>
     </div>
+<div class="solo-pc">
     <div>Usuarios
         <div class="submenu">
             <a href="agregar_usuario.php">Agregar</a>
@@ -139,8 +140,7 @@ $rol = $_SESSION['rol'] ?? '';
             <a href="ver_planes.php">Planes</a>
             <a href="accesos.php">Accesos</a>
         </div>
-     </div>
-   </div>
+    </div>
 </div>
    
     <div><a href="logout.php" style="color: gold; text-decoration: none;">Cerrar sesión</a></div>
