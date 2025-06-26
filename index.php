@@ -212,7 +212,7 @@ if ($gimnasio_id) {
   </div>
 <?php endif; ?>
 
-<?php if (in_array($rol, ['admin','usuarios', ' profesores'])): ?>
+<?php if (in_array($rol, ['admin','clientes', ' profesores'])): ?>
   <div class="dropdown"><span class="dropbtn">Panel del Cliente</span>
     <div class="dropdown-content">
       <a href="cliente_acceso.php">Acceso DNI</a>
