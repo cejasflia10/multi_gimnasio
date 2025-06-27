@@ -12,7 +12,7 @@ $permisos = [
     ],
     'admin' => [ // Admin local de un gimnasio
         'clientes', 'membresias', 'qr', 'asistencias', 'profesores',
-        'ventas', 'panel', 'usuarios_gimnasio', 'planes', 'ver_usuarios', 'asistencia_profesor'
+        'ventas', 'panel', 'reporte_horas_profesor', 'usuarios_gimnasio', 'planes', 'ver_usuarios', 'asistencia_profesor'
         // ❌ No incluye: configuraciones, gimnasios
     ],
     'usuario' => [ // Acceso según lo autorizado por superadmin
