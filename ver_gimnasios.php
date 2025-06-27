@@ -36,7 +36,10 @@ $resultado = $conexion->query("SELECT * FROM gimnasios");
       <td><?= $row['cantidad_clientes'] ?></td>
       <td><?= $row['plan'] ?></td>
       <td><?= $row['fecha_vencimiento'] ?></td>
-      <td><a href="editar_gimnasio.php?id=<?= $row['id'] ?>">✏️ Editar</a></td>
+      <td>
+        <a href="editar_gimnasio.php?id=<?= $row['id'] ?>">✏️ Editar</a> |
+        <a href="eliminar_gimnasio.php?id=<?= $row['id'] ?>" onclick="return confirm('¿Estás seguro de que deseas eliminar este gimnasio?')">🗑️ Eliminar</a>
+     </td>
     </tr>
     <?php endwhile; ?>
   </table>
