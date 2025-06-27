@@ -1,6 +1,11 @@
 <?php
 include 'conexion.php';
+include 'permisos.php';
 
+if (!tiene_permiso('profesores')) {
+    echo "<h2 style='color:red;'>⛔ Acceso denegado</h2>";
+    exit;
+}
 // Eliminar cualquier usuario admin anterior
 $conexion->query("DELETE FROM usuarios WHERE TRIM(rol) = 'admin'");
 
