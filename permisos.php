@@ -5,16 +5,21 @@ if (session_status() === PHP_SESSION_NONE) {
 
 // Definición global de permisos por rol
 $permisos = [
-    'admin' => [
+    'superadmin' => [ // Acceso total
         'clientes', 'membresias', 'qr', 'asistencias', 'profesores',
         'ventas', 'configuraciones', 'panel', 'usuarios_gimnasio',
-        'planes', 'ver_usuarios', 'asistencia_profesor', 'gimnasios'
+        'planes', 'ver_usuarios', 'asistencia_profesor', 'gimnasios', 'panel_cliente'
     ],
-    'usuario' => [
-        'clientes', 'membresias', 'qr', 'ventas', 'panel'
+    'admin' => [ // Admin local de un gimnasio
+        'clientes', 'membresias', 'qr', 'asistencias', 'profesores',
+        'ventas', 'panel', 'usuarios_gimnasio', 'planes', 'ver_usuarios', 'asistencia_profesor'
+        // ❌ No incluye: configuraciones, gimnasios
     ],
-    'profesor' => [
-        'asistencias', 'profesores', 'membresias', 'qr'
+    'usuario' => [ // Acceso según lo autorizado por superadmin
+        'clientes', 'membresias', 'profesores', 'qr', 'ventas', 'panel', 'panel_cliente'
+    ],
+    'profesor' => [ // Acceso muy limitado
+        'clientes', 'membresias', 'qr'
     ],
     'cliente' => [
         'panel_cliente'
@@ -25,5 +30,9 @@ $permisos = [
 function tiene_permiso($seccion) {
     global $permisos;
     $rol = $_SESSION['rol'] ?? '';
+
+    // Superadmin tiene acceso total
+    if ($rol === 'superadmin') return true;
+
     return in_array($seccion, $permisos[$rol] ?? []);
 }
