@@ -38,7 +38,7 @@ if ($gimnasio_id) {
     if ($f = $r->fetch_assoc()) {
         $gimnasio_nombre = $f['nombre'];
         $proximo_vencimiento = $f['fecha_vencimiento'];
-    }
+    }}
     $r2 = $conexion->query("
       SELECT c.nombre, c.apellido, m.fecha_vencimiento
       FROM clientes c
@@ -52,9 +52,9 @@ if ($gimnasio_id) {
     $fecha_nac = new DateTime($fila['fecha_nacimiento']);
     $hoy = new DateTime();
     $edad = $fecha_nac->diff($hoy)->y;
-} else {
+}} else {
     $edad = 'No registrada';
-}}}
+}
 ?>
 <!DOCTYPE html>
 <html lang="es">
