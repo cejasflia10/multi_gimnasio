@@ -1,24 +1,21 @@
 <?php
 if (session_status() === PHP_SESSION_NONE) session_start();
 include 'conexion.php';
-header('Content-Type: text/html; charset=UTF-8');
 
-date_default_timezone_set('America/Argentina/Buenos_Aires');
+$dni = $_POST['dni'] ?? '';
 $fecha = date('Y-m-d');
 $hora = date('H:i:s');
 
-$dni = $_POST['dni'] ?? '';
-
-if (!$dni) {
-    echo "<div style='color:orange;'>⚠️ DNI no recibido</div>";
+if (empty($dni)) {
+    echo "<div style='color: red;'>❌ DNI no recibido.</div>";
     exit;
 }
 
-// Paso 1: Buscar cliente
+// PASO 1: Buscar cliente
 $cliente_q = $conexion->query("SELECT * FROM clientes WHERE dni = '$dni' LIMIT 1");
 
 if (!$cliente_q || $cliente_q->num_rows === 0) {
-    echo "<div style='color:red;'>❌ Cliente no encontrado</div>";
+    echo "<div style='color: red;'>❌ Cliente no encontrado</div>";
     exit;
 }
 
@@ -26,56 +23,49 @@ $cliente = $cliente_q->fetch_assoc();
 $cliente_id = $cliente['id'];
 $nombre = $cliente['apellido'] . ' ' . $cliente['nombre'];
 
-echo "<div style='color:cyan;'>✅ Cliente encontrado: $nombre</div>";
+echo "<div style='color: cyan;'>✅ Cliente encontrado: $nombre</div>";
 
-// Paso 2: Verificar membresía
+// PASO 2: Buscar membresía vigente
 $membresia_q = $conexion->query("
-    SELECT m.*, p.nombre AS plan_nombre 
-    FROM membresias m
-    JOIN planes p ON m.plan_id = p.id
-    WHERE m.cliente_id = $cliente_id
-    ORDER BY m.fecha_vencimiento DESC
+    SELECT m.*, p.nombre AS nombre_plan 
+    FROM membresias m 
+    JOIN planes p ON m.plan_id = p.id 
+    WHERE m.cliente_id = $cliente_id 
+    ORDER BY m.fecha_vencimiento DESC 
     LIMIT 1
 ");
 
 if (!$membresia_q || $membresia_q->num_rows === 0) {
-    echo "<div style='color:orange;'>⚠️ $nombre no tiene membresía registrada</div>";
+    echo "<div style='color: orange;'>⚠️ $nombre no tiene membresía registrada</div>";
     exit;
 }
 
 $membresia = $membresia_q->fetch_assoc();
-$clases = (int)$membresia['clases_restantes'];
-$vencimiento = $membresia['fecha_vencimiento'];
-$plan_nombre = $membresia['plan_nombre'];
+$clases = (int)$membresia['clases_disponibles'];
+$vto = $membresia['fecha_vencimiento'];
+$plan_nombre = $membresia['nombre_plan'];
+$membresia_id = $membresia['id'];
 
-// Paso 3: ¿Ya asistió hoy?
-$ya_asistio = $conexion->query("
-    SELECT 1 FROM asistencias 
-    WHERE cliente_id = $cliente_id AND fecha = '$fecha'
-");
+echo "<div style='color: green;'>✅ Membresía: clases = $clases, vence = $vto</div>";
 
-$ya_ingreso = $ya_asistio && $ya_asistio->num_rows > 0;
+// PASO 3: Verificar si ya asistió hoy
+$ya_asistio = $conexion->query("SELECT 1 FROM asistencias WHERE cliente_id = $cliente_id AND fecha = '$fecha'");
 
-// Paso 4: Verifica si puede ingresar
-if (($clases > 0 && $vencimiento >= $fecha) || $plan_nombre === 'FREE PASS') {
-    // FREE PASS puede ingresar varias veces
-    if (!$ya_ingreso || $plan_nombre === 'FREE PASS') {
-        // Registrar asistencia
-        $conexion->query("INSERT INTO asistencias (cliente_id, fecha, hora) VALUES ($cliente_id, '$fecha', '$hora')");
+if ($ya_asistio && $ya_asistio->num_rows > 0) {
+    echo "<div style='color: gold;'>⚠️ $nombre ya registró asistencia hoy.</div>";
+    exit;
+}
 
-        if ($plan_nombre !== 'FREE PASS') {
-            $conexion->query("UPDATE membresias SET clases_restantes = clases_restantes - 1 WHERE id = {$membresia['id']}");
-            $clases--;
-        }
+// PASO 4: Verificar clases y vencimiento
+if ($clases > 0 && $vto >= $fecha) {
+    // Registrar asistencia y descontar clase
+    $conexion->query("INSERT INTO asistencias (cliente_id, fecha, hora) VALUES ($cliente_id, '$fecha', '$hora')");
+    $conexion->query("UPDATE membresias SET clases_disponibles = clases_disponibles - 1 WHERE id = $membresia_id");
 
-        echo "<div style='color:lime;'>✅ Asistencia registrada: $nombre</div>";
-        echo "<div style='color:white;'>📅 Vence: $vencimiento<br>🎯 Clases restantes: $clases<br>🕒 Hora: $hora</div>";
-    } else {
-        echo "<div style='color:gold;'>⚠️ $nombre ya registró asistencia hoy.</div>";
-        echo "<div style='color:white;'>📅 Vence: $vencimiento<br>🎯 Clases: $clases</div>";
-    }
+    echo "<div style='color: green;'>✅ Asistencia registrada</div>";
+    echo "<div style='color: white;'>📅 Vence: $vto<br>🎯 Clases restantes: " . ($clases - 1) . "<br>🕒 $hora</div>";
 } else {
-    echo "<div style='color:orange;'>⚠️ $nombre no tiene clases disponibles o está vencido</div>";
-    echo "<div style='color:white;'>📅 Vence: $vencimiento<br>🎯 Clases: $clases</div>";
+    echo "<div style='color: orange;'>⚠️ $nombre no tiene clases disponibles o está vencido</div>";
+    echo "<div style='color: white;'>📅 Vence: $vto<br>🎯 Clases: $clases</div>";
 }
 ?>
