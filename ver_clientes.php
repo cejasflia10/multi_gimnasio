@@ -6,7 +6,12 @@ include 'menu_horizontal.php';
 $gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
 
 $planes = $conexion->query("SELECT * FROM planes WHERE gimnasio_id = $gimnasio_id");
-$clientes = $conexion->query("SELECT id, nombre, apellido, dni FROM clientes WHERE gimnasio_id = $gimnasio_id");
+$clientes = $conexion->query("
+    SELECT c.id, c.nombre, c.apellido, c.dni, c.telefono, c.email, c.disciplina, g.nombre AS nombre_gimnasio
+    FROM clientes c
+    LEFT JOIN gimnasios g ON c.gimnasio_id = g.id
+    WHERE c.gimnasio_id = $gimnasio_id
+");
 $adicionales = $conexion->query("SELECT id, nombre FROM planes_adicionales WHERE gimnasio_id = $gimnasio_id");
 ?>
 
