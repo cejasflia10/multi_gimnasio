@@ -1,7 +1,5 @@
 <?php
-if (session_status() === PHP_SESSION_NONE) {
-    session_start();
-}
+if (session_status() === PHP_SESSION_NONE) session_start();
 include 'conexion.php';
 include 'menu_horizontal.php';
 
@@ -35,92 +33,82 @@ $resultado = $conexion->query($query);
             color: gold;
             font-family: Arial, sans-serif;
         }
-
         .container {
-            margin-left: 260px;
+            max-width: 1200px;
+            margin: auto;
             padding: 20px;
         }
-
         h1 {
             text-align: center;
-            color: gold;
+            margin-bottom: 20px;
         }
-
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 20px;
-            overflow-x: auto;
-        }
-
-        th {
-            background-color: #222;
-            border: 1px solid gold;
-            padding: 8px;
-            text-align: center;
-        }
-
-        td {
-            border: 1px solid gold;
-            padding: 8px;
-        }
-
-        td.align-left {
-            text-align: left;
-        }
-
-        td.align-center {
-            text-align: center;
-        }
-
-        tr:nth-child(even) {
-            background-color: #1a1a1a;
-        }
-
         .btn-volver {
             background-color: gold;
             color: #111;
             padding: 10px 20px;
             border: none;
-            cursor: pointer;
             text-decoration: none;
+            border-radius: 5px;
             display: inline-block;
+            font-weight: bold;
             margin-bottom: 20px;
         }
-
+        .search-box {
+            text-align: right;
+            margin-bottom: 15px;
+        }
+        .search-box input {
+            padding: 8px;
+            border-radius: 5px;
+            border: 1px solid gold;
+            background-color: #222;
+            color: gold;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background-color: #222;
+        }
+        th {
+            background-color: #333;
+            color: gold;
+            border: 1px solid gold;
+            padding: 8px;
+            text-align: center;
+        }
+        td {
+            border: 1px solid gold;
+            padding: 8px;
+        }
+        td.align-left {
+            text-align: left;
+        }
+        td.align-center {
+            text-align: center;
+        }
+        tr:nth-child(even) {
+            background-color: #1a1a1a;
+        }
         .btn-generar {
             color: gold;
             text-decoration: underline;
         }
-
         .acciones a {
             margin: 0 5px;
             color: gold;
             text-decoration: none;
             font-size: 18px;
         }
-
-        .search-box {
-            margin-bottom: 15px;
-            text-align: right;
-        }
-
-        .search-box input {
-            padding: 8px;
-            border-radius: 5px;
-            border: 1px solid #ccc;
-        }
-
         @media screen and (max-width: 768px) {
             .container {
-                margin-left: 0;
                 padding: 10px;
             }
-
             table, thead, tbody, th, td, tr {
                 font-size: 14px;
             }
-
+            .search-box {
+                text-align: center;
+            }
             .search-box input {
                 width: 100%;
                 margin-top: 10px;
@@ -143,9 +131,11 @@ $resultado = $conexion->query($query);
 <div class="container">
     <h1>Clientes Registrados</h1>
     <a href="index.php" class="btn-volver">← Volver al Menú</a>
+
     <div class="search-box">
         <input type="text" id="busqueda" placeholder="Buscar por nombre, apellido, DNI o disciplina..." onkeyup="filtrarClientes()">
     </div>
+
     <table id="tablaClientes">
         <thead>
             <tr>
@@ -181,7 +171,7 @@ $resultado = $conexion->query($query);
                 </td>
                 <td class="align-left"><?= htmlspecialchars($fila['nombre_gimnasio'] ?? '') ?></td>
                 <td class="acciones align-center">
-                    <a href="editar_cliente.php?id=<?= $fila['id'] ?>"><i class="fas fa-edit"></i>✎</a>
+                    <a href="editar_cliente.php?id=<?= $fila['id'] ?>">✏️</a>
                     <a href="eliminar_cliente.php?id=<?= $fila['id'] ?>" onclick="return confirm('¿Estás seguro de que deseas eliminar este cliente?');">🗑️</a>
                 </td>
             </tr>
