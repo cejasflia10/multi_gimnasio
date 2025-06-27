@@ -90,7 +90,12 @@ if ($gimnasio_id) {
 <header>
   <h1><?= $gimnasio_nombre ?></h1>
   <div class="info-header">
-    <strong>Próximo vencimiento del gimnasio:</strong> <?= date('d/m/Y', strtotime($proximo_vencimiento)) ?><br>
+<?php if (!empty($proximo_vencimiento)): ?>
+  <strong>Próximo vencimiento del gimnasio:</strong> <?= date('d/m/Y', strtotime($proximo_vencimiento)) ?><br>
+<?php else: ?>
+  <strong>Próximo vencimiento del gimnasio:</strong> No disponible<br>
+<?php endif; ?>
+<?= $cliente_activo ?>
     <?= $cliente_activo ?>
   </div>
 </header>
