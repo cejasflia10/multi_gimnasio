@@ -1,76 +1,59 @@
 <?php
-if (session_status() === PHP_SESSION_NONE) {
-    session_start();
-}
+session_start();
 include 'conexion.php';
 
-$cliente_id = $_SESSION['cliente_id'] ?? 0;
-if (!$cliente_id) {
+$rol = $_SESSION['rol'] ?? '';
+if (!in_array($rol, ['cliente', 'admin', 'profesor'])) {
     die("Acceso denegado.");
 }
 
-$query = "SELECT * FROM fichas_seguimiento WHERE cliente_id = $cliente_id ORDER BY semana DESC";
-$resultado = $conexion->query($query);
+$cliente_id = $_SESSION['cliente_id'] ?? ($_GET['id'] ?? null);
+if (!$cliente_id) {
+    die("ID de cliente no especificado.");
+}
+
+$cliente = $conexion->query("SELECT nombre, apellido FROM clientes WHERE id = $cliente_id")->fetch_assoc();
+$seguimientos = $conexion->query("SELECT * FROM seguimiento_nutricional WHERE cliente_id = $cliente_id ORDER BY fecha DESC");
 ?>
 <!DOCTYPE html>
 <html lang="es">
 <head>
-    <meta charset="UTF-8">
-    <title>Historial de Seguimiento</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <style>
-        body {
-            background-color: #000;
-            color: gold;
-            font-family: Arial, sans-serif;
-            padding: 20px;
-        }
-        h2 {
-            text-align: center;
-        }
-        .ficha {
-            background: #111;
-            padding: 15px;
-            margin-bottom: 20px;
-            border-radius: 8px;
-        }
-        .campo {
-            margin-bottom: 10px;
-        }
-        .campo label {
-            font-weight: bold;
-        }
-    </style>
+  <meta charset="UTF-8">
+  <title>Mi Seguimiento Nutricional</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    body { background-color: #000; color: gold; font-family: Arial, sans-serif; padding: 20px; }
+    .container { max-width: 800px; margin: auto; background: #222; padding: 20px; border-radius: 10px; }
+    h2 { text-align: center; }
+    table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+    th, td { border: 1px solid gold; padding: 8px; text-align: center; }
+    th { background-color: #333; }
+    a.volver { background: gold; color: black; padding: 10px; border-radius: 5px; font-weight: bold; text-decoration: none; display: inline-block; margin-top: 10px; }
+    .acciones { text-align: center; margin-top: 15px; }
+  </style>
 </head>
 <body>
-<h2>Historial de Seguimiento Alimenticio</h2>
-<?php while ($fila = $resultado->fetch_assoc()): ?>
-    <div class="ficha">
-        <div class="campo"><label>Semana:</label> <?php echo $fila['semana']; ?></div>
-        <div class="campo"><label>Fecha de inicio:</label> <?php echo $fila['fecha_inicio']; ?></div>
-        <div class="campo"><label>Peso inicio:</label> <?php echo $fila['peso_inicio']; ?> kg</div>
-        <div class="campo"><label>Peso fin:</label> <?php echo $fila['peso_fin']; ?> kg</div>
-        <div class="campo"><label>Satisfacción:</label> <?php echo $fila['satisfaccion']; ?></div>
-        <div class="campo"><label>Adherencia:</label> <?php echo $fila['adherencia']; ?></div>
-        <div class="campo"><label>Dificultades:</label> <?php echo nl2br($fila['dificultades']); ?></div>
-        <div class="campo"><label>Comidas diarias:</label>
-            D: <?php echo nl2br($fila['desayuno']); ?><br>
-            A: <?php echo nl2br($fila['almuerzo']); ?><br>
-            M: <?php echo nl2br($fila['merienda']); ?><br>
-            C: <?php echo nl2br($fila['cena']); ?>
-        </div>
-        <div class="campo"><label>Plan semanal:</label>
-            Lunes: <?php echo nl2br($fila['lunes']); ?><br>
-            Martes: <?php echo nl2br($fila['martes']); ?><br>
-            Miércoles: <?php echo nl2br($fila['miercoles']); ?><br>
-            Jueves: <?php echo nl2br($fila['jueves']); ?><br>
-            Viernes: <?php echo nl2br($fila['viernes']); ?><br>
-            Sábado: <?php echo nl2br($fila['sabado']); ?><br>
-            Domingo: <?php echo nl2br($fila['domingo']); ?>
-        </div>
-        <div class="campo"><label>Seguimiento diario:</label> <?php echo nl2br($fila['seguimiento']); ?></div>
-        <div class="campo"><label>Registrado el:</label> <?php echo $fila['fecha_registro']; ?></div>
-    </div>
-<?php endwhile; ?>
+<div class="container">
+  <h2>📋 Seguimiento Nutricional de <?= htmlspecialchars($cliente['nombre'] . ' ' . $cliente['apellido']) ?></h2>
+
+  <div class="acciones">
+    <a class="volver" href="panel_cliente.php">← Volver al Panel</a>
+    <?php if ($rol === 'cliente'): ?>
+      <a class="volver" href="ver_seguimiento_cliente.php">📄 Ver Seguimientos</a>
+    <?php endif; ?>
+  </div>
+
+  <table>
+    <tr><th>Fecha</th><th>Peso</th><th>Recomendaciones</th><th>Observaciones</th></tr>
+    <?php while ($s = $seguimientos->fetch_assoc()): ?>
+      <tr>
+        <td><?= $s['fecha'] ?></td>
+        <td><?= $s['peso'] ?> kg</td>
+        <td><?= htmlspecialchars($s['recomendaciones']) ?></td>
+        <td><?= htmlspecialchars($s['observaciones']) ?></td>
+      </tr>
+    <?php endwhile; ?>
+  </table>
+</div>
 </body>
 </html>
