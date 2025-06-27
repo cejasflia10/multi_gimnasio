@@ -9,7 +9,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
     $usuario = trim($_POST["usuario"]);
     $clave = trim($_POST["clave"]);
 
-    $stmt = $conexion->prepare("SELECT id, contrasena, rol, id_gimnasio FROM usuarios WHERE usuario = ?");
+    $stmt = $conexion->prepare("SELECT id, contrasena, rol, id_gimnasio FROM usuarios WHERE nombre_usuario = ?");
     $stmt->bind_param("s", $usuario);
     $stmt->execute();
     $resultado = $stmt->get_result();
