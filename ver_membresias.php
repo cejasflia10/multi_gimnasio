@@ -131,6 +131,7 @@ $resultado = $conexion->query($query);
 </table>
 
 <a href="index.php" class="boton-volver">Volver al Menú</a>
+<a href="ver_historial_membresias.php?cliente_id=<?= $fila['cliente_id'] ?>">📜 Historial</a>
 
 </body>
 </html>
