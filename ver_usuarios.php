@@ -2,7 +2,7 @@
 if (session_status() === PHP_SESSION_NONE) session_start();
 include("conexion.php");
 
-$resultado = $conexion->query("SELECT u.id, u.nombre_usuario, u.rol, g.nombre AS gimnasio 
+$resultado = $conexion->query("SELECT u.id, u.usuario, u.rol, g.nombre AS gimnasio 
                                FROM usuarios u 
                                LEFT JOIN gimnasios g ON u.gimnasio_id = g.id 
                                ORDER BY u.id DESC");
