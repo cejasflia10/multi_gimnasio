@@ -56,7 +56,20 @@ while ($row = $peso_evol->fetch_assoc()) {
 <div class="container">
   <h2>Bienvenido <?= htmlspecialchars($cliente['nombre'] . ' ' . $cliente['apellido']) ?></h2>
 
-  <img src="<?= $cliente['foto'] ?: 'fotos/default.jpg' ?>" alt="Foto">
+<?php
+$foto_path = (!empty($cliente['foto']) && file_exists($cliente['foto'])) ? $cliente['foto'] : 'fotos/default.jpg';
+?>
+<div class="foto" style="text-align:center; margin: 20px 0;">
+    <img src="<?= $foto_path ?>" alt="Foto de perfil">
+    
+    <?php if ($rol === 'cliente'): ?>
+    <form method="POST" enctype="multipart/form-data" style="margin-top: 15px;">
+        <label style="display:block; color: gold; font-weight: bold;">📷 Subir nueva foto:</label>
+        <input type="file" name="foto" accept="image/*" style="color: gold;" required>
+        <button class="btn" type="submit" style="margin-top: 10px;">Actualizar Foto</button>
+    </form>
+    <?php endif; ?>
+</div>
   <p><strong>DNI:</strong> <?= $cliente['dni'] ?></p>
   <p><strong>Email:</strong> <?= $cliente['email'] ?></p>
   <p><strong>Teléfono:</strong> <?= $cliente['telefono'] ?></p>
