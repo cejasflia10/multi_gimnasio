@@ -48,10 +48,12 @@ if ($gimnasio_id > 0) {
     $stmt1->execute();
     $res1 = $stmt1->get_result();
 }
-    if ($f = $res1->fetch_assoc()) {
-        $gimnasio_nombre = $f['nombre'];
-        $proximo_vencimiento = $f['fecha_vencimiento'];
-    }
+    $res1 = $conexion->query("SELECT * FROM gimnasios WHERE id = $gimnasio_id");
+if (!$res1) {
+    die("Error en la consulta: " . $conexion->error);
+}
+$fila1 = $res1->fetch_assoc();
+
 
     // Cliente con membresía más próxima a vencer
     $stmt2 = $conexion->prepare("
