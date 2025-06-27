@@ -4,7 +4,12 @@ if (session_status() === PHP_SESSION_NONE) {
 }
 
 include 'conexion.php';
+include 'permisos.php';
 
+if (!tiene_permiso('ver_clientes')) {
+    echo "<h2 style='color:red;'>⛔ Acceso denegado</h2>";
+    exit;
+}
 // VERIFICAR QUE ESTÁS LOGUEADO
 if (!isset($_SESSION['id_usuario']) || !isset($_SESSION['rol'])) {
     die("Acceso denegado. No ha iniciado sesión correctamente.");
