@@ -2,28 +2,12 @@
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
-
 include 'conexion.php';
-
-// VERIFICAR QUE ESTÁS LOGUEADO
-if (!isset($_SESSION['id_usuario']) || !isset($_SESSION['rol'])) {
-    die("Acceso denegado. No ha iniciado sesión correctamente.");
-}
+include 'menu_horizontal.php';
 
 $gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
 $rol = $_SESSION['rol'] ?? '';
 
-// OPCIONAL: Debug del rol
-// echo "ROL: $rol";
-
-// MOSTRAR EL MENÚ CORRESPONDIENTE
-if ($rol === 'admin') {
-    include 'menu_horizontal_admin.php'; // Asegurate de tener este archivo si el admin tiene menú diferente
-} else {
-    include 'menu_horizontal.php';
-}
-
-// CONSULTA DIFERENCIADA POR ROL
 if ($rol === 'admin') {
     $query = "SELECT clientes.*, gimnasios.nombre AS nombre_gimnasio 
               FROM clientes 
