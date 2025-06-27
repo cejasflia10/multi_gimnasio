@@ -1,5 +1,12 @@
 <?php
 session_start();
+<?php
+session_start();
+echo "Usuario: " . ($_SESSION['usuario'] ?? 'no seteado') . "<br>";
+echo "Rol: " . ($_SESSION['rol'] ?? 'no seteado') . "<br>";
+echo "Gimnasio ID: " . ($_SESSION['gimnasio_id'] ?? 'no seteado') . "<br>";
+exit;
+
 include 'conexion.php';
 
 // FUNCIONES
