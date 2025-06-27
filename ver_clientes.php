@@ -4,20 +4,10 @@ include 'conexion.php';
 include 'menu_horizontal.php';
 
 $gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
-$rol = $_SESSION['rol'] ?? '';
 
-if ($rol === 'admin') {
-    $query = "SELECT clientes.*, gimnasios.nombre AS nombre_gimnasio 
-              FROM clientes 
-              LEFT JOIN gimnasios ON clientes.gimnasio_id = gimnasios.id";
-} else {
-    $query = "SELECT clientes.*, gimnasios.nombre AS nombre_gimnasio 
-              FROM clientes 
-              LEFT JOIN gimnasios ON clientes.gimnasio_id = gimnasios.id
-              WHERE clientes.gimnasio_id = $gimnasio_id";
-}
-
-$resultado = $conexion->query($query);
+$planes = $conexion->query("SELECT * FROM planes WHERE gimnasio_id = $gimnasio_id");
+$clientes = $conexion->query("SELECT id, nombre, apellido, dni FROM clientes WHERE gimnasio_id = $gimnasio_id");
+$adicionales = $conexion->query("SELECT id, nombre FROM planes_adicionales WHERE gimnasio_id = $gimnasio_id");
 ?>
 
 <!DOCTYPE html>
