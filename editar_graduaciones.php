@@ -46,7 +46,7 @@ $cliente = $conexion->query("SELECT nombre, apellido FROM clientes WHERE id = $c
         .container { max-width: 700px; margin: auto; background: #222; padding: 20px; border-radius: 10px; }
         h2 { text-align: center; }
         input, select, textarea { width: 100%; padding: 10px; margin: 5px 0; background: #333; border: 1px solid gold; color: gold; border-radius: 5px; }
-        button { background: gold; color: #000; padding: 10px; border: none; font-weight: bold; cursor: pointer; border-radius: 5px; margin-top: 10px; }
+        button, .volver { background: gold; color: #000; padding: 10px; border: none; font-weight: bold; cursor: pointer; border-radius: 5px; margin-top: 10px; text-decoration: none; display: inline-block; text-align: center; }
         table { width: 100%; margin-top: 20px; border-collapse: collapse; }
         th, td { border: 1px solid gold; padding: 8px; text-align: center; }
         th { background: #333; }
@@ -56,6 +56,8 @@ $cliente = $conexion->query("SELECT nombre, apellido FROM clientes WHERE id = $c
 <body>
 <div class="container">
     <h2>🥋 Editar Graduaciones de <?= htmlspecialchars($cliente['nombre'] . ' ' . $cliente['apellido']) ?></h2>
+
+    <a class="volver" href="panel_cliente.php?id=<?= $cliente_id ?>">← Volver al Panel del Cliente</a>
 
     <form method="POST">
         <label>Disciplina:</label>
