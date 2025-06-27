@@ -22,10 +22,6 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
             $_SESSION["rol"] = $usuario_data["rol"];
             $_SESSION["gimnasio_id"] = $usuario_data["id_gimnasio"];
             header("Location: index.php");
-            // Si es admin, no necesita gimnasio asignado
-        if ($usuario_data["rol"] === 'admin') {
-            $_SESSION["gimnasio_id"] = 0;
-        }
             exit();
         } else {
             $error = "Contraseña incorrecta.";
