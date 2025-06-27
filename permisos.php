@@ -7,8 +7,8 @@ if (session_status() === PHP_SESSION_NONE) {
 $permisos = [
     'superadmin' => [ // Acceso total
         'clientes', 'membresias', 'qr', 'asistencias', 'profesores',
-        'ventas', 'configuraciones', 'panel', 'usuarios_gimnasio',
-        'planes', 'ver_usuarios', 'asistencia_profesor', 'gimnasios', 'panel_cliente'
+        'ventas', 'configuraciones', 'panel', 'usuarios_gimnasio','configurar_accesos',
+        'planes', 'ver_usuarios', 'asistencia_profesor', 'gimnasios','configurar_planes', 'panel_cliente'
     ],
     'admin' => [ // Admin local de un gimnasio
         'clientes', 'membresias', 'qr', 'asistencias', 'profesores',
