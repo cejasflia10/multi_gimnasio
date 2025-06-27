@@ -2,9 +2,7 @@
 session_start();
 include 'conexion.php';
 
-if (!isset($_SESSION['id_gimnasio'])) {
-    die('Acceso no autorizado.');
-}
+
 
 $id_gimnasio = $_SESSION['id_gimnasio'];
 $rfid = $_POST['rfid'] ?? '';
