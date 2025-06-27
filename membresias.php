@@ -24,6 +24,11 @@ $resultado = $conexion->query($sql);
     <meta charset="UTF-8">
     <title>Listado de Membresías</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
+
+    <!-- ESTILOS -->
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+
     <style>
         body {
             background-color: #111;
@@ -69,10 +74,7 @@ $resultado = $conexion->query($sql);
             border: none;
             border-radius: 4px;
             text-decoration: none;
-link rel="stylesheet" href="style.css">
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
-
-<body            font-size: 14px;
+            font-size: 14px;
             margin-right: 5px;
         }
         .boton:hover {
@@ -92,7 +94,7 @@ link rel="stylesheet" href="style.css">
         }
     </style>
 </head>
-<>
+<body>
 
 <h2>Listado de Membresías</h2>
 
