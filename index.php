@@ -47,7 +47,7 @@ if ($gimnasio_id > 0) {
     $stmt1->bind_param("i", $gimnasio_id);
     $stmt1->execute();
     $res1 = $stmt1->get_result();
-
+}
     if ($f = $res1->fetch_assoc()) {
         $gimnasio_nombre = $f['nombre'];
         $proximo_vencimiento = $f['fecha_vencimiento'];
