@@ -53,14 +53,24 @@ $resultado = $conexion->query($query);
             overflow-x: auto;
         }
 
-        th, td {
+        th {
+            background-color: #222;
             border: 1px solid gold;
             padding: 8px;
             text-align: center;
         }
 
-        th {
-            background-color: #222;
+        td {
+            border: 1px solid gold;
+            padding: 8px;
+        }
+
+        td.align-left {
+            text-align: left;
+        }
+
+        td.align-center {
+            text-align: center;
         }
 
         tr:nth-child(even) {
@@ -153,13 +163,13 @@ $resultado = $conexion->query($query);
         <tbody>
         <?php while ($fila = $resultado->fetch_assoc()) : ?>
             <tr>
-                <td><?= htmlspecialchars($fila['apellido'] ?? '') ?></td>
-                <td><?= htmlspecialchars($fila['nombre'] ?? '') ?></td>
-                <td><?= htmlspecialchars($fila['dni'] ?? '') ?></td>
-                <td><?= htmlspecialchars($fila['telefono'] ?? '') ?></td>
-                <td><?= htmlspecialchars($fila['email'] ?? '') ?></td>
-                <td><?= htmlspecialchars($fila['disciplina'] ?? '') ?></td>
-                <td>
+                <td class="align-left"><?= htmlspecialchars($fila['apellido'] ?? '') ?></td>
+                <td class="align-left"><?= htmlspecialchars($fila['nombre'] ?? '') ?></td>
+                <td class="align-center"><?= htmlspecialchars($fila['dni'] ?? '') ?></td>
+                <td class="align-center"><?= htmlspecialchars($fila['telefono'] ?? '') ?></td>
+                <td class="align-left"><?= htmlspecialchars($fila['email'] ?? '') ?></td>
+                <td class="align-left"><?= htmlspecialchars($fila['disciplina'] ?? '') ?></td>
+                <td class="align-center">
                     <?php
                     $qr_path = "qr/" . ($fila['dni'] ?? '') . ".png";
                     if (file_exists($qr_path)) {
@@ -169,8 +179,8 @@ $resultado = $conexion->query($query);
                     }
                     ?>
                 </td>
-                <td><?= htmlspecialchars($fila['nombre_gimnasio'] ?? '') ?></td>
-                <td class="acciones">
+                <td class="align-left"><?= htmlspecialchars($fila['nombre_gimnasio'] ?? '') ?></td>
+                <td class="acciones align-center">
                     <a href="editar_cliente.php?id=<?= $fila['id'] ?>"><i class="fas fa-edit"></i>✎</a>
                     <a href="eliminar_cliente.php?id=<?= $fila['id'] ?>" onclick="return confirm('¿Estás seguro de que deseas eliminar este cliente?');">🗑️</a>
                 </td>
