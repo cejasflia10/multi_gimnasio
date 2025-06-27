@@ -6,14 +6,12 @@ if (session_status() === PHP_SESSION_NONE) {
 // Definición global de permisos por rol
 $permisos = [
     'admin' => [
-        'clientes','index', 'ver_clientes','membresias', 'qr', 'agregar_gimnasio','asistencias', 'profesores',
-        'ventas', 'configuraciones', 'panel', 'usuarios','ver_gimnasios',
+        'clientes', 'membresias', 'qr', 'asistencias', 'profesores',
+        'ventas', 'configuraciones', 'panel', 'usuarios_gimnasio',
         'planes', 'ver_usuarios', 'asistencia_profesor', 'gimnasios'
     ],
     'usuario' => [
-    'clientes','index', 'ver_clientes','membresias', 'qr', 'agregar_gimnasio','asistencias', 'profesores',
-        'ventas', 'configuraciones', 'panel', 'usuarios','ver_gimnasios',
-        'planes', 'ver_usuarios', 'asistencia_profesor', 'gimnasios'
+        'clientes', 'membresias', 'qr', 'ventas', 'panel'
     ],
     'profesor' => [
         'asistencias', 'profesores', 'membresias', 'qr'
