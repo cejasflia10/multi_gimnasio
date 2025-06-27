@@ -70,7 +70,7 @@ $resultado = $conexion->query("SELECT u.id, u.usuario, u.rol, g.nombre AS gimnas
             <td><?= $fila['id'] ?></td>
             <td><?= htmlspecialchars($fila['usuario']) ?></td>
             <td><?= $fila['rol'] ?></td>
-            <td><?= htmlspecialchars($fila['gimnasio']) ?></td>
+            <td><?= htmlspecialchars($fila['gimnasio'] ?? '') ?></td>
             <td class="acciones">
                 <a href="editar_usuario.php?id=<?= $fila['id'] ?>">✏️ Editar</a>
             </td>
