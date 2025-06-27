@@ -1,124 +1,95 @@
 <?php
-session_start();
-if (!isset($_SESSION['rol']) || $_SESSION['rol'] !== 'admin') {
-    die("Acceso denegado.");
-}
-include 'conexion.php';
+if (session_status() === PHP_SESSION_NONE) session_start();
+include("conexion.php");
 
-if ($_SERVER["REQUEST_METHOD"] == "POST") {
-    $usuario = trim($_POST["usuario"]);
-    $email = trim($_POST["email"]);
-    $clave = password_hash(trim($_POST["clave"]), PASSWORD_BCRYPT);
-    $rol = $_POST["rol"];
-    $gimnasio_id = $_POST["gimnasio_id"];
-
-    // Permisos por defecto
-    $permiso_clientes = 0;
-    $permiso_membresias = 0;
-    $permiso_profesores = 0;
-    $permiso_ventas = 0;
-    $permiso_panel = 0;
-    $permiso_asistencias = 0;
-
-    // Asignación de permisos según rol
-    switch ($rol) {
-        case 'admin':
-            $permiso_clientes = 1;
-            $permiso_membresias = 1;
-            $permiso_profesores = 1;
-            $permiso_ventas = 1;
-            $permiso_panel = 1;
-            $permiso_asistencias = 1;
-            break;
-        case 'cliente_gym':
-            $permiso_clientes = 1;
-            $permiso_membresias = 1;
-            $permiso_profesores = 1;
-            $permiso_ventas = 1;
-            $permiso_asistencias = 1;
-            break;
-        case 'profesor':
-            $permiso_asistencias = 1;
-            $permiso_profesores = 1;
-            break;
-    }
-
-    // Si el admin seleccionó checkboxes, se sobrescriben los valores anteriores
-    $permiso_clientes = isset($_POST['permiso_clientes']) ? 1 : $permiso_clientes;
-    $permiso_membresias = isset($_POST['permiso_membresias']) ? 1 : $permiso_membresias;
-    $permiso_profesores = isset($_POST['permiso_profesores']) ? 1 : $permiso_profesores;
-    $permiso_ventas = isset($_POST['permiso_ventas']) ? 1 : $permiso_ventas;
-    $permiso_panel = isset($_POST['permiso_panel']) ? 1 : $permiso_panel;
-    $permiso_asistencias = isset($_POST['permiso_asistencias']) ? 1 : $permiso_asistencias;
-
-    $stmt = $conexion->prepare("INSERT INTO usuarios (usuario, email, contrasena, rol, id_gimnasio, permiso_clientes, permiso_membresias, perm_profesores, perm_ventas, puede_ver_panel, puede_ver_asistencias) 
-                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
-    $stmt->bind_param("ssssiiiiiii", $usuario, $email, $clave, $rol, $gimnasio_id, $permiso_clientes, $permiso_membresias, $permiso_profesores, $permiso_ventas, $permiso_panel, $permiso_asistencias);
-
-    if ($stmt->execute()) {
-        echo "<script>alert('Usuario creado exitosamente'); window.location.href='usuarios.php';</script>";
-    } else {
-        echo "Error: " . $stmt->error;
-    }
-
-    $stmt->close();
-}
-
-$gimnasios = $conexion->query("SELECT id, nombre FROM gimnasios");
+// Obtener gimnasios disponibles
+$gimnasios_resultado = $conexion->query("SELECT id, nombre FROM gimnasios");
 ?>
+
 <!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="UTF-8">
-  <title>Agregar Usuario</title>
-  <style>
-    body { background-color: #111; color: #f1f1f1; font-family: Arial; padding: 30px; }
-    .form-container { background-color: #222; padding: 25px; border-radius: 10px; max-width: 600px; margin: auto; box-shadow: 0 0 15px rgba(255,215,0,0.3); }
-    h2 { color: gold; text-align: center; }
-    label { display: block; margin-top: 15px; font-weight: bold; }
-    input, select { width: 100%; padding: 10px; margin-top: 5px; background-color: #333; border: none; border-radius: 5px; color: white; }
-    input[type=checkbox] { width: auto; margin-right: 10px; }
-    button { margin-top: 25px; padding: 12px; width: 100%; background-color: gold; color: black; font-weight: bold; border: none; border-radius: 8px; cursor: pointer; }
-  </style>
+    <meta charset="UTF-8">
+    <title>Agregar Usuario</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body {
+            background-color: #111;
+            color: gold;
+            font-family: Arial, sans-serif;
+            padding: 20px;
+        }
+        label {
+            display: block;
+            margin-top: 10px;
+        }
+        input, select {
+            width: 100%;
+            padding: 10px;
+            margin-top: 5px;
+            margin-bottom: 15px;
+            font-size: 16px;
+        }
+        .permisos-box {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            background: #222;
+            padding: 10px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        .permisos-box label {
+            margin: 0;
+        }
+        button {
+            background-color: gold;
+            color: black;
+            font-weight: bold;
+            padding: 10px 20px;
+            border: none;
+            cursor: pointer;
+        }
+    </style>
 </head>
 <body>
-  <div class="form-container">
-    <h2>Agregar Usuario</h2>
-    <form method="post">
-      <label>Nombre de Usuario:
-        <input type="text" name="usuario" required>
-      </label>
-      <label>Email:
-        <input type="email" name="email">
-      </label>
-      <label>Contraseña:
-        <input type="password" name="clave" required>
-      </label>
-      <label>Rol:
-        <select name="rol">
-          <option value="admin">Administrador</option>
-          <option value="cliente_gym">Cliente Gym</option>
-          <option value="profesor">Profesor</option>
-        </select>
-      </label>
-      <label>Gimnasio:
-        <select name="gimnasio_id">
-          <?php while ($g = $gimnasios->fetch_assoc()) { ?>
-            <option value="<?php echo $g['id']; ?>"><?php echo $g['nombre']; ?></option>
-          <?php } ?>
-        </select>
-      </label>
 
-      <h3>Permisos</h3>
-      <label><input type="checkbox" name="permiso_clientes" value="1"> Ver Clientes</label>
-      <label><input type="checkbox" name="permiso_membresias" value="1"> Ver Membresías</label>
-      <label><input type="checkbox" name="permiso_ventas" value="1"> Ver Ventas</label>
-      <label><input type="checkbox" name="permiso_profesores" value="1"> Ver Profesores</label>
-      <label><input type="checkbox" name="permiso_panel" value="1"> Ver Panel</label>
-      <label><input type="checkbox" name="permiso_asistencias" value="1"> Ver Asistencias</label>
+<h2>Agregar Nuevo Usuario</h2>
 
-      <button type="submit">Crear Usuario</button>
-    </form>
-  </div>
+<form action="guardar_nuevo_usuario.php" method="POST">
+
+    <label>Nombre de Usuario</label>
+    <input type="text" name="nombre_usuario" required>
+
+    <label>Contraseña</label>
+    <input type="password" name="contrasena" required>
+
+    <label>Rol</label>
+    <select name="rol" required>
+        <option value="admin">Admin</option>
+        <option value="usuario">Usuario</option>
+        <option value="profesor">Profesor</option>
+    </select>
+
+    <label>Asignar Gimnasio</label>
+    <select name="gimnasio_id" required>
+        <?php while ($g = $gimnasios_resultado->fetch_assoc()): ?>
+            <option value="<?= $g['id'] ?>"><?= htmlspecialchars($g['nombre']) ?></option>
+        <?php endwhile; ?>
+    </select>
+
+    <label>Permisos específicos</label>
+    <div class="permisos-box">
+        <?php
+        $opciones = ['clientes', 'membresias', 'qr', 'asistencias', 'profesores', 'ventas', 'panel'];
+        foreach ($opciones as $permiso) {
+            echo "<label><input type='checkbox' name='permisos[]' value='$permiso'> $permiso</label>";
+        }
+        ?>
+    </div>
+
+    <button type="submit">Crear Usuario</button>
+</form>
+
 </body>
 </html>
