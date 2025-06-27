@@ -13,7 +13,15 @@ if (!$cliente_id) {
 }
 
 $cliente = $conexion->query("SELECT nombre, apellido FROM clientes WHERE id = $cliente_id")->fetch_assoc();
-$seguimientos = $conexion->query("SELECT * FROM seguimiento_nutricional WHERE cliente_id = $cliente_id ORDER BY fecha DESC");
+$seguimientos = $conexion->query("SELECT * FROM seguimiento_nutricional WHERE cliente_id = $cliente_id ORDER BY fecha ASC");
+
+// Datos para gráfica
+$fechas = [];
+$peso = [];
+while ($s = $seguimientos->fetch_assoc()) {
+    $fechas[] = $s['fecha'];
+    $peso[] = $s['peso'];
+}
 ?>
 <!DOCTYPE html>
 <html lang="es">
@@ -21,6 +29,7 @@ $seguimientos = $conexion->query("SELECT * FROM seguimiento_nutricional WHERE cl
   <meta charset="UTF-8">
   <title>Mi Seguimiento Nutricional</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
     body { background-color: #000; color: gold; font-family: Arial, sans-serif; padding: 20px; }
     .container { max-width: 800px; margin: auto; background: #222; padding: 20px; border-radius: 10px; }
@@ -38,14 +47,15 @@ $seguimientos = $conexion->query("SELECT * FROM seguimiento_nutricional WHERE cl
 
   <div class="acciones">
     <a class="volver" href="panel_cliente.php">← Volver al Panel</a>
-    <?php if ($rol === 'cliente'): ?>
-      <a class="volver" href="ver_seguimiento_cliente.php">📄 Ver Seguimientos</a>
-    <?php endif; ?>
   </div>
+
+  <canvas id="graficoPeso" height="100"></canvas>
 
   <table>
     <tr><th>Fecha</th><th>Peso</th><th>Recomendaciones</th><th>Observaciones</th></tr>
-    <?php while ($s = $seguimientos->fetch_assoc()): ?>
+    <?php
+    $seguimientos = $conexion->query("SELECT * FROM seguimiento_nutricional WHERE cliente_id = $cliente_id ORDER BY fecha DESC");
+    while ($s = $seguimientos->fetch_assoc()): ?>
       <tr>
         <td><?= $s['fecha'] ?></td>
         <td><?= $s['peso'] ?> kg</td>
@@ -55,5 +65,42 @@ $seguimientos = $conexion->query("SELECT * FROM seguimiento_nutricional WHERE cl
     <?php endwhile; ?>
   </table>
 </div>
+
+<script>
+const ctx = document.getElementById('graficoPeso').getContext('2d');
+const chart = new Chart(ctx, {
+    type: 'line',
+    data: {
+        labels: <?= json_encode($fechas) ?>,
+        datasets: [{
+            label: 'Peso (kg)',
+            data: <?= json_encode($peso) ?>,
+            borderColor: 'gold',
+            backgroundColor: 'rgba(255, 215, 0, 0.1)',
+            borderWidth: 2,
+            tension: 0.3,
+            fill: true,
+            pointRadius: 4,
+            pointBackgroundColor: 'gold'
+        }]
+    },
+    options: {
+        scales: {
+            y: {
+                beginAtZero: false,
+                ticks: { color: 'gold' },
+                grid: { color: '#444' }
+            },
+            x: {
+                ticks: { color: 'gold' },
+                grid: { color: '#333' }
+            }
+        },
+        plugins: {
+            legend: { labels: { color: 'gold' } }
+        }
+    }
+});
+</script>
 </body>
 </html>
