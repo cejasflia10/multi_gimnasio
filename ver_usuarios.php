@@ -2,7 +2,7 @@
 if (session_status() === PHP_SESSION_NONE) session_start();
 include("conexion.php");
 
-$resultado = $conexion->query("SELECT u.id, u.usuario, u.rol, g.nombre AS gimnasio 
+$resultado = $conexion->query("SELECT u.id, u.usuario, u.rol, u.gimnasio_id, g.nombre AS gimnasio 
                                FROM usuarios u 
                                LEFT JOIN gimnasios g ON u.gimnasio_id = g.id 
                                ORDER BY u.id DESC");
@@ -62,6 +62,7 @@ $resultado = $conexion->query("SELECT u.id, u.usuario, u.rol, g.nombre AS gimnas
             <th>ID</th>
             <th>Usuario</th>
             <th>Rol</th>
+            <th>ID Gimnasio</th>
             <th>Gimnasio</th>
             <th>Acciones</th>
         </tr>
@@ -70,6 +71,7 @@ $resultado = $conexion->query("SELECT u.id, u.usuario, u.rol, g.nombre AS gimnas
             <td><?= $fila['id'] ?></td>
             <td><?= htmlspecialchars($fila['usuario']) ?></td>
             <td><?= $fila['rol'] ?></td>
+            <td><?= $fila['gimnasio_id'] ?></td>
             <td><?= htmlspecialchars($fila['gimnasio'] ?? '') ?></td>
             <td class="acciones">
                 <a href="editar_usuario.php?id=<?= $fila['id'] ?>">✏️ Editar</a>
