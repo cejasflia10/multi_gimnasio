@@ -4,7 +4,6 @@ if (!isset($_SESSION['rol']) || $_SESSION['rol'] !== 'admin') {
     die("Acceso denegado.");
 }
 include 'conexion.php';
-include 'menu_horizontal.php';
 
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
     $usuario = trim($_POST["usuario"]);
