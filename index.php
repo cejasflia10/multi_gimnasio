@@ -86,8 +86,7 @@ if ($gimnasio_id) {
 <header>
   <h1><?= $gimnasio_nombre ?></h1>
   <div class="info-header">
-<strong>Próximo vencimiento del gimnasio:</strong>
-<?= $proximo_vencimiento ? date('d/m/Y', strtotime($proximo_vencimiento)) : 'No disponible' ?><br>
+    <strong>Próximo vencimiento del gimnasio:</strong> <?= date('d/m/Y', strtotime($proximo_vencimiento)) ?><br>
     <?= $cliente_activo ?>
   </div>
 </header>
@@ -126,6 +125,8 @@ if ($gimnasio_id) {
   <div class="dropdown"><span class="dropbtn"><i class="fas fa-cogs"></i> Configuraciones</span>
     <div class="dropdown-content"><a href="configurar_planes.php">Planes</a><a href="configurar_accesos.php">Accesos</a></div>
   </div>
+  
+  
   
   <div class="dropdown"><span class="dropbtn">Panel del Cliente</span>
     <div class="dropdown-content">
@@ -255,11 +256,11 @@ if ($gimnasio_id) {
 
 <div class="bottom-bar">
   <a href="index.php"><i class="fas fa-home"></i><br>Inicio</a>
-  <a href="ver_clientes.php"><i class="fas fa-users"></i><br>Clientes</a>
-  <a href="ver_membresias.php"><i class="fas fa-id-card"></i><br>Membresías</a>
-  <a href="scanner_qr.php"><i class="fas fa-qrcode"></i><br>QR</a>
-  <a href="registrar_asistencia.php"><i class="fas fa-calendar-check"></i><br>Asistencias</a>
-<a href="ver_ventas.php"><i class="fas fa-shopping-cart"></i><br>Ventas</a>
+  <a href="ver_clientes.php"><i class="fas fa-users"></i><br><i class="fas fa-users"></i> Clientes</a>
+  <a href="ver_membresias.php"><i class="fas fa-id-card"></i><br><i class="fas fa-id-card"></i> Membresías</a>
+  <a href="scanner_qr.php"><i class="fas fa-qrcode"></i><br><i class="fas fa-qrcode"></i> QR</a>
+  <a href="registrar_asistencia.php"><i class="fas fa-calendar-check"></i><br><i class="fas fa-calendar-check"></i> Asistencias</a>
+  <a href="ver_ventas.php"><i class="fas fa-shopping-cart"></i><br><i class="fas fa-shopping-cart"></i> Ventas</a>
 </div>
 <div class="card">
   <h3>Estadísticas por Disciplina (últimos 7 días)</h3>
