@@ -141,7 +141,7 @@ $adicionales = $conexion->query("SELECT id, nombre FROM planes_adicionales WHERE
             </tr>
         </thead>
         <tbody>
-        <?php while ($fila = $resultado->fetch_assoc()) : ?>
+        <?php while ($fila = $clientes->fetch_assoc()) : ?>
             <tr>
                 <td class="align-left"><?= htmlspecialchars($fila['apellido'] ?? '') ?></td>
                 <td class="align-left"><?= htmlspecialchars($fila['nombre'] ?? '') ?></td>
