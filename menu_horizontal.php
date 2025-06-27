@@ -1,173 +1,209 @@
-<!-- FONT AWESOME -->
-<link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet">
+<?php if (session_status() === PHP_SESSION_NONE) { session_start(); } ?>
 
-<style>
-/* Ocultar menú horizontal en celulares */
-@media screen and (max-width: 768px) {
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Sistema Gimnasio</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <style>
+    body {
+        margin: 0;
+        font-family: Arial, sans-serif;
+        background-color: #000;
+        color: gold;
+    }
+
     .menu-horizontal {
+        background-color: #a00;
+        padding: 10px;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 15px;
+        justify-content: center;
+    }
+
+    .menu-horizontal a {
+        color: gold;
+        text-decoration: none;
+        font-weight: bold;
+        padding: 6px 12px;
+    }
+
+    .menu-horizontal a:hover {
+        background-color: #700;
+        border-radius: 5px;
+    }
+
+    .menu-lateral {
+        position: fixed;
+        top: 50px;
+        left: 0;
+        width: 200px;
+        background-color: rgba(0, 0, 0, 0.8);
+        padding: 15px;
+        z-index: 999;
+        box-shadow: 2px 0 10px rgba(0, 0, 0, 0.5);
         display: none;
+    }
+
+    .menu-lateral h3 {
+        color: gold;
+        margin-bottom: 10px;
+    }
+
+    .menu-lateral a {
+        display: block;
+        padding: 8px 0;
+        color: gold !important;
+        text-decoration: none !important;
+        border-bottom: 1px solid #444;
+    }
+
+    .menu-lateral a:hover {
+        background-color: rgba(255, 215, 0, 0.1);
+    }
+
+    @media screen and (max-width: 768px) {
+        .menu-horizontal {
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .menu-lateral {
+            position: relative;
+            width: 100%;
+            top: 0;
+        }
+    }
+    </style>
+</head>
+<body>
+
+<!-- MENÚ HORIZONTAL -->
+<div class="menu-horizontal">
+    <a href="#" onclick="mostrarLateral('clientes')">👥 Clientes</a>
+    <a href="#" onclick="mostrarLateral('asistencias')">🕘 Asistencias</a>
+    <a href="#" onclick="mostrarLateral('profesores')">🧑‍🏫 Profesores</a>
+    <a href="#" onclick="mostrarLateral('qr')">📷 QR</a>
+    <a href="#" onclick="mostrarLateral('ventas')">🛒 Ventas</a>
+    <a href="#" onclick="mostrarLateral('panel')">👤 Panel Cliente</a>
+    <a href="#" onclick="mostrarLateral('configuraciones')">⚙️ Configuraciones</a>
+    <a href="logout.php">🔒 Cerrar sesión</a>
+</div>
+
+<!-- MENÚ LATERAL DE CLIENTES -->
+<div id="menu-clientes" class="menu-lateral">
+    <h3>Clientes</h3>
+    <a href="agregar_cliente.php">Agregar Cliente</a>
+    <a href="ver_clientes.php">Ver Clientes</a>
+    <a href="nueva_membresia.php">Nueva Membresía</a>
+    <a href="ver_membresias.php">Ver Membresías</a>
+    <a href="disciplinas.php">Disciplinas</a>
+    <a href="planes.php">Planes</a>
+    <a href="adicionales.php">Adicionales</a>
+</div>
+
+<!-- MENÚ LATERAL DE ASISTENCIAS -->
+<div id="menu-asistencias" class="menu-lateral">
+    <h3>Asistencias</h3>
+    <a href="registrar_asistencia_qr.php">Registrar Asistencia QR</a>
+    <a href="ver_asistencia_qr.php">Ver Asistencia QR</a>
+    <a href="asistencia_qr.php">Asistencia QR</a>
+    <a href="formulario_qr.php">Formulario QR</a>
+    <a href="historial_asistencia_filtro.php">Historial con Filtro</a>
+    <a href="ver_asistencia.php">Ver Asistencia</a>
+    <a href="ver_asistencia_mes.php">Asistencia del Mes</a>
+</div>
+
+<!-- MENÚ LATERAL DE PROFESORES -->
+<div id="menu-profesores" class="menu-lateral">
+    <h3>Profesores</h3>
+    <a href="registrar_asistencia_profesor.php">Registrar Asistencia Profesor</a>
+    <a href="plan_profesor.php">Plan Profesor</a>
+    <a href="pagar_horas_profesor.php">Pagar Horas Profesor</a>
+    <a href="reporte_horas_profesor.php">Reporte Horas Profesor</a>
+    <a href="turnos_profesor.php">Turnos Profesor</a>
+    <a href="ver_pagos_profesor.php">Ver Pagos Profesor</a>
+    <a href="ver_pagos.php">Ver Pagos</a>
+    <a href="ver_profesores.php">Ver Profesores</a>
+    <a href="ver_asistencia_mes.php">Asistencia del Mes</a>
+    <a href="ver_asistencia_clientes.php">Asistencia Clientes</a>
+</div>
+<!-- MENÚ LATERAL DE VENTAS -->
+<div id="menu-ventas" class="menu-lateral">
+    <h3>Ventas</h3>
+    <a href="ver_productos.php">Ver Productos</a>
+    <a href="ver_suplementos.php">Ver Suplementos</a>
+    <a href="ver_indumentaria.php">Ver Indumentaria</a>
+    <a href="ventas_proteccion.php">Ventas Protección</a>
+    <a href="ventas_productos.php">Ventas Productos</a>
+    <a href="ventas_suplementos.php">Ventas Suplementos</a>
+    <a href="editar_producto.php">Editar Producto</a>
+    <a href="agregar_producto.php">Agregar Producto</a>
+    <a href="agregar_indumentaria.php">Agregar Indumentaria</a>
+    <a href="agregar_suplementos.php">Agregar Suplementos</a>
+</div>
+<!-- MENÚ LATERAL PANEL CLIENTES -->
+<div id="menu-panel" class="menu-lateral">
+    <h3>Panel Cliente</h3>
+    <a href="cliente_acceso.php">Acceso Cliente</a>
+    <a href="cliente_reservas.php">Reservas</a>
+    <a href="clientes_pagos.php">Pagos</a>
+    <a href="asistencias_cliente.php">Asistencias</a>
+    <a href="ver_qr.php">Ver QR</a>
+</div>
+<!-- MENÚ LATERAL DE CONFIGURACIONES -->
+<div id="menu-configuraciones" class="menu-lateral">
+    <h3>Configuraciones</h3>
+    <a href="agregar_usuario.php">Agregar Usuario</a>
+    <a href="usuarios.php">Usuarios</a>
+    <a href="usuarios_gimnasio.php">Usuarios por Gimnasio</a>
+    <a href="configurar_accesos.php">Configurar Accesos</a>
+    <a href="agregar_gimnasio.php">Agregar Gimnasio</a>
+    <a href="crear_gimnasio.php">Crear Gimnasio</a>
+    <a href="gimnasios.php">Ver Gimnasios</a>
+    <a href="registro_pagos_gimnasio.php">Registro de Pagos</a>
+    <a href="historial_pagos_gym.php">Historial de Pagos</a>
+</div>
+
+<!-- MENÚ LATERAL DE QR -->
+<div id="menu-qr" class="menu-lateral">
+    <h3>QR</h3>
+    <a href="scanner_qr.php">Escanear QR</a>
+</div>
+
+<!-- SCRIPT -->
+<script>
+function mostrarLateral(seccion) {
+    const secciones = ['clientes', 'asistencias', 'profesores', 'qr', 'ventas', 'panel', 'configuraciones'];
+    secciones.forEach(s => {
+        const menu = document.getElementById('menu-' + s);
+        if (menu) menu.style.display = 'none';
+    });
+
+    const menuMostrar = document.getElementById('menu-' + seccion);
+    if (menuMostrar) {
+        menuMostrar.style.display = 'block';
     }
 }
 
-/* Estilos menú horizontal */
-.menu-horizontal {
-    background-color: #900; /* fondo rojo oscuro */
-    padding: 10px;
-    display: flex;
-    flex-wrap: wrap;
-    gap: 20px;
-    font-family: Arial, sans-serif;
-    justify-content: center;
-    align-items: center;
-}
+// Cerrar menú lateral al hacer clic fuera
+document.addEventListener('click', function (e) {
+    const esLateral = e.target.closest('.menu-lateral');
+    const esBotonMenu = e.target.closest('.menu-horizontal a');
 
-.menu-horizontal .dropdown {
-    position: relative;
-}
+    if (!esLateral && !esBotonMenu) {
+        const secciones = ['clientes', 'asistencias', 'profesores', 'qr', 'ventas', 'panel', 'configuraciones'];
+        secciones.forEach(s => {
+            const menu = document.getElementById('menu-' + s);
+            if (menu) menu.style.display = 'none';
+        });
+    }
+});
 
-.menu-horizontal .dropbtn {
-    background-color: transparent;
-    color: gold;
-    font-weight: bold;
-    border: none;
-    cursor: pointer;
-    padding: 10px;
-    display: flex;
-    align-items: center;
-    gap: 5px;
-}
+</script>
 
-.menu-horizontal .dropdown-content {
-    display: none;
-    position: absolute;
-    background-color: #222;
-    min-width: 200px;
-    z-index: 1;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.5);
-}
-
-.menu-horizontal .dropdown-content a {
-    color: gold;
-    padding: 10px;
-    text-decoration: none;
-    display: block;
-    font-size: 14px;
-}
-
-.menu-horizontal .dropdown-content a:hover {
-    background-color: #333;
-}
-
-.menu-horizontal .dropdown:hover .dropdown-content {
-    display: block;
-}
-</style>
-
-<!-- MENÚ HORIZONTAL -->
-<div class="menu-horizontal-pc">
-  <div class="menu-horizontal">
-    
-    <!-- Botón Volver al Menú con ícono -->
-    <div class="dropdown">
-        <a href="index.php" class="dropbtn"><i class="fas fa-home"></i> Menú</a>
-    </div>
-
-    <!-- Clientes -->
-    <div class="dropdown">
-        <span class="dropbtn"><i class="fas fa-users"></i> Clientes</span>
-        <div class="dropdown-content">
-            <a href="ver_clientes.php">Ver Clientes</a>
-            <a href="agregar_cliente.php">Agregar Cliente</a>
-            <a href="disciplinas.php">Disciplinas</a>
-        </div>
-    </div>
-
-    <!-- Membresías -->
-    <div class="dropdown">
-        <span class="dropbtn"><i class="fas fa-id-card"></i> Membresías</span>
-        <div class="dropdown-content">
-            <a href="nueva_membresia.php">Nueva</a>
-            <a href="ver_membresias.php">Ver</a>
-            <a href="planes.php">Planes</a>
-            <a href="planes_adicionales.php">Adicionales</a>
-        </div>
-    </div>
-
-    <!-- Asistencias -->
-    <div class="dropdown">
-        <span class="dropbtn"><i class="fas fa-calendar-check"></i> Asistencias</span>
-        <div class="dropdown-content">
-            <a href="registrar_asistencia.php">Registrar</a>
-            <a href="ver_asistencias.php">Ver</a>
-        </div>
-    </div>
-
-    <!-- QR -->
-    <div class="dropdown">
-        <span class="dropbtn"><i class="fas fa-qrcode"></i> QR</span>
-        <div class="dropdown-content">
-            <a href="scanner_qr.php">Escanear</a>
-            <a href="generar_qr.php">Generar</a>
-        </div>
-    </div>
-
-    <!-- Profesores -->
-    <div class="dropdown">
-        <span class="dropbtn"><i class="fas fa-user-tie"></i> Profesores</span>
-        <div class="dropdown-content">
-            <a href="agregar_profesor.php">Agregar</a>
-            <a href="ver_profesores.php">Ver</a>
-            <a href="ver_pagos_profesor.php">Pagos</a>
-        </div>
-    </div>
-
-    <!-- Ventas -->
-    <div class="dropdown">
-        <span class="dropbtn"><i class="fas fa-shopping-cart"></i> Ventas</span>
-        <div class="dropdown-content">
-            <a href="ventas_protecciones.php">Protecciones</a>
-            <a href="ventas_indumentaria.php">Indumentaria</a>
-            <a href="ventas_suplementos.php">Suplementos</a>
-            <a href="ver_ventas.php">Ver Todas</a>
-        </div>
-    </div>
-
-    <!-- Gimnasios -->
-    <div class="dropdown">
-        <span class="dropbtn"><i class="fas fa-dumbbell"></i> Gimnasios</span>
-        <div class="dropdown-content">
-            <a href="agregar_gimnasio.php">Agregar</a>
-            <a href="ver_gimnasios.php">Ver</a>
-        </div>
-    </div>
-
-    <!-- Usuarios -->
-    <div class="dropdown">
-        <span class="dropbtn"><i class="fas fa-users-cog"></i> Usuarios</span>
-        <div class="dropdown-content">
-            <a href="agregar_usuario.php">Agregar</a>
-            <a href="ver_usuarios.php">Ver</a>
-        </div>
-    </div>
-
-    <!-- Configuraciones -->
-    <div class="dropdown">
-        <span class="dropbtn"><i class="fas fa-cogs"></i> Configuraciones</span>
-        <div class="dropdown-content">
-            <a href="configurar_planes.php">Planes</a>
-            <a href="configurar_accesos.php">Accesos</a>
-        </div>
-    </div>
-
-    <!-- Panel Cliente -->
-    <div class="dropdown">
-        <a href="panel_cliente.php" class="dropbtn"><i class="fas fa-user-circle"></i> Panel Cliente</a>
-    </div>
-
-    <!-- Cerrar sesión -->
-    <div class="dropdown">
-        <a href="logout.php" class="dropbtn"><i class="fas fa-sign-out-alt"></i> Cerrar sesión</a>
-    </div>
-
-  </div>
-</div>
+</body>
+</html>
