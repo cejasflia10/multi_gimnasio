@@ -54,6 +54,14 @@ $datos = $conexion->query("SELECT * FROM datos_personales_cliente WHERE cliente_
 $graduaciones = $conexion->query("SELECT * FROM graduaciones_cliente WHERE cliente_id = $cliente_id ORDER BY fecha_examen DESC");
 $competencias = $conexion->query("SELECT * FROM competencias_cliente WHERE cliente_id = $cliente_id ORDER BY fecha DESC");
 $asistencias = $conexion->query("SELECT fecha, hora FROM asistencias WHERE cliente_id = $cliente_id ORDER BY fecha DESC, hora DESC LIMIT 10");
+
+$seguimientos = $conexion->query("SELECT fecha, peso FROM seguimiento_nutricional WHERE cliente_id = $cliente_id ORDER BY fecha ASC");
+$fechas = [];
+$peso = [];
+while ($s = $seguimientos->fetch_assoc()) {
+    $fechas[] = $s['fecha'];
+    $peso[] = $s['peso'];
+}
 ?>
 <!DOCTYPE html>
 <html lang="es">
@@ -61,6 +69,7 @@ $asistencias = $conexion->query("SELECT fecha, hora FROM asistencias WHERE clien
     <meta charset="UTF-8">
     <title>Panel del Cliente</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         body { background: #111; color: gold; font-family: Arial; margin: 0; padding: 20px; }
         .container { max-width: 800px; margin: auto; background: #222; padding: 20px; border-radius: 10px; box-shadow: 0 0 10px gold; }
@@ -108,6 +117,7 @@ $asistencias = $conexion->query("SELECT fecha, hora FROM asistencias WHERE clien
             <label>Objetivo:</label><textarea name="objetivo"><?= $datos['objetivo'] ?? '' ?></textarea>
             <button class="btn" type="submit">Guardar datos físicos</button>
         </form>
+        <canvas id="graficoPeso" height="100"></canvas>
     </div>
 
     <div class="section">
@@ -162,5 +172,41 @@ $asistencias = $conexion->query("SELECT fecha, hora FROM asistencias WHERE clien
         </div>
     </div>
 </div>
+<script>
+const ctx = document.getElementById('graficoPeso').getContext('2d');
+const chart = new Chart(ctx, {
+    type: 'line',
+    data: {
+        labels: <?= json_encode($fechas) ?>,
+        datasets: [{
+            label: 'Peso (kg)',
+            data: <?= json_encode($peso) ?>,
+            borderColor: 'gold',
+            backgroundColor: 'rgba(255, 215, 0, 0.1)',
+            borderWidth: 2,
+            tension: 0.3,
+            fill: true,
+            pointRadius: 4,
+            pointBackgroundColor: 'gold'
+        }]
+    },
+    options: {
+        scales: {
+            y: {
+                beginAtZero: false,
+                ticks: { color: 'gold' },
+                grid: { color: '#444' }
+            },
+            x: {
+                ticks: { color: 'gold' },
+                grid: { color: '#333' }
+            }
+        },
+        plugins: {
+            legend: { labels: { color: 'gold' } }
+        }
+    }
+});
+</script>
 </body>
 </html>
