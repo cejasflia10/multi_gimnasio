@@ -68,7 +68,7 @@ $resultado = $conexion->query("SELECT u.id, u.usuario, u.rol, g.nombre AS gimnas
         <?php while ($fila = $resultado->fetch_assoc()): ?>
         <tr>
             <td><?= $fila['id'] ?></td>
-            <td><?= htmlspecialchars($fila['nombre_usuario']) ?></td>
+            <td><?= htmlspecialchars($fila['usuario']) ?></td>
             <td><?= $fila['rol'] ?></td>
             <td><?= htmlspecialchars($fila['gimnasio']) ?></td>
             <td class="acciones">
