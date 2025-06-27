@@ -1,9 +1,6 @@
 <?php
 session_start();
-
 include 'conexion.php';
-
-// FUNCIONES
 function obtenerMonto($conexion, $tabla, $campo_fecha, $gimnasio_id, $modo = 'DIA') {
     $condicion = $modo === 'MES'
         ? "MONTH($campo_fecha) = MONTH(CURDATE()) AND YEAR($campo_fecha) = YEAR(CURDATE())"
@@ -23,58 +20,38 @@ function obtenerMonto($conexion, $tabla, $campo_fecha, $gimnasio_id, $modo = 'DI
             $columna = 'monto';
     }
 
-    $query = "SELECT SUM($columna) AS total FROM $tabla WHERE $condicion AND gimnasio_id = ?";
-    $stmt = $conexion->prepare($query);
-    $stmt->bind_param("i", $gimnasio_id);
-    $stmt->execute();
-    $res = $stmt->get_result();
-
+    $query = "SELECT SUM($columna) AS total FROM $tabla WHERE $condicion AND gimnasio_id = $gimnasio_id";
+    $res = $conexion->query($query);
     if ($res && $fila = $res->fetch_assoc()) {
         return $fila['total'] ?? 0;
     }
     return 0;
 }
 
-// VARIABLES POR DEFECTO
 $gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
 $gimnasio_nombre = 'Gimnasio';
 $proximo_vencimiento = '';
 $cliente_activo = '';
 
-if ($gimnasio_id > 0) {
-    // Nombre del gimnasio y fecha de vencimiento
-    $stmt1 = $conexion->prepare("SELECT nombre, fecha_vencimiento FROM gimnasios WHERE id = ?");
-    $stmt1->bind_param("i", $gimnasio_id);
-    $stmt1->execute();
-    $res1 = $stmt1->get_result();
-}
-    $res1 = $conexion->query("SELECT * FROM gimnasios WHERE id = $gimnasio_id");
-if (!$res1) {
-    die("Error en la consulta: " . $conexion->error);
-}
-$fila1 = $res1->fetch_assoc();
-
-
-    // Cliente con membresía más próxima a vencer
-    $stmt2 = $conexion->prepare("
-        SELECT c.nombre, c.apellido, m.fecha_vencimiento
-        FROM clientes c
-        JOIN membresias m ON c.id = m.cliente_id
-        WHERE c.gimnasio_id = ?
-        ORDER BY m.fecha_vencimiento ASC
-        LIMIT 1
+if ($gimnasio_id) {
+    $r = $conexion->query("SELECT nombre, fecha_vencimiento FROM gimnasios WHERE id=$gimnasio_id");
+    if ($f = $r->fetch_assoc()) {
+        $gimnasio_nombre = $f['nombre'];
+        $proximo_vencimiento = $f['fecha_vencimiento'];
+    }
+    $r2 = $conexion->query("
+      SELECT c.nombre, c.apellido, m.fecha_vencimiento
+      FROM clientes c
+      JOIN membresias m ON c.id = m.cliente_id
+      WHERE c.gimnasio_id = $gimnasio_id
+      ORDER BY m.fecha_vencimiento ASC
+      LIMIT 1
     ");
-    $stmt2->bind_param("i", $gimnasio_id);
-    $stmt2->execute();
-    $res2 = $stmt2->get_result();
-
-    if ($c = $res2->fetch_assoc()) {
-     $fecha_venc = !empty($c['fecha_vencimiento']) ? date('d/m/Y', strtotime($c['fecha_vencimiento'])) : 'No disponible';
-$cliente_activo = "{$c['nombre']} {$c['apellido']} – Vence: $fecha_venc";
-
+    if ($c = $r2->fetch_assoc()) {
+        $cliente_activo = "{$c['nombre']} {$c['apellido']} – Vence: " . date('d/m/Y', strtotime($c['fecha_vencimiento']));
+    }
 }
 ?>
-
 <!DOCTYPE html>
 <html lang="es">
 <head>
