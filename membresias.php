@@ -21,80 +21,84 @@ $resultado = $conexion->query($sql);
 <!DOCTYPE html>
 <html lang="es">
 <head>
-    <meta charset="UTF-8">
-    <title>Listado de Membresías</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1">
+   <!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Listado de Membresías</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-    <!-- ESTILOS -->
-    <link rel="stylesheet" href="style.css">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+  <!-- Hojas de estilo externas -->
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
 
-    <style>
-        body {
-            background-color: #111;
-            color: #ffd700;
-            font-family: Arial, sans-serif;
-            padding: 20px;
-        }
-        h2 {
-            text-align: center;
-            margin-bottom: 20px;
-        }
+  <style>
+    body {
+        background-color: #111;
+        color: #ffd700;
+        font-family: Arial, sans-serif;
+        padding: 20px;
+    }
+    h2 {
+        text-align: center;
+        margin-bottom: 20px;
+    }
+    .buscar {
+        width: 100%;
+        max-width: 500px;
+        padding: 10px;
+        font-size: 16px;
+        margin: 10px auto 20px;
+        display: block;
+        background: #222;
+        color: #ffd700;
+        border: 1px solid #ffd700;
+        border-radius: 5px;
+    }
+    table {
+        width: 100%;
+        border-collapse: collapse;
+    }
+    th, td {
+        padding: 10px;
+        text-align: left;
+        border-bottom: 1px solid #444;
+    }
+    th {
+        background-color: #222;
+    }
+    tr:hover {
+        background-color: #333;
+    }
+    .boton {
+        background-color: #ffd700;
+        color: #111;
+        padding: 6px 12px;
+        border: none;
+        border-radius: 4px;
+        text-decoration: none;
+        font-size: 14px;
+        margin-right: 5px;
+    }
+    .boton:hover {
+        background-color: #e5c100;
+    }
+    @media (max-width: 768px) {
         .buscar {
-            width: 100%;
-            max-width: 500px;
-            padding: 10px;
-            font-size: 16px;
-            margin: 10px auto 20px;
-            display: block;
-            background: #222;
-            color: #ffd700;
-            border: 1px solid #ffd700;
-            border-radius: 5px;
-        }
-        table {
-            width: 100%;
-            border-collapse: collapse;
+            font-size: 14px;
         }
         th, td {
-            padding: 10px;
-            text-align: left;
-            border-bottom: 1px solid #444;
-        }
-        th {
-            background-color: #222;
-        }
-        tr:hover {
-            background-color: #333;
+            font-size: 14px;
+            padding: 8px;
         }
         .boton {
-            background-color: #ffd700;
-            color: #111;
-            padding: 6px 12px;
-            border: none;
-            border-radius: 4px;
-            text-decoration: none;
-            font-size: 14px;
-            margin-right: 5px;
+            font-size: 12px;
         }
-        .boton:hover {
-            background-color: #e5c100;
-        }
-        @media (max-width: 768px) {
-            .buscar {
-                font-size: 14px;
-            }
-            th, td {
-                font-size: 14px;
-                padding: 8px;
-            }
-            .boton {
-                font-size: 12px;
-            }
-        }
-    </style>
+    }
+  </style>
 </head>
 <body>
+
 
 <h2>Listado de Membresías</h2>
 
