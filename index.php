@@ -67,8 +67,9 @@ if ($gimnasio_id > 0) {
     $res2 = $stmt2->get_result();
 
     if ($c = $res2->fetch_assoc()) {
-        $cliente_activo = "{$c['nombre']} {$c['apellido']} – Vence: " . date('d/m/Y', strtotime($c['fecha_vencimiento']));
-    }
+     $fecha_venc = !empty($c['fecha_vencimiento']) ? date('d/m/Y', strtotime($c['fecha_vencimiento'])) : 'No disponible';
+$cliente_activo = "{$c['nombre']} {$c['apellido']} – Vence: $fecha_venc";
+
 }
 ?>
 
