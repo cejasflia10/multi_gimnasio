@@ -259,7 +259,7 @@ if ($gimnasio_id) {
   <a href="ver_membresias.php"><i class="fas fa-id-card"></i><br>Membresías</a>
   <a href="scanner_qr.php"><i class="fas fa-qrcode"></i><br>QR</a>
   <a href="registrar_asistencia.php"><i class="fas fa-calendar-check"></i><br>Asistencias</a>
-  <a href="ver_ventas.php"><i class="fas fa-shopping-cart"></i><br>Ventas</a>
+<a href="ver_ventas.php"><i class="fas fa-shopping-cart"></i><br>Ventas</a>
 </div>
 <div class="card">
   <h3>Estadísticas por Disciplina (últimos 7 días)</h3>
