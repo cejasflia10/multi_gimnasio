@@ -2,6 +2,9 @@
 session_start();
 include 'conexion.php';
 include 'menu_horizontal.php';
+if (session_status() === PHP_SESSION_NONE) { session_start(); }
+include 'permisos.php';
+
 // Validar si se ha enviado el formulario
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
     $nombre = $_POST["nombre"];

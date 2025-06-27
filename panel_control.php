@@ -1,4 +1,10 @@
 <?php
+include 'permisos.php';
+
+if (!tiene_permiso('profesores')) {
+    echo "<h2 style='color:red;'>⛔ Acceso denegado</h2>";
+    exit;
+}
 function obtenerMonto($conexion, $tabla, $campo_fecha, $gimnasio_id, $modo = 'DIA') {
     $condicion = $modo === 'MES'
         ? "MONTH($campo_fecha) = MONTH(CURDATE()) AND YEAR($campo_fecha) = YEAR(CURDATE())"

@@ -1,7 +1,12 @@
 <?php
 session_start();
 include 'conexion.php';
+include 'permisos.php';
 
+if (!tiene_permiso('profesores')) {
+    echo "<h2 style='color:red;'>⛔ Acceso denegado</h2>";
+    exit;
+}
 $gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
 $rol = $_SESSION['rol'] ?? '';
 if ($rol !== 'profesor' && $rol !== 'admin') {

@@ -2,7 +2,12 @@
 session_start();
 include 'conexion.php';
 include 'menu_horizontal.php';
+include 'permisos.php';
 
+if (!tiene_permiso('profesores')) {
+    echo "<h2 style='color:red;'>⛔ Acceso denegado</h2>";
+    exit;
+}
 if (!isset($_SESSION['id_gimnasio'])) {
     die('Acceso no autorizado.');
 }

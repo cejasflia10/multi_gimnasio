@@ -6,7 +6,12 @@ if (!isset($_SESSION['usuario'])) {
 }
 include 'conexion.php';
 include 'menu_horizontal.php';
+include 'permisos.php';
 
+if (!tiene_permiso('profesores')) {
+    echo "<h2 style='color:red;'>⛔ Acceso denegado</h2>";
+    exit;
+}
 $mensaje = "";
 if ($_SERVER["REQUEST_METHOD"] === "POST") {
     $rfid = trim($_POST["rfid"]);
