@@ -45,21 +45,12 @@ if ($ya_asistio && $ya_asistio->num_rows > 0) {
 }
 
 // PASO 4: Verifica clases y vencimiento
-if ($clases > 0 && $vto >= $fecha) {
-    $insert = $conexion->query("INSERT INTO asistencias (cliente_id, fecha, hora) VALUES ($cliente_id, '$fecha', '$hora')");
-    if ($insert) {
-        echo "<div style='color: lime;'>🟢 Asistencia registrada</div>";
-    } else {
-        echo "<div style='color: red;'>❌ Error al registrar asistencia: " . $conexion->error . "</div>";
+if (($clases > 0 || $plan_nombre === 'FREE PASS') && $vto >= $fecha) {
+    // Registrar asistencia (solo restar clase si no es FREE PASS)
+    if ($plan_nombre !== 'FREE PASS') {
+        $conexion->query("UPDATE membresias SET clases_restantes = clases_restantes - 1 WHERE id = {$membresia['id']}");
     }
-
-    $update = $conexion->query("UPDATE membresias SET clases_restantes = clases_restantes - 1 WHERE id = {$membresia['id']}");
-    if ($update) {
-        echo "<div style='color: lime;'>🟢 Clase descontada</div>";
-    } else {
-        echo "<div style='color: red;'>❌ Error al descontar clase: " . $conexion->error . "</div>";
-    }
-} else {
-    echo "<div style='color: orange;'>⚠️ No se puede registrar asistencia. Clases: $clases, Vencimiento: $vto</div>";
+    $conexion->query("INSERT INTO asistencias (cliente_id, fecha, hora) VALUES ($cliente_id, '$fecha', '$hora')");
+    echo "<div class='exito'>✅ $nombre - Asistencia registrada</div>
+          <div class='info'>📅 Vence: $vto<br>🎯 Clases restantes: " . ($plan_nombre === 'FREE PASS' ? '∞' : $clases - 1) . "<br>🕒 $hora</div>";
 }
-?>
