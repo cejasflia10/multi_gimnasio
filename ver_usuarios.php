@@ -1,18 +1,18 @@
 <?php
-if (session_status() === PHP_SESSION_NONE) session_start();
 include 'conexion.php';
-include 'permisos.php';
+if (session_status() === PHP_SESSION_NONE) session_start();
 
-// VALIDACIÓN DE PERMISO
-if (!tiene_permiso('ver_usuarios')) {
-    echo "<h2 style='color:red;'>⛔ Acceso denegado</h2>";
-    exit;
-}
+// Corregir gimnasio_id de fightacademy si hiciera falta
+$conexion->query("UPDATE usuarios SET id_gimnasio = 6 WHERE usuario = 'fightacademy'");
 
-// Consulta solo si tiene permiso
-$resultado = $conexion->query("SELECT * FROM usuarios");
+// Traer todos los usuarios y el nombre del gimnasio asociado
+$query = "
+    SELECT u.id, u.usuario, u.rol, u.id_gimnasio, g.nombre AS gimnasio
+    FROM usuarios u
+    LEFT JOIN gimnasios g ON u.id_gimnasio = g.id
+";
+$resultado = $conexion->query($query);
 ?>
-
 
 <!DOCTYPE html>
 <html lang="es">
@@ -77,7 +77,7 @@ $resultado = $conexion->query("SELECT * FROM usuarios");
         <td><?= $fila['id'] ?></td>
         <td><?= htmlspecialchars($fila['usuario'] ?? '', ENT_QUOTES) ?></td>
         <td><?= htmlspecialchars($fila['rol'] ?? '', ENT_QUOTES) ?></td>
-        <td><?= htmlspecialchars($fila['id_gimnasio'] ?? '', ENT_QUOTES) ?></td>
+        <td><?= htmlspecialchars($fila['gimnasio'] ?? 'Sin asignar', ENT_QUOTES) ?></td>
         <td class="acciones">
             <a class="boton" href="editar_usuario.php?id=<?= $fila['id'] ?>">Editar</a>
             <a class="boton" href="eliminar_usuario.php?id=<?= $fila['id'] ?>" onclick="return confirm('¿Seguro que deseas eliminar este usuario?')">Eliminar</a>
