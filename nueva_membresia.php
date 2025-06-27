@@ -99,17 +99,17 @@ $adicionales = $conexion->query("SELECT id, nombre FROM planes_adicionales WHERE
 
 <form action="guardar_membresia.php" method="POST">
     <label for="buscador">Buscar Cliente (DNI o Apellido):</label>
-    <input type="text" id="buscador" placeholder="Buscar..." onkeyup="filtrarClientes()">
+<input type="text" id="buscador" placeholder="Buscar..." onkeyup="filtrarClientes()">
 
-    <label for="cliente_id">Seleccionar Cliente:</label>
-    <select name="cliente_id" id="cliente_id" required>
-        <option value="">-- Seleccionar --</option>
-        <?php while ($c = $clientes->fetch_assoc()): ?>
-            <option value="<?= $c['id'] ?>">
-                <?= $c['apellido'] . ', ' . $c['nombre'] . ' (' . $c['dni'] . ')' ?>
-            </option>
-        <?php endwhile; ?>
-    </select>
+<label for="cliente_id">Seleccionar Cliente:</label>
+<select name="cliente_id" id="cliente_id" required>
+    <option value="">-- Seleccionar --</option>
+    <?php while ($c = $clientes->fetch_assoc()): ?>
+        <option value="<?= $c['id'] ?>">
+            <?= $c['apellido'] . ', ' . $c['nombre'] . ' (' . $c['dni'] . ')' ?>
+        </option>
+    <?php endwhile; ?>
+</select>
 
     <label for="plan_id">Seleccionar Plan:</label>
     <select name="plan_id" id="plan_id" onchange="cargarDatosPlan(this.value)" required>
@@ -216,16 +216,37 @@ function aplicarDescuento(porcentaje) {
     document.getElementById('precio').value = (original - descuento).toFixed(2);
     calcularTotal();
 }
-
-function filtrarClientes() {
-    let input = document.getElementById('buscador').value.toLowerCase();
-    let opciones = document.getElementById('cliente_id').options;
-
-    for (let i = 0; i < opciones.length; i++) {
-        let texto = opciones[i].text.toLowerCase();
-        opciones[i].style.display = texto.includes(input) ? '' : 'none';
+// Buscador en vivo con AJAX
+document.getElementById("buscador").addEventListener("input", function() {
+    const filtro = this.value;
+    if (filtro.length < 2) {
+        document.getElementById("resultados").innerHTML = "";
+        return;
     }
-}
+
+    fetch("buscar_cliente.php?filtro=" + encodeURIComponent(filtro))
+        .then(res => res.json())
+        .then(data => {
+            const lista = document.getElementById("resultados");
+            lista.innerHTML = "";
+            data.forEach(cliente => {
+                const li = document.createElement("li");
+                li.textContent = `${cliente.apellido}, ${cliente.nombre} (${cliente.dni})`;
+                li.style.cursor = "pointer";
+                li.style.padding = "5px";
+                li.style.backgroundColor = "#222";
+                li.style.border = "1px solid #555";
+                li.style.marginBottom = "2px";
+                li.onclick = () => {
+                    document.getElementById("buscador").value = `${cliente.apellido}, ${cliente.nombre}`;
+                    document.getElementById("cliente_id").value = cliente.id;
+                    lista.innerHTML = "";
+                };
+                lista.appendChild(li);
+            });
+        });
+});
+
 
 // Fecha de hoy por defecto
 document.getElementById('fecha_inicio').valueAsDate = new Date();
