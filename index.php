@@ -243,6 +243,29 @@ if ($gimnasio_id) {
       <p>No se registraron ingresos hoy.</p>
     <?php endif; ?>
   </div>
+<div class="bar-section">
+    <div class="bar-title">Próximos Vencimientos</div>
+    <ul>
+      <?php
+      $query_venc = "
+        SELECT clientes.nombre, clientes.apellido, membresias.fecha_vencimiento
+        FROM clientes
+        JOIN membresias ON clientes.id = membresias.cliente_id
+        WHERE clientes.gimnasio_id = $gimnasio_id
+          AND membresias.fecha_vencimiento >= CURDATE()
+        ORDER BY membresias.fecha_vencimiento ASC
+        LIMIT 5
+      ";
+      $result_venc = $conexion->query($query_venc);
+      if ($result_venc && $result_venc->num_rows > 0) {
+          while ($v = $result_venc->fetch_assoc()) {
+              echo "<li>{$v['nombre']} {$v['apellido']} – " . date('d/m/Y', strtotime($v['fecha_vencimiento'])) . "</li>";
+          }
+      } else {
+          echo "<li>No hay vencimientos próximos.</li>";
+      }
+      ?>
+    </ul>
   </div>
 <div class="bar-section">
     <div class="bar-title">Estadísticas por Disciplina</div>
@@ -261,31 +284,6 @@ if ($gimnasio_id) {
   <a href="scanner_qr.php"><i class="fas fa-qrcode"></i><br><i class="fas fa-qrcode"></i> QR</a>
   <a href="registrar_asistencia.php"><i class="fas fa-calendar-check"></i><br><i class="fas fa-calendar-check"></i> Asistencias</a>
   <a href="ver_ventas.php"><i class="fas fa-shopping-cart"></i><br><i class="fas fa-shopping-cart"></i> Ventas</a>
-</div>
-<div class="card">
-  <h3>Estadísticas por Disciplina (últimos 7 días)</h3>
-  <?php
-  $sql = "SELECT d.nombre AS disciplina, COUNT(*) AS total
-          FROM asistencias a
-          JOIN clientes c ON a.cliente_id = c.id
-          JOIN disciplinas d ON c.disciplina_id = d.id
-          WHERE c.gimnasio_id = $gimnasio_id
-            AND a.fecha >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)
-          GROUP BY d.nombre";
-  $res = $conexion->query($sql);
-  if ($res && $res->num_rows > 0): ?>
-    <ul style="list-style:none; padding:0;">
-      <?php while ($fila = $res->fetch_assoc()): ?>
-        <li><?= $fila['disciplina'] ?>: 
-          <div style="background:#444; width:100%; height:20px; margin:5px 0; border-radius:5px;">
-            <div style="background:gold; width:<?= min(100, $fila['total'] * 10) ?>%; height:100%; border-radius:5px;"></div>
-          </div>
-        </li>
-      <?php endwhile; ?>
-    </ul>
-  <?php else: ?>
-    <p>No hay datos disponibles.</p>
-  <?php endif; ?>
 </div>
 
 </body>
