@@ -9,6 +9,16 @@ if (!tiene_permiso('usuarios')) {
     echo "<h2 style='color:red;'>⛔ Acceso denegado</h2>";
     exit;
 }
+
+// CONSULTA CORRECTA PARA OBTENER LOS USUARIOS
+$query = "SELECT u.id, u.usuario, u.rol, g.nombre AS gimnasio 
+          FROM usuarios u
+          LEFT JOIN gimnasios g ON u.id_gimnasio = g.id";
+
+$resultado = $conexion->query($query);
+if (!$resultado) {
+    die("Error al obtener usuarios: " . $conexion->error);
+}
 ?>
 
 <!DOCTYPE html>
