@@ -48,8 +48,14 @@ if ($gimnasio_id) {
       LIMIT 1
     ");
     if ($c = $r2->fetch_assoc()) {
-        $cliente_activo = "{$c['nombre']} {$c['apellido']} – Vence: " . date('d/m/Y', strtotime($c['fecha_vencimiento']));
-    }
+     if (!empty($fila['fecha_nacimiento'])) {
+    $fecha_nac = new DateTime($fila['fecha_nacimiento']);
+    $hoy = new DateTime();
+    $edad = $fecha_nac->diff($hoy)->y;
+} else {
+    $edad = 'No registrada';
+}
+
 }
 ?>
 <!DOCTYPE html>
