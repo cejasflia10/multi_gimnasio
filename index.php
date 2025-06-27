@@ -54,9 +54,7 @@ if ($gimnasio_id) {
     $edad = $fecha_nac->diff($hoy)->y;
 } else {
     $edad = 'No registrada';
-}
-
-}
+}}}
 ?>
 <!DOCTYPE html>
 <html lang="es">
