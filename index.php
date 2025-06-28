@@ -55,7 +55,26 @@ if ($gimnasio_id) {
 }} else {
     $edad = 'No registrada';
 }
+// Clientes con deuda (total negativo en la membresía más reciente)
+$deudas_q = $conexion->query("
+    SELECT c.id, c.nombre, c.apellido, m.total, m.fecha_inicio
+    FROM membresias m
+    JOIN clientes c ON m.cliente_id = c.id
+    WHERE m.total < 0
+      AND m.gimnasio_id = $gimnasio_id
+    ORDER BY m.fecha_inicio DESC
+    LIMIT 15
+");
+
+$clientes_deudores = [];
+if ($deudas_q && $deudas_q->num_rows > 0) {
+    while ($d = $deudas_q->fetch_assoc()) {
+        $clientes_deudores[] = $d;
+    }
+}
 ?>
+?>
+
 <!DOCTYPE html>
 <html lang="es">
 <head>
@@ -88,13 +107,15 @@ if ($gimnasio_id) {
 <body>
 
 <header>
+  
   <h1><?= $gimnasio_nombre ?></h1>
   <div class="info-header">
 <?php if (!empty($proximo_vencimiento)): ?>
   <strong>Próximo vencimiento del gimnasio:</strong> <?= date('d/m/Y', strtotime($proximo_vencimiento)) ?><br>
 <?php else: ?>
   <strong>Próximo vencimiento del gimnasio:</strong> No disponible<br>
-<?php endif; ?>
+
+  <?php endif; ?>
 <?= $cliente_activo ?>
     <?= $cliente_activo ?>
   </div>
@@ -151,7 +172,22 @@ if ($gimnasio_id) {
 </nav>
 
 <div class="container">
-  
+  <div class="panel">
+    <h3>💰 Clientes con Deuda</h3>
+    <ul>
+        <?php if (!empty($clientes_deudores)): ?>
+            <?php foreach ($clientes_deudores as $cli): ?>
+                <li>
+                    <?= $cli['apellido'] . ' ' . $cli['nombre'] ?> – 
+                    💸 $<?= number_format(abs($cli['total']), 2, ',', '.') ?>
+                </li>
+            <?php endforeach; ?>
+        <?php else: ?>
+            <li>Todos los clientes están al día.</li>
+        <?php endif; ?>
+    </ul>
+</div>
+
 <div style="display: flex; flex-wrap: wrap; justify-content: space-around; gap: 20px; margin-top: 20px;">
   <div style="flex: 1; min-width: 200px; background-color: #1f1f1f; padding: 20px; border-radius: 10px; text-align: center; color: gold;">
     <h3>Pagos del Día</h3>
@@ -252,28 +288,7 @@ if ($gimnasio_id) {
       <p>No se registraron ingresos hoy.</p>
     <?php endif; ?>
   </div>
-<div class="bar-section">
-    <div class="bar-title">Próximos Vencimientos</div>
-    <ul>
-      <?php
-      $query_venc = "
-        SELECT clientes.nombre, clientes.apellido, membresias.fecha_vencimiento
-        FROM clientes
-        JOIN membresias ON clientes.id = membresias.cliente_id
-        WHERE clientes.gimnasio_id = $gimnasio_id
-          AND membresias.fecha_vencimiento >= CURDATE()
-        ORDER BY membresias.fecha_vencimiento ASC
-        LIMIT 5
-      ";
-      $result_venc = $conexion->query($query_venc);
-      if ($result_venc && $result_venc->num_rows > 0) {
-          while ($v = $result_venc->fetch_assoc()) {
-              echo "<li>{$v['nombre']} {$v['apellido']} – " . date('d/m/Y', strtotime($v['fecha_vencimiento'])) . "</li>";
-          }
-      } else {
-          echo "<li>No hay vencimientos próximos.</li>";
-      }
-      ?>
+  
     </ul>
   </div>
 <div class="bar-section">
