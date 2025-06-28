@@ -12,7 +12,7 @@ $disciplinas = $conexion->query("SELECT id, nombre FROM disciplinas WHERE gimnas
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Disciplinas</title>
+  <title>Ver Disciplinas</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
   <style>
     body {
@@ -75,7 +75,6 @@ $disciplinas = $conexion->query("SELECT id, nombre FROM disciplinas WHERE gimnas
 <h2>📋 Disciplinas del Gimnasio</h2>
 <a href="agregar_disciplina.php" class="btn-nueva">➕ Nueva Disciplina</a>
 
-<?php if ($disciplinas && $disciplinas->num_rows > 0): ?>
 <table>
   <thead>
     <tr>
@@ -95,9 +94,6 @@ $disciplinas = $conexion->query("SELECT id, nombre FROM disciplinas WHERE gimnas
     <?php endwhile; ?>
   </tbody>
 </table>
-<?php else: ?>
-  <p style="text-align:center;">No hay disciplinas registradas aún.</p>
-<?php endif; ?>
 
 </body>
 </html>
