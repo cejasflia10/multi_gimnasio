@@ -1,13 +1,20 @@
 <?php
-session_start();
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
 include 'conexion.php';
-
-if (!isset($_SESSION['id_gimnasio'])) die('Acceso denegado.');
 include 'menu_horizontal.php';
 
-$id_gimnasio = $_SESSION['id_gimnasio'];
+$gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
 $tipo = $_GET['tipo'] ?? '';
 $id = intval($_GET['id'] ?? 0);
+
+// Validar tipo de producto
+$tipos_validos = ['proteccion', 'indumentaria', 'suplemento'];
+if (!in_array($tipo, $tipos_validos)) {
+    die("Tipo de producto inválido.");
+}
+
 $tabla = "productos_" . $tipo;
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -16,22 +23,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $precio_compra = floatval($_POST['precio_compra']);
     $precio_venta = floatval($_POST['precio_venta']);
 
-    $stmt = $conexion->prepare("UPDATE $tabla SET nombre = ?, detalle = ?, precio_compra = ?, precio_venta = ? WHERE id = ? AND id_gimnasio = ?");
-    $stmt->bind_param("ssddii", $nombre, $detalle, $precio_compra, $precio_venta, $id, $id_gimnasio);
+    $stmt = $conexion->prepare("UPDATE $tabla SET nombre = ?, detalle = ?, precio_compra = ?, precio_venta = ? WHERE id = ? AND gimnasio_id = ?");
+    $stmt->bind_param("ssddii", $nombre, $detalle, $precio_compra, $precio_venta, $id, $gimnasio_id);
 
     if ($stmt->execute()) {
-        echo "✅ Producto actualizado.";
+        echo "<p style='color:lime'>✅ Producto actualizado correctamente.</p>";
     } else {
-        echo "❌ Error: " . $stmt->error;
+        echo "<p style='color:red'>❌ Error: " . $stmt->error . "</p>";
     }
     exit();
 }
 
-$stmt = $conexion->prepare("SELECT * FROM $tabla WHERE id = ? AND id_gimnasio = ?");
-$stmt->bind_param("ii", $id, $id_gimnasio);
+// Obtener datos del producto
+$stmt = $conexion->prepare("SELECT * FROM $tabla WHERE id = ? AND gimnasio_id = ?");
+$stmt->bind_param("ii", $id, $gimnasio_id);
 $stmt->execute();
 $producto = $stmt->get_result()->fetch_assoc();
-if (!$producto) die("Producto no encontrado.");
+
+if (!$producto) {
+    die("<p style='color:red'>❌ Producto no encontrado.</p>");
+}
 ?>
 
 <!DOCTYPE html>
@@ -39,18 +50,69 @@ if (!$producto) die("Producto no encontrado.");
 <head>
     <meta charset="UTF-8">
     <title>Editar Producto</title>
+    <style>
+        body {
+            background: #000;
+            color: gold;
+            font-family: Arial, sans-serif;
+            padding: 30px;
+        }
+
+        h2 {
+            color: #ffc107;
+        }
+
+        form {
+            max-width: 500px;
+            margin: auto;
+            background-color: #111;
+            padding: 20px;
+            border-radius: 10px;
+        }
+
+        label {
+            display: block;
+            margin-top: 15px;
+            color: #ffc107;
+        }
+
+        input[type="text"],
+        input[type="number"] {
+            width: 100%;
+            padding: 10px;
+            margin-top: 5px;
+            border-radius: 5px;
+            border: none;
+        }
+
+        input[type="submit"] {
+            margin-top: 20px;
+            padding: 10px;
+            width: 100%;
+            background-color: #ffc107;
+            color: #000;
+            border: none;
+            border-radius: 5px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+    </style>
 </head>
-<body style="background:#111; color:#fff; font-family:Arial; padding:30px;">
-    <h2>Editar Producto (<?php echo ucfirst($tipo); ?>)</h2>
+<body>
+    <h2>Editar Producto (<?= ucfirst($tipo) ?>)</h2>
     <form method="post">
-        <label>Nombre:</label><br>
-        <input type="text" name="nombre" value="<?php echo $producto['nombre']; ?>" required><br>
-        <label>Detalle:</label><br>
-        <input type="text" name="detalle" value="<?php echo $producto['detalle']; ?>"><br>
-        <label>Precio Compra:</label><br>
-        <input type="number" step="0.01" name="precio_compra" value="<?php echo $producto['precio_compra']; ?>" required><br>
-        <label>Precio Venta:</label><br>
-        <input type="number" step="0.01" name="precio_venta" value="<?php echo $producto['precio_venta']; ?>" required><br>
+        <label>Nombre:</label>
+        <input type="text" name="nombre" value="<?= $producto['nombre'] ?>" required>
+
+        <label>Detalle:</label>
+        <input type="text" name="detalle" value="<?= $producto['detalle'] ?>">
+
+        <label>Precio Compra:</label>
+        <input type="number" step="0.01" name="precio_compra" value="<?= $producto['precio_compra'] ?>" required>
+
+        <label>Precio Venta:</label>
+        <input type="number" step="0.01" name="precio_venta" value="<?= $producto['precio_venta'] ?>" required>
+
         <input type="submit" value="Guardar Cambios">
     </form>
 </body>

@@ -1,25 +1,16 @@
 <?php
-
+include 'conexion.php';
+include 'menu_horizontal.php';
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
-
-include 'conexion.php';
-include 'menu_horizontal.php';
-
 $gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
 
-// Cargar clientes
-$clientes = $conexion->query("SELECT id, apellido, nombre FROM clientes WHERE gimnasio_id = $gimnasio_id ORDER BY apellido ASC");
+// Obtener clientes
+$clientes = $conexion->query("SELECT id, apellido, nombre FROM clientes WHERE gimnasio_id = $gimnasio_id ORDER BY apellido");
 
-// Cargar productos combinados
-$productos = $conexion->query("
-    SELECT id, nombre, 'Protección' AS categoria, precio_venta FROM productos_proteccion WHERE gimnasio_id = $gimnasio_id
-    UNION
-    SELECT id, nombre, 'Indumentaria' AS categoria, precio_venta FROM productos_indumentaria WHERE gimnasio_id = $gimnasio_id
-    UNION
-    SELECT id, nombre, 'Suplemento' AS categoria, precio_venta FROM productos_suplemento WHERE gimnasio_id = $gimnasio_id
-");
+// Obtener suplementos
+$productos = $conexion->query("SELECT id, nombre, precio_venta FROM productos_suplemento WHERE gimnasio_id = $gimnasio_id");
 ?>
 
 <!DOCTYPE html>
@@ -27,7 +18,7 @@ $productos = $conexion->query("
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Registrar Venta de Producto</title>
+  <title>Registrar Venta de Suplemento</title>
   <style>
     body {
       background: #000;
@@ -94,9 +85,9 @@ $productos = $conexion->query("
 <body>
 
 <div class="container">
-  <h2>Registrar Venta de Producto</h2>
+  <h2>Registrar Venta de Suplemento</h2>
 
-  <form action="guardar_venta_producto.php" method="POST">
+  <form action="guardar_venta_suplemento.php" method="POST">
     <label for="cliente">Cliente:</label>
     <select name="cliente_id" id="cliente" required>
       <option value="">Seleccionar cliente</option>
@@ -105,13 +96,11 @@ $productos = $conexion->query("
       <?php endwhile; ?>
     </select>
 
-    <label for="producto">Producto:</label>
+    <label for="producto">Suplemento:</label>
     <select name="producto_id" id="producto" onchange="cargarPrecio()" required>
-      <option value="">Seleccionar producto</option>
+      <option value="">Seleccionar suplemento</option>
       <?php while ($p = $productos->fetch_assoc()): ?>
-        <option value="<?= $p['id'] ?>" data-precio="<?= $p['precio_venta'] ?>">
-          <?= $p['nombre'] ?> (<?= $p['categoria'] ?>)
-        </option>
+        <option value="<?= $p['id'] ?>" data-precio="<?= $p['precio_venta'] ?>"><?= $p['nombre'] ?></option>
       <?php endwhile; ?>
     </select>
 
