@@ -23,7 +23,15 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
     $total = floatval($_POST['total']);
     $duracion_meses = intval($_POST['duracion_meses']);
 
-    // Insertar la nueva membresía
+    // Validar clases desde la tabla planes si vienen 0
+    if ($clases_disponibles === 0 && $plan_id > 0) {
+        $query = $conexion->query("SELECT clases FROM planes WHERE id = $plan_id LIMIT 1");
+        if ($row = $query->fetch_assoc()) {
+            $clases_disponibles = intval($row['clases']);
+        }
+    }
+
+    // Insertar membresía
     $stmt = $conexion->prepare("INSERT INTO membresias (
         cliente_id, plan_id, fecha_inicio, fecha_vencimiento, precio, clases_disponibles, 
         pagos_adicionales, otros_pagos, forma_pago, total, gimnasio_id, duracion_meses
@@ -36,9 +44,9 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
     );
 
     if ($stmt->execute()) {
-        echo "<script>alert('Membresía registrada correctamente'); window.location.href='ver_membresias.php';</script>";
+        echo "<script>alert('✅ Membresía registrada correctamente'); window.location.href='ver_membresias.php';</script>";
     } else {
-        echo "<script>alert('Error al registrar la membresía: " . $stmt->error . "'); window.history.back();</script>";
+        echo "<script>alert('❌ Error al registrar membresía: " . $stmt->error . "'); window.history.back();</script>";
     }
 
     $stmt->close();
