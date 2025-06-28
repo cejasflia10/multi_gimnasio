@@ -14,7 +14,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     $precio_venta = $_POST['precio_venta'];
     $stock = $_POST['stock'];
 
-    $stmt = $conexion->prepare("INSERT INTO productos_suplemento (nombre, tipo, precio_compra, precio_venta, stock, gimnasio_id) VALUES (?, ?, ?, ?, ?, ?)");
+    $stmt = $conexion->prepare("INSERT INTO productos (nombre, precio) VALUES (?, ?)");
     $stmt->bind_param("ssddii", $nombre, $tipo, $precio_compra, $precio_venta, $stock, $gimnasio_id);
     if ($stmt->execute()) {
         $mensaje = "✅ Suplemento registrado correctamente.";
