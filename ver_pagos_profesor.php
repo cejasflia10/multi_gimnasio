@@ -1,26 +1,42 @@
 <?php
-if (session_status() === PHP_SESSION_NONE) session_start();
 include 'conexion.php';
+session_start();
 
-$mes = date('m');
-$anio = date('Y');
+date_default_timezone_set('America/Argentina/Buenos_Aires');
 
-// Traer profesores, total horas del mes, y valor hora
-$query = "
-SELECT 
-    p.id,
-    CONCAT(p.apellido, ' ', p.nombre) AS nombre,
-    COALESCE(SUM(a.horas_trabajadas), 0) AS total_horas,
-    COALESCE(pp.valor_hora, 0) AS valor_hora,
-    (COALESCE(SUM(a.horas_trabajadas), 0) * COALESCE(pp.valor_hora, 0)) AS total_pagar
-FROM profesores p
-LEFT JOIN asistencia_profesor a ON p.id = a.profesor_id AND MONTH(a.fecha) = $mes AND YEAR(a.fecha) = $anio
-LEFT JOIN plan_profesor pp ON p.id = pp.profesor_id
-GROUP BY p.id
-ORDER BY nombre
+$gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
+$mes = $_GET['mes'] ?? date('m');
+$anio = $_GET['anio'] ?? date('Y');
+$profesor_id = $_GET['profesor_id'] ?? '';
+
+// Listado de profesores
+$profesores_q = $conexion->query("SELECT id, apellido, nombre FROM profesores WHERE gimnasio_id = $gimnasio_id");
+
+// Filtros
+$condiciones = [
+    "pp.gimnasio_id = $gimnasio_id",
+    "pp.mes = '$anio-$mes'"
+];
+if (!empty($profesor_id)) {
+    $condiciones[] = "p.id = $profesor_id";
+}
+$where = implode(" AND ", $condiciones);
+
+// Consulta principal
+$sql = "
+    SELECT 
+        p.apellido, 
+        p.nombre, 
+        SUM(pp.horas_trabajadas) AS total_horas, 
+        ANY_VALUE(pp.monto_hora) AS valor_hora, 
+        SUM(pp.total_pagado) AS total
+    FROM pagos_profesor pp
+    JOIN profesores p ON pp.profesor_id = p.id
+    WHERE $where
+    GROUP BY p.id
+    ORDER BY p.apellido, p.nombre
 ";
-
-$resultado = $conexion->query($query);
+$pagos_q = $conexion->query($sql);
 ?>
 
 <!DOCTYPE html>
@@ -30,35 +46,83 @@ $resultado = $conexion->query($query);
     <title>Pagos a Profesores</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
-        body { background-color: #111; color: gold; font-family: Arial; padding: 20px; }
-        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-        th, td { padding: 10px; border: 1px solid #444; text-align: center; }
-        th { background-color: #222; }
-        tr:nth-child(even) { background-color: #1a1a1a; }
-        h1 { text-align: center; }
+        body {
+            background-color: #000;
+            color: gold;
+            font-family: Arial, sans-serif;
+            padding: 20px;
+        }
+        select, button {
+            padding: 8px;
+            font-size: 16px;
+            margin-right: 10px;
+        }
+        table {
+            width: 100%;
+            background-color: #111;
+            color: white;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        th, td {
+            padding: 10px;
+            border: 1px solid gold;
+            text-align: center;
+        }
+        th {
+            background-color: #222;
+        }
     </style>
 </head>
 <body>
 
-<h1>💰 Pagos a Profesores - <?= date('F Y') ?></h1>
+<h2>Pagos a Profesores</h2>
+
+<form method="GET">
+    <label>Mes:</label>
+    <select name="mes">
+        <?php for ($i = 1; $i <= 12; $i++): ?>
+            <option value="<?= str_pad($i, 2, '0', STR_PAD_LEFT) ?>" <?= $i == $mes ? 'selected' : '' ?>><?= $i ?></option>
+        <?php endfor; ?>
+    </select>
+
+    <label>Año:</label>
+    <select name="anio">
+        <?php for ($y = 2023; $y <= date('Y'); $y++): ?>
+            <option value="<?= $y ?>" <?= $y == $anio ? 'selected' : '' ?>><?= $y ?></option>
+        <?php endfor; ?>
+    </select>
+
+    <label>Profesor:</label>
+    <select name="profesor_id">
+        <option value="">Todos</option>
+        <?php while ($p = $profesores_q->fetch_assoc()): ?>
+            <option value="<?= $p['id'] ?>" <?= $profesor_id == $p['id'] ? 'selected' : '' ?>>
+                <?= $p['apellido'] . ' ' . $p['nombre'] ?>
+            </option>
+        <?php endwhile; ?>
+    </select>
+
+    <button type="submit">Filtrar</button>
+</form>
 
 <table>
     <thead>
         <tr>
             <th>Profesor</th>
-            <th>Horas Trabajadas</th>
-            <th>Valor x Hora ($)</th>
-            <th>Total a Pagar ($)</th>
+            <th>Total Horas</th>
+            <th>Valor por Hora</th>
+            <th>Total a Pagar</th>
         </tr>
     </thead>
     <tbody>
-        <?php while ($fila = $resultado->fetch_assoc()): ?>
-            <tr>
-                <td><?= htmlspecialchars($fila['nombre']) ?></td>
-                <td><?= number_format($fila['total_horas'], 2) ?></td>
-                <td>$<?= number_format($fila['valor_hora'], 2) ?></td>
-                <td><strong>$<?= number_format($fila['total_pagar'], 2) ?></strong></td>
-            </tr>
+        <?php while ($fila = $pagos_q->fetch_assoc()): ?>
+        <tr>
+            <td><?= $fila['apellido'] . ' ' . $fila['nombre'] ?></td>
+            <td><?= $fila['total_horas'] ?></td>
+            <td>$<?= number_format($fila['valor_hora'], 0, ',', '.') ?></td>
+            <td>$<?= number_format($fila['total'], 0, ',', '.') ?></td>
+        </tr>
         <?php endwhile; ?>
     </tbody>
 </table>
