@@ -1,6 +1,15 @@
 <?php
 session_start();
 include 'conexion.php';
+
+$gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
+
+// Aquí es donde pegás las llamadas
+$pagos_dia = obtenerMonto($conexion, 'membresias', 'fecha_inicio', $gimnasio_id, 'DIA');
+$pagos_mes = obtenerMonto($conexion, 'membresias', 'fecha_inicio', $gimnasio_id, 'MES');
+$ventas_mes = obtenerMonto($conexion, 'ventas', 'fecha', $gimnasio_id, 'MES');
+$total_ventas = obtenerMonto($conexion, 'ventas', 'fecha', $gimnasio_id, 'DIA');
+
 function obtenerMonto($conexion, $tabla, $campo_fecha, $gimnasio_id, $modo = 'DIA') {
     $condicion = $modo === 'MES'
         ? "MONTH($campo_fecha) = MONTH(CURDATE()) AND YEAR($campo_fecha) = YEAR(CURDATE())"
@@ -72,7 +81,6 @@ if ($deudas_q && $deudas_q->num_rows > 0) {
         $clientes_deudores[] = $d;
     }
 }
-?>
 ?>
 
 <!DOCTYPE html>
@@ -155,10 +163,7 @@ if ($deudas_q && $deudas_q->num_rows > 0) {
   <div class="dropdown"><span class="dropbtn"><i class="fas fa-cogs"></i> Configuraciones</span>
     <div class="dropdown-content"><a href="configurar_planes.php">Planes</a><a href="configurar_accesos.php">Accesos</a></div>
   </div>
-  
-  
-  
-  <div class="dropdown"><span class="dropbtn">Panel del Cliente</span>
+    <div class="dropdown"><span class="dropbtn">Panel del Cliente</span>
     <div class="dropdown-content">
       <a href="cliente_acceso.php">Acceso DNI</a>
       <a href="cliente_reservas.php">Reservas</a>
@@ -187,33 +192,31 @@ if ($deudas_q && $deudas_q->num_rows > 0) {
         <?php endif; ?>
     </ul>
 </div>
+<!-- Panel superior de estadísticas -->
+<div style="display: flex; flex-wrap: wrap; gap: 20px; justify-content: center; margin-top: 20px;">
 
-<div style="display: flex; flex-wrap: wrap; justify-content: space-around; gap: 20px; margin-top: 20px;">
-  <div style="flex: 1; min-width: 200px; background-color: #1f1f1f; padding: 20px; border-radius: 10px; text-align: center; color: gold;">
-    <h3>Pagos del Día</h3>
-    <p style="font-size: 22px;">
-      $<?= number_format(obtenerMonto($conexion, 'pagos', 'fecha', $gimnasio_id, 'DIA'), 0, ',', '.') ?>
-    </p>
-  </div>
-  <div style="flex: 1; min-width: 200px; background-color: #1f1f1f; padding: 20px; border-radius: 10px; text-align: center; color: gold;">
-    <h3>Pagos del Mes</h3>
-    <p style="font-size: 22px;">
-      $<?= number_format(obtenerMonto($conexion, 'pagos', 'fecha', $gimnasio_id, 'MES'), 0, ',', '.') ?>
-    </p>
-  </div>
-  <div style="flex: 1; min-width: 200px; background-color: #1f1f1f; padding: 20px; border-radius: 10px; text-align: center; color: gold;">
-    <h3>Ventas del Mes</h3>
-    <p style="font-size: 22px;">
-      $<?= number_format(obtenerMonto($conexion, 'ventas', 'fecha', $gimnasio_id, 'MES'), 0, ',', '.') ?>
-    </p>
-  </div>
-  <div style="flex: 1; min-width: 200px; background-color: #1f1f1f; padding: 20px; border-radius: 10px; text-align: center; color: gold;">
-    <h3>Total de Ventas</h3>
-    <p style="font-size: 22px;">
-      $<?= number_format(obtenerMonto($conexion, 'ventas', 'fecha', $gimnasio_id, 'DIA'), 0, ',', '.') ?>
-    </p>
-  </div>
+    <div style="background-color: #222; color: gold; padding: 20px; border-radius: 10px; width: 200px; text-align: center;">
+        <h3>Pagos del Día</h3>
+        <p>$<?= number_format($pagos_dia, 0, ',', '.') ?></p>
+    </div>
+
+    <div style="background-color: #222; color: gold; padding: 20px; border-radius: 10px; width: 200px; text-align: center;">
+        <h3>Pagos del Mes</h3>
+        <p>$<?= number_format($pagos_mes, 0, ',', '.') ?></p>
+    </div>
+
+    <div style="background-color: #222; color: gold; padding: 20px; border-radius: 10px; width: 200px; text-align: center;">
+        <h3>Ventas del Mes</h3>
+        <p>$<?= number_format($ventas_mes, 0, ',', '.') ?></p>
+    </div>
+
+    <div style="background-color: #222; color: gold; padding: 20px; border-radius: 10px; width: 200px; text-align: center;">
+        <h3>Total de Ventas</h3>
+        <p>$<?= number_format($total_ventas, 0, ',', '.') ?></p>
+    </div>
+
 </div>
+
 <div style="display: flex; flex-wrap: wrap; gap: 20px; margin-top: 20px;">
   <div style="flex: 1; background:#1f1f1f; padding: 20px; border-radius: 12px;">
     <h3 style="color: gold;">Próximos Vencimientos</h3>
@@ -239,8 +242,7 @@ if ($deudas_q && $deudas_q->num_rows > 0) {
       ?>
     </ul>
   </div>
-
-  <div style="flex: 1; background:#1f1f1f; padding: 20px; border-radius: 12px;">
+<div style="flex: 1; background:#1f1f1f; padding: 20px; border-radius: 12px;">
     <h3 style="color: gold;">Próximos Cumpleaños</h3>
     <ul style="color: #fff; padding-left: 20px;">
       <?php
@@ -264,6 +266,29 @@ if ($deudas_q && $deudas_q->num_rows > 0) {
     </ul>
   </div>
 </div>
+<h3 style="color:gold; margin-top:30px;">📅 Reservas de Turnos de Hoy</h3>
+<div style="background-color:#111; color:white; padding:15px; border:1px solid gold; border-radius:10px; max-height:300px; overflow-y:auto;">
+<?php
+$reservas_q = $conexion->query("
+    SELECT r.fecha_reserva, c.apellido, c.nombre, d.nombre AS dia, h.hora_inicio, h.hora_fin, p.apellido AS profesor
+    FROM reservas r
+    JOIN clientes c ON r.cliente_id = c.id
+    JOIN turnos t ON r.turno_id = t.id
+    JOIN dias d ON t.dia = d.id
+    JOIN horarios h ON t.horario_id = h.id
+    JOIN profesores p ON t.profesor_id = p.id
+    WHERE r.fecha_reserva = CURDATE()
+    ORDER BY h.hora_inicio
+");
+
+if ($reservas_q->num_rows > 0) {
+    while ($res = $reservas_q->fetch_assoc()) {
+        echo "<p><strong>{$res['apellido']} {$res['nombre']}</strong> – {$res['dia']} de {$res['hora_inicio']} a {$res['hora_fin']} con Prof. <strong>{$res['profesor']}</strong></p><hr>";
+    }
+} else {
+    echo "<p>No hay reservas registradas para hoy.</p>";
+}
+?>
 
 
 <div class="card">
