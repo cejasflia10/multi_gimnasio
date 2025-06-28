@@ -159,6 +159,12 @@ $adicionales = $conexion->query("SELECT id, nombre FROM planes_adicionales WHERE
     <label>Total a Pagar:</label>
     <input type="number" name="total" id="total" readonly>
 
+    <label>Monto Pagado:</label>
+    <input type="number" name="monto_pagado" id="monto_pagado" value="0" oninput="calcularTotal()">
+
+    <label>Saldo (Cuenta Corriente):</label>
+    <input type="number" name="saldo_cc" id="saldo_cc" readonly>
+
     <button type="submit">Registrar Membresía</button>
     <a href="index.php"><button type="button">Volver al Menú</button></a>
 </form>
@@ -200,14 +206,19 @@ function calcularTotal() {
     let precio = parseFloat(document.getElementById('precio').value || 0);
     let adicionales = parseFloat(document.getElementById('pagos_adicionales').value || 0);
     let otros = parseFloat(document.getElementById('otros_pagos').value || 0);
+    let pagado = parseFloat(document.getElementById('monto_pagado').value || 0);
     let forma = document.getElementById('forma_pago').value;
+
     let total = precio + adicionales + otros;
+    document.getElementById('total').value = total.toFixed(2);
+
+    let saldo = total - pagado;
 
     if (forma === 'cuenta_corriente') {
-        total = -Math.abs(total);
+        document.getElementById('saldo_cc').value = saldo > 0 ? saldo.toFixed(2) : '0.00';
+    } else {
+        document.getElementById('saldo_cc').value = '0.00';
     }
-
-    document.getElementById('total').value = total.toFixed(2);
 }
 
 function aplicarDescuento(porcentaje) {
