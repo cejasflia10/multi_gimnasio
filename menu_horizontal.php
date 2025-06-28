@@ -145,6 +145,7 @@
 <!-- MENÚ LATERAL PANEL CLIENTES -->
 <div id="menu-panel" class="menu-lateral">
     <h3>Panel Cliente</h3>
+    <a href="cliente_turnos.php">Reservar Turno (Cliente)</a></li>
     <a href="cliente_acceso.php">Acceso Cliente</a>
     <a href="cliente_reservas.php">Reservas</a>
     <a href="clientes_pagos.php">Pagos</a>
