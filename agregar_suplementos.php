@@ -9,15 +9,15 @@ $gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
 
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
     $nombre = $_POST['nombre'];
-    $talle = $_POST['talle'];
+    $tipo = $_POST['tipo'];
     $precio_compra = $_POST['precio_compra'];
     $precio_venta = $_POST['precio_venta'];
     $stock = $_POST['stock'];
 
-    $stmt = $conexion->prepare("INSERT INTO productos_indumentaria (nombre, talle, precio_compra, precio_venta, stock, gimnasio_id) VALUES (?, ?, ?, ?, ?, ?)");
-    $stmt->bind_param("ssddii", $nombre, $talle, $precio_compra, $precio_venta, $stock, $gimnasio_id);
+    $stmt = $conexion->prepare("INSERT INTO productos_suplemento (nombre, tipo, precio_compra, precio_venta, stock, gimnasio_id) VALUES (?, ?, ?, ?, ?, ?)");
+    $stmt->bind_param("ssddii", $nombre, $tipo, $precio_compra, $precio_venta, $stock, $gimnasio_id);
     if ($stmt->execute()) {
-        $mensaje = "✅ Indumentaria registrada correctamente.";
+        $mensaje = "✅ Suplemento registrado correctamente.";
     } else {
         $mensaje = "❌ Error al registrar: " . $stmt->error;
     }
@@ -29,7 +29,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Agregar Indumentaria</title>
+  <title>Agregar Suplemento</title>
   <style>
     body {
       background: #000;
@@ -94,13 +94,13 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 <body>
 
 <div class="container">
-  <h2>Agregar Indumentaria</h2>
+  <h2>Agregar Suplemento</h2>
   <form method="POST">
     <label>Nombre:</label>
     <input type="text" name="nombre" required>
 
-    <label>Talle:</label>
-    <input type="text" name="talle">
+    <label>Tipo:</label>
+    <input type="text" name="tipo" required>
 
     <label>Precio de Compra:</label>
     <input type="number" step="0.01" name="precio_compra" required>
