@@ -14,6 +14,7 @@ if ($gimnasio_id) {
         $disciplinas[] = $fila;
     }
 }
+
 ?>
 
 <!DOCTYPE html>
