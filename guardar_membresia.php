@@ -23,30 +23,25 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
     $total = floatval($_POST['total']);
     $duracion_meses = intval($_POST['duracion_meses']);
 
-    // Validar clases desde la tabla planes si vienen 0
-    if ($clases_disponibles === 0 && $plan_id > 0) {
-        $query = $conexion->query("SELECT clases FROM planes WHERE id = $plan_id LIMIT 1");
-        if ($row = $query->fetch_assoc()) {
-            $clases_disponibles = intval($row['clases']);
-        }
-    }
+    // NUEVOS CAMPOS
+    $monto_pagado = floatval($_POST['monto_pagado'] ?? 0);
+    $saldo_cc = floatval($_POST['saldo_cc'] ?? 0);
 
-    // Insertar membresía
+    // Insertar la nueva membresía
     $stmt = $conexion->prepare("INSERT INTO membresias (
-        cliente_id, plan_id, fecha_inicio, fecha_vencimiento, precio, clases_disponibles, 
-        pagos_adicionales, otros_pagos, forma_pago, total, gimnasio_id, duracion_meses
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+        cliente_id, plan_id, fecha_inicio, fecha_vencimiento, precio, clases_disponibles,
+        pagos_adicionales, otros_pagos, forma_pago, total, monto_pagado, saldo_cc, gimnasio_id, duracion_meses
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
 
-    $stmt->bind_param("iissdiddsdii", 
-        $cliente_id, $plan_id, $fecha_inicio, $fecha_vencimiento, $precio,
-        $clases_disponibles, $pagos_adicionales, $otros_pagos, $forma_pago,
-        $total, $gimnasio_id, $duracion_meses
+    $stmt->bind_param("iissdiddsddiii",
+        $cliente_id, $plan_id, $fecha_inicio, $fecha_vencimiento, $precio, $clases_disponibles,
+        $pagos_adicionales, $otros_pagos, $forma_pago, $total, $monto_pagado, $saldo_cc, $gimnasio_id, $duracion_meses
     );
 
     if ($stmt->execute()) {
-        echo "<script>alert('✅ Membresía registrada correctamente'); window.location.href='ver_membresias.php';</script>";
+        echo "<script>alert('Membresía registrada correctamente'); window.location.href='ver_membresias.php';</script>";
     } else {
-        echo "<script>alert('❌ Error al registrar membresía: " . $stmt->error . "'); window.history.back();</script>";
+        echo "<script>alert('Error al registrar la membresía: " . $stmt->error . "'); window.history.back();</script>";
     }
 
     $stmt->close();
