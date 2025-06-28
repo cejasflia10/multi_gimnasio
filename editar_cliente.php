@@ -10,18 +10,20 @@ if (!isset($_GET['id'])) {
     exit;
 }
 
-$id = $_GET['id'];
+$id = intval($_GET['id']);
 $cliente = mysqli_fetch_assoc(mysqli_query($conexion, "SELECT * FROM clientes WHERE id = $id"));
 if (!$cliente) {
     echo "<div class='error'>Cliente no encontrado.</div>";
     exit;
 }
 
-// Cargar disciplinas
-$disciplinas = mysqli_query($conexion, "SELECT * FROM disciplinas");
+$es_admin = ($_SESSION['rol'] ?? '') === 'admin';
+
+// Cargar disciplinas filtradas por gimnasio del cliente
+$gimnasio_id_cliente = $cliente['gimnasio_id'] ?? 0;
+$disciplinas = mysqli_query($conexion, "SELECT * FROM disciplinas WHERE gimnasio_id = $gimnasio_id_cliente");
 
 // Si es admin, cargar gimnasios
-$es_admin = ($_SESSION['rol'] ?? '') === 'admin';
 if ($es_admin) {
     $gimnasios = mysqli_query($conexion, "SELECT * FROM gimnasios");
 }
@@ -86,25 +88,25 @@ if ($es_admin) {
     <form action="guardar_edicion_cliente.php" method="POST">
         <input type="hidden" name="id" value="<?= $cliente['id']; ?>">
         <label>Apellido:</label>
-        <input type="text" name="apellido" value="<?= $cliente['apellido']; ?>" required>
+        <input type="text" name="apellido" value="<?= htmlspecialchars($cliente['apellido']); ?>" required>
 
         <label>Nombre:</label>
-        <input type="text" name="nombre" value="<?= $cliente['nombre']; ?>" required>
+        <input type="text" name="nombre" value="<?= htmlspecialchars($cliente['nombre']); ?>" required>
 
         <label>DNI:</label>
-        <input type="text" name="dni" value="<?= $cliente['dni']; ?>" required>
+        <input type="text" name="dni" value="<?= htmlspecialchars($cliente['dni']); ?>" required>
 
         <label>Fecha de nacimiento:</label>
         <input type="date" name="fecha_nacimiento" value="<?= $cliente['fecha_nacimiento']; ?>">
 
         <label>Domicilio:</label>
-        <input type="text" name="domicilio" value="<?= $cliente['domicilio']; ?>">
+        <input type="text" name="domicilio" value="<?= htmlspecialchars($cliente['domicilio']); ?>">
 
         <label>Teléfono:</label>
-        <input type="text" name="telefono" value="<?= $cliente['telefono']; ?>">
+        <input type="text" name="telefono" value="<?= htmlspecialchars($cliente['telefono']); ?>">
 
         <label>Email:</label>
-        <input type="email" name="email" value="<?= $cliente['email']; ?>">
+        <input type="email" name="email" value="<?= htmlspecialchars($cliente['email']); ?>">
 
         <label>Disciplina:</label>
         <select name="disciplina" required>
