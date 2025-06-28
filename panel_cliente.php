@@ -51,6 +51,8 @@ while ($row = $peso_evol->fetch_assoc()) {
     .btn { background: gold; color: #000; font-weight: bold; padding: 10px; border: none; border-radius: 5px; cursor: pointer; text-decoration: none; display: inline-block; margin: 10px 0; }
     img { width: 180px; border: 3px solid gold; border-radius: 10px; display: block; margin: auto; }
   </style>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
 </head>
 <body>
 <div class="container">
@@ -76,43 +78,311 @@ $foto_path = (!empty($cliente['foto']) && file_exists($cliente['foto'])) ? $clie
   <p><strong>Disciplina:</strong> <?= $cliente['disciplina'] ?></p>
   <p><strong>Obra Social:</strong> <?= $cliente['obra_social'] ?? 'No especificada' ?></p>
 
-  <div class="section">
-    <h3>📋 Ficha Física</h3>
-    <p><strong>Altura:</strong> <?= $datos['altura_cm'] ?? '—' ?> cm | <strong>Peso:</strong> <?= $datos['peso_kg'] ?? '—' ?> kg | <strong>Peso Ideal:</strong> <?= $datos['peso_ideal'] ?? '—' ?> kg</p>
-    <p><strong>Nivel:</strong> <?= $datos['nivel_entrenamiento'] ?? '—' ?></p>
-    <p><strong>Objetivo:</strong> <?= $datos['objetivo'] ?? '—' ?></p>
-    <canvas id="graficoPeso" height="100"></canvas>
-  </div>
+<?php
+// Obtener controles físicos del cliente
+$controles = $conexion->query("
+    SELECT * FROM controles_fisicos 
+    WHERE cliente_id = $cliente_id 
+    ORDER BY fecha DESC
+");
+?>
+<?php
+$planes = $conexion->query("
+    SELECT * FROM planes_entrenamiento 
+    WHERE cliente_id = $cliente_id 
+    ORDER BY fecha DESC
+");
+?>
+<?php
+$progresos = $conexion->query("
+    SELECT * FROM progreso_tecnico 
+    WHERE cliente_id = $cliente_id 
+    ORDER BY fecha DESC
+");
+?>
+<div class="card">
+    <h3>📘 Plan de Entrenamiento</h3>
+    <?php
+    $planes = $conexion->query("
+        SELECT * FROM planes_entrenamiento 
+        WHERE cliente_id = $cliente_id 
+        ORDER BY fecha DESC
+        LIMIT 1
+    ");
+    ?>
 
-  <div class="section">
-    <h3>🥋 Ficha de Graduaciones</h3>
-    <table>
-      <tr><th>Disciplina</th><th>Grado</th><th>Fecha</th></tr>
-      <?php while ($g = $graduaciones->fetch_assoc()): ?>
-      <tr><td><?= $g['disciplina'] ?></td><td><?= $g['grado'] ?></td><td><?= $g['fecha_examen'] ?></td></tr>
-      <?php endwhile; ?>
-    </table>
-  </div>
+    <?php if ($planes->num_rows > 0): ?>
+        <?php $plan = $planes->fetch_assoc(); ?>
+        <p><strong>Fecha:</strong> <?= $plan['fecha'] ?></p>
+        <p><strong>Disciplina:</strong> <?= $plan['disciplina'] ?></p>
+        <p><strong>Contenido:</strong><br><?= nl2br($plan['contenido']) ?></p>
 
-  <div class="section">
-    <h3>🥊 Ficha de Competencias</h3>
-    <table>
-      <tr><th>Torneo</th><th>Fecha</th><th>Categoría</th><th>Resultado</th><th>Ciudad</th></tr>
-      <?php while ($c = $competencias->fetch_assoc()): ?>
-      <tr><td><?= $c['torneo'] ?></td><td><?= $c['fecha'] ?></td><td><?= $c['categoria'] ?></td><td><?= $c['resultado'] ?></td><td><?= $c['ciudad'] ?></td></tr>
-      <?php endwhile; ?>
-    </table>
-  </div>
+        <?php if (!empty($plan['archivo']) && file_exists($plan['archivo'])): ?>
+            <p><strong>Archivo:</strong> 
+                <a href="<?= $plan['archivo'] ?>" target="_blank" style="color: lightblue;">📎 Ver archivo</a>
+            </p>
+        <?php endif; ?>
+    <?php else: ?>
+        <p>No hay planes cargados aún.</p>
+    <?php endif; ?>
+</div>
+<div class="card">
+    <h3>🧍 Evaluaciones Físicas</h3>
+    <?php
+    $evaluaciones = $conexion->query("
+        SELECT * FROM evaluaciones_fisicas 
+        WHERE cliente_id = $cliente_id 
+        ORDER BY fecha DESC
+    ");
+    ?>
 
-  <div class="section">
-    <h3>🥗 Seguimiento Nutricional</h3>
-    <table>
-      <tr><th>Fecha</th><th>Peso</th><th>Recomendaciones</th><th>Observaciones</th></tr>
-      <?php mysqli_data_seek($seguimientos, 0); while ($s = $seguimientos->fetch_assoc()): ?>
-      <tr><td><?= $s['fecha'] ?></td><td><?= $s['peso'] ?> kg</td><td><?= $s['recomendaciones'] ?></td><td><?= $s['observaciones'] ?></td></tr>
-      <?php endwhile; ?>
-    </table>
-  </div>
+    <?php if ($evaluaciones->num_rows > 0): ?>
+        <?php $ultima = $evaluaciones->fetch_assoc(); ?>
+        <p><strong>📅 Fecha:</strong> <?= $ultima['fecha'] ?></p>
+        <p><strong>Peso:</strong> <?= $ultima['peso'] ?> kg</p>
+        <p><strong>Altura:</strong> <?= $ultima['altura'] ?> cm</p>
+        <p><strong>Edad:</strong> <?= $ultima['edad'] ?> años</p>
+        <p><strong>IMC:</strong> <?= $ultima['imc'] ?></p>
+        <p><strong>Tipo de control:</strong> <?= ucfirst($ultima['tipo_control']) ?></p>
+        <p><strong>Observaciones:</strong><br><?= nl2br($ultima['observaciones']) ?></p>
+
+        <hr style="border-top: 1px solid gold; margin: 20px 0;">
+
+        <h4>📋 Historial de evaluaciones:</h4>
+        <table style="width:100%; border-collapse: collapse;">
+            <tr style="background:#222;">
+                <th style="color:gold;">Fecha</th>
+                <th style="color:gold;">Peso</th>
+                <th style="color:gold;">Altura</th>
+                <th style="color:gold;">IMC</th>
+                <th style="color:gold;">Tipo</th>
+            </tr>
+            <tr>
+                <td><?= $ultima['fecha'] ?></td>
+                <td><?= $ultima['peso'] ?> kg</td>
+                <td><?= $ultima['altura'] ?> cm</td>
+                <td><?= $ultima['imc'] ?></td>
+                <td><?= $ultima['tipo_control'] ?></td>
+            </tr>
+            <?php while ($e = $evaluaciones->fetch_assoc()): ?>
+                <tr>
+                    <td><?= $e['fecha'] ?></td>
+                    <td><?= $e['peso'] ?> kg</td>
+                    <td><?= $e['altura'] ?> cm</td>
+                    <td><?= $e['imc'] ?></td>
+                    <td><?= $e['tipo_control'] ?></td>
+                </tr>
+            <?php endwhile; ?>
+        </table>
+    <?php else: ?>
+        <p>No hay evaluaciones físicas registradas aún.</p>
+    <?php endif; ?>
+</div>
+<div class="card">
+    <h3>📷 Fotos de Evolución Física</h3>
+    <?php
+    $fotos = $conexion->query("
+        SELECT * FROM fotos_evolucion 
+        WHERE cliente_id = $cliente_id 
+        ORDER BY fecha DESC
+    ");
+    ?>
+
+    <?php if ($fotos->num_rows > 0): ?>
+        <div style="display: flex; flex-wrap: wrap; justify-content: center; gap: 20px; margin-top: 15px;">
+            <?php while ($f = $fotos->fetch_assoc()): ?>
+                <div style="background: #222; padding: 10px; border-radius: 10px; text-align: center; max-width: 180px;">
+                    <img src="<?= $f['archivo'] ?>" style="max-width: 100%; border-radius: 8px;">
+                    <p style="margin: 5px 0;"><strong><?= $f['etapa'] ?></strong></p>
+                    <small><?= $f['fecha'] ?></small>
+                </div>
+            <?php endwhile; ?>
+        </div>
+    <?php else: ?>
+        <p>No hay fotos de evolución registradas aún.</p>
+    <?php endif; ?>
+</div>
+
+<div class="card">
+    <h3>📈 Progreso Técnico</h3>
+    <?php if ($progresos->num_rows > 0): ?>
+        <table style="width:100%; border-collapse: collapse;">
+            <tr>
+                <th style="color:gold;">Fecha</th>
+                <th style="color:gold;">Técnica</th>
+                <th style="color:gold;">Fuerza</th>
+                <th style="color:gold;">Resistencia</th>
+                <th style="color:gold;">Coordinación</th>
+                <th style="color:gold;">Velocidad</th>
+            </tr>
+            <?php while ($p = $progresos->fetch_assoc()): ?>
+                <tr>
+                    <td><?= $p['fecha'] ?></td>
+                    <td><?= $p['tecnica'] ?></td>
+                    <td><?= $p['fuerza'] ?></td>
+                    <td><?= $p['resistencia'] ?></td>
+                    <td><?= $p['coordinacion'] ?></td>
+                    <td><?= $p['velocidad'] ?></td>
+                </tr>
+            <?php endwhile; ?>
+        </table>
+    <?php else: ?>
+        <p>No hay evaluaciones cargadas aún.</p>
+    <?php endif; ?>
+</div>
+
+<div class="card">
+    <h3>📘 Planes de Entrenamiento</h3>
+    <?php if ($planes->num_rows > 0): ?>
+        <?php while($p = $planes->fetch_assoc()): ?>
+            <div style="margin-bottom:15px; border-bottom:1px solid gold; padding-bottom:10px;">
+                <p><strong>Disciplina:</strong> <?= $p['disciplina'] ?></p>
+                <p><strong>Objetivo:</strong> <?= $p['objetivo'] ?></p>
+                <p><strong>Duración:</strong> <?= $p['duracion'] ?></p>
+                <p><strong>Fecha:</strong> <?= $p['fecha'] ?></p>
+                <?php if (!empty($p['contenido'])): ?>
+                    <p><?= nl2br($p['contenido']) ?></p>
+                <?php endif; ?>
+                <?php if (!empty($p['archivo']) && file_exists($p['archivo'])): ?>
+                    <a href="<?= $p['archivo'] ?>" target="_blank" style="color:lightblue;">📎 Ver archivo</a>
+                <?php endif; ?>
+            </div>
+        <?php endwhile; ?>
+    <?php else: ?>
+        <p>No hay planes de entrenamiento cargados aún.</p>
+    <?php endif; ?>
+</div>
+
+<div class="card">
+    <h3>📊 Ficha Física</h3>
+    <?php if ($controles->num_rows > 0): ?>
+        <?php $primero = $controles->fetch_assoc(); ?>
+        <p><strong>Altura:</strong> <?= $primero['altura'] ?> cm</p>
+        <p><strong>Peso actual:</strong> <?= $primero['peso'] ?> kg</p>
+        <p><strong>Edad:</strong> <?= $primero['edad'] ?> años</p>
+        <p><strong>IMC:</strong> <?= $primero['imc'] ?></p>
+        <p><strong>Nivel:</strong> <?= $primero['nivel'] ?></p>
+        <p><strong>Objetivo:</strong> <?= $primero['objetivo'] ?></p>
+        <p><strong>Observaciones:</strong> <?= $primero['observaciones'] ?></p>
+
+        <h4>📅 Evolución (últimos controles):</h4>
+        <ul>
+            <li><strong><?= $primero['fecha'] ?>:</strong> <?= $primero['peso'] ?> kg</li>
+            <?php while ($c = $controles->fetch_assoc()): ?>
+                <li><strong><?= $c['fecha'] ?>:</strong> <?= $c['peso'] ?> kg</li>
+            <?php endwhile; ?>
+        </ul>
+    <?php else: ?>
+        <p>No se ha registrado información física aún.</p>
+    <?php endif; ?>
+</div>
+<?php
+// Volvemos a obtener los datos de evolución en orden ASC
+$peso_q = $conexion->query("
+    SELECT fecha, peso FROM controles_fisicos
+    WHERE cliente_id = $cliente_id
+    ORDER BY fecha ASC
+");
+
+$fechas = [];
+$pesos = [];
+while ($row = $peso_q->fetch_assoc()) {
+    $fechas[] = $row['fecha'];
+    $pesos[] = $row['peso'];
+}
+?>
+<div class="card">
+    <h4>📈 Evolución de Peso</h4>
+    <canvas id="graficoPeso" width="100%" height="60"></canvas>
+</div>
+
+<script>
+    const ctx = document.getElementById('graficoPeso').getContext('2d');
+    const graficoPeso = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: <?= json_encode($fechas) ?>,
+            datasets: [{
+                label: 'Peso (kg)',
+                data: <?= json_encode($pesos) ?>,
+                borderColor: 'gold',
+                backgroundColor: 'rgba(255, 215, 0, 0.2)',
+                fill: true,
+                tension: 0.3
+            }]
+        },
+        options: {
+            responsive: true,
+            scales: {
+                y: {
+                    beginAtZero: false,
+                    ticks: {
+                        color: 'gold'
+                    }
+                },
+                x: {
+                    ticks: {
+                        color: 'gold'
+                    }
+                }
+            },
+            plugins: {
+                legend: {
+                    labels: {
+                        color: 'gold'
+                    }
+                }
+            }
+        }
+    });
+</script>
+
+  <div class="card">
+    <h3>🥋 Graduación Técnica</h3>
+    <?php
+    $grad = $conexion->query("
+        SELECT * FROM graduaciones 
+        WHERE cliente_id = $cliente_id 
+        ORDER BY fecha DESC LIMIT 1
+    ");
+    ?>
+
+    <?php if ($grad->num_rows > 0): ?>
+        <?php $g = $grad->fetch_assoc(); ?>
+        <p><strong>Disciplina:</strong> <?= $g['disciplina'] ?></p>
+        <p><strong>Nivel:</strong> <?= $g['nivel'] ?></p>
+        <p><strong>Fecha:</strong> <?= $g['fecha'] ?></p>
+        <p><strong>Observaciones:</strong><br><?= nl2br($g['observaciones']) ?></p>
+    <?php else: ?>
+        <p>No se ha registrado ninguna graduación aún.</p>
+    <?php endif; ?>
+</div>
+
+  <div class="card">
+    <h3>🏆 Competencias</h3>
+    <?php
+    $comp = $conexion->query("
+        SELECT * FROM competencias 
+        WHERE cliente_id = $cliente_id 
+        ORDER BY fecha DESC
+    ");
+    ?>
+
+    <?php if ($comp->num_rows > 0): ?>
+        <ul style="list-style: none; padding: 0;">
+            <?php while ($c = $comp->fetch_assoc()): ?>
+                <li style="margin-bottom: 15px; border-bottom: 1px solid gold; padding-bottom: 10px;">
+                    <strong><?= $c['fecha'] ?>:</strong> <?= $c['nombre_competencia'] ?> <br>
+                    <em>Lugar:</em> <?= $c['lugar'] ?> <br>
+                    <em>Resultado:</em> <?= $c['resultado'] ?> <br>
+                    <em>Observaciones:</em> <?= nl2br($c['observaciones']) ?>
+                </li>
+            <?php endwhile; ?>
+        </ul>
+    <?php else: ?>
+        <p>No hay competencias registradas aún.</p>
+    <?php endif; ?>
+</div>
 
   <?php if ($ficha_medica): ?>
   <div class="section">
