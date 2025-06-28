@@ -9,7 +9,7 @@ $gimnasio_id = $_GET['gimnasio'] ?? 0;
 // Obtener disciplinas del gimnasio
 $disciplinas = [];
 if ($gimnasio_id) {
-$resultado = $conexion->query("SELECT id, nombre FROM disciplinas WHERE gimnasio_id = $gimnasio_id");
+    $resultado = $conexion->query("SELECT id, nombre FROM disciplinas WHERE gimnasio_id = $gimnasio_id");
     while ($fila = $resultado->fetch_assoc()) {
         $disciplinas[] = $fila;
     }
