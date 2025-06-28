@@ -9,6 +9,9 @@ $hoy = date('Y-m-d');
 $dias = $conexion->query("SELECT * FROM dias");
 $dia_seleccionado = $_GET['dia'] ?? 1;
 
+// Calcular fecha del día seleccionado en la semana actual
+$dia_fecha = date('Y-m-d', strtotime("this week +" . ($dia_seleccionado - 1) . " days"));
+
 // Obtener turnos
 $query = "
 SELECT t.id, d.nombre AS dia, h.hora_inicio, h.hora_fin, p.apellido AS profesor
@@ -25,10 +28,7 @@ $turnos = $conexion->query($query);
 $reserva_existente = $conexion->query("
     SELECT turno_id FROM reservas 
     WHERE cliente_id = $cliente_id 
-    AND fecha = CURDATE()
-    AND turno_id IN (
-        SELECT id FROM turnos WHERE id_dia = $dia_seleccionado
-    )
+    AND fecha = '$dia_fecha'
 ")->fetch_assoc();
 
 $reservado_id = $reserva_existente['turno_id'] ?? null;
@@ -111,10 +111,12 @@ $reservado_id = $reserva_existente['turno_id'] ?? null;
         <?php if ($reservado_id == $t['id']) { ?>
           <form method="POST" action="editar_reserva.php">
             <input type="hidden" name="turno_id" value="<?= $t['id'] ?>">
+            <input type="hidden" name="fecha" value="<?= $dia_fecha ?>">
             <button class="reservar">Editar</button>
           </form>
           <form method="POST" action="cancelar_reserva.php" onsubmit="return confirm('¿Cancelar esta reserva?')">
             <input type="hidden" name="turno_id" value="<?= $t['id'] ?>">
+            <input type="hidden" name="fecha" value="<?= $dia_fecha ?>">
             <button class="reservar" style="background:red;color:white;">Cancelar</button>
           </form>
         <?php } else if ($reservado_id) { ?>
@@ -123,6 +125,7 @@ $reservado_id = $reserva_existente['turno_id'] ?? null;
           <form method="POST" action="guardar_reserva.php">
             <input type="hidden" name="turno_id" value="<?= $t['id'] ?>">
             <input type="hidden" name="cliente_id" value="<?= $cliente_id ?>">
+            <input type="hidden" name="fecha" value="<?= $dia_fecha ?>">
             <button type="submit" class="reservar">Reservar</button>
           </form>
         <?php } ?>
