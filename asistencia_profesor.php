@@ -1,101 +1,128 @@
 <?php
-session_start();
-if (!isset($_SESSION['usuario'])) {
-    header("Location: login.php");
-    exit();
-}
 include 'conexion.php';
-include 'menu_horizontal.php';
-include 'permisos.php';
+session_start();
 
-if (!tiene_permiso('profesores')) {
-    echo "<h2 style='color:red;'>⛔ Acceso denegado</h2>";
-    exit;
-}
+date_default_timezone_set('America/Argentina/Buenos_Aires');
+
 $mensaje = "";
-if ($_SERVER["REQUEST_METHOD"] === "POST") {
-    $rfid = trim($_POST["rfid"]);
-    $fecha = date("Y-m-d");
-    $hora_actual = date("H:i:s");
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $dni = trim($_POST['dni']);
 
-    $stmt = $conexion->prepare("SELECT id FROM profesores WHERE rfid = ?");
-    $stmt->bind_param("s", $rfid);
+    // Buscar profesor por DNI
+    $stmt = $conexion->prepare("SELECT * FROM profesores WHERE dni = ?");
+    $stmt->bind_param("s", $dni);
     $stmt->execute();
-    $stmt->store_result();
+    $resultado = $stmt->get_result();
+    $profesor = $resultado->fetch_assoc();
 
-    if ($stmt->num_rows > 0) {
-        $stmt->bind_result($profesor_id);
-        $stmt->fetch();
-
-        $stmt_check = $conexion->prepare("SELECT id, hora_ingreso FROM asistencias_profesores WHERE profesor_id = ? AND fecha = ?");
-        $stmt_check->bind_param("is", $profesor_id, $fecha);
-        $stmt_check->execute();
-        $resultado = $stmt_check->get_result();
-
-        if ($resultado->num_rows > 0) {
-            $asistencia = $resultado->fetch_assoc();
-            $hora_ingreso = strtotime($asistencia['hora_ingreso']);
-            $hora_egreso = strtotime($hora_actual);
-            $horas_trabajadas = round(($hora_egreso - $hora_ingreso) / 3600, 2);
-            $monto_por_hora = 2000; // modificar según pago por hora
-            $monto_pagado = $horas_trabajadas * $monto_por_hora;
-
-            $stmt_update = $conexion->prepare("UPDATE asistencias_profesores SET hora_egreso = ?, horas_trabajadas = ?, monto_pagado = ? WHERE id = ?");
-            $stmt_update->bind_param("sdsi", $hora_actual, $horas_trabajadas, $monto_pagado, $asistencia['id']);
-            $stmt_update->execute();
-            $mensaje = "Egreso registrado. Total horas: $horas_trabajadas.";
-        } else {
-            $stmt_insert = $conexion->prepare("INSERT INTO asistencias_profesores (profesor_id, fecha, hora_ingreso) VALUES (?, ?, ?)");
-            $stmt_insert->bind_param("iss", $profesor_id, $fecha, $hora_actual);
-            $stmt_insert->execute();
-            $mensaje = "Ingreso registrado.";
-        }
+    if (!$profesor) {
+        $mensaje = "Profesor no encontrado.";
     } else {
-        $mensaje = "RFID no encontrado.";
+        $profesor_id = $profesor['id'];
+        $fecha = date('Y-m-d');
+        $hora_actual = date('H:i:s');
+
+        // Verificar si ya tiene ingreso hoy sin egreso
+        $consulta = $conexion->query("SELECT * FROM asistencias_profesor 
+            WHERE profesor_id = $profesor_id AND fecha = '$fecha' 
+            AND hora_egreso IS NULL");
+
+        if ($consulta->num_rows > 0) {
+            // Registrar hora de salida
+            $registro = $consulta->fetch_assoc();
+            $hora_ingreso = new DateTime($registro['hora_ingreso']);
+            $hora_egreso = new DateTime($hora_actual);
+            $intervalo = $hora_ingreso->diff($hora_egreso);
+            $horas = $intervalo->h + ($intervalo->i / 60);
+
+            // Obtener cantidad de alumnos en el horario
+            $alumnos_q = $conexion->query("
+                SELECT COUNT(*) as cantidad 
+                FROM asistencias_clientes 
+                WHERE fecha = '$fecha' 
+                  AND hora BETWEEN '{$registro['hora_ingreso']}' AND '$hora_actual'
+            ");
+            $alumnos = $alumnos_q->fetch_assoc()['cantidad'];
+
+            // Calcular monto a pagar según alumnos
+            if ($alumnos >= 10) {
+                $monto = 2000 * $horas;
+            } elseif ($alumnos >= 4) {
+                $monto = 1500 * $horas;
+            } elseif ($alumnos >= 1) {
+                $monto = 1000 * $horas;
+            } else {
+                $monto = 0;
+            }
+
+            $conexion->query("UPDATE asistencias_profesor 
+                SET hora_egreso = '$hora_actual', 
+                    alumnos_presentes = $alumnos,
+                    monto_a_pagar = $monto 
+                WHERE id = {$registro['id']}");
+
+            $mensaje = "Salida registrada. Total horas: " . round($horas, 2) . ", alumnos: $alumnos, monto: $$monto.";
+        } else {
+            // Verificar si hay al menos 1 alumno registrado en la última hora
+            $alumnos_q = $conexion->query("
+                SELECT COUNT(*) as cantidad 
+                FROM asistencias_clientes 
+                WHERE fecha = '$fecha' 
+                  AND hora >= SUBTIME('$hora_actual', '01:00:00')
+            ");
+            $alumnos = $alumnos_q->fetch_assoc()['cantidad'];
+
+            if ($alumnos == 0) {
+                $mensaje = "No hay alumnos registrados en este horario. No se puede ingresar.";
+            } else {
+                $conexion->query("INSERT INTO asistencias_profesor 
+                    (profesor_id, fecha, hora_ingreso) 
+                    VALUES ($profesor_id, '$fecha', '$hora_actual')");
+                $mensaje = "Ingreso registrado correctamente.";
+            }
+        }
     }
 }
 ?>
 
 <!DOCTYPE html>
-<html lang="es">
+<html>
 <head>
-  <meta charset="UTF-8">
-  <title>Asistencia Profesor</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <style>
-    body {
-        background-color: #000;
-        color: gold;
-        font-family: Arial, sans-serif;
-        text-align: center;
-        padding: 50px;
-    }
-    input[type="text"] {
-        font-size: 20px;
-        padding: 10px;
-        width: 80%;
-        max-width: 400px;
-    }
-    button {
-        padding: 10px 20px;
-        font-size: 18px;
-        margin-top: 20px;
-        background-color: gold;
-        border: none;
-        cursor: pointer;
-    }
-    .mensaje {
-        margin-top: 30px;
-        font-size: 22px;
-    }
-  </style>
+    <meta charset="UTF-8">
+    <title>Asistencia Profesor</title>
+    <style>
+        body {
+            background-color: #000;
+            color: gold;
+            font-family: Arial, sans-serif;
+            text-align: center;
+            padding: 30px;
+        }
+        input {
+            padding: 10px;
+            font-size: 18px;
+            width: 60%;
+            margin-bottom: 10px;
+        }
+        button {
+            background-color: gold;
+            color: black;
+            font-weight: bold;
+            padding: 10px 20px;
+            border: none;
+            cursor: pointer;
+        }
+    </style>
 </head>
 <body>
-  <h1>📛 Asistencia de Profesores</h1>
-  <form method="POST">
-    <input type="text" name="rfid" placeholder="Escanee tarjeta RFID" autofocus required>
-    <br><button type="submit">Registrar</button>
-  </form>
-  <div class="mensaje"><?= $mensaje ?></div>
+    <h1>Registro de Asistencia - Profesor</h1>
+    <form method="POST">
+        <input type="text" name="dni" placeholder="Escanear QR o ingresar DNI" required autofocus><br>
+        <button type="submit">Registrar</button>
+    </form>
+
+    <?php if ($mensaje): ?>
+        <p><strong><?= $mensaje ?></strong></p>
+    <?php endif; ?>
 </body>
 </html>

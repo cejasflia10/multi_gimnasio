@@ -120,16 +120,13 @@
 <!-- MENÚ LATERAL DE PROFESORES -->
 <div id="menu-profesores" class="menu-lateral">
     <h3>Profesores</h3>
-    <a href="registrar_asistencia_profesor.php">Registrar Asistencia Profesor</a>
-    <a href="plan_profesor.php">Plan Profesor</a>
-    <a href="pagar_horas_profesor.php">Pagar Horas Profesor</a>
+    <a href="agregar_profesor.php">Agregar Profesor</a></li>
+    <a href="ver_profesores.php">Ver Profesores</a></li>
+    <a href="ver_asistencias_profesor.php">Ver Asistencias / Pagos</a></li>
     <a href="reporte_horas_profesor.php">Reporte Horas Profesor</a>
     <a href="turnos_profesor.php">Turnos Profesor</a>
     <a href="ver_pagos_profesor.php">Ver Pagos Profesor</a>
-    <a href="ver_pagos.php">Ver Pagos</a>
     <a href="ver_profesores.php">Ver Profesores</a>
-    <a href="ver_asistencia_mes.php">Asistencia del Mes</a>
-    <a href="ver_asistencia_clientes.php">Asistencia Clientes</a>
 </div>
 <!-- MENÚ LATERAL DE VENTAS -->
 <div id="menu-ventas" class="menu-lateral">
