@@ -12,7 +12,7 @@ include 'menu_horizontal.php';
 
 $gimnasio_id = intval($_SESSION['gimnasio_id']);
 
-$resultado = $conexion->query("SELECT id, nombre FROM disciplinas WHERE id_gimnasio = $gimnasio_id");
+$disciplinas = $conexion->query("SELECT id, nombre FROM disciplinas WHERE gimnasio_id = $gimnasio_id");
 ?>
 
 <!DOCTYPE html>
