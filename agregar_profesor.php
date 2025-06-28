@@ -18,11 +18,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $domicilio = $_POST['domicilio'];
     $telefono = $_POST['telefono'];
     $dni = $_POST['dni'];
+    $gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
 
     $qr_path = generarQR($dni);
 
-    $stmt = $conexion->prepare("INSERT INTO profesores (apellido, nombre, domicilio, telefono, dni, qr_codigo) VALUES (?, ?, ?, ?, ?, ?)");
-    $stmt->bind_param("ssssss", $apellido, $nombre, $domicilio, $telefono, $dni, $qr_path);
+    $stmt = $conexion->prepare("INSERT INTO profesores (apellido, nombre, domicilio, telefono, dni, qr_codigo, gimnasio_id) VALUES (?, ?, ?, ?, ?, ?, ?)");
+    $stmt->bind_param("ssssssi", $apellido, $nombre, $domicilio, $telefono, $dni, $qr_path, $gimnasio_id);
     $stmt->execute();
 
     header("Location: ver_profesores.php");
