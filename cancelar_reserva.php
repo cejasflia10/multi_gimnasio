@@ -1,12 +1,14 @@
 <?php
 include 'conexion.php';
-if (session_status() === PHP_SESSION_NONE) session_start();
+session_start();
 
 $cliente_id = $_SESSION['cliente_id'] ?? 0;
 $turno_id = $_POST['turno_id'] ?? 0;
+$fecha = $_POST['fecha'] ?? date('Y-m-d');
 
-$conexion->query("DELETE FROM reservas WHERE cliente_id = $cliente_id AND turno_id = $turno_id");
+if ($cliente_id && $turno_id && $fecha) {
+    $conexion->query("DELETE FROM reservas WHERE cliente_id = $cliente_id AND turno_id = $turno_id AND fecha = '$fecha'");
+}
 
-header("Location: reservar_turno_cliente.php");
+header("Location: reservar_turno.php?dia=" . date('N', strtotime($fecha)));
 exit;
-?>

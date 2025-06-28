@@ -1,35 +1,24 @@
 <?php
 include 'conexion.php';
-if (session_status() === PHP_SESSION_NONE) session_start();
+session_start();
 
-$turno_id = $_POST['turno_id'] ?? 0;
 $cliente_id = $_POST['cliente_id'] ?? 0;
-$hoy = date('Y-m-d');
+$turno_id = $_POST['turno_id'] ?? 0;
+$fecha = $_POST['fecha'] ?? date('Y-m-d');
 
-// Obtener el id_dia del turno
-$turno = $conexion->query("SELECT id_dia FROM turnos WHERE id = $turno_id")->fetch_assoc();
-$id_dia = $turno['id_dia'] ?? 0;
+if ($cliente_id && $turno_id && $fecha) {
+    // Verificar si ya tiene reserva para ese día
+    $verifica = $conexion->query("SELECT id FROM reservas WHERE cliente_id = $cliente_id AND fecha = '$fecha'");
 
-// Verificar si ya tiene una reserva para ese día
-$verificar = $conexion->query("
-    SELECT * FROM reservas 
-    WHERE cliente_id = $cliente_id 
-    AND fecha = '$hoy' 
-    AND turno_id IN (
-        SELECT id FROM turnos WHERE id_dia = $id_dia
-    )
-");
+    if ($verifica->num_rows > 0) {
+        echo "<script>alert('Ya tenés una reserva para ese día');window.history.back();</script>";
+        exit;
+    }
 
-if ($verificar->num_rows > 0) {
-    echo "Ya tenés una reserva para este día.";
-    exit;
+    $stmt = $conexion->prepare("INSERT INTO reservas (cliente_id, turno_id, fecha) VALUES (?, ?, ?)");
+    $stmt->bind_param("iis", $cliente_id, $turno_id, $fecha);
+    $stmt->execute();
 }
 
-// Guardar reserva
-$stmt = $conexion->prepare("INSERT INTO reservas (cliente_id, turno_id, fecha) VALUES (?, ?, ?)");
-$stmt->bind_param("iis", $cliente_id, $turno_id, $hoy);
-$stmt->execute();
-
-header("Location: reservar_turno_cliente.php?dia=$id_dia");
+header("Location: reservar_turno.php?dia=" . date('N', strtotime($fecha)));
 exit;
-?>
