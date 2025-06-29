@@ -8,10 +8,10 @@ $codigo = trim($codigo);
 $fecha = date('Y-m-d');
 $hora = date('H:i:s');
 
-function mostrarMensaje($mensaje, $color) {
-    echo "<html><head><meta http-equiv='refresh' content='3;url=scanner_qr.php'>
+function mostrarMensaje($mensaje, $color, $detalles = '') {
+    echo "<html><head><meta http-equiv='refresh' content='5;url=scanner_qr.php'>
         <style>body{background:#000;color:$color;font-family:Arial;text-align:center;padding-top:100px;font-size:22px}</style>
-        </head><body>$mensaje<br><br><small>Redirigiendo...</small></body></html>";
+        </head><body>$mensaje<br><br><small>$detalles</small><br><br><small>Redirigiendo...</small></body></html>";
     exit;
 }
 
@@ -26,9 +26,9 @@ if (substr($codigo, 0, 2) === 'P-') {
         $profesor = $profesor_q->fetch_assoc();
         $profesor_id = $profesor['id'];
         $conexion->query("INSERT INTO asistencias_profesores (profesor_id, fecha, hora_ingreso) VALUES ($profesor_id, '$fecha', '$hora')");
-        mostrarMensaje("✅ Profesor registrado correctamente.", "lime");
+        mostrarMensaje("✅ Profesor registrado correctamente.", "lime", "Código: $codigo");
     } else {
-        mostrarMensaje("❌ Profesor no encontrado.", "red");
+        mostrarMensaje("❌ Profesor no encontrado.", "red", "Código: $codigo (buscado en profesores)");
     }
 
 } elseif (substr($codigo, 0, 2) === 'C-') {
@@ -38,12 +38,12 @@ if (substr($codigo, 0, 2) === 'P-') {
         $cliente = $cliente_q->fetch_assoc();
         $cliente_id = $cliente['id'];
         $conexion->query("INSERT INTO asistencias (cliente_id, fecha, hora) VALUES ($cliente_id, '$fecha', '$hora')");
-        mostrarMensaje("✅ Cliente registrado correctamente.", "lime");
+        mostrarMensaje("✅ Cliente registrado correctamente.", "lime", "Código: $codigo");
     } else {
-        mostrarMensaje("❌ Cliente no encontrado.", "red");
+        mostrarMensaje("❌ Cliente no encontrado.", "red", "Código: $codigo (buscado en clientes)");
     }
 
 } else {
-    mostrarMensaje("⚠️ Código QR inválido.", "orange");
+    mostrarMensaje("⚠️ Código QR inválido.", "orange", "Código: $codigo");
 }
 ?>
