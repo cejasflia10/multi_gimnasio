@@ -20,6 +20,7 @@ $resultado = $conexion->query("SELECT * FROM profesores WHERE gimnasio_id = $gim
         }
         h1 {
             text-align: center;
+            color: gold;
         }
         table {
             width: 100%;
@@ -34,10 +35,6 @@ $resultado = $conexion->query("SELECT * FROM profesores WHERE gimnasio_id = $gim
         th {
             background-color: #222;
         }
-        img.qr {
-            width: 80px;
-            height: 80px;
-        }
         .boton {
             background-color: gold;
             color: black;
@@ -51,6 +48,10 @@ $resultado = $conexion->query("SELECT * FROM profesores WHERE gimnasio_id = $gim
             display: flex;
             flex-direction: column;
             gap: 5px;
+        }
+        img.qr {
+            width: 80px;
+            height: 80px;
         }
     </style>
 </head>
@@ -72,10 +73,10 @@ $resultado = $conexion->query("SELECT * FROM profesores WHERE gimnasio_id = $gim
                 <td><?= $profesor['dni'] ?></td>
                 <td><?= $profesor['telefono'] ?></td>
                 <td>
-                    <img class="qr" src="generar_qr_profesor.php?dni=<?= $profesor['dni'] ?>" alt="QR"><br>
-                    <a href="generar_qr_profesor.php?dni=<?= $profesor['dni'] ?>" target="_blank">
-                        <button class="boton">Ver QR</button>
-                    </a>
+                    <form method="get" action="generar_qr_profesor.php" target="_blank">
+                        <input type="hidden" name="dni" value="<?= $profesor['dni'] ?>">
+                        <button type="submit" class="boton">Generar QR</button>
+                    </form>
                 </td>
                 <td class="acciones">
                     <a href="editar_profesor.php?id=<?= $profesor['id'] ?>">
