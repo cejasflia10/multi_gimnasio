@@ -1,7 +1,6 @@
-
 <?php
+if (session_status() === PHP_SESSION_NONE) session_start();
 include 'conexion.php';
-session_start();
 date_default_timezone_set('America/Argentina/Buenos_Aires');
 
 $mensaje = "";
@@ -101,10 +100,7 @@ if ($cliente_id && $dia_seleccionado) {
                 <div><strong>Cupos:</strong> <?= ($t['cupos_maximos'] - $t['usados']) ?> / <?= $t['cupos_maximos'] ?></div>
             </div>
             <?php if (($t['cupos_maximos'] - $t['usados']) > 0): ?>
-                <form action="cliente_reservas.php" method="GET">
-                    <input type="hidden" name="id_turno" value="<?= $t['id'] ?>">
-                    <button class="boton-turno" type="submit">Reservar Turno</button>
-                </form>
+                <a href="cliente_reservas.php?id_turno=<?= $t['id'] ?>" class="boton-turno">Reservar Turno</a>
             <?php else: ?>
                 <p style="color:red;">Sin cupo disponible</p>
             <?php endif; ?>
