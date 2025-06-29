@@ -1,3 +1,4 @@
+
 <?php
 include 'conexion.php';
 session_start();
@@ -27,29 +28,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['dni'])) {
 $cliente_id = $_SESSION['cliente_id'] ?? null;
 $cliente_nombre = $_SESSION['cliente_nombre'] ?? '';
 $cliente_apellido = $_SESSION['cliente_apellido'] ?? '';
-$membresia_activa = false;
 
-// Validar membresía sin destruir sesión
 if ($cliente_id) {
-    $membresia = $conexion->query("
-        SELECT * FROM membresias 
-        WHERE cliente_id = $cliente_id 
-        AND fecha_vencimiento >= CURDATE() 
-        AND clases_disponibles > 0 
-        ORDER BY id DESC LIMIT 1
-    ");
-    $membresia_activa = $membresia->num_rows > 0;
-    if (!$membresia_activa) {
+    $membresia = $conexion->query("SELECT * FROM membresias WHERE cliente_id = $cliente_id AND fecha_vencimiento >= CURDATE() AND clases_disponibles > 0 ORDER BY id DESC LIMIT 1");
+    if ($membresia->num_rows === 0) {
         $mensaje = "⚠️ No tenés una membresía activa o sin clases disponibles.";
+        session_destroy();
+        $cliente_id = null;
     }
 }
 
-// Día seleccionado (por GET)
 $dia_seleccionado = $_GET['dia'] ?? date('N');
 $fecha_reserva = date('Y-m-d', strtotime("this week +" . ($dia_seleccionado - 1) . " days"));
 
-// Cargar turnos solo si el cliente tiene membresía
-if ($cliente_id && $membresia_activa && $dia_seleccionado) {
+if ($cliente_id && $dia_seleccionado) {
     $turnos_q = $conexion->query("
         SELECT t.id, h.hora_inicio, h.hora_fin, p.apellido AS profesor, t.cupos_maximos,
         (SELECT COUNT(*) FROM reservas r WHERE r.turno_id = t.id AND r.fecha = '$fecha_reserva') AS usados
@@ -65,7 +57,6 @@ if ($cliente_id && $membresia_activa && $dia_seleccionado) {
     }
 }
 ?>
-
 <!DOCTYPE html>
 <html>
 <head>
@@ -85,7 +76,6 @@ if ($cliente_id && $membresia_activa && $dia_seleccionado) {
 </head>
 <body>
 <h2>📅 Turnos disponibles</h2>
-
 <?php if (!$cliente_id): ?>
     <form method="POST">
         <input type="text" name="dni" placeholder="Ingresá tu DNI" required>
@@ -93,46 +83,38 @@ if ($cliente_id && $membresia_activa && $dia_seleccionado) {
     </form>
 <?php else: ?>
     <p><strong>Bienvenido/a:</strong> <?= $cliente_apellido . ' ' . $cliente_nombre ?></p>
+    <form method="GET">
+        <label>Seleccioná un día:</label>
+        <select name="dia" onchange="this.form.submit()">
+            <?php foreach ($dias_semana as $num => $nombre): ?>
+                <option value="<?= $num ?>" <?= $num == $dia_seleccionado ? 'selected' : '' ?>><?= $nombre ?></option>
+            <?php endforeach; ?>
+        </select>
+    </form>
 
-    <?php if (!$membresia_activa): ?>
-        <p style="color: orange;"><strong><?= $mensaje ?></strong></p>
-    <?php else: ?>
-        <form method="GET">
-            <label>Seleccioná un día:</label>
-            <select name="dia" onchange="this.form.submit()">
-                <?php foreach ($dias_semana as $num => $nombre): ?>
-                    <option value="<?= $num ?>" <?= $num == $dia_seleccionado ? 'selected' : '' ?>><?= $nombre ?></option>
-                <?php endforeach; ?>
-            </select>
-        </form>
-
-        <?php foreach ($turnos_disponibles as $t): ?>
-            <div class="turno-container">
-                <h4>🗓️ <?= $dias_semana[$dia_seleccionado] . ' ' . date('d/m', strtotime($fecha_reserva)) ?></h4>
-                <div class="turno-detalle">
-                    <div><strong>Horario:</strong> <?= $t['hora_inicio'] ?> - <?= $t['hora_fin'] ?></div>
-                    <div><strong>Profesor:</strong> <?= $t['profesor'] ?></div>
-                    <div><strong>Cupos:</strong> <?= ($t['cupos_maximos'] - $t['usados']) ?> / <?= $t['cupos_maximos'] ?></div>
-                </div>
-                <?php if (($t['cupos_maximos'] - $t['usados']) > 0): ?>
-                    <form action="cliente_reservas.php" method="GET">
-                        <input type="hidden" name="id_turno" value="<?= $t['id'] ?>">
-                        <button class="boton-turno" type="submit">Reservar Turno</button>
-                    </form>
-                <?php else: ?>
-                    <p style="color:red;">Sin cupo disponible</p>
-                <?php endif; ?>
+    <?php foreach ($turnos_disponibles as $t): ?>
+        <div class="turno-container">
+            <h4>🗓️ <?= $dias_semana[$dia_seleccionado] . ' ' . date('d/m', strtotime($fecha_reserva)) ?></h4>
+            <div class="turno-detalle">
+                <div><strong>Horario:</strong> <?= $t['hora_inicio'] ?> - <?= $t['hora_fin'] ?></div>
+                <div><strong>Profesor:</strong> <?= $t['profesor'] ?></div>
+                <div><strong>Cupos:</strong> <?= ($t['cupos_maximos'] - $t['usados']) ?> / <?= $t['cupos_maximos'] ?></div>
             </div>
-        <?php endforeach; ?>
-    <?php endif; ?>
+            <?php if (($t['cupos_maximos'] - $t['usados']) > 0): ?>
+                <form action="cliente_reservas.php" method="GET">
+                    <input type="hidden" name="id_turno" value="<?= $t['id'] ?>">
+                    <button class="boton-turno" type="submit">Reservar Turno</button>
+                </form>
+            <?php else: ?>
+                <p style="color:red;">Sin cupo disponible</p>
+            <?php endif; ?>
+        </div>
+    <?php endforeach; ?>
 
     <form method="POST" action="logout_turnos.php">
         <button type="submit">Cerrar sesión</button>
     </form>
 <?php endif; ?>
-
-<?php if ($mensaje && $membresia_activa): ?>
-    <p style="color: yellow;"><strong><?= $mensaje ?></strong></p>
-<?php endif; ?>
+<?php if ($mensaje): ?><p><strong><?= $mensaje ?></strong></p><?php endif; ?>
 </body>
 </html>
