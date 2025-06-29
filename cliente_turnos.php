@@ -53,7 +53,7 @@ if ($cliente_id && $dia_seleccionado) {
         FROM turnos t
         JOIN horarios h ON t.horario_id = h.id
         JOIN profesores p ON t.profesor_id = p.id
-        WHERE t.dia_id = $dia_seleccionado
+        WHERE t.id_dia = $dia_seleccionado
         ORDER BY h.hora_inicio
     ");
 
