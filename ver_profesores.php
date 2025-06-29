@@ -4,10 +4,7 @@ if (session_status() === PHP_SESSION_NONE) {
 }
 include 'conexion.php';
 
-$profesor_id = $_SESSION['profesor_id'] ?? null;
-if (!$profesor_id) {
-    die("Acceso denegado.");
-}
+
 
 // Obtener datos del profesor
 $profesor_q = $conexion->query("SELECT * FROM profesores WHERE id = $profesor_id");
