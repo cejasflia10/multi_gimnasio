@@ -30,7 +30,6 @@ $cliente_nombre = $_SESSION['cliente_nombre'] ?? '';
 $cliente_apellido = $_SESSION['cliente_apellido'] ?? '';
 
 if ($cliente_id) {
-    // Validar membresía
     $membresia = $conexion->query("SELECT * FROM membresias WHERE cliente_id = $cliente_id AND fecha_vencimiento >= CURDATE() AND clases_disponibles > 0 ORDER BY id DESC LIMIT 1");
     if ($membresia->num_rows === 0) {
         $mensaje = "⚠️ No tenés una membresía activa o sin clases disponibles.";
@@ -39,11 +38,9 @@ if ($cliente_id) {
     }
 }
 
-// Obtener días
 $dias = $conexion->query("SELECT * FROM dias");
-$dia_seleccionado = $_GET['dia'] ?? date('N'); // 1 = Lunes
+$dia_seleccionado = $_GET['dia'] ?? date('N');
 
-// Cargar turnos disponibles por día
 if ($cliente_id && $dia_seleccionado) {
     $fecha_reserva = date('Y-m-d', strtotime("this week +" . ($dia_seleccionado - 1) . " days"));
 
@@ -59,6 +56,22 @@ if ($cliente_id && $dia_seleccionado) {
 
     while ($fila = $turnos_q->fetch_assoc()) {
         $turnos_disponibles[] = $fila;
+    }
+
+    $reservas_q = $conexion->query("
+        SELECT r.fecha, d.nombre AS dia, h.hora_inicio, h.hora_fin, p.apellido AS profesor
+        FROM reservas r
+        JOIN turnos t ON r.turno_id = t.id
+        JOIN dias d ON t.id_dia = d.id
+        JOIN horarios h ON t.horario_id = h.id
+        JOIN profesores p ON t.profesor_id = p.id
+        WHERE r.cliente_id = $cliente_id
+        ORDER BY r.fecha DESC
+        LIMIT 10
+    ");
+
+    while ($r = $reservas_q->fetch_assoc()) {
+        $reservas_cliente[] = $r;
     }
 }
 ?>
@@ -140,6 +153,26 @@ if ($cliente_id && $dia_seleccionado) {
         </table>
     <?php else: ?>
         <p>No hay turnos disponibles para este día.</p>
+    <?php endif; ?>
+
+    <?php if (!empty($reservas_cliente)): ?>
+        <h3>📖 Mis Reservas recientes</h3>
+        <table border="1" cellpadding="10" style="width:100%; margin-top:10px; border-color:gold;">
+            <tr style="background-color: #222;">
+                <th>Fecha</th>
+                <th>Día</th>
+                <th>Horario</th>
+                <th>Profesor</th>
+            </tr>
+            <?php foreach ($reservas_cliente as $r): ?>
+                <tr>
+                    <td><?= date('d/m/Y', strtotime($r['fecha'])) ?></td>
+                    <td><?= $r['dia'] ?></td>
+                    <td><?= $r['hora_inicio'] ?> - <?= $r['hora_fin'] ?></td>
+                    <td><?= $r['profesor'] ?></td>
+                </tr>
+            <?php endforeach; ?>
+        </table>
     <?php endif; ?>
 
     <form method="POST" action="logout_turnos.php">
