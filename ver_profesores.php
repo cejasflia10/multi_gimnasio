@@ -31,18 +31,21 @@ $resultado = $conexion->query("SELECT * FROM profesores WHERE gimnasio_id = $gim
         th {
             background-color: #222;
         }
-        img.qr {
+        canvas.qr {
             width: 80px;
+            height: 80px;
         }
-        .boton-generar {
+        .boton {
             background-color: gold;
             color: black;
             border: none;
             padding: 6px 12px;
+            margin: 2px;
             cursor: pointer;
             font-size: 14px;
         }
     </style>
+    <script src="https://cdn.jsdelivr.net/npm/qrious/dist/qrious.min.js"></script>
 </head>
 <body>
     <h1>Listado de Profesores</h1>
@@ -53,6 +56,7 @@ $resultado = $conexion->query("SELECT * FROM profesores WHERE gimnasio_id = $gim
             <th>DNI</th>
             <th>Teléfono</th>
             <th>QR</th>
+            <th>Acciones</th>
         </tr>
         <?php while ($profesor = $resultado->fetch_assoc()): ?>
             <tr>
@@ -61,18 +65,23 @@ $resultado = $conexion->query("SELECT * FROM profesores WHERE gimnasio_id = $gim
                 <td><?= $profesor['dni'] ?></td>
                 <td><?= $profesor['telefono'] ?></td>
                 <td>
-                    <?php
-                    $qr_filename = "qr/qr_profesor_P-" . $profesor['dni'] . ".png";
-                    if (file_exists(__DIR__ . "/" . $qr_filename)) {
-                        echo '<a href="' . $qr_filename . '" target="_blank">
-                                <img class="qr" src="' . $qr_filename . '" alt="QR"><br>Ver QR
-                              </a>';
-                    } else {
-                        echo '<a href="generar_qr_individual_profesor.php?id=' . $profesor['id'] . '">
-                                <button class="boton-generar">Generar QR</button>
-                              </a>';
-                    }
-                    ?>
+                    <canvas class="qr" id="qr_<?= $profesor['dni'] ?>"></canvas>
+                    <script>
+                        new QRious({
+                            element: document.getElementById("qr_<?= $profesor['dni'] ?>"),
+                            value: "P-<?= $profesor['dni'] ?>",
+                            size: 80,
+                            level: 'H'
+                        });
+                    </script>
+                </td>
+                <td>
+                    <a href="editar_profesor.php?id=<?= $profesor['id'] ?>">
+                        <button class="boton">Editar</button>
+                    </a>
+                    <a href="eliminar_profesor.php?id=<?= $profesor['id'] ?>" onclick="return confirm('¿Estás seguro de eliminar este profesor?');">
+                        <button class="boton">Eliminar</button>
+                    </a>
                 </td>
             </tr>
         <?php endwhile; ?>
