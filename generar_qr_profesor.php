@@ -1,42 +1,23 @@
 <?php
-if (session_status() === PHP_SESSION_NONE) {
-    session_start();
-}
+// Importar la librería para generar QR
+require_once 'phpqrcode/qrlib.php';
 
-include 'conexion.php';
-require_once 'phpqrcode/qrlib.php'; // Asegurate de tener esta librería
+// Verificar si se pasó el DNI
+$dni = $_GET['dni'] ?? '';
 
-$id_profesor = $_GET['id'] ?? null;
-
-if (!$id_profesor) {
-    echo "ID de profesor no especificado.";
+if (empty($dni)) {
+    header("HTTP/1.1 400 Bad Request");
+    echo "DNI no recibido.";
     exit;
 }
 
-// Obtener datos del profesor
-$query = $conexion->query("SELECT id, apellido, nombre, dni FROM profesores WHERE id = $id_profesor");
-$profesor = $query->fetch_assoc();
+// Contenido del QR: prefijo 'P-' seguido del DNI
+$contenido_qr = 'P-' . $dni;
 
-if (!$profesor) {
-    echo "Profesor no encontrado.";
-    exit;
-}
+// Encabezado para imagen PNG
+header('Content-Type: image/png');
 
-// Carpeta donde se guardará el QR
-$carpetaQR = 'qr_profesores/';
-if (!file_exists($carpetaQR)) {
-    mkdir($carpetaQR, 0777, true);
-}
-
-// Contenido del QR (podés usar DNI o ID)
-$contenidoQR = $profesor['dni'];
-$archivoQR = $carpetaQR . 'qr_profesor_' . $profesor['id'] . '.png';
-
-// Generar QR
-QRcode::png($contenidoQR, $archivoQR, QR_ECLEVEL_H, 10);
-
-// Mostrar QR generado
-echo "<h2>QR generado para: {$profesor['apellido']} {$profesor['nombre']}</h2>";
-echo "<img src='$archivoQR' alt='QR del profesor'><br><br>";
-echo "<a href='ver_profesores.php'>← Volver</a>";
+// Generar el QR directamente al navegador (sin guardarlo)
+QRcode::png($contenido_qr, false, QR_ECLEVEL_H, 8);
+exit;
 ?>
