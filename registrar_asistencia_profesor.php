@@ -1,47 +1,34 @@
 <?php
-if (session_status() === PHP_SESSION_NONE) session_start();
 include 'conexion.php';
+date_default_timezone_set('America/Argentina/Buenos_Aires');
 
-$dni = $_GET['dni'] ?? '';
-$dni = trim($dni);
-
-if ($dni === '') {
-    echo "<div style='text-align:center; color:red; margin-top:50px; font-size:20px;'>❌ Código QR vacío<br><a href='javascript:history.back()' style='color:violet'>← Volver</a></div>";
-    exit;
+if (!isset($_GET['codigo'])) {
+    die("Código no proporcionado.");
 }
 
-// Buscar al profesor por DNI
-$prof = $conexion->query("SELECT * FROM profesores WHERE dni = '$dni' LIMIT 1");
-if ($prof->num_rows === 0) {
-    echo "<div style='text-align:center; color:red; margin-top:50px; font-size:20px;'>⚠️ QR no válido para profesor<br><a href='javascript:history.back()' style='color:violet'>← Volver</a></div>";
-    exit;
+$codigo = $_GET['codigo'];
+$dni = substr($codigo, 1); // Quitamos la letra "P"
+
+$profesor_q = $conexion->query("SELECT id FROM profesores WHERE dni = '$dni' LIMIT 1");
+if ($profesor_q->num_rows === 0) {
+    die("Profesor no encontrado.");
 }
 
-$profesor = $prof->fetch_assoc();
+$profesor = $profesor_q->fetch_assoc();
 $profesor_id = $profesor['id'];
-$nombre = $profesor['nombre'] . ' ' . $profesor['apellido'];
-$fecha_hoy = date('Y-m-d');
-$hora_actual = date('H:i:s');
-$gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
+$fecha_actual = date("Y-m-d");
+$hora_actual = date("H:i:s");
 
-// Verificar si ya ingresó hoy y no egresó
-$check = $conexion->query("SELECT * FROM asistencias_profesores 
-    WHERE profesor_id = $profesor_id AND fecha = '$fecha_hoy' 
-    AND hora_salida IS NULL 
-    ORDER BY id DESC LIMIT 1");
+// Verificar si ya tiene ingreso hoy
+$asistencia_q = $conexion->query("SELECT * FROM asistencias_profesor WHERE profesor_id = $profesor_id AND fecha = '$fecha_actual'");
 
-if ($check->num_rows > 0) {
-    // Ya ingresó → registrar egreso
-    $conexion->query("UPDATE asistencias_profesores 
-        SET hora_salida = '$hora_actual' 
-        WHERE profesor_id = $profesor_id AND fecha = '$fecha_hoy' AND hora_salida IS NULL");
-
-    echo "<div style='text-align:center; color:lightgreen; margin-top:50px; font-size:20px;'>✅ Egreso registrado<br>Profesor: <b>$nombre</b><br>Hora: $hora_actual<br><a href='scanner_qr.php' style='color:violet'>← Volver</a></div>";
+if ($asistencia_q->num_rows > 0) {
+    // Ya tiene registro, marcamos salida
+    $conexion->query("UPDATE asistencias_profesor SET hora_salida = '$hora_actual' WHERE profesor_id = $profesor_id AND fecha = '$fecha_actual'");
+    echo "<script>alert('✅ Salida registrada correctamente'); window.location='scanner_qr_profesor.php';</script>";
 } else {
-    // Registrar ingreso
-    $conexion->query("INSERT INTO asistencias_profesores (profesor_id, fecha, hora_ingreso, gimnasio_id)
-        VALUES ($profesor_id, '$fecha_hoy', '$hora_actual', $gimnasio_id)");
-
-    echo "<div style='text-align:center; color:lightgreen; margin-top:50px; font-size:20px;'>✅ Ingreso registrado<br>Profesor: <b>$nombre</b><br>Hora: $hora_actual<br><a href='scanner_qr.php' style='color:violet'>← Volver</a></div>";
+    // No hay registro aún, marcamos entrada
+    $conexion->query("INSERT INTO asistencias_profesor (profesor_id, fecha, hora_ingreso) VALUES ($profesor_id, '$fecha_actual', '$hora_actual')");
+    echo "<script>alert('✅ Ingreso registrado correctamente'); window.location='scanner_qr_profesor.php';</script>";
 }
 ?>
