@@ -22,7 +22,7 @@ $dni = $profesor['dni'];
 $qr_code = 'P-' . $dni;
 
 $filename = __DIR__ . "/qr/qr_profesor_P-$dni.png";
-QRcode::png($qr_code, $filename, QR_ECLEVEL_H, 10);
+QRcode::png($qr_code, $filename, 'H', 10);
 
 header("Location: ver_profesores.php");
 exit;
