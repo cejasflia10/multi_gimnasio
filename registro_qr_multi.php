@@ -5,12 +5,19 @@ session_start();
 $codigo = $_GET['codigo'] ?? $_POST['codigo'] ?? '';
 $codigo = trim($codigo);
 
-if (!$codigo) {
-    die("<h2 style='color: red;'>❌ Código QR no recibido.</h2>");
-}
-
 $fecha = date('Y-m-d');
 $hora = date('H:i:s');
+
+function mostrarMensaje($mensaje, $color) {
+    echo "<html><head><meta http-equiv='refresh' content='3;url=scanner_qr.php'>
+        <style>body{background:#000;color:$color;font-family:Arial;text-align:center;padding-top:100px;font-size:22px}</style>
+        </head><body>$mensaje<br><br><small>Redirigiendo...</small></body></html>";
+    exit;
+}
+
+if (!$codigo) {
+    mostrarMensaje("❌ Código QR no recibido.", "red");
+}
 
 if (substr($codigo, 0, 2) === 'P-') {
     $dni = substr($codigo, 2);
@@ -19,9 +26,9 @@ if (substr($codigo, 0, 2) === 'P-') {
         $profesor = $profesor_q->fetch_assoc();
         $profesor_id = $profesor['id'];
         $conexion->query("INSERT INTO asistencias_profesores (profesor_id, fecha, hora_ingreso) VALUES ($profesor_id, '$fecha', '$hora')");
-        echo "<h2 style='color: lime;'>✅ Profesor registrado correctamente.</h2>";
+        mostrarMensaje("✅ Profesor registrado correctamente.", "lime");
     } else {
-        echo "<h2 style='color: red;'>❌ Profesor no encontrado.</h2>";
+        mostrarMensaje("❌ Profesor no encontrado.", "red");
     }
 
 } elseif (substr($codigo, 0, 2) === 'C-') {
@@ -31,12 +38,12 @@ if (substr($codigo, 0, 2) === 'P-') {
         $cliente = $cliente_q->fetch_assoc();
         $cliente_id = $cliente['id'];
         $conexion->query("INSERT INTO asistencias (cliente_id, fecha, hora) VALUES ($cliente_id, '$fecha', '$hora')");
-        echo "<h2 style='color: lime;'>✅ Cliente registrado correctamente.</h2>";
+        mostrarMensaje("✅ Cliente registrado correctamente.", "lime");
     } else {
-        echo "<h2 style='color: red;'>❌ Cliente no encontrado.</h2>";
+        mostrarMensaje("❌ Cliente no encontrado.", "red");
     }
 
 } else {
-    echo "<h2 style='color: orange;'>⚠️ Código QR inválido. Debe comenzar con C- o P-.</h2>";
+    mostrarMensaje("⚠️ Código QR inválido.", "orange");
 }
 ?>
