@@ -34,8 +34,9 @@ $resultado = $conexion->query("SELECT * FROM profesores WHERE gimnasio_id = $gim
         th {
             background-color: #222;
         }
-        .qr-img {
+        img.qr {
             width: 80px;
+            height: 80px;
         }
         .boton {
             background-color: gold;
@@ -43,8 +44,8 @@ $resultado = $conexion->query("SELECT * FROM profesores WHERE gimnasio_id = $gim
             border: none;
             padding: 6px 10px;
             cursor: pointer;
-            margin: 3px;
-            font-size: 14px;
+            margin: 2px;
+            font-weight: bold;
         }
         .acciones {
             display: flex;
@@ -71,19 +72,16 @@ $resultado = $conexion->query("SELECT * FROM profesores WHERE gimnasio_id = $gim
                 <td><?= $profesor['dni'] ?></td>
                 <td><?= $profesor['telefono'] ?></td>
                 <td>
-                    <img class="qr-img" src="generar_qr_profesor.php?dni=<?= $profesor['dni'] ?>&t=<?= time() ?>" alt="QR"><br>
+                    <img class="qr" src="generar_qr_profesor.php?dni=<?= $profesor['dni'] ?>" alt="QR"><br>
                     <a href="generar_qr_profesor.php?dni=<?= $profesor['dni'] ?>" target="_blank">
                         <button class="boton">Ver QR</button>
-                    </a>
-                    <a href="ver_profesores.php">
-                        <button class="boton">Generar QR</button>
                     </a>
                 </td>
                 <td class="acciones">
                     <a href="editar_profesor.php?id=<?= $profesor['id'] ?>">
                         <button class="boton">Editar</button>
                     </a>
-                    <a href="eliminar_profesor.php?id=<?= $profesor['id'] ?>" onclick="return confirm('¿Eliminar este profesor?')">
+                    <a href="eliminar_profesor.php?id=<?= $profesor['id'] ?>" onclick="return confirm('¿Estás seguro de eliminar este profesor?')">
                         <button class="boton">Eliminar</button>
                     </a>
                 </td>
