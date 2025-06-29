@@ -1,4 +1,8 @@
 <?php
+ini_set('display_errors', 1);
+ini_set('display_startup_errors', 1);
+error_reporting(E_ALL);
+
 include 'conexion.php';
 require_once 'phpqrcode/qrlib.php';
 session_start();
@@ -8,8 +12,6 @@ if (!isset($_GET['id'])) {
 }
 
 $id = intval($_GET['id']);
-
-// Obtener el DNI del profesor
 $profesor_q = $conexion->query("SELECT dni FROM profesores WHERE id = $id");
 if ($profesor_q->num_rows === 0) {
     die("Profesor no encontrado.");
@@ -17,13 +19,16 @@ if ($profesor_q->num_rows === 0) {
 
 $profesor = $profesor_q->fetch_assoc();
 $dni = $profesor['dni'];
-
-// Generar QR con formato P-12345678
 $qr_code = 'P-' . $dni;
-$filename = "qr/qr_profesor_P-$dni.png";
-QRcode::png($qr_code, $filename, QR_ECLEVEL_H, 10);
 
-// Redirigir de nuevo
+// Ruta temporal para Render
+$tempfile = "/tmp/qr_profesor_P-$dni.png";
+QRcode::png($qr_code, $tempfile, QR_ECLEVEL_H, 10);
+
+// Ruta final
+$final_path = "qr/qr_profesor_P-$dni.png";
+copy($tempfile, $final_path);
+
 header("Location: ver_profesores.php");
 exit;
 ?>
