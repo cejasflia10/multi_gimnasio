@@ -47,7 +47,7 @@ if ($cliente_id && $dia_seleccionado) {
         FROM turnos t
         JOIN horarios h ON t.horario_id = h.id
         JOIN profesores p ON t.profesor_id = p.id
-        WHERE t.dia_id = $dia_seleccionado
+        WHERE t.id_dia = $dia_seleccionado
         ORDER BY h.hora_inicio
     ");
 
@@ -75,7 +75,7 @@ if ($cliente_id && $dia_seleccionado) {
     </style>
 </head>
 <body>
-<h2>📅 Turnos disponibles</h2>
+<h2>🗓️ Turnos disponibles</h2>
 <?php if (!$cliente_id): ?>
     <form method="POST">
         <input type="text" name="dni" placeholder="Ingresá tu DNI" required>
