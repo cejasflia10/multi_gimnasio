@@ -90,6 +90,7 @@
     <a href="#" onclick="mostrarLateral('ventas')">🛒 Ventas</a>
     <a href="#" onclick="mostrarLateral('panel')">👤 Panel Cliente</a>
     <a href="#" onclick="mostrarLateral('configuraciones')">⚙️ Configuraciones</a>
+    <a href="logout.php" class="cerrar-sesion">Cerrar sesión</a>
     <a href="index.php">Volver</a>
 </div>
 
