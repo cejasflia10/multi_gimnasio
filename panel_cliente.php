@@ -367,6 +367,11 @@ while ($row = $peso_q->fetch_assoc()) {
         ORDER BY fecha DESC
     ");
     ?>
+<div class="card">
+  <h3>📅 Reservar Turno</h3>
+  <p>Accedé a tus turnos disponibles y reservá tu lugar semanal.</p>
+  <a href="cliente_turnos.php" style="background:gold;color:black;padding:10px 15px;border-radius:5px;font-weight:bold;text-decoration:none;">Ver Turnos</a>
+</div>
 
     <?php if ($comp->num_rows > 0): ?>
         <ul style="list-style: none; padding: 0;">
