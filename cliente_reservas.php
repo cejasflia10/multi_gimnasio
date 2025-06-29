@@ -1,6 +1,4 @@
 <?php
-<!-- MODIFICADO OK: cliente_reservas.php -->
-
 include 'conexion.php';
 if (session_status() === PHP_SESSION_NONE) session_start();
 
@@ -38,6 +36,8 @@ ORDER BY h.hora_inicio");
 $reserva_actual = $conexion->query("SELECT * FROM reservas WHERE cliente_id = $cliente_id AND fecha = '$fecha_reserva'")->fetch_assoc();
 $reservado_turno_id = $reserva_actual['turno_id'] ?? null;
 ?>
+<!-- MODIFICADO OK: cliente_reservas.php -->
+
 
 <!DOCTYPE html>
 <html lang="es">

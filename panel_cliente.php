@@ -1,6 +1,4 @@
 <?php
-<!-- MODIFICADO OK: panel_cliente.php -->
-
 session_start();
 include 'conexion.php';
 
@@ -35,6 +33,8 @@ while ($row = $peso_evol->fetch_assoc()) {
     $peso[] = $row['peso'];
 }
 ?>
+<!-- MODIFICADO OK: panel_cliente.php -->
+
 <!DOCTYPE html>
 <html lang="es">
 <head>
