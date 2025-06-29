@@ -5,81 +5,69 @@ if (session_status() === PHP_SESSION_NONE) session_start();
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>Escanear QR - Profesor</title>
+    <title>Escaneo QR para Ingreso Profesor</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
     <style>
         body {
-            background-color: black;
+            background-color: #000;
             color: gold;
             font-family: Arial, sans-serif;
             text-align: center;
-            padding: 20px;
+            margin: 0;
+            padding: 0;
         }
         h1 {
-            color: gold;
-            font-size: 24px;
-            margin-bottom: 20px;
+            margin: 20px 0;
         }
-        video {
-            width: 100%;
+        #reader {
+            width: 90%;
             max-width: 400px;
+            margin: auto;
             border: 4px solid gold;
             border-radius: 8px;
-        }
-        .error {
-            color: red;
-            margin-top: 20px;
         }
     </style>
 </head>
 <body>
-    <h1>📷 Escaneo QR para Ingreso Profesor</h1>
-    <video id="preview"></video>
-    <div class="error" id="error"></div>
+    <h1>📸 Escaneo QR para Ingreso Profesor</h1>
+    <div id="reader"></div>
 
-    <script src="https://unpkg.com/html5-qrcode"></script>
     <script>
-        const errorDiv = document.getElementById("error");
-
-        function iniciarScanner() {
-            const html5QrCode = new Html5Qrcode("preview");
-
-            Html5Qrcode.getCameras().then(cameras => {
-                if (cameras.length === 0) {
-                    errorDiv.textContent = "No se detectó cámara.";
-                    return;
-                }
-
-                html5QrCode.start(
-                    cameras[0].id,
-                    {
-                        fps: 10,
-                        qrbox: 250
-                    },
-                    qrCodeMessage => {
-                        // Esperamos que el QR tenga el DNI directamente (solo números)
-                        const dni = qrCodeMessage.trim();
-
-                        if (/^\d{6,10}$/.test(dni)) {
-                            html5QrCode.stop().then(() => {
-                                window.location.href = `registrar_asistencia_profesor.php?dni=${dni}`;
-                            });
-                        } else {
-                            errorDiv.textContent = "QR no válido (debe contener solo DNI).";
-                        }
-                    },
-                    error => {
-                        // Silenciar errores de escaneo continuo
-                    }
-                ).catch(err => {
-                    errorDiv.textContent = "No se pudo acceder a la cámara: " + err;
-                });
-            }).catch(err => {
-                errorDiv.textContent = "Error al obtener cámara: " + err;
-            });
+        function onScanSuccess(decodedText, decodedResult) {
+            // Validar que el QR empiece con 'P-' (por ejemplo)
+            if(decodedText.startsWith('P-')) {
+                // Extraer el DNI (todo lo que sigue de P-)
+                const dni = decodedText.substring(2);
+                window.location.href = "registrar_asistencia_profesor.php?dni=" + encodeURIComponent(dni);
+            } else {
+                alert("❌ QR no válido para profesor");
+            }
         }
 
-        window.addEventListener('load', iniciarScanner);
+        function onScanError(errorMessage) {
+            // Solo mostramos error en consola para no molestar al usuario
+            console.log("Error de escaneo: ", errorMessage);
+        }
+
+        const html5QrCode = new Html5Qrcode("reader");
+        const config = { fps: 10, qrbox: { width: 250, height: 250 } };
+
+        Html5Qrcode.getCameras().then(cameras => {
+            if (cameras && cameras.length) {
+                html5QrCode.start(
+                    cameras[0].id,
+                    config,
+                    onScanSuccess,
+                    onScanError
+                );
+            } else {
+                alert("No se detectaron cámaras.");
+            }
+        }).catch(err => {
+            console.error(err);
+            alert("Error al acceder a la cámara: " + err);
+        });
     </script>
 </body>
 </html>
