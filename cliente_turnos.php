@@ -1,6 +1,4 @@
 <?php
-<!-- MODIFICADO OK: cliente_turnos.php -->
-
 include 'conexion.php';
 session_start();
 date_default_timezone_set('America/Argentina/Buenos_Aires');
@@ -80,6 +78,8 @@ if (isset($_GET['cancelar']) && isset($_SESSION['cliente_id'])) {
     exit;
 }
 ?>
+<!-- MODIFICADO OK: cliente_turnos.php -->
+
 <!DOCTYPE html>
 <html>
 <head>
