@@ -41,13 +41,14 @@ $dia_seleccionado = $_GET['dia'] ?? date('N');
 $fecha_reserva = date('Y-m-d', strtotime("this week +" . ($dia_seleccionado - 1) . " days"));
 
 if ($cliente_id && $dia_seleccionado) {
+    $nombre_dia = $dias_semana[$dia_seleccionado];
     $turnos_q = $conexion->query("
         SELECT t.id, h.hora_inicio, h.hora_fin, p.apellido AS profesor, t.cupos_maximos,
-        (SELECT COUNT(*) FROM reservas r WHERE r.turno_id = t.id AND r.fecha_reserva = '$fecha_reserva') AS usados
+        (SELECT COUNT(*) FROM reservas r WHERE r.turno_id = t.id AND r.fecha = '$fecha_reserva') AS usados
         FROM turnos t
         JOIN horarios h ON t.horario_id = h.id
         JOIN profesores p ON t.profesor_id = p.id
-        WHERE t.dia_id = $dia_seleccionado
+        WHERE t.dia = '$nombre_dia'
         ORDER BY h.hora_inicio
     ");
 
@@ -56,6 +57,7 @@ if ($cliente_id && $dia_seleccionado) {
     }
 }
 ?>
+
 <!DOCTYPE html>
 <html>
 <head>
