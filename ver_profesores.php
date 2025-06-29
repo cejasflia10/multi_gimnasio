@@ -18,6 +18,11 @@ $resultado = $conexion->query("SELECT * FROM profesores WHERE gimnasio_id = $gim
             font-family: Arial, sans-serif;
             padding: 20px;
         }
+        h1 {
+            text-align: center;
+            font-size: 24px;
+            margin-bottom: 20px;
+        }
         table {
             width: 100%;
             border-collapse: collapse;
@@ -31,21 +36,25 @@ $resultado = $conexion->query("SELECT * FROM profesores WHERE gimnasio_id = $gim
         th {
             background-color: #222;
         }
-        canvas.qr {
+        img.qr {
             width: 80px;
-            height: 80px;
         }
-        .boton {
+        .boton-generar, .boton-ver {
             background-color: gold;
             color: black;
             border: none;
-            padding: 6px 12px;
-            margin: 2px;
+            padding: 6px 10px;
+            margin-top: 5px;
             cursor: pointer;
             font-size: 14px;
+            border-radius: 4px;
+        }
+        .boton-ver {
+            background-color: #222;
+            color: gold;
+            border: 1px solid gold;
         }
     </style>
-    <script src="https://cdn.jsdelivr.net/npm/qrious/dist/qrious.min.js"></script>
 </head>
 <body>
     <h1>Listado de Profesores</h1>
@@ -56,7 +65,6 @@ $resultado = $conexion->query("SELECT * FROM profesores WHERE gimnasio_id = $gim
             <th>DNI</th>
             <th>Teléfono</th>
             <th>QR</th>
-            <th>Acciones</th>
         </tr>
         <?php while ($profesor = $resultado->fetch_assoc()): ?>
             <tr>
@@ -65,23 +73,14 @@ $resultado = $conexion->query("SELECT * FROM profesores WHERE gimnasio_id = $gim
                 <td><?= $profesor['dni'] ?></td>
                 <td><?= $profesor['telefono'] ?></td>
                 <td>
-                    <canvas class="qr" id="qr_<?= $profesor['dni'] ?>"></canvas>
-                    <script>
-                        new QRious({
-                            element: document.getElementById("qr_<?= $profesor['dni'] ?>"),
-                            value: "P-<?= $profesor['dni'] ?>",
-                            size: 80,
-                            level: 'H'
-                        });
-                    </script>
-                </td>
-                <td>
-                    <a href="editar_profesor.php?id=<?= $profesor['id'] ?>">
-                        <button class="boton">Editar</button>
-                    </a>
-                    <a href="eliminar_profesor.php?id=<?= $profesor['id'] ?>" onclick="return confirm('¿Estás seguro de eliminar este profesor?');">
-                        <button class="boton">Eliminar</button>
-                    </a>
+                    <?php
+                    // Generar el QR dinámicamente cada vez
+                    $qr_code = 'P-' . $profesor['dni'];
+                    echo '<img class="qr" src="https://chart.googleapis.com/chart?chs=200x200&cht=qr&chl=' . urlencode($qr_code) . '" alt="QR"><br>';
+                    echo '<a href="https://chart.googleapis.com/chart?chs=200x200&cht=qr&chl=' . urlencode($qr_code) . '" target="_blank">
+                            <button class="boton-ver">Ver QR</button>
+                          </a>';
+                    ?>
                 </td>
             </tr>
         <?php endwhile; ?>
