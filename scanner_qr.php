@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8">
-  <title>Escaneo QR - Profesor</title>
+  <title>Escaneo QR para Ingreso Profesor</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
   <style>
@@ -25,20 +25,25 @@
   </style>
 </head>
 <body>
-  <h1>📸 Escaneo QR - Ingreso / Egreso Profesor</h1>
+  <h1>📸 Escaneo QR para Ingreso / Egreso Profesor</h1>
   <div id="reader"></div>
+
+  <form id="form-envio" action="registrar_asistencia_profesor.php" method="POST" style="display:none;">
+    <input type="hidden" name="codigo" id="codigo">
+  </form>
 
   <script>
     function onScanSuccess(decodedText, decodedResult) {
       if (decodedText.startsWith('P')) {
-        window.location.href = "registrar_asistencia_profesor.php?codigo=" + encodeURIComponent(decodedText);
+        document.getElementById("codigo").value = decodedText;
+        document.getElementById("form-envio").submit();
       } else {
-        alert("⚠️ QR no válido para profesor.");
+        alert("⚠️ El QR no es válido para profesor.");
       }
     }
 
     function onScanFailure(error) {
-      // Debug opcional
+      // Silencio
     }
 
     const html5QrCode = new Html5Qrcode("reader");
@@ -56,7 +61,7 @@
         alert("No se detectó cámara.");
       }
     }).catch(err => {
-      alert("Error: " + err);
+      alert("Error al acceder a la cámara: " + err);
     });
   </script>
 </body>

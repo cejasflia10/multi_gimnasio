@@ -2,12 +2,12 @@
 include 'conexion.php';
 date_default_timezone_set('America/Argentina/Buenos_Aires');
 
-if (!isset($_GET['codigo'])) {
-    die("Código no proporcionado.");
+if (!isset($_POST['codigo'])) {
+    die("Código no recibido.");
 }
 
-$codigo = $_GET['codigo'];
-$dni = substr($codigo, 1); // Quitamos la letra "P"
+$codigo = $_POST['codigo'];
+$dni = substr($codigo, 1); // Elimina la P
 
 $profesor_q = $conexion->query("SELECT id FROM profesores WHERE dni = '$dni' LIMIT 1");
 if ($profesor_q->num_rows === 0) {
@@ -16,19 +16,19 @@ if ($profesor_q->num_rows === 0) {
 
 $profesor = $profesor_q->fetch_assoc();
 $profesor_id = $profesor['id'];
-$fecha_actual = date("Y-m-d");
-$hora_actual = date("H:i:s");
+$fecha = date("Y-m-d");
+$hora = date("H:i:s");
 
-// Verificar si ya tiene ingreso hoy
-$asistencia_q = $conexion->query("SELECT * FROM asistencias_profesor WHERE profesor_id = $profesor_id AND fecha = '$fecha_actual'");
+// Ver si ya hay un registro hoy
+$existe = $conexion->query("SELECT * FROM asistencias_profesor WHERE profesor_id = $profesor_id AND fecha = '$fecha'");
 
-if ($asistencia_q->num_rows > 0) {
-    // Ya tiene registro, marcamos salida
-    $conexion->query("UPDATE asistencias_profesor SET hora_salida = '$hora_actual' WHERE profesor_id = $profesor_id AND fecha = '$fecha_actual'");
-    echo "<script>alert('✅ Salida registrada correctamente'); window.location='scanner_qr_profesor.php';</script>";
+if ($existe->num_rows > 0) {
+    // Ya hay ingreso, marcamos salida
+    $conexion->query("UPDATE asistencias_profesor SET hora_salida = '$hora' WHERE profesor_id = $profesor_id AND fecha = '$fecha'");
+    echo "<script>alert('✅ Salida registrada.'); window.location='scanner_qr_profesor.php';</script>";
 } else {
-    // No hay registro aún, marcamos entrada
-    $conexion->query("INSERT INTO asistencias_profesor (profesor_id, fecha, hora_ingreso) VALUES ($profesor_id, '$fecha_actual', '$hora_actual')");
-    echo "<script>alert('✅ Ingreso registrado correctamente'); window.location='scanner_qr_profesor.php';</script>";
+    // No hay ingreso, lo registramos
+    $conexion->query("INSERT INTO asistencias_profesor (profesor_id, fecha, hora_ingreso) VALUES ($profesor_id, '$fecha', '$hora')");
+    echo "<script>alert('✅ Ingreso registrado.'); window.location='scanner_qr_profesor.php';</script>";
 }
 ?>
