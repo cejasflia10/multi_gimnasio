@@ -1,8 +1,15 @@
 <?php
-include 'conexion.php';
-if (!isset($_GET['dni']) || !isset($_GET['id_turno'])) {
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+
+if (!isset($_SESSION['cliente_id'])) {
     die("Acceso inválido.");
 }
+
+$cliente_id = $_SESSION['cliente_id'];
+include 'conexion.php';
+
 $dni = $_GET['dni'];
 $id_turno = $_GET['id_turno'];
 
