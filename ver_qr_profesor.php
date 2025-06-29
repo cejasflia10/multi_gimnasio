@@ -2,17 +2,23 @@
 session_start();
 require_once 'phpqrcode/qrlib.php';
 
-// Obtener el DNI del profesor desde la URL
+// Validar DNI recibido
 $dni = $_GET['dni'] ?? '';
 if (!$dni) {
     die("DNI no proporcionado.");
 }
 
+// Contenido del QR
 $codigo = 'P-' . $dni;
 
-// Encabezado para que el navegador sepa que es una imagen
+// Encabezado correcto
 header('Content-Type: image/png');
 
-// Generar QR en tiempo real (no se guarda)
+// Evitar errores de salida previa
+ob_clean();
+flush();
+
+// Generar y mostrar QR
 QRcode::png($codigo, null, 'H', 10);
 exit;
+?>
