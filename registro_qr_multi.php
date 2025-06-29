@@ -1,58 +1,52 @@
 <?php
-include 'conexion.php';
 session_start();
+include 'conexion.php';
 
-$codigo = $_GET['codigo'] ?? $_POST['codigo'] ?? '';
-$codigo = trim($codigo);
-$fecha = date('Y-m-d');
-$hora = date('H:i:s');
+date_default_timezone_set('America/Argentina/Buenos_Aires');
 
-function mostrar($msg, $color = "gold") {
-    echo "<html><head><style>
-        body { background:#000; color:$color; font-family:Arial; text-align:center; padding-top:100px; font-size:22px }
-    </style></head><body>$msg<br><br><a href='scanner_qr.php' style='color:$color'>⬅ Volver</a></body></html>";
+// Mostrar errores para depuración
+ini_set('display_errors', 1);
+ini_set('display_startup_errors', 1);
+error_reporting(E_ALL);
+
+$codigo_qr = $_POST['codigo_qr'] ?? '';
+
+if (empty($codigo_qr)) {
+    echo "<div style='color:red; text-align:center; margin-top:30px;'>❌ Código QR vacío<br><a href='scanner_qr.php'>← Volver</a></div>";
     exit;
 }
 
-if (!$codigo) {
-    mostrar("❌ Código QR vacío", "red");
-}
+$gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
 
-if (strpos($codigo, 'P-') === 0) {
-    $dni = substr($codigo, 2);
-    $profesor = $conexion->query("SELECT id FROM profesores WHERE dni = '$dni'")->fetch_assoc();
+// ▶️ ESCANEO DE PROFESORES: código comienza con "P-"
+if (strpos($codigo_qr, 'P-') === 0) {
+    $dni_profesor = substr($codigo_qr, 2); // quitar "P-" para obtener el DNI
 
-    if (!$profesor) mostrar("❌ Profesor no encontrado", "red");
+    $prof_q = $conexion->query("SELECT id FROM profesores WHERE dni = '$dni_profesor' AND gimnasio_id = $gimnasio_id");
+    if ($prof_q && $prof_q->num_rows > 0) {
+        $prof = $prof_q->fetch_assoc();
+        $prof_id = $prof['id'];
+        $fecha = date('Y-m-d');
+        $hora = date('H:i:s');
 
-    $profesor_id = $profesor['id'];
-
-    // Verificar si ya hay ingreso sin salida
-    $registro = $conexion->query("
-        SELECT * FROM asistencias_profesores
-        WHERE profesor_id = $profesor_id AND fecha = '$fecha'
-        ORDER BY id DESC LIMIT 1
-    ")->fetch_assoc();
-
-    if (!$registro || $registro['hora_egreso']) {
-        // Registrar nuevo ingreso
-        $conexion->query("INSERT INTO asistencias_profesores (profesor_id, fecha, hora_ingreso) VALUES ($profesor_id, '$fecha', '$hora')");
-        mostrar("✅ Ingreso registrado<br>DNI: $dni<br>Hora: $hora", "lime");
+        // Verificar si ya tiene una entrada sin salida hoy
+        $verificar = $conexion->query("SELECT id FROM asistencias_profesor WHERE profesor_id = $prof_id AND fecha = '$fecha' AND hora_salida IS NULL");
+        if ($verificar->num_rows > 0) {
+            // Registrar salida
+            $conexion->query("UPDATE asistencias_profesor SET hora_salida = '$hora' WHERE profesor_id = $prof_id AND fecha = '$fecha' AND hora_salida IS NULL");
+            echo "<div style='color:lime; text-align:center; margin-top:30px;'>✅ Egreso registrado correctamente<br><a href='scanner_qr.php'>← Volver</a></div>";
+        } else {
+            // Registrar ingreso
+            $conexion->query("INSERT INTO asistencias_profesor (profesor_id, fecha, hora_ingreso, gimnasio_id) VALUES ($prof_id, '$fecha', '$hora', $gimnasio_id)");
+            echo "<div style='color:lime; text-align:center; margin-top:30px;'>✅ Ingreso registrado correctamente<br><a href='scanner_qr.php'>← Volver</a></div>";
+        }
     } else {
-        // Registrar egreso
-        $id_asistencia = $registro['id'];
-        $hora_ingreso = strtotime($registro['hora_ingreso']);
-        $hora_egreso = strtotime($hora);
-        $horas_trabajadas = round(($hora_egreso - $hora_ingreso) / 3600, 2);
-
-        $conexion->query("
-            UPDATE asistencias_profesores
-            SET hora_egreso = '$hora', horas_trabajadas = $horas_trabajadas
-            WHERE id = $id_asistencia
-        ");
-
-        mostrar("✅ Egreso registrado<br>DNI: $dni<br>Duración: $horas_trabajadas hs", "aqua");
+        echo "<div style='color:orange; text-align:center; margin-top:30px;'>⚠️ QR no válido para profesor<br><a href='scanner_qr.php'>← Volver</a></div>";
     }
-} else {
-    mostrar("⚠️ QR no válido para profesor", "orange");
+    exit;
 }
+
+// Si no coincide con ningún patrón
+echo "<div style='color:red; text-align:center; margin-top:30px;'>❌ Código QR no válido<br><a href='scanner_qr.php'>← Volver</a></div>";
+exit;
 ?>
