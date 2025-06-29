@@ -1,4 +1,6 @@
 <?php
+<!-- MODIFICADO OK: panel_cliente.php -->
+
 session_start();
 include 'conexion.php';
 
