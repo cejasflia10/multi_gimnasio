@@ -5,11 +5,10 @@ date_default_timezone_set('America/Argentina/Buenos_Aires');
 
 $mensaje = "";
 $turnos_disponibles = [];
-$reservas_cliente = [];
+$dias_semana = [1 => "Lunes", 2 => "Martes", 3 => "Miércoles", 4 => "Jueves", 5 => "Viernes", 6 => "Sábado"];
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['dni'])) {
     $dni = trim($_POST['dni']);
-
     $cliente_q = $conexion->query("SELECT * FROM clientes WHERE dni = '$dni'");
     $cliente = $cliente_q->fetch_assoc();
 
@@ -38,40 +37,22 @@ if ($cliente_id) {
     }
 }
 
-$dias = $conexion->query("SELECT * FROM dias");
 $dia_seleccionado = $_GET['dia'] ?? date('N');
+$fecha_reserva = date('Y-m-d', strtotime("this week +" . ($dia_seleccionado - 1) . " days"));
 
 if ($cliente_id && $dia_seleccionado) {
-    $fecha_reserva = date('Y-m-d', strtotime("this week +" . ($dia_seleccionado - 1) . " days"));
-
     $turnos_q = $conexion->query("
         SELECT t.id, h.hora_inicio, h.hora_fin, p.apellido AS profesor, t.cupos_maximos,
-        (SELECT COUNT(*) FROM reservas r WHERE r.turno_id = t.id AND r.fecha = '$fecha_reserva') AS usados
+        (SELECT COUNT(*) FROM reservas r WHERE r.turno_id = t.id AND r.fecha_reserva = '$fecha_reserva') AS usados
         FROM turnos t
         JOIN horarios h ON t.horario_id = h.id
         JOIN profesores p ON t.profesor_id = p.id
-        WHERE t.id_dia = $dia_seleccionado
+        WHERE t.dia_id = $dia_seleccionado
         ORDER BY h.hora_inicio
     ");
 
     while ($fila = $turnos_q->fetch_assoc()) {
         $turnos_disponibles[] = $fila;
-    }
-
-    $reservas_q = $conexion->query("
-        SELECT r.fecha, d.nombre AS dia, h.hora_inicio, h.hora_fin, p.apellido AS profesor
-        FROM reservas r
-        JOIN turnos t ON r.turno_id = t.id
-        JOIN dias d ON t.id_dia = d.id
-        JOIN horarios h ON t.horario_id = h.id
-        JOIN profesores p ON t.profesor_id = p.id
-        WHERE r.cliente_id = $cliente_id
-        ORDER BY r.fecha DESC
-        LIMIT 10
-    ");
-
-    while ($r = $reservas_q->fetch_assoc()) {
-        $reservas_cliente[] = $r;
     }
 }
 ?>
@@ -79,36 +60,21 @@ if ($cliente_id && $dia_seleccionado) {
 <html>
 <head>
     <meta charset="UTF-8">
-    <title>Mis Turnos</title>
+    <title>Turnos</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <style>
         body { background-color: #000; color: gold; font-family: Arial, sans-serif; padding: 20px; }
-        input, button, select {
-            padding: 10px;
-            font-size: 16px;
-            margin: 10px 0;
-            width: 100%;
-        }
-        .turno {
-            background-color: #111;
-            margin: 10px 0;
-            padding: 10px;
-            border: 1px solid gold;
-        }
-        a.boton {
-            background-color: gold;
-            color: black;
-            padding: 5px 10px;
-            text-decoration: none;
-            display: inline-block;
-            margin-top: 5px;
-            font-weight: bold;
-        }
+        input, button, select { padding: 10px; font-size: 16px; margin: 10px 0; width: 100%; }
+        .turno-container { background-color: #111; color: gold; padding: 15px; margin: 15px 0; border: 1px solid gold; border-radius: 8px; }
+        .turno-container h4 { margin: 0 0 10px; font-size: 18px; }
+        .turno-detalle { display: flex; justify-content: space-between; flex-wrap: wrap; font-size: 16px; }
+        .turno-detalle div { flex: 1 1 45%; margin-bottom: 8px; }
+        .boton-turno { background-color: gold; color: black; font-weight: bold; border: none; padding: 8px 15px; border-radius: 5px; cursor: pointer; width: 100%; }
+        @media (max-width: 600px) { .turno-detalle div { flex: 1 1 100%; } }
     </style>
 </head>
 <body>
-<h2>🗓️ Turnos disponibles</h2>
-
+<h2>📅 Turnos disponibles</h2>
 <?php if (!$cliente_id): ?>
     <form method="POST">
         <input type="text" name="dni" placeholder="Ingresá tu DNI" required>
@@ -116,72 +82,38 @@ if ($cliente_id && $dia_seleccionado) {
     </form>
 <?php else: ?>
     <p><strong>Bienvenido/a:</strong> <?= $cliente_apellido . ' ' . $cliente_nombre ?></p>
-
     <form method="GET">
         <label>Seleccioná un día:</label>
         <select name="dia" onchange="this.form.submit()">
-            <?php while ($d = $dias->fetch_assoc()): ?>
-                <option value="<?= $d['id'] ?>" <?= $d['id'] == $dia_seleccionado ? 'selected' : '' ?>>
-                    <?= $d['nombre'] ?>
-                </option>
-            <?php endwhile; ?>
+            <?php foreach ($dias_semana as $num => $nombre): ?>
+                <option value="<?= $num ?>" <?= $num == $dia_seleccionado ? 'selected' : '' ?>><?= $nombre ?></option>
+            <?php endforeach; ?>
         </select>
     </form>
 
-    <?php if ($turnos_disponibles): ?>
-        <table border="1" cellpadding="10" style="width:100%; margin-top:20px; border-color:gold;">
-            <tr style="background-color: #222;">
-                <th>Horario</th>
-                <th>Profesor</th>
-                <th>Cupos</th>
-                <th>Acción</th>
-            </tr>
-            <?php foreach ($turnos_disponibles as $t): ?>
-                <tr>
-                    <td><?= $t['hora_inicio'] ?> - <?= $t['hora_fin'] ?></td>
-                    <td><?= $t['profesor'] ?></td>
-                    <td><?= $t['cupos_maximos'] - $t['usados'] ?> / <?= $t['cupos_maximos'] ?></td>
-                    <td>
-                        <?php if (($t['cupos_maximos'] - $t['usados']) > 0): ?>
-                            <a class="boton" href="cliente_reservas.php?id_turno=<?= $t['id'] ?>">Reservar</a>
-                        <?php else: ?>
-                            <span style="color:red;">Sin cupo</span>
-                        <?php endif; ?>
-                    </td>
-                </tr>
-            <?php endforeach; ?>
-        </table>
-    <?php else: ?>
-        <p>No hay turnos disponibles para este día.</p>
-    <?php endif; ?>
-
-    <?php if (!empty($reservas_cliente)): ?>
-        <h3>📖 Mis Reservas recientes</h3>
-        <table border="1" cellpadding="10" style="width:100%; margin-top:10px; border-color:gold;">
-            <tr style="background-color: #222;">
-                <th>Fecha</th>
-                <th>Día</th>
-                <th>Horario</th>
-                <th>Profesor</th>
-            </tr>
-            <?php foreach ($reservas_cliente as $r): ?>
-                <tr>
-                    <td><?= date('d/m/Y', strtotime($r['fecha'])) ?></td>
-                    <td><?= $r['dia'] ?></td>
-                    <td><?= $r['hora_inicio'] ?> - <?= $r['hora_fin'] ?></td>
-                    <td><?= $r['profesor'] ?></td>
-                </tr>
-            <?php endforeach; ?>
-        </table>
-    <?php endif; ?>
+    <?php foreach ($turnos_disponibles as $t): ?>
+        <div class="turno-container">
+            <h4>🗓️ <?= $dias_semana[$dia_seleccionado] . ' ' . date('d/m', strtotime($fecha_reserva)) ?></h4>
+            <div class="turno-detalle">
+                <div><strong>Horario:</strong> <?= $t['hora_inicio'] ?> - <?= $t['hora_fin'] ?></div>
+                <div><strong>Profesor:</strong> <?= $t['profesor'] ?></div>
+                <div><strong>Cupos:</strong> <?= ($t['cupos_maximos'] - $t['usados']) ?> / <?= $t['cupos_maximos'] ?></div>
+            </div>
+            <?php if (($t['cupos_maximos'] - $t['usados']) > 0): ?>
+                <form action="cliente_reservas.php" method="GET">
+                    <input type="hidden" name="id_turno" value="<?= $t['id'] ?>">
+                    <button class="boton-turno" type="submit">Reservar Turno</button>
+                </form>
+            <?php else: ?>
+                <p style="color:red;">Sin cupo disponible</p>
+            <?php endif; ?>
+        </div>
+    <?php endforeach; ?>
 
     <form method="POST" action="logout_turnos.php">
         <button type="submit">Cerrar sesión</button>
     </form>
 <?php endif; ?>
-
-<?php if ($mensaje): ?>
-    <p style="color: yellow;"><?= $mensaje ?></p>
-<?php endif; ?>
+<?php if ($mensaje): ?><p><strong><?= $mensaje ?></strong></p><?php endif; ?>
 </body>
 </html>
