@@ -1,9 +1,9 @@
-<!-- scanner_qr.php - escanea QR en vivo para registrar ingreso de profesor -->
 <!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>Escaneo QR Profesor</title>
+    <title>Escaneo QR para Ingreso Profesor</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
     <style>
         body {
@@ -13,52 +13,41 @@
             text-align: center;
             padding: 20px;
         }
-        h2 {
-            margin-bottom: 20px;
-        }
         #reader {
             width: 100%;
             max-width: 400px;
             margin: auto;
         }
-        .mensaje {
+        .error {
+            color: red;
             margin-top: 20px;
-            font-size: 18px;
-            color: gold;
         }
     </style>
 </head>
 <body>
     <h2>📷 Escaneo QR para Ingreso Profesor</h2>
     <div id="reader"></div>
-    <div class="mensaje" id="mensaje"></div>
+
+    <form id="qrForm" action="registro_qr_multi.php" method="POST" style="display:none;">
+        <input type="hidden" name="codigo_qr" id="codigo_qr">
+    </form>
 
     <script>
         function onScanSuccess(decodedText, decodedResult) {
-            // Desactivar escaneo
-            html5QrcodeScanner.clear();
-
-            // Mostrar el valor escaneado
-            document.getElementById("mensaje").innerText = "Registrando...";
-
-            // Enviar el QR escaneado al backend
-            fetch("registro_qr_multi.php", {
-                method: "POST",
-                headers: { "Content-Type": "application/x-www-form-urlencoded" },
-                body: "codigo=" + encodeURIComponent(decodedText)
-            })
-            .then(res => res.text())
-            .then(data => {
-                document.getElementById("mensaje").innerHTML = data;
-            })
-            .catch(err => {
-                document.getElementById("mensaje").innerText = "Error al registrar: " + err;
-            });
+            document.getElementById("codigo_qr").value = decodedText;
+            document.getElementById("qrForm").submit();
         }
 
-        const html5QrcodeScanner = new Html5QrcodeScanner(
-            "reader", { fps: 10, qrbox: 250 }, /* verbose= */ false);
-        html5QrcodeScanner.render(onScanSuccess);
+        function onScanError(errorMessage) {
+            // Opcional: mostrar errores de lectura
+        }
+
+        const html5QrcodeScanner = new Html5QrcodeScanner("reader", {
+            fps: 10,
+            qrbox: { width: 250, height: 250 }
+        });
+
+        html5QrcodeScanner.render(onScanSuccess, onScanError);
     </script>
 </body>
 </html>
