@@ -17,65 +17,49 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['dni'])) {
         $mensaje = "DNI no encontrado.";
     } else {
         $_SESSION['cliente_id'] = $cliente['id'];
-} else {
-    // Recuperar datos del cliente si ya está logueado
-    $cliente_q = $conexion->query("SELECT * FROM clientes WHERE id = {$_SESSION['cliente_id']}");
-    $cliente = $cliente_q->fetch_assoc();
-}
-
-        $turnos_q = $conexion->query("
-            SELECT t.id, d.nombre AS dia_nombre, h.hora_inicio, h.hora_fin, p.apellido AS profesor
-            FROM turnos t
-            JOIN dias d ON t.dia = d.id
-            JOIN horarios h ON t.horario_id = h.id
-            JOIN profesores p ON t.profesor_id = p.id
-        ");
-        while ($fila = $turnos_q->fetch_assoc()) {
-            $turnos_disponibles[] = $fila;
-        }
-
-        $hoy = date('Y-m-d');
-        $reservas_q = $conexion->query("
-            SELECT r.*, d.nombre AS dia, h.hora_inicio, h.hora_fin
-            FROM reservas r
-            JOIN turnos t ON r.turno_id = t.id
-            JOIN dias d ON t.dia = d.id
-            JOIN horarios h ON t.horario_id = h.id
-            WHERE r.cliente_id = {$cliente['id']} AND fecha_reserva = '$hoy'
-        ");
-        while ($r = $reservas_q->fetch_assoc()) {
-            $reservas_cliente[] = $r;
-        }
+        $_SESSION['cliente_dni'] = $cliente['dni'];
+        $_SESSION['cliente_nombre'] = $cliente['nombre'];
+        $_SESSION['cliente_apellido'] = $cliente['apellido'];
+        header("Location: cliente_turnos.php");
+        exit;
     }
 }
 
-if (isset($_GET['reservar']) && isset($_SESSION['cliente_id'])) {
-    $turno_id = intval($_GET['reservar']);
-    $fecha_hoy = date('Y-m-d');
+$cliente_id = $_SESSION['cliente_id'] ?? null;
+$cliente_nombre = $_SESSION['cliente_nombre'] ?? '';
+$cliente_apellido = $_SESSION['cliente_apellido'] ?? '';
 
-    $verif = $conexion->query("
-        SELECT * FROM reservas WHERE cliente_id = {$_SESSION['cliente_id']} AND fecha_reserva = '$fecha_hoy'
+if ($cliente_id) {
+    // Validar membresía
+    $membresia = $conexion->query("SELECT * FROM membresias WHERE cliente_id = $cliente_id AND fecha_vencimiento >= CURDATE() AND clases_disponibles > 0 ORDER BY id DESC LIMIT 1");
+    if ($membresia->num_rows === 0) {
+        $mensaje = "⚠️ No tenés una membresía activa o sin clases disponibles.";
+        session_destroy();
+        $cliente_id = null;
+    }
+}
+
+// Obtener días
+$dias = $conexion->query("SELECT * FROM dias");
+$dia_seleccionado = $_GET['dia'] ?? date('N'); // 1 = Lunes
+
+// Cargar turnos disponibles por día
+if ($cliente_id && $dia_seleccionado) {
+    $fecha_reserva = date('Y-m-d', strtotime("this week +" . ($dia_seleccionado - 1) . " days"));
+
+    $turnos_q = $conexion->query("
+        SELECT t.id, h.hora_inicio, h.hora_fin, p.apellido AS profesor, t.cupos_maximos,
+        (SELECT COUNT(*) FROM reservas r WHERE r.turno_id = t.id AND r.fecha = '$fecha_reserva') AS usados
+        FROM turnos t
+        JOIN horarios h ON t.horario_id = h.id
+        JOIN profesores p ON t.profesor_id = p.id
+        WHERE t.dia_id = $dia_seleccionado
+        ORDER BY h.hora_inicio
     ");
-    if ($verif->num_rows > 0) {
-        $mensaje = "Ya tenés un turno reservado para hoy.";
-    } else {
-        $conexion->query("
-            INSERT INTO reservas (cliente_id, turno_id, fecha_reserva)
-            VALUES ({$_SESSION['cliente_id']}, $turno_id, '$fecha_hoy')
-        ");
-        $mensaje = "Turno reservado correctamente.";
+
+    while ($fila = $turnos_q->fetch_assoc()) {
+        $turnos_disponibles[] = $fila;
     }
-
-    header("Location: cliente_turnos.php");
-    exit;
-}
-
-if (isset($_GET['cancelar']) && isset($_SESSION['cliente_id'])) {
-    $id_cancelar = intval($_GET['cancelar']);
-    $conexion->query("DELETE FROM reservas WHERE id = $id_cancelar AND cliente_id = {$_SESSION['cliente_id']}");
-    $mensaje = "Turno cancelado correctamente.";
-    header("Location: cliente_turnos.php");
-    exit;
 }
 ?>
 <!DOCTYPE html>
@@ -84,7 +68,6 @@ if (isset($_GET['cancelar']) && isset($_SESSION['cliente_id'])) {
     <meta charset="UTF-8">
     <title>Mis Turnos</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="theme-color" content="#000000">
     <style>
         body { background-color: #000; color: gold; font-family: Arial, sans-serif; padding: 20px; }
         input, button, select {
@@ -111,43 +94,61 @@ if (isset($_GET['cancelar']) && isset($_SESSION['cliente_id'])) {
     </style>
 </head>
 <body>
-<h2>Reserva de Turnos</h2>
-<?php if (!isset($_SESSION['cliente_id'])): ?>
+<h2>🗓️ Turnos disponibles</h2>
+
+<?php if (!$cliente_id): ?>
     <form method="POST">
-        <input type="text" name="dni" placeholder="Ingresar DNI" required>
-        <button type="submit">Ver mis turnos</button>
+        <input type="text" name="dni" placeholder="Ingresá tu DNI" required>
+        <button type="submit">Ingresar</button>
     </form>
 <?php else: ?>
-    <p><strong>Bienvenido/a:</strong> <?= $cliente['apellido'] . ' ' . $cliente['nombre'] ?></p>
-    <h3>Turnos de hoy:</h3>
-    <?php if ($reservas_cliente): ?>
-        <?php foreach ($reservas_cliente as $res): ?>
-            <div class="turno">
-                Día: <?= $res['dia'] ?><br>
-                Hora: <?= $res['hora_inicio'] ?> a <?= $res['hora_fin'] ?><br>
-                <a href="?cancelar=<?= $res['id'] ?>" class="boton" style="background-color:red; color:white;">Cancelar turno</a>
-            </div>
-        <?php endforeach; ?>
-    <?php else: ?>
-        <p>No tenés turnos reservados hoy.</p>
-    <?php endif; ?>
+    <p><strong>Bienvenido/a:</strong> <?= $cliente_apellido . ' ' . $cliente_nombre ?></p>
 
-    <h3>Turnos disponibles</h3>
-    <?php foreach ($turnos_disponibles as $t): ?>
-        <div class="turno">
-            Día: <?= $t['dia_nombre'] ?><br>
-            Hora: <?= $t['hora_inicio'] ?> a <?= $t['hora_fin'] ?><br>
-            Profesor: <?= $t['profesor'] ?><br>
-            <a href="?reservar=<?= $t['id'] ?>" class="boton">Reservar este turno</a>
-        </div>
-    <?php endforeach; ?>
+    <form method="GET">
+        <label>Seleccioná un día:</label>
+        <select name="dia" onchange="this.form.submit()">
+            <?php while ($d = $dias->fetch_assoc()): ?>
+                <option value="<?= $d['id'] ?>" <?= $d['id'] == $dia_seleccionado ? 'selected' : '' ?>>
+                    <?= $d['nombre'] ?>
+                </option>
+            <?php endwhile; ?>
+        </select>
+    </form>
+
+    <?php if ($turnos_disponibles): ?>
+        <table border="1" cellpadding="10" style="width:100%; margin-top:20px; border-color:gold;">
+            <tr style="background-color: #222;">
+                <th>Horario</th>
+                <th>Profesor</th>
+                <th>Cupos</th>
+                <th>Acción</th>
+            </tr>
+            <?php foreach ($turnos_disponibles as $t): ?>
+                <tr>
+                    <td><?= $t['hora_inicio'] ?> - <?= $t['hora_fin'] ?></td>
+                    <td><?= $t['profesor'] ?></td>
+                    <td><?= $t['cupos_maximos'] - $t['usados'] ?> / <?= $t['cupos_maximos'] ?></td>
+                    <td>
+                        <?php if (($t['cupos_maximos'] - $t['usados']) > 0): ?>
+                            <a class="boton" href="cliente_reservas.php?id_turno=<?= $t['id'] ?>">Reservar</a>
+                        <?php else: ?>
+                            <span style="color:red;">Sin cupo</span>
+                        <?php endif; ?>
+                    </td>
+                </tr>
+            <?php endforeach; ?>
+        </table>
+    <?php else: ?>
+        <p>No hay turnos disponibles para este día.</p>
+    <?php endif; ?>
 
     <form method="POST" action="logout_turnos.php">
         <button type="submit">Cerrar sesión</button>
     </form>
 <?php endif; ?>
+
 <?php if ($mensaje): ?>
-    <p><strong><?= $mensaje ?></strong></p>
+    <p style="color: yellow;"><?= $mensaje ?></p>
 <?php endif; ?>
 </body>
 </html>
