@@ -35,6 +35,14 @@ $resultado = $conexion->query("SELECT * FROM profesores WHERE gimnasio_id = $gim
         img.qr {
             width: 80px;
         }
+        .boton-generar {
+            background-color: gold;
+            color: black;
+            border: none;
+            padding: 6px 12px;
+            cursor: pointer;
+            font-size: 14px;
+        }
     </style>
 </head>
 <body>
@@ -53,7 +61,18 @@ $resultado = $conexion->query("SELECT * FROM profesores WHERE gimnasio_id = $gim
                 <td><?= htmlspecialchars($profesor['nombre']) ?></td>
                 <td><?= $profesor['dni'] ?></td>
                 <td><?= $profesor['telefono'] ?></td>
-                <td><img class="qr" src="qr/qr_profesor_<?= $profesor['id'] ?>.png" alt="QR"></td>
+                <td>
+                    <?php
+                    $qr_filename = "qr/qr_profesor_P-" . $profesor['dni'] . ".png";
+                    if (file_exists($qr_filename)) {
+                        echo '<img class="qr" src="' . $qr_filename . '" alt="QR">';
+                    } else {
+                        echo '<a href="generar_qr_individual_profesor.php?id=' . $profesor['id'] . '">
+                                <button class="boton-generar">Generar QR</button>
+                              </a>';
+                    }
+                    ?>
+                </td>
             </tr>
         <?php endwhile; ?>
     </table>
