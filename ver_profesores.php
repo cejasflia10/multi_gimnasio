@@ -35,18 +35,16 @@ $resultado = $conexion->query("SELECT * FROM profesores WHERE gimnasio_id = $gim
             background-color: #222;
         }
         .qr-img {
-            width: 70px;
-            margin-bottom: 5px;
+            width: 80px;
         }
         .boton {
             background-color: gold;
             color: black;
             border: none;
             padding: 6px 10px;
-            margin: 2px;
             cursor: pointer;
+            margin: 4px 2px;
             font-size: 14px;
-            border-radius: 4px;
         }
     </style>
 </head>
@@ -68,23 +66,16 @@ $resultado = $conexion->query("SELECT * FROM profesores WHERE gimnasio_id = $gim
                 <td><?= $profesor['dni'] ?></td>
                 <td><?= $profesor['telefono'] ?></td>
                 <td>
-                    <?php
-                    $qr_url = "generar_qr_temp.php?dni=" . $profesor['dni']; // genera dinámico en Render
-
-                    echo '<a href="' . $qr_url . '" target="_blank">
-                            <button class="boton">Ver QR</button>
-                          </a>';
-
-                    echo '<a href="generar_qr_individual_profesor.php?id=' . $profesor['id'] . '">
-                            <button class="boton">Generar QR</button>
-                          </a>';
-                    ?>
+                    <img class="qr-img" src="generar_qr_profesor.php?dni=<?= $profesor['dni'] ?>" alt="QR"><br>
+                    <a href="generar_qr_profesor.php?dni=<?= $profesor['dni'] ?>" target="_blank">
+                        <button class="boton">Ver QR</button>
+                    </a>
                 </td>
                 <td>
                     <a href="editar_profesor.php?id=<?= $profesor['id'] ?>">
                         <button class="boton">Editar</button>
                     </a>
-                    <a href="eliminar_profesor.php?id=<?= $profesor['id'] ?>" onclick="return confirm('¿Estás seguro de eliminar este profesor?');">
+                    <a href="eliminar_profesor.php?id=<?= $profesor['id'] ?>" onclick="return confirm('¿Eliminar este profesor?')">
                         <button class="boton">Eliminar</button>
                     </a>
                 </td>
