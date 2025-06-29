@@ -1,6 +1,3 @@
-<?php
-if (session_status() === PHP_SESSION_NONE) session_start();
-?>
 <!DOCTYPE html>
 <html lang="es">
 <head>
@@ -14,18 +11,16 @@ if (session_status() === PHP_SESSION_NONE) session_start();
             color: gold;
             font-family: Arial, sans-serif;
             text-align: center;
-            margin: 0;
-            padding: 0;
+            padding: 20px;
         }
         h1 {
-            margin: 20px 0;
+            color: gold;
         }
         #reader {
-            width: 90%;
-            max-width: 400px;
-            margin: auto;
-            border: 4px solid gold;
-            border-radius: 8px;
+            width: 300px;
+            margin: 0 auto;
+            border: 5px solid gold;
+            border-radius: 10px;
         }
     </style>
 </head>
@@ -35,38 +30,40 @@ if (session_status() === PHP_SESSION_NONE) session_start();
 
     <script>
         function onScanSuccess(decodedText, decodedResult) {
-            // Validar que el QR empiece con 'P-' (por ejemplo)
-            if(decodedText.startsWith('P-')) {
-                // Extraer el DNI (todo lo que sigue de P-)
-                const dni = decodedText.substring(2);
-                window.location.href = "registrar_asistencia_profesor.php?dni=" + encodeURIComponent(dni);
+            // Verificar que el código comience con 'P'
+            if (decodedText.startsWith('P')) {
+                window.location.href = "registrar_asistencia_profesor.php?codigo=" + encodeURIComponent(decodedText);
             } else {
-                alert("❌ QR no válido para profesor");
+                alert("⚠️ El código escaneado no es válido para profesor.");
             }
         }
 
-        function onScanError(errorMessage) {
-            // Solo mostramos error en consola para no molestar al usuario
-            console.log("Error de escaneo: ", errorMessage);
+        function onScanFailure(error) {
+            // Podés loguear el error si querés para depuración
+            console.warn(`Error escaneando: ${error}`);
         }
 
         const html5QrCode = new Html5Qrcode("reader");
-        const config = { fps: 10, qrbox: { width: 250, height: 250 } };
+        const config = {
+            fps: 10,
+            qrbox: 250
+        };
 
-        Html5Qrcode.getCameras().then(cameras => {
-            if (cameras && cameras.length) {
+        Html5Qrcode.getCameras().then(devices => {
+            if (devices && devices.length) {
+                // Selecciona la cámara trasera
                 html5QrCode.start(
-                    cameras[0].id,
+                    { facingMode: "environment" },
                     config,
                     onScanSuccess,
-                    onScanError
+                    onScanFailure
                 );
             } else {
-                alert("No se detectaron cámaras.");
+                alert("No se detectó ninguna cámara.");
             }
         }).catch(err => {
             console.error(err);
-            alert("Error al acceder a la cámara: " + err);
+            alert("Error accediendo a la cámara: " + err);
         });
     </script>
 </body>
