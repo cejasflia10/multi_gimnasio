@@ -17,6 +17,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['dni'])) {
         $mensaje = "DNI no encontrado.";
     } else {
         $_SESSION['cliente_id'] = $cliente['id'];
+} else {
+    // Recuperar datos del cliente si ya está logueado
+    $cliente_q = $conexion->query("SELECT * FROM clientes WHERE id = {$_SESSION['cliente_id']}");
+    $cliente = $cliente_q->fetch_assoc();
+}
 
         $turnos_q = $conexion->query("
             SELECT t.id, d.nombre AS dia_nombre, h.hora_inicio, h.hora_fin, p.apellido AS profesor
