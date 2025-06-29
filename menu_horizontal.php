@@ -170,7 +170,12 @@
 <!-- MENÚ LATERAL DE QR -->
 <div id="menu-qr" class="menu-lateral">
     <h3>QR</h3>
-    <a href="scanner_qr.php">Escanear QR</a>
+ <a href="ver_clientes.php">Ver Clientes</a>
+        <a href="ver_profesores.php">Ver Profesores</a>
+        <a href="registro_qr_multi.php">Escanear QR Ingreso/Egreso</a>
+        <a href="ver_asistencias_dia.php">Ver Asistencias del Día</a>
+        <a href="reporte_horas_profesores.php">Reporte Horas Profesores</a>
+        <a href="configurar_precios_hora.php">Configurar Precio Hora</a>    <a href="scanner_qr.php">Escanear QR</a>
 </div>
 
 <!-- SCRIPT -->
