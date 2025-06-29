@@ -62,9 +62,11 @@ $resultado = $conexion->query("SELECT * FROM profesores WHERE gimnasio_id = $gim
                 <td><?= $profesor['telefono'] ?></td>
                 <td>
                     <?php
-                    $qr_filename = "qr/qr_profesor_P-" . $profesor['dni'] . ".png";
-                    if (file_exists($qr_filename)) {
-                        echo '<img class="qr" src="' . $qr_filename . '" alt="QR">';
+                    $qr_path = "multi_gimnasio/qr/qr_profesor_P-" . $profesor['dni'] . ".png";
+                    $qr_local_file = __DIR__ . "/qr/qr_profesor_P-" . $profesor['dni'] . ".png";
+
+                    if (file_exists($qr_local_file)) {
+                        echo '<img class="qr" src="' . $qr_path . '" alt="QR">';
                     } else {
                         echo '<a href="generar_qr_individual_profesor.php?id=' . $profesor['id'] . '">
                                 <button class="boton-generar">Generar QR</button>
