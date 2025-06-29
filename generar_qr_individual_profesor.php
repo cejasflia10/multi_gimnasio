@@ -21,12 +21,15 @@ $profesor = $profesor_q->fetch_assoc();
 $dni = $profesor['dni'];
 $qr_code = 'P-' . $dni;
 
-// Ruta temporal para Render
+// Generar QR en carpeta temporal
 $tempfile = "/tmp/qr_profesor_P-$dni.png";
 QRcode::png($qr_code, $tempfile, QR_ECLEVEL_H, 10);
 
-// Ruta final
-$final_path = "qr/qr_profesor_P-$dni.png";
+// Copiar a carpeta pública (Render requiere carpeta accesible)
+$final_path = __DIR__ . "/public/qr/qr_profesor_P-$dni.png";
+if (!is_dir(dirname($final_path))) {
+    mkdir(dirname($final_path), 0755, true);
+}
 copy($tempfile, $final_path);
 
 header("Location: ver_profesores.php");
