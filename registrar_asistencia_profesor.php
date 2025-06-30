@@ -5,11 +5,17 @@ if (session_status() === PHP_SESSION_NONE) session_start();
 date_default_timezone_set('America/Argentina/Buenos_Aires');
 
 $codigo = $_GET['codigo'] ?? '';
-if (!$codigo || !str_starts_with($codigo, 'P')) {
+if (!$codigo) {
     exit("Código inválido.");
 }
 
-$dni = substr($codigo, 1); // Quitar la letra P
+// ✅ Permitir con o sin P al inicio
+if (str_starts_with($codigo, 'P')) {
+    $dni = substr($codigo, 1);
+} else {
+    $dni = $codigo;
+}
+
 $gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
 $fecha = date('Y-m-d');
 $hora_actual = date('H:i:s');
