@@ -79,8 +79,6 @@ while ($row = $peso_evol->fetch_assoc()) {
 </head>
 <body>
 <div class="container">
-  <h2>Bienvenido <?= htmlspecialchars($cliente['nombre'] . ' ' . $cliente['apellido']) ?></h2>
-<h2 style="text-align: center; color: gold;">🏋️ Panel - <?= $nombre_gimnasio ?></h2>
 <h2 style="text-align: center; color: gold; font-family: Arial, sans-serif;">
     🏋️ Bienvenido a <?= htmlspecialchars($nombre_gimnasio) ?>
 </h2>
