@@ -1,10 +1,11 @@
 <?php
-session_start();
+if (session_status() === PHP_SESSION_NONE) session_start();
 include 'conexion.php';
 
 $rol = $_SESSION['rol'] ?? '';
-if (!in_array($rol, ['cliente','admin', 'profesor'])) {
-    die("Acceso denegado.");
+if (!in_array($rol, ['cliente', 'admin', 'profesor'])) {
+    header("Location: login_cliente.php");
+    exit;
 }
 
 $cliente_id = $_SESSION['cliente_id'] ?? null;
@@ -12,7 +13,8 @@ if ($rol === 'profesor') {
     $cliente_id = $_GET['id'] ?? null;
 }
 if (!$cliente_id) {
-    die("ID de cliente no especificado.");
+    header("Location: login_cliente.php");
+    exit;
 }
 
 // Obtener el gimnasio desde sesión
