@@ -1,0 +1,21 @@
+{
+    "name": "Fight Academy - Turnos",
+    "short_name": "FightTurnos",
+    "start_url": "cliente_turnos.php",
+    "display": "standalone",
+    "background_color": "#000000",
+    "theme_color": "#FFD700",
+    "orientation": "portrait",
+    "icons": [
+        {
+            "src": "icono192.png",
+            "sizes": "192x192",
+            "type": "image/png"
+        },
+        {
+            "src": "icono512.png",
+            "sizes": "512x512",
+            "type": "image/png"
+        }
+    ]
+}

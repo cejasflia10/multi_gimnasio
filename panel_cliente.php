@@ -52,6 +52,15 @@ while ($row = $peso_evol->fetch_assoc()) {
     img { width: 180px; border: 3px solid gold; border-radius: 10px; display: block; margin: auto; }
   </style>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<!-- PWA: Progressive Web App -->
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#000000">
+<link rel="icon" href="icono192.png" type="image/png">
+<script>
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('service-worker.js');
+  }
+</script>
 
 </head>
 <body>
