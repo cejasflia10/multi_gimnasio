@@ -1,71 +1,55 @@
+
 <?php
-if (session_status() === PHP_SESSION_NONE) session_start();
 include 'conexion.php';
+if (session_status() === PHP_SESSION_NONE) session_start();
+
+date_default_timezone_set('America/Argentina/Buenos_Aires');
 
 $dni = $_POST['dni'] ?? '';
+$tipo = $_POST['tipo'] ?? '';
+$gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
 $fecha = date('Y-m-d');
 $hora = date('H:i:s');
 
-if (empty($dni)) {
-    echo "<div style='color: red;'>❌ DNI no recibido.</div>";
+if (!$dni || !$tipo) {
+    echo "<span style='color:red;'>❌ Datos inválidos.</span>";
     exit;
 }
 
-// PASO 1: Buscar cliente
-$cliente_q = $conexion->query("SELECT * FROM clientes WHERE dni = '$dni' LIMIT 1");
+if ($tipo === 'C') {
+    $consulta = $conexion->query("SELECT id FROM clientes WHERE dni = '$dni' AND gimnasio_id = $gimnasio_id");
+    if ($consulta->num_rows === 0) {
+        echo "<span style='color:red;'>❌ Cliente no encontrado.</span>";
+        exit;
+    }
 
-if (!$cliente_q || $cliente_q->num_rows === 0) {
-    echo "<div style='color: red;'>❌ Cliente no encontrado</div>";
-    exit;
-}
+    $cliente = $consulta->fetch_assoc();
+    $cliente_id = $cliente['id'];
 
-$cliente = $cliente_q->fetch_assoc();
-$cliente_id = $cliente['id'];
-$nombre = $cliente['apellido'] . ' ' . $cliente['nombre'];
+    $conexion->query("INSERT INTO asistencias (cliente_id, fecha, hora, gimnasio_id) VALUES ($cliente_id, '$fecha', '$hora', $gimnasio_id)");
+    echo "<span style='color:lime;'>✅ Cliente registrado correctamente.</span>";
 
-echo "<div style='color: cyan;'>✅ Cliente encontrado: $nombre</div>";
+} elseif ($tipo === 'P') {
+    $consulta = $conexion->query("SELECT id FROM profesores WHERE dni = '$dni' AND gimnasio_id = $gimnasio_id");
+    if ($consulta->num_rows === 0) {
+        echo "<span style='color:red;'>❌ Profesor no encontrado.</span>";
+        exit;
+    }
 
-// PASO 2: Buscar membresía vigente
-$membresia_q = $conexion->query("
-    SELECT m.*, p.nombre AS nombre_plan 
-    FROM membresias m 
-    JOIN planes p ON m.plan_id = p.id 
-    WHERE m.cliente_id = $cliente_id 
-    ORDER BY m.fecha_vencimiento DESC 
-    LIMIT 1
-");
+    $profesor = $consulta->fetch_assoc();
+    $profesor_id = $profesor['id'];
 
-if (!$membresia_q || $membresia_q->num_rows === 0) {
-    echo "<div style='color: orange;'>⚠️ $nombre no tiene membresía registrada</div>";
-    exit;
-}
+    $check = $conexion->query("SELECT id FROM asistencias_profesor WHERE profesor_id = $profesor_id AND fecha = '$fecha' AND hora_salida IS NULL");
 
-$membresia = $membresia_q->fetch_assoc();
-$clases = (int)$membresia['clases_disponibles'];
-$vto = $membresia['fecha_vencimiento'];
-$plan_nombre = $membresia['nombre_plan'];
-$membresia_id = $membresia['id'];
-
-echo "<div style='color: green;'>✅ Membresía: clases = $clases, vence = $vto</div>";
-
-// PASO 3: Verificar si ya asistió hoy
-$ya_asistio = $conexion->query("SELECT 1 FROM asistencias WHERE cliente_id = $cliente_id AND fecha = '$fecha'");
-
-if ($ya_asistio && $ya_asistio->num_rows > 0) {
-    echo "<div style='color: gold;'>⚠️ $nombre ya registró asistencia hoy.</div>";
-    exit;
-}
-
-// PASO 4: Verificar clases y vencimiento
-if ($clases > 0 && $vto >= $fecha) {
-    // Registrar asistencia y descontar clase
-    $conexion->query("INSERT INTO asistencias (cliente_id, fecha, hora) VALUES ($cliente_id, '$fecha', '$hora')");
-    $conexion->query("UPDATE membresias SET clases_disponibles = clases_disponibles - 1 WHERE id = $membresia_id");
-
-    echo "<div style='color: green;'>✅ Asistencia registrada</div>";
-    echo "<div style='color: white;'>📅 Vence: $vto<br>🎯 Clases restantes: " . ($clases - 1) . "<br>🕒 $hora</div>";
+    if ($check->num_rows > 0) {
+        $row = $check->fetch_assoc();
+        $conexion->query("UPDATE asistencias_profesor SET hora_salida = '$hora' WHERE id = " . $row['id']);
+        echo "<span style='color:gold;'>✅ Salida registrada.</span>";
+    } else {
+        $conexion->query("INSERT INTO asistencias_profesor (profesor_id, hora_entrada, fecha, gimnasio_id) VALUES ($profesor_id, '$hora', '$fecha', $gimnasio_id)");
+        echo "<span style='color:gold;'>✅ Ingreso registrado.</span>";
+    }
 } else {
-    echo "<div style='color: orange;'>⚠️ $nombre no tiene clases disponibles o está vencido</div>";
-    echo "<div style='color: white;'>📅 Vence: $vto<br>🎯 Clases: $clases</div>";
+    echo "<span style='color:red;'>❌ Tipo de código no válido.</span>";
 }
 ?>
