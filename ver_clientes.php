@@ -53,7 +53,15 @@ $resultado = $conexion->query("SELECT * FROM clientes WHERE gimnasio_id = $gimna
                 <td><?= htmlspecialchars($cliente['nombre']) ?></td>
                 <td><?= $cliente['dni'] ?></td>
                 <td><?= htmlspecialchars($cliente['disciplina']) ?></td>
-                <td><img class="qr" src="qr/qr_cliente_<?= $cliente['id'] ?>.png" alt="QR"></td>
+                <td>
+        <?php if (!empty($cliente['dni'])): ?>
+            <a href="generar_qr_cliente.php?id=<?= $cliente['id'] ?>" target="_blank" style="color: gold; text-decoration: none; font-weight: bold; background-color: #111; padding: 5px 10px; border-radius: 8px; border: 1px solid gold;">
+                Generar QR
+            </a>
+        <?php else: ?>
+            Sin DNI
+        <?php endif; ?>
+     src="qr/qr_cliente_<?= $cliente['id'] ?>.png" alt="QR"></td>
             </tr>
         <?php endwhile; ?>
     </table>
