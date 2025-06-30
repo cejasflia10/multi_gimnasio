@@ -1,72 +1,66 @@
+
 <?php
 if (session_status() === PHP_SESSION_NONE) session_start();
 include 'conexion.php';
+date_default_timezone_set('America/Argentina/Buenos_Aires');
 
 $mensaje = "";
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['dni'])) {
+if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST['dni'])) {
     $dni = trim($_POST['dni']);
-    $query = $conexion->query("SELECT * FROM clientes WHERE dni = '$dni'");
-    $cliente = $query->fetch_assoc();
+    $consulta = $conexion->query("SELECT * FROM clientes WHERE dni = '$dni'");
+    $cliente = $consulta->fetch_assoc();
 
-    if ($cliente) {
-        $_SESSION['cliente_id'] = $cliente['id'];
-        $_SESSION['cliente_dni'] = $cliente['dni'];
-        $_SESSION['cliente_nombre'] = $cliente['nombre'];
-        $_SESSION['cliente_apellido'] = $cliente['apellido'];
-        $_SESSION['gimnasio_id'] = $cliente['gimnasio_id']; // muy importante en multi-gimnasio
-
-        header("Location: panel_cliente.php");
-        exit;
+    if (!$cliente) {
+        $mensaje = "DNI no encontrado.";
     } else {
-        $mensaje = "DNI no encontrado. Por favor verificalo.";
+        $cliente_id = $cliente['id'];
+        $gimnasio_id = $cliente['gimnasio_id'];
+        $membresia_q = $conexion->query("SELECT * FROM membresias 
+            WHERE cliente_id = $cliente_id 
+            AND fecha_vencimiento >= CURDATE() 
+            AND clases_disponibles > 0
+            ORDER BY id DESC LIMIT 1");
+
+        if ($membresia_q->num_rows === 0) {
+            $mensaje = "No tenés una membresía activa o sin clases disponibles.";
+        } else {
+            $_SESSION['cliente_id'] = $cliente_id;
+            $_SESSION['cliente_nombre'] = $cliente['nombre'];
+            $_SESSION['cliente_apellido'] = $cliente['apellido'];
+            $_SESSION['gimnasio_id'] = $gimnasio_id;
+            $_SESSION['rol'] = 'cliente';
+
+            header("Location: panel_cliente.php");
+            exit;
+        }
     }
 }
 ?>
 
 <!DOCTYPE html>
-<html lang="es">
+<html>
 <head>
     <meta charset="UTF-8">
-    <title>Ingreso al Panel</title>
+    <title>Login Cliente</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <style>
-        body {
-            background-color: #000;
-            color: gold;
-            font-family: Arial, sans-serif;
-            padding: 30px;
-            text-align: center;
-        }
-        input, button {
-            width: 100%;
-            padding: 12px;
-            margin: 10px 0;
-            font-size: 18px;
-            border-radius: 8px;
-            border: none;
-        }
-        button {
-            background-color: gold;
-            color: black;
-            font-weight: bold;
-            cursor: pointer;
-        }
-        .error {
-            color: red;
-            margin-top: 15px;
-        }
+        body { background: #000; color: gold; font-family: Arial, sans-serif; text-align: center; padding: 30px; }
+        input, button { padding: 10px; font-size: 18px; margin: 10px; width: 80%; max-width: 300px; }
+        button { background-color: gold; color: black; border: none; border-radius: 6px; cursor: pointer; }
     </style>
 </head>
 <body>
-    <h2>🔐 Ingresá tu DNI</h2>
+
+    <h2>🎟️ Ingresar al Panel del Cliente</h2>
     <form method="POST">
-        <input type="text" name="dni" placeholder="DNI" required>
+        <input type="text" name="dni" placeholder="Ingresá tu DNI" required><br>
         <button type="submit">Ingresar</button>
     </form>
 
-    <?php if ($mensaje): ?>
-        <div class="error"><?= $mensaje ?></div>
+    <?php if (!empty($mensaje)): ?>
+        <p style="color:red;"><?= $mensaje ?></p>
     <?php endif; ?>
+
 </body>
 </html>
