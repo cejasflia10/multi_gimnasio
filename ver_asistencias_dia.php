@@ -6,15 +6,15 @@ date_default_timezone_set('America/Argentina/Buenos_Aires');
 $hoy = date('Y-m-d');
 $gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
 
-// CLIENTES
+// CLIENTES (usa campo 'hora')
 $clientes_q = $conexion->query("
-  SELECT c.apellido, c.nombre, a.hora_ingreso
+  SELECT c.apellido, c.nombre, a.hora
   FROM asistencias_clientes a
   JOIN clientes c ON a.cliente_id = c.id
   WHERE a.fecha = '$hoy' AND c.gimnasio_id = $gimnasio_id
 ");
 
-// PROFESORES
+// PROFESORES (usa hora_entrada y hora_salida)
 $profesores_q = $conexion->query("
   SELECT p.apellido, p.nombre, a.hora_entrada, a.hora_salida
   FROM asistencias_profesor a
@@ -65,7 +65,7 @@ $profesores_q = $conexion->query("
         <tr>
           <td><?php echo $c['apellido']; ?></td>
           <td><?php echo $c['nombre']; ?></td>
-          <td><?php echo $c['hora_ingreso']; ?></td>
+          <td><?php echo $c['hora']; ?></td>
         </tr>
       <?php endwhile; ?>
     <?php else: ?>
