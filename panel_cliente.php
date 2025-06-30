@@ -15,6 +15,18 @@ if (!$cliente_id) {
     die("ID de cliente no especificado.");
 }
 
+// Obtener el gimnasio desde sesión
+$gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
+$nombre_gimnasio = '';
+
+// Consultar el nombre del gimnasio
+if ($gimnasio_id > 0) {
+    $resultado = $conexion->query("SELECT nombre FROM gimnasios WHERE id = $gimnasio_id");
+    if ($fila = $resultado->fetch_assoc()) {
+        $nombre_gimnasio = $fila['nombre'];
+    }
+}
+
 $cliente = $conexion->query("SELECT * FROM clientes WHERE id = $cliente_id")->fetch_assoc();
 $datos = $conexion->query("SELECT * FROM datos_personales_cliente WHERE cliente_id = $cliente_id")->fetch_assoc();
 $graduaciones = $conexion->query("SELECT * FROM graduaciones_cliente WHERE cliente_id = $cliente_id ORDER BY fecha_examen DESC");
@@ -66,6 +78,7 @@ while ($row = $peso_evol->fetch_assoc()) {
 <body>
 <div class="container">
   <h2>Bienvenido <?= htmlspecialchars($cliente['nombre'] . ' ' . $cliente['apellido']) ?></h2>
+<h2 style="text-align: center; color: gold;">🏋️ Panel - <?= $nombre_gimnasio ?></h2>
 
 <?php
 $foto_path = (!empty($cliente['foto']) && file_exists($cliente['foto'])) ? $cliente['foto'] : 'fotos/default.jpg';
