@@ -11,23 +11,48 @@ $resultado = $conexion->query("SELECT * FROM planes WHERE gimnasio_id = $gimnasi
 <head>
     <meta charset="UTF-8">
     <title>Planes del Gimnasio</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
-        body { background-color: #111; color: gold; font-family: Arial, sans-serif; padding: 20px; }
-        table { width: 100%; border-collapse: collapse; color: gold; }
-        th, td { border: 1px solid gold; padding: 10px; text-align: center; }
-        th { background-color: #222; }
-        a, button { background: gold; color: black; padding: 6px 12px; text-decoration: none; border: none; cursor: pointer; }
+        body {
+            background-color: #111;
+            color: gold;
+            font-family: Arial, sans-serif;
+            padding: 20px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            color: gold;
+        }
+        th, td {
+            border: 1px solid gold;
+            padding: 10px;
+            text-align: center;
+        }
+        th {
+            background-color: #222;
+        }
+        a, button {
+            background: gold;
+            color: black;
+            padding: 6px 12px;
+            text-decoration: none;
+            border: none;
+            cursor: pointer;
+        }
     </style>
 </head>
 <body>
 <h1>Planes del Gimnasio</h1>
 <a href="agregar_plan.php">Crear nuevo plan</a>
 <a href="index.php">Volver al menú</a>
+
 <table>
     <tr>
         <th>Nombre</th>
         <th>Precio</th>
-        <th>Días disponibles</th>
+        <th>Clases Disponibles</th>
+        <th>Días Disponibles</th>
         <th>Duración (meses)</th>
         <th>Acciones</th>
     </tr>
@@ -35,6 +60,7 @@ $resultado = $conexion->query("SELECT * FROM planes WHERE gimnasio_id = $gimnasi
         <tr>
             <td><?= $fila['nombre'] ?></td>
             <td>$<?= number_format($fila['precio'], 2, ',', '.') ?></td>
+            <td><?= $fila['clases_disponibles'] ?></td>
             <td><?= $fila['dias_disponibles'] ?></td>
             <td><?= $fila['duracion'] ?></td>
             <td>
