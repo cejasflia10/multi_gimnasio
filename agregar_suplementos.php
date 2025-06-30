@@ -1,11 +1,9 @@
 <?php
 include 'conexion.php';
 include 'menu_horizontal.php';
-
-if (session_status() === PHP_SESSION_NONE) {
-    session_start();
-}
+if (session_status() === PHP_SESSION_NONE) session_start();
 $gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
+$categorias = $conexion->query("SELECT id, nombre FROM categorias WHERE gimnasio_id = $gimnasio_id");
 
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
     $nombre = $_POST['nombre'];
@@ -13,14 +11,14 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     $precio_compra = $_POST['precio_compra'];
     $precio_venta = $_POST['precio_venta'];
     $stock = $_POST['stock'];
+    $categoria_id = $_POST['categoria_id'];
 
-    $stmt = $conexion->prepare("INSERT INTO productos (nombre, precio) VALUES (?, ?)");
-    $stmt->bind_param("ssddii", $nombre, $tipo, $precio_compra, $precio_venta, $stock, $gimnasio_id);
-    if ($stmt->execute()) {
-        $mensaje = "✅ Suplemento registrado correctamente.";
-    } else {
-        $mensaje = "❌ Error al registrar: " . $stmt->error;
-    }
+    $stmt = $conexion->prepare("INSERT INTO suplementos (nombre, tipo, precio_compra, precio_venta, stock, categoria_id, gimnasio_id)
+                                VALUES (?, ?, ?, ?, ?, ?, ?)");
+    $stmt->bind_param("ssdddii", $nombre, $tipo, $precio_compra, $precio_venta, $stock, $categoria_id, $gimnasio_id);
+    $stmt->execute();
+    header("Location: ver_suplementos.php");
+    exit;
 }
 ?>
 
@@ -32,92 +30,70 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
   <title>Agregar Suplemento</title>
   <style>
     body {
-      background: #000;
+      background-color: #000;
       color: gold;
       font-family: Arial, sans-serif;
-      margin: 0;
-      padding: 0;
+      padding: 20px;
     }
-
     .container {
       max-width: 600px;
-      margin: 30px auto;
-      background-color: #111;
-      padding: 20px;
-      border-radius: 10px;
+      margin: auto;
     }
-
-    h2 {
-      text-align: center;
-      color: #ffc107;
-    }
-
-    label {
+    label, input, select, button {
       display: block;
-      margin-top: 15px;
-      font-weight: bold;
-    }
-
-    input {
       width: 100%;
+      margin-top: 10px;
       padding: 10px;
-      margin-top: 5px;
-      border-radius: 5px;
-      border: none;
+      font-size: 16px;
+      border-radius: 6px;
     }
-
-    .btn {
+    input, select {
+      background-color: #111;
+      color: gold;
+      border: 1px solid gold;
+    }
+    button {
+      background-color: gold;
+      color: black;
+      border: none;
       margin-top: 20px;
-      width: 100%;
-      padding: 10px;
-      background: #ffc107;
-      color: #000;
-      border: none;
-      border-radius: 5px;
       font-weight: bold;
       cursor: pointer;
     }
-
-    .mensaje {
-      margin-top: 20px;
+    h1 {
       text-align: center;
-      font-weight: bold;
-    }
-
-    @media (max-width: 768px) {
-      .container {
-        margin: 20px;
-      }
     }
   </style>
 </head>
 <body>
+  <div class="container">
+    <h1>Agregar Suplemento</h1>
+    <form method="POST">
+      <label>Nombre:</label>
+      <input type="text" name="nombre" required>
 
-<div class="container">
-  <h2>Agregar Suplemento</h2>
-  <form method="POST">
-    <label>Nombre:</label>
-    <input type="text" name="nombre" required>
+      <label>Tipo:</label>
+      <input type="text" name="tipo" placeholder="Proteína, Creatina, etc.">
 
-    <label>Tipo:</label>
-    <input type="text" name="tipo" required>
+      <label>Precio de Compra:</label>
+      <input type="number" step="0.01" name="precio_compra">
 
-    <label>Precio de Compra:</label>
-    <input type="number" step="0.01" name="precio_compra" required>
+      <label>Precio de Venta:</label>
+      <input type="number" step="0.01" name="precio_venta">
 
-    <label>Precio de Venta:</label>
-    <input type="number" step="0.01" name="precio_venta" required>
+      <label>Stock:</label>
+      <input type="number" name="stock">
 
-    <label>Stock:</label>
-    <input type="number" name="stock" required>
+      <label>Categoría:</label>
+      <select name="categoria_id" required>
+        <option value="">Seleccionar categoría</option>
+        <?php while($c = $categorias->fetch_assoc()): ?>
+          <option value="<?= $c['id'] ?>"><?= $c['nombre'] ?></option>
+        <?php endwhile; ?>
+      </select>
 
-    <button type="submit" class="btn">Agregar</button>
-  </form>
-
-  <?php if (!empty($mensaje)): ?>
-    <div class="mensaje"><?= $mensaje ?></div>
-  <?php endif; ?>
-</div>
-
+      <button type="submit">Guardar Suplemento</button>
+    </form>
+  </div>
 </body>
 </html>
