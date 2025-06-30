@@ -16,7 +16,6 @@ $membresia = $conexion->query("SELECT * FROM membresias WHERE id = $id AND gimna
 $planes = $conexion->query("SELECT * FROM planes WHERE gimnasio_id = $gimnasio_id");
 $clientes = $conexion->query("SELECT id, nombre, apellido, dni FROM clientes WHERE gimnasio_id = $gimnasio_id");
 ?>
-
 <!DOCTYPE html>
 <html lang="es">
 <head>
@@ -25,34 +24,10 @@ $clientes = $conexion->query("SELECT id, nombre, apellido, dni FROM clientes WHE
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
         body { background-color: #111; color: gold; font-family: Arial; padding: 20px; }
+        label { display: block; margin-top: 10px; }
+        input, select, button { width: 100%; padding: 10px; margin-top: 5px; background-color: #222; color: gold; border: 1px solid gold; border-radius: 5px; }
         h1 { text-align: center; }
-        form { max-width: 600px; margin: auto; }
-        label { display: block; margin-top: 15px; font-weight: bold; }
-        input, select, button {
-            width: 100%;
-            padding: 10px;
-            margin-top: 5px;
-            background-color: #222;
-            color: gold;
-            border: 1px solid gold;
-            border-radius: 5px;
-            font-size: 16px;
-        }
-        button {
-            background-color: gold;
-            color: black;
-            font-weight: bold;
-            cursor: pointer;
-            margin-top: 20px;
-        }
-        .botones {
-            display: flex;
-            gap: 10px;
-            margin-top: 20px;
-        }
-        .botones button {
-            flex: 1;
-        }
+        button { background-color: gold; color: black; font-weight: bold; cursor: pointer; margin-top: 20px; }
     </style>
 </head>
 <body>
@@ -70,28 +45,26 @@ $clientes = $conexion->query("SELECT id, nombre, apellido, dni FROM clientes WHE
     </select>
 
     <label>Plan:</label>
-    <select name="plan_id" id="plan_id" required>
-        <?php
-        $planes2 = $conexion->query("SELECT * FROM planes WHERE gimnasio_id = $gimnasio_id");
-        while ($p = $planes2->fetch_assoc()): ?>
+    <select name="plan_id" required>
+        <?php while ($p = $planes->fetch_assoc()): ?>
             <option value="<?= $p['id'] ?>" <?= $p['id'] == $membresia['plan_id'] ? 'selected' : '' ?>><?= $p['nombre'] ?></option>
         <?php endwhile; ?>
     </select>
 
     <label>Precio:</label>
-    <input type="number" step="0.01" name="precio" id="precio" value="<?= $membresia['precio'] ?>" required>
+    <input type="number" name="precio" value="<?= $membresia['precio'] ?>" required>
 
     <label>Clases Disponibles:</label>
-    <input type="number" name="clases_disponibles" id="clases_disponibles" value="<?= $membresia['clases_disponibles'] ?>" required>
+    <input type="number" name="clases_disponibles" value="<?= $membresia['clases_restantes'] ?>" required>
 
     <label>Fecha de Inicio:</label>
-    <input type="date" name="fecha_inicio" id="fecha_inicio" value="<?= $membresia['fecha_inicio'] ?>" required>
+    <input type="date" name="fecha_inicio" value="<?= $membresia['fecha_inicio'] ?>" required>
 
     <label>Fecha de Vencimiento:</label>
-    <input type="date" name="fecha_vencimiento" id="fecha_vencimiento" value="<?= $membresia['fecha_vencimiento'] ?>" required>
+    <input type="date" name="fecha_vencimiento" value="<?= $membresia['fecha_vencimiento'] ?>" required>
 
     <label>Otros Pagos:</label>
-    <input type="number" step="0.01" name="otros_pagos" value="<?= $membresia['otros_pagos'] ?>">
+    <input type="number" name="otros_pagos" value="<?= $membresia['otros_pagos'] ?>">
 
     <label>Forma de Pago:</label>
     <select name="forma_pago" required>
@@ -103,39 +76,40 @@ $clientes = $conexion->query("SELECT id, nombre, apellido, dni FROM clientes WHE
     </select>
 
     <label>Total:</label>
-    <input type="number" step="0.01" name="total" value="<?= $membresia['total'] ?>" required>
+    <input type="number" name="total" value="<?= $membresia['total'] ?>" required>
 
-    <div class="botones">
-        <button type="submit">Guardar Cambios</button>
-        <button type="button" onclick="window.location.href='ver_membresias.php'">Volver</button>
-    </div>
+    <button type="submit">Guardar Cambios</button>
+    <a href="ver_membresias.php"><button type="button">Volver</button></a>
 </form>
 
 <script>
-document.getElementById("plan_id").addEventListener("change", function() {
-    const planId = this.value;
-    const inicio = document.getElementById("fecha_inicio").value;
+document.querySelector('select[name="plan_id"]').addEventListener('change', function () {
+    let planId = this.value;
 
-    fetch("obtener_datos_plan.php?plan_id=" + planId)
-        .then(res => res.json())
+    fetch('obtener_datos_plan.php?plan_id=' + planId)
+        .then(response => response.json())
         .then(data => {
             if (!data.error) {
-                document.getElementById("precio").value = data.precio;
-                document.getElementById("clases_disponibles").value = data.clases;
+                document.querySelector('input[name="precio"]').value = data.precio;
+                document.querySelector('input[name="clases_disponibles"]').value = data.clases_disponibles ?? data.clases ?? 0;
 
-                if (inicio) {
-                    let fechaInicio = new Date(inicio);
-                    fechaInicio.setMonth(fechaInicio.getMonth() + parseInt(data.duracion));
-                    let venc = fechaInicio.toISOString().split("T")[0];
-                    document.getElementById("fecha_vencimiento").value = venc;
+                const inicio = document.querySelector('input[name="fecha_inicio"]').value;
+                if (inicio && data.duracion_meses) {
+                    const fecha = new Date(inicio);
+                    fecha.setMonth(fecha.getMonth() + parseInt(data.duracion_meses));
+                    const mes = (fecha.getMonth() + 1).toString().padStart(2, '0');
+                    const dia = fecha.getDate().toString().padStart(2, '0');
+                    document.querySelector('input[name="fecha_vencimiento"]').value = `${fecha.getFullYear()}-${mes}-${dia}`;
                 }
             } else {
-                alert("Error: " + data.error);
+                alert('No se pudo cargar información del plan.');
             }
         })
-        .catch(err => alert("Error al obtener datos del plan: " + err));
+        .catch(err => {
+            console.error('Error al obtener plan:', err);
+            alert('Error al conectar con el servidor.');
+        });
 });
 </script>
-
 </body>
 </html>
