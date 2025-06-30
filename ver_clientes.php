@@ -60,9 +60,10 @@ $resultado = $conexion->query("SELECT * FROM clientes WHERE gimnasio_id = $gimna
 
 <input type="text" id="buscador" class="buscador" placeholder="Buscar por nombre, apellido o DNI" onkeyup="buscarCliente()">
 
-<table>
+<<table>
     <thead>
         <tr>
+            <th>#</th>
             <th>Apellido</th>
             <th>Nombre</th>
             <th>DNI</th>
@@ -71,27 +72,27 @@ $resultado = $conexion->query("SELECT * FROM clientes WHERE gimnasio_id = $gimna
         </tr>
     </thead>
     <tbody>
-        <?php while ($row = $resultado->fetch_assoc()) {
-            $id = $row['id'];
-            $dni = $row['dni'];
-            $archivo_qr = "qr_cliente_" . $id . ".png";
-            $ruta_qr = "qr/" . $archivo_qr;
-            $qr_generado = file_exists($ruta_qr);
-            ?>
-            <tr>
-                <td><?= $row['apellido'] ?></td>
-                <td><?= $row['nombre'] ?></td>
-                <td><?= $row['dni'] ?></td>
-                <td><?= $row['disciplina'] ?></td>
-                <td>
-                    <?php if ($qr_generado): ?>
-                        <img src="<?= $ruta_qr ?>" alt="QR" width="60">
-                    <?php else: ?>
-                        <a class="btn-qr" href="generar_qr_individual.php?id=<?= $id ?>">Generar QR</a>
-                    <?php endif; ?>
-                </td>
-            </tr>
-        <?php } ?>
+        <?php
+        $n = 1;
+        while ($fila = $resultado->fetch_assoc()) {
+            echo "<tr>";
+            echo "<td>$n</td>";
+            echo "<td>{$fila['apellido']}</td>";
+            echo "<td>{$fila['nombre']}</td>";
+            echo "<td>{$fila['dni']}</td>";
+            echo "<td>{$fila['disciplina']}</td>";
+
+            $qrPath = "qr/qr_cliente_{$fila['id']}.png";
+            if (file_exists($qrPath)) {
+                echo "<td><img src='$qrPath' alt='QR' width='40'></td>";
+            } else {
+                echo "<td><a class='btn' href='generar_qr_individual.php?id={$fila['id']}'>Generar QR</a></td>";
+            }
+
+            echo "</tr>";
+            $n++;
+        }
+        ?>
     </tbody>
 </table>
 

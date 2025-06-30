@@ -95,10 +95,10 @@ $resultado = $conexion->query($query);
 <body>
 
 <h1>Listado de Membresías</h1>
-
 <table>
     <thead>
         <tr>
+            <th>#</th>
             <th>Cliente</th>
             <th>Plan</th>
             <th>Inicio</th>
@@ -109,11 +109,14 @@ $resultado = $conexion->query($query);
         </tr>
     </thead>
     <tbody>
-        <?php while ($fila = $resultado->fetch_assoc()):
+        <?php
+        $n = 1;
+        while ($fila = $resultado->fetch_assoc()):
             $vencida = (strtotime($fila['fecha_vencimiento']) < strtotime(date("Y-m-d"))) ? 'vencida' : '';
             $id_membresia = $fila['id'];
         ?>
             <tr class="<?= $vencida ?>">
+                <td><?= $n ?></td>
                 <td><?= $fila['apellido'] . ', ' . $fila['nombre'] ?></td>
                 <td><?= $fila['nombre_plan'] ?></td>
                 <td><?= $fila['fecha_inicio'] ?></td>
@@ -126,7 +129,7 @@ $resultado = $conexion->query($query);
                     <a href="renovar_membresia.php?id=<?= $id_membresia ?>" class="renovar">♻️</a>
                 </td>
             </tr>
-        <?php endwhile; ?>
+        <?php $n++; endwhile; ?>
     </tbody>
 </table>
 
