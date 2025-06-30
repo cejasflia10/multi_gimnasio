@@ -16,10 +16,10 @@ $clientes_q = $conexion->query("
 
 // PROFESORES
 $profesores_q = $conexion->query("
-  SELECT p.apellido, p.nombre, a.hora_ingreso, a.hora_salida
+  SELECT p.apellido, p.nombre, a.hora_entrada, a.hora_salida
   FROM asistencias_profesor a
   JOIN profesores p ON a.profesor_id = p.id
-  WHERE a.fecha = '$hoy' AND p.gimnasio_id = $gimnasio_id
+  WHERE a.fecha = '$hoy' AND a.id_gimnasio = $gimnasio_id
 ");
 ?>
 
@@ -41,16 +41,16 @@ $profesores_q = $conexion->query("
       color: gold;
     }
     table {
-      width: 90%;
+      width: 95%;
       margin: 10px auto;
       border-collapse: collapse;
     }
     th, td {
       border: 1px solid gold;
-      padding: 8px;
+      padding: 6px;
     }
     th {
-      background-color: #222;
+      background: #222;
     }
   </style>
 </head>
@@ -60,26 +60,34 @@ $profesores_q = $conexion->query("
   <h2>Clientes</h2>
   <table>
     <tr><th>Apellido</th><th>Nombre</th><th>Hora Ingreso</th></tr>
-    <?php while ($c = $clientes_q->fetch_assoc()): ?>
-      <tr>
-        <td><?php echo $c['apellido']; ?></td>
-        <td><?php echo $c['nombre']; ?></td>
-        <td><?php echo $c['hora_ingreso']; ?></td>
-      </tr>
-    <?php endwhile; ?>
+    <?php if ($clientes_q->num_rows > 0): ?>
+      <?php while ($c = $clientes_q->fetch_assoc()): ?>
+        <tr>
+          <td><?php echo $c['apellido']; ?></td>
+          <td><?php echo $c['nombre']; ?></td>
+          <td><?php echo $c['hora_ingreso']; ?></td>
+        </tr>
+      <?php endwhile; ?>
+    <?php else: ?>
+      <tr><td colspan="3">Sin registros</td></tr>
+    <?php endif; ?>
   </table>
 
   <h2>Profesores</h2>
   <table>
     <tr><th>Apellido</th><th>Nombre</th><th>Ingreso</th><th>Egreso</th></tr>
-    <?php while ($p = $profesores_q->fetch_assoc()): ?>
-      <tr>
-        <td><?php echo $p['apellido']; ?></td>
-        <td><?php echo $p['nombre']; ?></td>
-        <td><?php echo $p['hora_ingreso']; ?></td>
-        <td><?php echo $p['hora_salida'] ?: '-'; ?></td>
-      </tr>
-    <?php endwhile; ?>
+    <?php if ($profesores_q->num_rows > 0): ?>
+      <?php while ($p = $profesores_q->fetch_assoc()): ?>
+        <tr>
+          <td><?php echo $p['apellido']; ?></td>
+          <td><?php echo $p['nombre']; ?></td>
+          <td><?php echo $p['hora_entrada']; ?></td>
+          <td><?php echo $p['hora_salida'] ?: '-'; ?></td>
+        </tr>
+      <?php endwhile; ?>
+    <?php else: ?>
+      <tr><td colspan="4">Sin registros</td></tr>
+    <?php endif; ?>
   </table>
 </body>
 </html>
