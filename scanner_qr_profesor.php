@@ -2,7 +2,7 @@
 include 'conexion.php';
 
 if ($_SERVER["REQUEST_METHOD"] === "POST") {
-    $codigo = $_POST["codigo"] ?? "";
+$codigo = str_replace('-', '', $_POST['codigo'] ?? '');
 
     if (str_starts_with($codigo, "P")) {
         $dni = substr($codigo, 1);
