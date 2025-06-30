@@ -175,6 +175,7 @@
         <a href="registro_qr_multi.php">Escanear QR Ingreso/Egreso</a>
         <a href="ver_asistencias_dia.php">Ver Asistencias del Día</a>
         <a href="reporte_horas_profesores.php">Reporte Horas Profesores</a>
+        <a href="ver_qr_profesores.php">Códigos QR</a>
         <a href="configurar_precios_hora.php">Configurar Precio Hora</a>    <a href="scanner_qr.php">Escanear QR</a>
 </div>
 
