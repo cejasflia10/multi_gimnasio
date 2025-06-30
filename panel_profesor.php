@@ -229,7 +229,84 @@ if (isset($_POST['guardar_competencia']) && $profesor_id) {
             <div class="mensaje"><?= $mensaje ?></div>
         <?php endif; ?>
     </div>
-    
+    <h2 style="text-align: center;">Mis Turnos y Alumnos</h2>
+<h2 style="text-align: center;">Mis Turnos y Alumnos</h2>
+
+<?php
+$turnos = $conexion->query("
+    SELECT t.*, d.nombre AS disciplina 
+    FROM turnos t
+    LEFT JOIN disciplinas d ON t.disciplina_id = d.id
+    WHERE t.profesor_id = $profesor_id AND t.gimnasio_id = $gimnasio_id
+    ORDER BY FIELD(t.dia, 'Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'), t.hora_inicio
+");
+
+while ($turno = $turnos->fetch_assoc()):
+    $turno_id = $turno['id'];
+    $alumnos = $conexion->query("
+        SELECT c.apellido, c.nombre, c.dni 
+        FROM reservas r
+        JOIN clientes c ON r.cliente_id = c.id
+        WHERE r.turno_id = $turno_id AND r.estado = 'activo'
+    ");
+?>
+    <div style="background:#222; color:gold; margin:10px 0; padding:15px; border-radius:10px;">
+        <strong><?= $turno['dia'] ?> - <?= substr($turno['hora_inicio'], 0, 5) ?> a <?= substr($turno['hora_fin'], 0, 5) ?></strong><br>
+        Disciplina: <?= $turno['disciplina'] ?? 'No asignada' ?><br>
+        Cupos: <?= $turno['cupos'] ?><br>
+        <div style="margin-top:10px;">
+            <u>Alumnos anotados:</u>
+            <?php if ($alumnos->num_rows > 0): ?>
+                <ul style="padding-left:20px; color:white;">
+                    <?php while ($a = $alumnos->fetch_assoc()): ?>
+                        <li><?= $a['apellido'] ?>, <?= $a['nombre'] ?> (DNI: <?= $a['dni'] ?>)</li>
+                    <?php endwhile; ?>
+                </ul>
+            <?php else: ?>
+                <p style="color:gray;">No hay alumnos reservados.</p>
+            <?php endif; ?>
+        </div>
+    </div>
+<?php endwhile; ?>
+
+<?php
+$turnos = $conexion->query("
+    SELECT t.*, d.nombre AS disciplina 
+    FROM turnos t
+    LEFT JOIN disciplinas d ON t.disciplina_id = d.id
+    WHERE t.profesor_id = $profesor_id AND t.gimnasio_id = $gimnasio_id
+    ORDER BY FIELD(t.dia, 'Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'), t.hora_inicio
+");
+
+while ($turno = $turnos->fetch_assoc()):
+    $turno_id = $turno['id'];
+    $alumnos = $conexion->query("
+        SELECT c.apellido, c.nombre, c.dni 
+        FROM reservas r
+        JOIN clientes c ON r.cliente_id = c.id
+        WHERE r.turno_id = $turno_id AND r.estado = 'activo'
+    ");
+?>
+<
+    <div style="background:#222; color:gold; margin:10px 0; padding:15px; border-radius:10px;">
+        <strong><?= $turno['dia'] ?> - <?= substr($turno['hora_inicio'], 0, 5) ?> a <?= substr($turno['hora_fin'], 0, 5) ?></strong><br>
+        Disciplina: <?= $turno['disciplina'] ?? 'No asignada' ?><br>
+        Cupos: <?= $turno['cupos'] ?><br>
+        <div style="margin-top:10px;">
+            <u>Alumnos anotados:</u>
+            <?php if ($alumnos->num_rows > 0): ?>
+                <ul style="padding-left:20px; color:white;">
+                    <?php while ($a = $alumnos->fetch_assoc()): ?>
+                        <li><?= $a['apellido'] ?>, <?= $a['nombre'] ?> (DNI: <?= $a['dni'] ?>)</li>
+                    <?php endwhile; ?>
+                </ul>
+            <?php else: ?>
+                <p style="color:gray;">No hay alumnos reservados.</p>
+            <?php endif; ?>
+        </div>
+    </div>
+<?php endwhile; ?>
+
 <?php else: ?>
     <div class="container">
         <h3><?= $_SESSION['profesor_nombre'] ?></h3>
