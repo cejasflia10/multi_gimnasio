@@ -1,24 +1,25 @@
 <?php
-if (session_status() === PHP_SESSION_NONE) {
-    session_start();
-}
+if (session_status() === PHP_SESSION_NONE) session_start();
 include 'conexion.php';
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $dni = trim($_POST['dni'] ?? '');
+$mensaje = "";
 
-    $query = "SELECT * FROM clientes WHERE dni = '$dni'";
-    $resultado = $conexion->query($query);
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['dni'])) {
+    $dni = trim($_POST['dni']);
+    $query = $conexion->query("SELECT * FROM clientes WHERE dni = '$dni'");
+    $cliente = $query->fetch_assoc();
 
-    if ($resultado && $resultado->num_rows > 0) {
-        $cliente = $resultado->fetch_assoc();
-        $_SESSION['rol'] = 'cliente';
+    if ($cliente) {
         $_SESSION['cliente_id'] = $cliente['id'];
+        $_SESSION['cliente_dni'] = $cliente['dni'];
+        $_SESSION['cliente_nombre'] = $cliente['nombre'];
+        $_SESSION['cliente_apellido'] = $cliente['apellido'];
+        $_SESSION['gimnasio_id'] = $cliente['gimnasio_id']; // muy importante en multi-gimnasio
 
         header("Location: panel_cliente.php");
         exit;
     } else {
-        $error = "DNI no encontrado. Verifica los datos.";
+        $mensaje = "DNI no encontrado. Por favor verificalo.";
     }
 }
 ?>
@@ -27,38 +28,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>Ingreso Cliente</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ingreso al Panel</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
     <style>
         body {
-            background-color: #111;
+            background-color: #000;
             color: gold;
             font-family: Arial, sans-serif;
+            padding: 30px;
             text-align: center;
-            padding: 50px;
         }
-        h2 {
-            color: gold;
-        }
-        form {
-            margin-top: 20px;
-        }
-        input[type="text"] {
-            padding: 10px;
-            font-size: 16px;
-            width: 80%;
-            max-width: 300px;
+        input, button {
+            width: 100%;
+            padding: 12px;
+            margin: 10px 0;
+            font-size: 18px;
+            border-radius: 8px;
             border: none;
-            border-radius: 5px;
         }
-        input[type="submit"] {
-            margin-top: 15px;
-            padding: 10px 20px;
-            font-size: 16px;
+        button {
             background-color: gold;
-            border: none;
             color: black;
-            border-radius: 5px;
+            font-weight: bold;
             cursor: pointer;
         }
         .error {
@@ -68,16 +59,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     </style>
 </head>
 <body>
-
-    <h2>Ingreso de Cliente</h2>
+    <h2>🔐 Ingresá tu DNI</h2>
     <form method="POST">
-        <input type="text" name="dni" placeholder="Ingresá tu DNI" required><br>
-        <input type="submit" value="Ingresar">
+        <input type="text" name="dni" placeholder="DNI" required>
+        <button type="submit">Ingresar</button>
     </form>
 
-    <?php if (isset($error)): ?>
-        <p class="error"><?= $error ?></p>
+    <?php if ($mensaje): ?>
+        <div class="error"><?= $mensaje ?></div>
     <?php endif; ?>
-
 </body>
 </html>
