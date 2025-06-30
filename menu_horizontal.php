@@ -143,7 +143,10 @@ if (session_status() === PHP_SESSION_NONE) { session_start(); } ?>
     <a href="agregar_producto.php">Agregar Producto</a>
     <a href="agregar_indumentaria.php">Agregar Indumentaria</a>
     <a href="agregar_suplementos.php">Agregar Suplementos</a>
+    <a href="ver_categorias.php">Categorías</a>
+
 </div>
+
 <!-- MENÚ LATERAL PANEL CLIENTES -->
 <div id="menu-panel" class="menu-lateral">
     <h3>Panel Cliente</h3>
