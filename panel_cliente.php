@@ -395,7 +395,7 @@ while ($row = $peso_q->fetch_assoc()) {
 <div class="card">
   <h3>📅 Reservar Turno</h3>
   <p>Accedé a tus turnos disponibles y reservá tu lugar semanal.</p>
-  <a href="cliente_turnos.php" style="background:gold;color:black;padding:10px 15px;border-radius:5px;font-weight:bold;text-decoration:none;">Ver Turnos</a>
+  <a href="reservar_turnos.php" style="background:gold;color:black;padding:10px 15px;border-radius:5px;font-weight:bold;text-decoration:none;">Ver Turnos</a>
 </div>
 
     <?php if ($comp->num_rows > 0): ?>
@@ -426,7 +426,7 @@ while ($row = $peso_q->fetch_assoc()) {
 
   <div class="section">
     <h3>📅 Turnos Reservados</h3>
-    <a class="btn" href="cliente_reservas.php">Reservar nuevo turno</a>
+    <a class="btn" href="ver_turnos.php">Reservar nuevo turno</a>
     <table>
       <tr><th>Fecha</th><th>Hora</th><th>Profesor</th></tr>
       <?php while ($r = $reservas->fetch_assoc()): ?>
