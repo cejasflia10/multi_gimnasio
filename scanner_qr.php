@@ -1,82 +1,34 @@
-<!DOCTYPE html>
-<html lang="es">
-<head>
-  <meta charset="UTF-8">
-  <title>Escaneo QR</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
-  <style>
-    body {
-      background-color: black;
-      color: gold;
-      text-align: center;
-      font-family: Arial, sans-serif;
-      padding: 20px;
-    }
-    #reader {
-      width: 100%;
-      max-width: 400px;
-      margin: auto;
-    }
-    #resultado {
-      margin-top: 20px;
-      font-size: 20px;
-    }
-  </style>
-</head>
-<body>
-  <h1>Escaneo QR</h1>
-  <div id="reader"></div>
-  <div id="resultado"></div>
+<?php
+if (session_status() === PHP_SESSION_NONE) session_start();
+include 'conexion.php';
 
-  <script>
-    function iniciarEscaneo() {
-      const scanner = new Html5Qrcode("reader");
-      const config = { fps: 10, qrbox: 250 };
+$codigo = $_GET['codigo'] ?? '';
 
-      scanner.start(
-        { facingMode: "environment" },
-        config,
-        (decodedText, decodedResult) => {
-          scanner.stop();
+if (empty($codigo) || $codigo[0] !== 'P') {
+    exit('Código inválido.');
+}
 
-          let codigo = decodedText.trim();
-          let tipo = codigo.charAt(0); // "P" o "C"
-          let dni = codigo.substring(1);
+$dni = substr($codigo, 1);
+$gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
 
-          let endpoint = "registrar_asistencia_qr.php";
-          let postData = "dni=" + encodeURIComponent(dni) + "&tipo=" + tipo;
+$resultado = $conexion->query("SELECT id FROM profesores WHERE dni = '$dni' AND gimnasio_id = $gimnasio_id");
+if ($resultado->num_rows === 0) {
+    exit("Profesor no encontrado (DNI: $dni) en este gimnasio.");
+}
 
-          fetch(endpoint, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/x-www-form-urlencoded"
-            },
-            body: postData
-          })
-          .then(response => response.text())
-          .then(data => {
-            document.getElementById("resultado").innerHTML = data;
-            setTimeout(() => {
-              document.getElementById("resultado").innerHTML = "";
-              iniciarEscaneo();
-            }, 4000);
-          })
-          .catch(error => {
-            document.getElementById("resultado").innerHTML = "<span style='color:red;'>❌ Error al registrar asistencia.</span>";
-            setTimeout(() => {
-              document.getElementById("resultado").innerHTML = "";
-              iniciarEscaneo();
-            }, 4000);
-          });
-        },
-        (errorMessage) => {
-          // console.log(errorMessage);
-        }
-      );
-    }
+$profesor = $resultado->fetch_assoc();
+$profesor_id = $profesor['id'];
+$fecha = date('Y-m-d');
 
-    iniciarEscaneo();
-  </script>
-</body>
-</html>
+// Verificar si ya hay entrada hoy sin salida
+$revisar = $conexion->query("SELECT * FROM asistencias_profesor WHERE profesor_id = $profesor_id AND fecha = '$fecha' AND hora_entrada IS NOT NULL AND hora_salida IS NULL");
+if ($revisar->num_rows > 0) {
+    // Registrar salida
+    $conexion->query("UPDATE asistencias_profesor SET hora_salida = CURTIME() WHERE profesor_id = $profesor_id AND fecha = '$fecha' AND hora_salida IS NULL");
+    echo "<script>alert('✅ Salida registrada correctamente.'); window.location.href='ver_asistencias_dia.php';</script>";
+} else {
+    // Registrar ingreso
+    $conexion->query("INSERT INTO asistencias_profesor (profesor_id, hora_entrada, fecha, gimnasio_id) VALUES ($profesor_id, CURTIME(), '$fecha', $gimnasio_id)");
+    echo "<script>alert('✅ Ingreso registrado correctamente.'); window.location.href='ver_asistencias_dia.php';</script>";
+}
+?>
