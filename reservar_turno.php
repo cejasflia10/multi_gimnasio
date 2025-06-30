@@ -1,17 +1,34 @@
+
 <?php
 session_start();
-include("conexion.php");
+include 'conexion.php';
 
 $cliente_id = $_SESSION['cliente_id'] ?? 0;
-$gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
+if ($cliente_id == 0) {
+    die("Acceso denegado.");
+}
 
-// Obtener todos los turnos disponibles (puedes filtrar por disciplina si querés)
+$hoy = date('Y-m-d');
+$membresia = $conexion->query("
+    SELECT * FROM membresias 
+    WHERE cliente_id = $cliente_id 
+      AND fecha_vencimiento >= '$hoy'
+      AND clases_disponibles > 0
+    ORDER BY fecha_vencimiento DESC LIMIT 1
+")->fetch_assoc();
+
+if (!$membresia) {
+    die("<h2>No tenés una membresía activa o no tenés clases disponibles.</h2>");
+}
+
 $turnos = $conexion->query("
-    SELECT t.*, p.apellido AS profesor 
-    FROM turnos t 
-    JOIN profesores p ON t.profesor_id = p.id 
-    WHERE t.gimnasio_id = $gimnasio_id
-    ORDER BY FIELD(t.dia, 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'), t.hora_inicio
+    SELECT t.id, d.nombre AS dia, h.hora_inicio, h.hora_fin, p.apellido AS profesor, t.cupo_maximo,
+        (SELECT COUNT(*) FROM reservas WHERE turno_id = t.id AND cliente_id = $cliente_id AND fecha = CURDATE()) AS ya_reservado
+    FROM turnos t
+    JOIN dias d ON t.dia_id = d.id
+    JOIN horarios h ON t.horario_id = h.id
+    JOIN profesores p ON t.profesor_id = p.id
+    ORDER BY t.dia_id, h.hora_inicio
 ");
 ?>
 
@@ -23,69 +40,54 @@ $turnos = $conexion->query("
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
         body {
-            background-color: #111;
+            background: #000;
             color: gold;
             font-family: Arial, sans-serif;
             padding: 20px;
-            margin: 0;
         }
-        h2 {
-            text-align: center;
-            margin-bottom: 20px;
-        }
+        h1 { text-align: center; }
         .turno {
-            background-color: #222;
-            border: 1px solid #444;
-            border-radius: 10px;
-            margin: 10px 0;
+            border: 1px solid gold;
             padding: 15px;
-            box-shadow: 0 0 10px #000;
+            margin-bottom: 15px;
+            border-radius: 10px;
         }
-        .turno strong {
-            color: #fff;
-        }
-        .btn-reservar {
+        .btn {
             background-color: gold;
-            color: #000;
-            border: none;
-            padding: 10px 14px;
-            border-radius: 8px;
+            color: black;
             font-weight: bold;
+            padding: 10px;
+            border: none;
             cursor: pointer;
             margin-top: 10px;
-            width: 100%;
         }
-        .btn-reservar:hover {
-            background-color: #ffc107;
+        .btn:disabled {
+            background: gray;
+            cursor: not-allowed;
         }
-        @media screen and (max-width: 600px) {
-            .turno {
-                padding: 12px;
-                font-size: 14px;
-            }
-            .btn-reservar {
-                font-size: 14px;
-                padding: 8px;
-            }
+        @media (max-width: 600px) {
+            .turno { font-size: 16px; }
         }
     </style>
 </head>
 <body>
+    <h1>Reservar Turno</h1>
 
-<h2>Reservar Turno</h2>
-
-<?php while ($turno = $turnos->fetch_assoc()): ?>
-    <form method="POST" action="reservar_turno.php">
+    <?php while ($t = $turnos->fetch_assoc()): ?>
         <div class="turno">
-            <div><strong>Día:</strong> <?= $turno['dia'] ?></div>
-            <div><strong>Hora:</strong> <?= substr($turno['hora_inicio'], 0, 5) ?> a <?= substr($turno['hora_fin'], 0, 5) ?></div>
-            <div><strong>Profesor:</strong> <?= $turno['profesor'] ?></div>
-            <div><strong>Cupos:</strong> <?= $turno['cupos'] ?></div>
-            <input type="hidden" name="turno_id" value="<?= $turno['id'] ?>">
-            <button type="submit" class="btn-reservar">Reservar</button>
-        </div>
-    </form>
-<?php endwhile; ?>
+            <strong><?= $t['dia'] ?> - <?= $t['hora_inicio'] ?> a <?= $t['hora_fin'] ?></strong><br>
+            Profesor: <?= $t['profesor'] ?><br>
+            Cupo máximo: <?= $t['cupo_maximo'] ?><br>
 
+            <?php if ($t['ya_reservado'] > 0): ?>
+                <button class="btn" disabled>Ya reservaste este turno</button>
+            <?php else: ?>
+                <form action="guardar_reserva.php" method="POST">
+                    <input type="hidden" name="turno_id" value="<?= $t['id'] ?>">
+                    <button class="btn" type="submit">Reservar</button>
+                </form>
+            <?php endif; ?>
+        </div>
+    <?php endwhile; ?>
 </body>
 </html>
