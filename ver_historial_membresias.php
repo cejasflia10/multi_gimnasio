@@ -1,6 +1,7 @@
 <?php
 if (session_status() === PHP_SESSION_NONE) session_start();
 include 'conexion.php';
+include 'menu_horizontal.php';
 
 if (!isset($_GET['cliente_id']) || !is_numeric($_GET['cliente_id'])) {
     die("ID de cliente no especificado.");
