@@ -1,46 +1,54 @@
-<!DOCTYPE html>
-<html lang="es">
-<head>
-  <meta charset="UTF-8">
-  <title>Escaneo QR Profesor</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
-  <style>
-    body {
-      background-color: #000;
-      color: gold;
-      font-family: Arial;
-      text-align: center;
-      padding: 20px;
-    }
-    #reader {
-      width: 300px;
-      margin: auto;
-      border: 3px solid gold;
-      border-radius: 10px;
-    }
-  </style>
-</head>
-<body>
-  <h1>📸 QR Profesor</h1>
-  <div id="reader"></div>
+<?php
+include 'conexion.php';
 
-  <form id="envio" method="POST" action="registrar_asistencia_profesor.php" style="display:none;">
-    <input type="hidden" name="codigo" id="codigo">
-  </form>
+if (!isset($_GET['codigo'])) {
+    die("Código inválido.");
+}
 
-  <script>
-    function onScanSuccess(decodedText) {
-      if (decodedText.startsWith('P')) {
-        document.getElementById('codigo').value = decodedText;
-        document.getElementById('envio').submit();
-      } else {
-        alert("QR no válido (debe comenzar con P).");
-      }
-    }
+$codigo = $_GET['codigo'];
 
-    const html5QrCode = new Html5Qrcode("reader");
-    html5QrCode.start({ facingMode: "environment" }, { fps: 10, qrbox: 250 }, onScanSuccess);
-  </script>
-</body>
-</html>
+// Verificar que comience con 'P' y extraer DNI
+if (strpos($codigo, 'P') !== 0) {
+    die("Código inválido.");
+}
+
+$dni = substr($codigo, 1);
+$dni = intval($dni);
+
+// Buscar profesor
+$query = $conexion->query("SELECT * FROM profesores WHERE dni = $dni");
+if ($query->num_rows === 0) {
+    die("Profesor no encontrado (DNI: $dni).");
+}
+
+$profesor = $query->fetch_assoc();
+$profesor_id = $profesor['id'];
+$gimnasio_id = $profesor['gimnasio_id'];
+
+// Buscar asistencia del día
+$hoy = date('Y-m-d');
+$asistencia = $conexion->query("
+    SELECT * FROM asistencias_profesor 
+    WHERE profesor_id = $profesor_id 
+    AND fecha = '$hoy'
+")->fetch_assoc();
+
+if ($asistencia) {
+    // Registrar salida
+    $hora = date('H:i:s');
+    $conexion->query("
+        UPDATE asistencias_profesor 
+        SET hora_salida = '$hora' 
+        WHERE id = {$asistencia['id']}
+    ");
+    echo "<script>alert('✅ Salida registrada correctamente.'); location.href='ver_asistencias_dia.php';</script>";
+} else {
+    // Registrar ingreso
+    $hora = date('H:i:s');
+    $conexion->query("
+        INSERT INTO asistencias_profesor (profesor_id, hora_entrada, gimnasio_id, fecha) 
+        VALUES ($profesor_id, '$hora', $gimnasio_id, '$hoy')
+    ");
+    echo "<script>alert('✅ Ingreso registrado correctamente.'); location.href='ver_asistencias_dia.php';</script>";
+}
+?>
