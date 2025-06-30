@@ -1,34 +1,59 @@
 <?php
-if (session_status() === PHP_SESSION_NONE) session_start();
-include 'conexion.php';
-
-$codigo = $_GET['codigo'] ?? '';
-
-if (empty($codigo) || $codigo[0] !== 'P') {
-    exit('Código inválido.');
-}
-
-$dni = substr($codigo, 1);
-$gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
-
-$resultado = $conexion->query("SELECT id FROM profesores WHERE dni = '$dni' AND gimnasio_id = $gimnasio_id");
-if ($resultado->num_rows === 0) {
-    exit("Profesor no encontrado (DNI: $dni) en este gimnasio.");
-}
-
-$profesor = $resultado->fetch_assoc();
-$profesor_id = $profesor['id'];
-$fecha = date('Y-m-d');
-
-// Verificar si ya hay entrada hoy sin salida
-$revisar = $conexion->query("SELECT * FROM asistencias_profesor WHERE profesor_id = $profesor_id AND fecha = '$fecha' AND hora_entrada IS NOT NULL AND hora_salida IS NULL");
-if ($revisar->num_rows > 0) {
-    // Registrar salida
-    $conexion->query("UPDATE asistencias_profesor SET hora_salida = CURTIME() WHERE profesor_id = $profesor_id AND fecha = '$fecha' AND hora_salida IS NULL");
-    echo "<script>alert('✅ Salida registrada correctamente.'); window.location.href='ver_asistencias_dia.php';</script>";
-} else {
-    // Registrar ingreso
-    $conexion->query("INSERT INTO asistencias_profesor (profesor_id, hora_entrada, fecha, gimnasio_id) VALUES ($profesor_id, CURTIME(), '$fecha', $gimnasio_id)");
-    echo "<script>alert('✅ Ingreso registrado correctamente.'); window.location.href='ver_asistencias_dia.php';</script>";
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
 }
 ?>
+
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Escaneo QR</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+    <style>
+        body {
+            background-color: black;
+            color: gold;
+            font-family: Arial, sans-serif;
+            text-align: center;
+            padding: 20px;
+        }
+        #reader {
+            width: 100%;
+            max-width: 400px;
+            margin: 20px auto;
+        }
+    </style>
+</head>
+<body>
+    <h1>Escaneo QR</h1>
+    <div id="reader"></div>
+
+    <form id="formQR" method="POST" action="registrar_asistencia_qr.php" style="display:none;">
+        <input type="hidden" name="codigo" id="codigoQR">
+    </form>
+
+    <script>
+        function onScanSuccess(decodedText) {
+            document.getElementById('codigoQR').value = decodedText;
+            document.getElementById('formQR').submit();
+        }
+
+        function onScanFailure(error) {
+            // Error silencioso
+        }
+
+        const html5QrcodeScanner = new Html5QrcodeScanner(
+            "reader", {
+                fps: 10,
+                qrbox: 250,
+                rememberLastUsedCamera: true,
+                supportedScanTypes: [Html5QrcodeScanType.SCAN_TYPE_CAMERA]
+            },
+            false
+        );
+        html5QrcodeScanner.render(onScanSuccess, onScanFailure);
+    </script>
+</body>
+</html>
