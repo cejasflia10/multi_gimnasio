@@ -287,7 +287,6 @@ while ($turno = $turnos->fetch_assoc()):
         WHERE r.turno_id = $turno_id AND r.estado = 'activo'
     ");
 ?>
-<
     <div style="background:#222; color:gold; margin:10px 0; padding:15px; border-radius:10px;">
         <strong><?= $turno['dia'] ?> - <?= substr($turno['hora_inicio'], 0, 5) ?> a <?= substr($turno['hora_fin'], 0, 5) ?></strong><br>
         Disciplina: <?= $turno['disciplina'] ?? 'No asignada' ?><br>
