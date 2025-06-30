@@ -1,6 +1,7 @@
 <?php
 session_start();
 include 'conexion.php';
+include 'menu_horizontal.php';
 
 $gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
 $resultado = $conexion->query("SELECT * FROM clientes WHERE gimnasio_id = $gimnasio_id");

@@ -1,6 +1,6 @@
 <?php
 include 'conexion.php';
-include 'menu.php';
+include 'menu_horizontal.php';
 
 // Iniciar sesión y validar que exista gimnasio_id
 if (session_status() === PHP_SESSION_NONE) session_start();

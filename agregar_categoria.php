@@ -1,6 +1,7 @@
 <?php include 'verificar_sesion.php'; ?>
 <?php
 include 'conexion.php';
+include 'menu_horizontal.php';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $nombre = trim($_POST['nombre']);

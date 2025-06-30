@@ -1,5 +1,6 @@
 <?php
 include 'conexion.php';
+include 'menu_horizontal.php';
 
 if (!isset($_GET['plan_id'])) {
     echo json_encode(['error' => 'ID de plan no especificado']);
