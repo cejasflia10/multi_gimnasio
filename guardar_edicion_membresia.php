@@ -1,3 +1,4 @@
+
 <?php
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
@@ -9,15 +10,19 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
     $gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
 
     $plan_id = $_POST['plan_id'];
-    $adicional_id = $_POST['adicional_id'] ?? null;
     $fecha_inicio = $_POST['fecha_inicio'];
     $fecha_vencimiento = $_POST['fecha_vencimiento'];
-    $clases_restantes = $_POST['clases_restantes'];
+    $clases_disponibles = $_POST['clases_disponibles'];
     $otros_pagos = $_POST['otros_pagos'] ?? 0;
-    $metodo_pago = $_POST['metodo_pago'];
+    $forma_pago = $_POST['forma_pago'];
     $total = $_POST['total'];
 
-    // Verificar que la membresía pertenezca al gimnasio
+    if (!$id || !$plan_id || !$fecha_inicio || !$fecha_vencimiento || !$forma_pago || !$total) {
+        echo "<script>alert('Faltan datos obligatorios.'); history.back();</script>";
+        exit;
+    }
+
+    // Validar que la membresía existe en el gimnasio actual
     $ver = $conexion->prepare("SELECT id FROM membresias WHERE id = ? AND gimnasio_id = ?");
     $ver->bind_param("ii", $id, $gimnasio_id);
     $ver->execute();
@@ -28,15 +33,15 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
     }
     $ver->close();
 
-    // Actualizar datos
+    // Actualizar membresía
     $stmt = $conexion->prepare("UPDATE membresias SET 
-        plan_id = ?, adicional_id = ?, fecha_inicio = ?, fecha_vencimiento = ?,
-        clases_restantes = ?, metodo_pago = ?, otros_pagos = ?, total = ?
+        plan_id = ?, fecha_inicio = ?, fecha_vencimiento = ?,
+        clases_disponibles = ?, forma_pago = ?, otros_pagos = ?, total = ?
         WHERE id = ?");
 
-    $stmt->bind_param("iississdi",
-        $plan_id, $adicional_id, $fecha_inicio, $fecha_vencimiento,
-        $clases_restantes, $metodo_pago, $otros_pagos, $total,
+    $stmt->bind_param("ississdi",
+        $plan_id, $fecha_inicio, $fecha_vencimiento,
+        $clases_disponibles, $forma_pago, $otros_pagos, $total,
         $id
     );
 
