@@ -32,8 +32,7 @@ if ($cliente_id) {
     $membresia = $conexion->query("SELECT * FROM membresias WHERE cliente_id = $cliente_id AND fecha_vencimiento >= CURDATE() AND clases_disponibles > 0 ORDER BY id DESC LIMIT 1");
     if ($membresia->num_rows === 0) {
         $mensaje = "⚠️ No tenés una membresía activa o sin clases disponibles.";
-        session_destroy();
-        $cliente_id = null;
+        // Ya no se destruye la sesión aquí
     }
 }
 
@@ -75,6 +74,7 @@ if ($cliente_id && $dia_seleccionado) {
 </head>
 <body>
 <h2>📅 Turnos disponibles</h2>
+
 <?php if (!$cliente_id): ?>
     <form method="POST">
         <input type="text" name="dni" placeholder="Ingresá tu DNI" required>
@@ -111,6 +111,9 @@ if ($cliente_id && $dia_seleccionado) {
         <button type="submit">Cerrar sesión</button>
     </form>
 <?php endif; ?>
-<?php if ($mensaje): ?><p><strong><?= $mensaje ?></strong></p><?php endif; ?>
+
+<?php if ($mensaje): ?>
+    <p><strong><?= $mensaje ?></strong></p>
+<?php endif; ?>
 </body>
 </html>
