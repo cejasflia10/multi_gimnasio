@@ -26,18 +26,34 @@ $clientes = $conexion->query("SELECT id, nombre, apellido, dni FROM clientes WHE
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
         body { background-color: #111; color: gold; font-family: Arial; padding: 20px; }
-        h1 { text-align: center; font-size: 24px; }
+        h1 { text-align: center; }
         form { max-width: 600px; margin: auto; }
         label { display: block; margin-top: 15px; font-weight: bold; }
         input, select, button {
-            width: 100%; padding: 10px; margin-top: 5px;
-            background-color: #222; color: gold; border: 1px solid gold; border-radius: 5px; font-size: 16px;
+            width: 100%;
+            padding: 10px;
+            margin-top: 5px;
+            background-color: #222;
+            color: gold;
+            border: 1px solid gold;
+            border-radius: 5px;
+            font-size: 16px;
         }
         button {
-            background-color: gold; color: black; font-weight: bold; cursor: pointer; margin-top: 20px;
+            background-color: gold;
+            color: black;
+            font-weight: bold;
+            cursor: pointer;
+            margin-top: 20px;
         }
-        .botones { display: flex; gap: 10px; margin-top: 20px; }
-        .botones button { flex: 1; }
+        .botones {
+            display: flex;
+            gap: 10px;
+            margin-top: 20px;
+        }
+        .botones button {
+            flex: 1;
+        }
     </style>
 </head>
 <body>
@@ -57,22 +73,14 @@ $clientes = $conexion->query("SELECT id, nombre, apellido, dni FROM clientes WHE
     <label>Plan:</label>
     <select name="plan_id" id="plan_id" required>
         <?php
-        $planes_data = [];
-        while ($p = $planes->fetch_assoc()):
-            $planes_data[$p['id']] = [
-                'precio' => $p['precio'],
-                'clases' => $p['clases'],
-                'duracion' => $p['duracion']
-            ];
-        ?>
-            <option value="<?= $p['id'] ?>" <?= $p['id'] == $membresia['plan_id'] ? 'selected' : '' ?>>
-                <?= $p['nombre'] ?>
-            </option>
+        $planes2 = $conexion->query("SELECT * FROM planes WHERE gimnasio_id = $gimnasio_id");
+        while ($p = $planes2->fetch_assoc()): ?>
+            <option value="<?= $p['id'] ?>" <?= $p['id'] == $membresia['plan_id'] ? 'selected' : '' ?>><?= $p['nombre'] ?></option>
         <?php endwhile; ?>
     </select>
 
     <label>Precio:</label>
-    <input type="number" name="precio" id="precio" value="<?= $membresia['precio'] ?>" required>
+    <input type="number" step="0.01" name="precio" id="precio" value="<?= $membresia['precio'] ?>" required>
 
     <label>Clases Disponibles:</label>
     <input type="number" name="clases_disponibles" id="clases_disponibles" value="<?= $membresia['clases_disponibles'] ?>" required>
@@ -84,7 +92,7 @@ $clientes = $conexion->query("SELECT id, nombre, apellido, dni FROM clientes WHE
     <input type="date" name="fecha_vencimiento" id="fecha_vencimiento" value="<?= $membresia['fecha_vencimiento'] ?>" required>
 
     <label>Otros Pagos:</label>
-    <input type="number" name="otros_pagos" value="<?= $membresia['otros_pagos'] ?>">
+    <input type="number" step="0.01" name="otros_pagos" value="<?= $membresia['otros_pagos'] ?>">
 
     <label>Forma de Pago:</label>
     <select name="forma_pago" required>
@@ -96,7 +104,7 @@ $clientes = $conexion->query("SELECT id, nombre, apellido, dni FROM clientes WHE
     </select>
 
     <label>Total:</label>
-    <input type="number" name="total" id="total" value="<?= $membresia['total'] ?>" required>
+    <input type="number" step="0.01" name="total" value="<?= $membresia['total'] ?>" required>
 
     <div class="botones">
         <button type="submit">Guardar Cambios</button>
@@ -105,21 +113,28 @@ $clientes = $conexion->query("SELECT id, nombre, apellido, dni FROM clientes WHE
 </form>
 
 <script>
-const planes = <?= json_encode($planes_data) ?>;
-document.getElementById('plan_id').addEventListener('change', function() {
-    const plan = planes[this.value];
-    if (plan) {
-        document.getElementById('precio').value = plan.precio;
-        document.getElementById('clases_disponibles').value = plan.clases;
+document.getElementById("plan_id").addEventListener("change", function() {
+    const planId = this.value;
+    const inicio = document.getElementById("fecha_inicio").value;
 
-        const inicio = document.getElementById('fecha_inicio').value;
-        if (inicio) {
-            const fecha = new Date(inicio);
-            fecha.setMonth(fecha.getMonth() + parseInt(plan.duracion));
-            const venc = fecha.toISOString().split('T')[0];
-            document.getElementById('fecha_vencimiento').value = venc;
-        }
-    }
+    fetch("obtener_datos_plan.php?plan_id=" + planId)
+        .then(res => res.json())
+        .then(data => {
+            if (!data.error) {
+                document.getElementById("precio").value = data.precio;
+                document.getElementById("clases_disponibles").value = data.clases;
+
+                if (inicio) {
+                    let fechaInicio = new Date(inicio);
+                    fechaInicio.setMonth(fechaInicio.getMonth() + parseInt(data.duracion));
+                    let venc = fechaInicio.toISOString().split("T")[0];
+                    document.getElementById("fecha_vencimiento").value = venc;
+                }
+            } else {
+                alert("Error: " + data.error);
+            }
+        })
+        .catch(err => alert("Error al obtener datos del plan: " + err));
 });
 </script>
 
