@@ -4,58 +4,58 @@ if (session_status() === PHP_SESSION_NONE) session_start();
 
 date_default_timezone_set('America/Argentina/Buenos_Aires');
 
-$codigo = $_GET['codigo'] ?? '';
-if (!$codigo) {
-    exit("Código inválido.");
-}
-
-// ✅ Permitir con o sin P al inicio
-if (str_starts_with($codigo, 'P')) {
-    $dni = substr($codigo, 1);
-} else {
-    $dni = $codigo;
-}
-
+$dni = $_POST['dni'] ?? '';
+$tipo = $_POST['tipo'] ?? '';
 $gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
 $fecha = date('Y-m-d');
-$hora_actual = date('H:i:s');
+$hora = date('H:i:s');
 
-// Buscar profesor por DNI y gimnasio
-$buscar_profesor = $conexion->query("
-    SELECT id FROM profesores
-    WHERE dni = '$dni' AND gimnasio_id = $gimnasio_id
-");
-
-if ($buscar_profesor->num_rows === 0) {
-    echo "<script>alert('❌ Profesor no encontrado (DNI: $dni) en este gimnasio.');window.history.back();</script>";
+if (!$dni || !$tipo) {
+    echo "<span style='color:red;'>❌ Datos inválidos.</span>";
     exit;
 }
 
-$fila = $buscar_profesor->fetch_assoc();
-$profesor_id = $fila['id'];
+if ($tipo === 'C') {
+    // CLIENTE
+    $consulta = $conexion->query("SELECT id FROM clientes WHERE dni = '$dni' AND gimnasio_id = $gimnasio_id");
+    if ($consulta->num_rows === 0) {
+        echo "<span style='color:red;'>❌ Cliente no encontrado.</span>";
+        exit;
+    }
 
-// Verificar si ya tiene un ingreso sin salida
-$buscar_asistencia = $conexion->query("
-    SELECT id FROM asistencias_profesor
-    WHERE profesor_id = $profesor_id AND fecha = '$fecha' AND hora_salida IS NULL
-");
+    $cliente = $consulta->fetch_assoc();
+    $cliente_id = $cliente['id'];
 
-if ($buscar_asistencia->num_rows > 0) {
-    // Ya tiene ingreso, registrar salida
-    $asistencia = $buscar_asistencia->fetch_assoc();
-    $id_asistencia = $asistencia['id'];
-    $conexion->query("
-        UPDATE asistencias_profesor
-        SET hora_salida = '$hora_actual'
-        WHERE id = $id_asistencia
-    ");
-    echo "<script>alert('✅ Salida registrada correctamente.');window.location.href='scanner_qr_profesor.php';</script>";
+    // Registrar asistencia cliente
+    $conexion->query("INSERT INTO asistencias (cliente_id, fecha, hora, gimnasio_id) VALUES ($cliente_id, '$fecha', '$hora', $gimnasio_id)");
+    echo "<span style='color:lime;'>✅ Cliente registrado correctamente.</span>";
+
+} elseif ($tipo === 'P') {
+    // PROFESOR
+    $consulta = $conexion->query("SELECT id FROM profesores WHERE dni = '$dni' AND gimnasio_id = $gimnasio_id");
+    if ($consulta->num_rows === 0) {
+        echo "<span style='color:red;'>❌ Profesor no encontrado.</span>";
+        exit;
+    }
+
+    $profesor = $consulta->fetch_assoc();
+    $profesor_id = $profesor['id'];
+
+    // Verificar si ya ingresó hoy sin salida
+    $check = $conexion->query("SELECT id FROM asistencias_profesor WHERE profesor_id = $profesor_id AND fecha = '$fecha' AND hora_salida IS NULL");
+
+    if ($check->num_rows > 0) {
+        // Registrar salida
+        $row = $check->fetch_assoc();
+        $conexion->query("UPDATE asistencias_profesor SET hora_salida = '$hora' WHERE id = " . $row['id']);
+        echo "<span style='color:gold;'>✅ Salida registrada.</span>";
+    } else {
+        // Registrar ingreso
+        $conexion->query("INSERT INTO asistencias_profesor (profesor_id, hora_entrada, fecha, gimnasio_id) VALUES ($profesor_id, '$hora', '$fecha', $gimnasio_id)");
+        echo "<span style='color:gold;'>✅ Ingreso registrado.</span>";
+    }
+
 } else {
-    // No tiene ingreso, registrar nuevo ingreso
-    $conexion->query("
-        INSERT INTO asistencias_profesor (profesor_id, hora_entrada, gimnasio_id, fecha)
-        VALUES ($profesor_id, '$hora_actual', $gimnasio_id, '$fecha')
-    ");
-    echo "<script>alert('✅ Ingreso registrado correctamente.');window.location.href='scanner_qr_profesor.php';</script>";
+    echo "<span style='color:red;'>❌ Tipo de código no válido.</span>";
 }
 ?>
