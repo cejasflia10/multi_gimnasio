@@ -6,10 +6,14 @@ date_default_timezone_set('America/Argentina/Buenos_Aires');
 $codigo = $_POST['codigo'] ?? '';
 if (!$codigo || $codigo[0] !== 'P') {
     echo "<script>alert('Código inválido.'); window.location='scanner_qr_profesor.php';</script>";
+    echo "Código recibido: $codigo<br>";
+    echo "DNI limpio: $dni<br>";
+exit;
+
     exit;
 }
 
-$dni = substr($codigo, 1);
+$dni = ltrim(substr($codigo, 1), '-');
 $gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
 
 // Buscar profesor con DNI y gimnasio actual
