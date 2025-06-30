@@ -7,9 +7,8 @@ if (!isset($_GET['dni'])) {
 }
 
 $dni = intval($_GET['dni']);
-$codigo = "P" . $dni; // SIN GUION
+$codigo = "P" . $dni;
 
-// Generar QR en tiempo real
 header('Content-Type: image/png');
 QRcode::png($codigo, false, QR_ECLEVEL_L, 8);
 ?>
