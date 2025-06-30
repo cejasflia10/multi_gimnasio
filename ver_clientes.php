@@ -1,3 +1,4 @@
+
 <?php
 session_start();
 include 'conexion.php';
@@ -34,6 +35,8 @@ $resultado = $conexion->query("SELECT * FROM clientes WHERE gimnasio_id = $gimna
             border: 1px solid gold;
             cursor: pointer;
             border-radius: 5px;
+            margin: 2px;
+            display: inline-block;
         }
         .buscador {
             margin: 15px;
@@ -60,7 +63,7 @@ $resultado = $conexion->query("SELECT * FROM clientes WHERE gimnasio_id = $gimna
 
 <input type="text" id="buscador" class="buscador" placeholder="Buscar por nombre, apellido o DNI" onkeyup="buscarCliente()">
 
-<<table>
+<table>
     <thead>
         <tr>
             <th>#</th>
@@ -69,6 +72,7 @@ $resultado = $conexion->query("SELECT * FROM clientes WHERE gimnasio_id = $gimna
             <th>DNI</th>
             <th>Disciplina</th>
             <th>QR</th>
+            <th>Acciones</th>
         </tr>
     </thead>
     <tbody>
@@ -86,11 +90,15 @@ $resultado = $conexion->query("SELECT * FROM clientes WHERE gimnasio_id = $gimna
             if (file_exists($qrPath)) {
                 echo "<td><img src='$qrPath' alt='QR' width='40'></td>";
             } else {
-                echo "<td><a class='btn' href='generar_qr_individual.php?id={$fila['id']}'>Generar QR</a></td>";
+                echo "<td><a class='btn-qr' href='generar_qr_individual.php?id={$fila['id']}'>Generar QR</a></td>";
             }
 
+            echo "<td>
+                    <a href='editar_cliente.php?id={$fila['id']}' class='btn-qr'>✏️ Editar</a>
+                    <a href='eliminar_cliente.php?id={$fila['id']}' class='btn-qr' onclick='return confirm(\"¿Seguro que querés eliminar este cliente?\")'>🗑️ Eliminar</a>
+                  </td>";
             echo "</tr>";
-            $n++;
+            $n;
         }
         ?>
     </tbody>
