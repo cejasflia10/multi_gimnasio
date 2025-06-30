@@ -1,6 +1,6 @@
 <?php
-include 'conexion.php';
 session_start();
+include 'conexion.php';
 
 $gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
 $resultado = $conexion->query("SELECT * FROM clientes WHERE gimnasio_id = $gimnasio_id");
@@ -10,36 +10,58 @@ $resultado = $conexion->query("SELECT * FROM clientes WHERE gimnasio_id = $gimna
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>Ver Clientes</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Listado de Clientes</title>
     <style>
         body {
             background-color: #000;
             color: gold;
             font-family: Arial, sans-serif;
-            padding: 20px;
         }
         table {
             width: 100%;
             border-collapse: collapse;
-            margin-top: 20px;
+            color: gold;
         }
         th, td {
-            border: 1px solid gold;
             padding: 10px;
+            border: 1px solid gold;
             text-align: center;
         }
-        th {
-            background-color: #222;
+        .btn-qr {
+            padding: 6px 10px;
+            background: #222;
+            color: gold;
+            border: 1px solid gold;
+            cursor: pointer;
+            border-radius: 5px;
         }
-        img.qr {
-            width: 80px;
+        .buscador {
+            margin: 15px;
+            padding: 10px;
+            font-size: 16px;
+            width: 300px;
         }
     </style>
+    <script>
+        function buscarCliente() {
+            var input = document.getElementById("buscador").value.toLowerCase();
+            var filas = document.querySelectorAll("tbody tr");
+
+            filas.forEach(fila => {
+                let texto = fila.textContent.toLowerCase();
+                fila.style.display = texto.includes(input) ? "" : "none";
+            });
+        }
+    </script>
 </head>
 <body>
-    <h1>Listado de Clientes</h1>
-    <table>
+
+<h2>Listado de Clientes</h2>
+
+<input type="text" id="buscador" class="buscador" placeholder="Buscar por nombre, apellido o DNI" onkeyup="buscarCliente()">
+
+<table>
+    <thead>
         <tr>
             <th>Apellido</th>
             <th>Nombre</th>
@@ -47,23 +69,31 @@ $resultado = $conexion->query("SELECT * FROM clientes WHERE gimnasio_id = $gimna
             <th>Disciplina</th>
             <th>QR</th>
         </tr>
-        <?php while ($cliente = $resultado->fetch_assoc()): ?>
+    </thead>
+    <tbody>
+        <?php while ($row = $resultado->fetch_assoc()) {
+            $id = $row['id'];
+            $dni = $row['dni'];
+            $archivo_qr = "qr_cliente_" . $id . ".png";
+            $ruta_qr = "qr/" . $archivo_qr;
+            $qr_generado = file_exists($ruta_qr);
+            ?>
             <tr>
-                <td><?= htmlspecialchars($cliente['apellido']) ?></td>
-                <td><?= htmlspecialchars($cliente['nombre']) ?></td>
-                <td><?= $cliente['dni'] ?></td>
-                <td><?= htmlspecialchars($cliente['disciplina']) ?></td>
+                <td><?= $row['apellido'] ?></td>
+                <td><?= $row['nombre'] ?></td>
+                <td><?= $row['dni'] ?></td>
+                <td><?= $row['disciplina'] ?></td>
                 <td>
-        <?php if (!empty($cliente['dni'])): ?>
-            <a href="generar_qr_cliente.php?id=<?= $cliente['id'] ?>" target="_blank" style="color: gold; text-decoration: none; font-weight: bold; background-color: #111; padding: 5px 10px; border-radius: 8px; border: 1px solid gold;">
-                Generar QR
-            </a>
-        <?php else: ?>
-            Sin DNI
-        <?php endif; ?>
-     src="qr/qr_cliente_<?= $cliente['id'] ?>.png" alt="QR"></td>
+                    <?php if ($qr_generado): ?>
+                        <img src="<?= $ruta_qr ?>" alt="QR" width="60">
+                    <?php else: ?>
+                        <a class="btn-qr" href="generar_qr_individual.php?id=<?= $id ?>">Generar QR</a>
+                    <?php endif; ?>
+                </td>
             </tr>
-        <?php endwhile; ?>
-    </table>
+        <?php } ?>
+    </tbody>
+</table>
+
 </body>
 </html>
