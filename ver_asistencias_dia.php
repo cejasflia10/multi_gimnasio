@@ -19,8 +19,9 @@ $profesores_q = $conexion->query("
   SELECT p.apellido, p.nombre, a.hora_entrada, a.hora_salida
   FROM asistencias_profesor a
   JOIN profesores p ON a.profesor_id = p.id
-  WHERE a.fecha = '$hoy' AND a.id_gimnasio = $gimnasio_id
+  WHERE a.fecha = '$hoy' AND a.gimnasio_id = $gimnasio_id
 ");
+
 ?>
 
 <!DOCTYPE html>
