@@ -1,52 +1,40 @@
 <?php
-if (session_status() === PHP_SESSION_NONE) {
-    session_start();
-}
+if (session_status() === PHP_SESSION_NONE) session_start();
 include 'conexion.php';
 
-if (!isset($_SESSION['gimnasio_id'])) {
-    die("Gimnasio no identificado.");
-}
+$gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
 
-$gimnasio_id = $_SESSION['gimnasio_id'];
-
-if ($_SERVER["REQUEST_METHOD"] === "POST") {
-    $cliente_id = $_POST['cliente_id'];
-    $plan_id = $_POST['plan_id'];
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $cliente_id = intval($_POST['cliente_id']);
+    $plan_id = intval($_POST['plan_id']);
     $fecha_inicio = $_POST['fecha_inicio'];
     $fecha_vencimiento = $_POST['fecha_vencimiento'];
-    $precio = floatval($_POST['precio']);
     $clases_disponibles = intval($_POST['clases_disponibles']);
-    $pagos_adicionales = floatval($_POST['pagos_adicionales'] ?? 0);
+    $precio = floatval($_POST['precio']);
     $otros_pagos = floatval($_POST['otros_pagos'] ?? 0);
-    $forma_pago = $_POST['forma_pago'];
-    $total = floatval($_POST['total']);
-    $duracion_meses = intval($_POST['duracion_meses']);
+    $descuento = floatval($_POST['descuento'] ?? 0);
+    $total_pagar = floatval($_POST['total_pagar']);
+    $metodo_pago = $_POST['metodo_pago'];
 
-    // NUEVOS CAMPOS
-    $monto_pagado = floatval($_POST['monto_pagado'] ?? 0);
-    $saldo_cc = floatval($_POST['saldo_cc'] ?? 0);
+    $saldo_cc = ($metodo_pago === 'cuenta_corriente') ? -$total_pagar : 0;
 
-    // Insertar la nueva membresía
-    $stmt = $conexion->prepare("INSERT INTO membresias (
-        cliente_id, plan_id, fecha_inicio, fecha_vencimiento, precio, clases_disponibles,
-        pagos_adicionales, otros_pagos, forma_pago, total, monto_pagado, saldo_cc, gimnasio_id, duracion_meses
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+    $stmt = $conexion->prepare("INSERT INTO membresias (cliente_id, plan_id, fecha_inicio, fecha_vencimiento, clases_disponibles, precio, otros_pagos, descuento, total_pagado, metodo_pago, saldo_cc, gimnasio_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+    $stmt->bind_param("iissiddddsdi", $cliente_id, $plan_id, $fecha_inicio, $fecha_vencimiento, $clases_disponibles, $precio, $otros_pagos, $descuento, $total_pagar, $metodo_pago, $saldo_cc, $gimnasio_id);
+    $stmt->execute();
 
-    $stmt->bind_param("iissdiddsddiii",
-        $cliente_id, $plan_id, $fecha_inicio, $fecha_vencimiento, $precio, $clases_disponibles,
-        $pagos_adicionales, $otros_pagos, $forma_pago, $total, $monto_pagado, $saldo_cc, $gimnasio_id, $duracion_meses
-    );
+    $membresia_id = $conexion->insert_id;
 
-    if ($stmt->execute()) {
-        echo "<script>alert('Membresía registrada correctamente'); window.location.href='ver_membresias.php';</script>";
-    } else {
-        echo "<script>alert('Error al registrar la membresía: " . $stmt->error . "'); window.history.back();</script>";
+    if (!empty($_POST['adicionales'])) {
+        foreach ($_POST['adicionales'] as $adicional_id) {
+            $adicional_id = intval($adicional_id);
+            $conexion->query("INSERT INTO membresia_adicionales (membresia_id, adicional_id) VALUES ($membresia_id, $adicional_id)");
+        }
     }
 
-    $stmt->close();
-    $conexion->close();
+    header("Location: ver_membresias.php");
+    exit;
 } else {
-    echo "<script>alert('Acceso no permitido.'); window.location.href='index.php';</script>";
+    echo "Acceso no permitido";
 }
 ?>
