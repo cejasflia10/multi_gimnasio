@@ -2,81 +2,83 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8">
-  <title>Escaneo QR</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+  <title>Escaneo QR para Ingreso</title>
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
   <style>
     body {
       background-color: black;
       color: gold;
-      text-align: center;
       font-family: Arial, sans-serif;
-      padding: 20px;
+      text-align: center;
+      padding-top: 20px;
     }
     #reader {
-      width: 100%;
-      max-width: 400px;
+      width: 300px;
       margin: auto;
+      border: 2px solid gold;
     }
     #resultado {
       margin-top: 20px;
-      font-size: 20px;
+      font-size: 18px;
     }
   </style>
 </head>
 <body>
-  <h1>Escaneo QR</h1>
+
+  <h2>📷 Escaneo QR para Ingreso</h2>
   <div id="reader"></div>
   <div id="resultado"></div>
 
   <script>
-    function iniciarEscaneo() {
-      const scanner = new Html5Qrcode("reader");
-      const config = { fps: 10, qrbox: 250 };
+    const scanner = new Html5Qrcode("reader");
 
+    function iniciarEscaneo() {
       scanner.start(
         { facingMode: "environment" },
-        config,
+        {
+          fps: 10,
+          qrbox: { width: 250, height: 250 }
+        },
         (decodedText, decodedResult) => {
-          scanner.stop();
+          scanner.stop().then(() => {
+            // Enviar DNI al backend
+            fetch("registrar_asistencia_qr.php", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/x-www-form-urlencoded"
+              },
+              body: "dni=" + encodeURIComponent(decodedText)
+            })
+            .then(response => response.text())
+            .then(data => {
+              document.getElementById("resultado").innerHTML = data;
 
-          let codigo = decodedText.trim();
-          let tipo = codigo.charAt(0); // "P" o "C"
-          let dni = codigo.substring(1);
-
-          let endpoint = "registrar_asistencia_qr.php";
-          let postData = "dni=" + encodeURIComponent(dni) + "&tipo=" + tipo;
-
-          fetch(endpoint, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/x-www-form-urlencoded"
-            },
-            body: postData
-          })
-          .then(response => response.text())
-          .then(data => {
-            document.getElementById("resultado").innerHTML = data;
-            setTimeout(() => {
-              document.getElementById("resultado").innerHTML = "";
-              iniciarEscaneo();
-            }, 4000);
-          })
-          .catch(error => {
-            document.getElementById("resultado").innerHTML = "<span style='color:red;'>❌ Error al registrar asistencia.</span>";
-            setTimeout(() => {
-              document.getElementById("resultado").innerHTML = "";
-              iniciarEscaneo();
-            }, 4000);
+              // Reiniciar escaneo después de 4 segundos
+              setTimeout(() => {
+                document.getElementById("resultado").innerHTML = "";
+                iniciarEscaneo();
+              }, 4000);
+            })
+            .catch(error => {
+              document.getElementById("resultado").innerHTML = "<span style='color:red;'>❌ Error al registrar asistencia.</span>";
+              setTimeout(() => {
+                document.getElementById("resultado").innerHTML = "";
+                iniciarEscaneo();
+              }, 4000);
+            });
           });
         },
-        (errorMessage) => {
-          // console.log(errorMessage);
+        errorMessage => {
+          // Errores de lectura ignorados
         }
-      );
+      ).catch(err => {
+        document.getElementById("resultado").innerHTML = "<span style='color:red;'>❌ Error al acceder a la cámara</span>";
+      });
     }
 
-    iniciarEscaneo();
+    // Iniciar al cargar
+    window.onload = iniciarEscaneo;
   </script>
+
 </body>
 </html>
