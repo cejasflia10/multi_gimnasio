@@ -1,3 +1,4 @@
+
 <?php
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
@@ -25,10 +26,18 @@ $clientes = $conexion->query("SELECT id, nombre, apellido, dni FROM clientes WHE
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
         body { background-color: #111; color: gold; font-family: Arial; padding: 20px; }
-        label { display: block; margin-top: 10px; }
-        input, select, button { width: 100%; padding: 10px; margin-top: 5px; background-color: #222; color: gold; border: 1px solid gold; border-radius: 5px; }
-        h1 { text-align: center; }
-        button { background-color: gold; color: black; font-weight: bold; cursor: pointer; margin-top: 20px; }
+        h1 { text-align: center; font-size: 24px; }
+        form { max-width: 600px; margin: auto; }
+        label { display: block; margin-top: 15px; font-weight: bold; }
+        input, select, button {
+            width: 100%; padding: 10px; margin-top: 5px;
+            background-color: #222; color: gold; border: 1px solid gold; border-radius: 5px; font-size: 16px;
+        }
+        button {
+            background-color: gold; color: black; font-weight: bold; cursor: pointer; margin-top: 20px;
+        }
+        .botones { display: flex; gap: 10px; margin-top: 20px; }
+        .botones button { flex: 1; }
     </style>
 </head>
 <body>
@@ -39,30 +48,40 @@ $clientes = $conexion->query("SELECT id, nombre, apellido, dni FROM clientes WHE
     <label>Cliente:</label>
     <select name="cliente_id" required>
         <?php while ($c = $clientes->fetch_assoc()): ?>
-            <option value="<?= $c['id'] ?>" <?= $c['id'] == $membresia['cliente_id'] ? 'selected' : '' ?> >
+            <option value="<?= $c['id'] ?>" <?= $c['id'] == $membresia['cliente_id'] ? 'selected' : '' ?>>
                 <?= $c['apellido'] . ', ' . $c['nombre'] . ' (' . $c['dni'] . ')' ?>
             </option>
         <?php endwhile; ?>
     </select>
 
     <label>Plan:</label>
-    <select name="plan_id" required>
-        <?php while ($p = $planes->fetch_assoc()): ?>
-            <option value="<?= $p['id'] ?>" <?= $p['id'] == $membresia['plan_id'] ? 'selected' : '' ?> ><?= $p['nombre'] ?></option>
+    <select name="plan_id" id="plan_id" required>
+        <?php
+        $planes_data = [];
+        while ($p = $planes->fetch_assoc()):
+            $planes_data[$p['id']] = [
+                'precio' => $p['precio'],
+                'clases' => $p['clases'],
+                'duracion' => $p['duracion']
+            ];
+        ?>
+            <option value="<?= $p['id'] ?>" <?= $p['id'] == $membresia['plan_id'] ? 'selected' : '' ?>>
+                <?= $p['nombre'] ?>
+            </option>
         <?php endwhile; ?>
     </select>
 
     <label>Precio:</label>
-    <input type="number" name="precio" value="<?= $membresia['precio'] ?>" required>
+    <input type="number" name="precio" id="precio" value="<?= $membresia['precio'] ?>" required>
 
     <label>Clases Disponibles:</label>
-    <input type="number" name="clases_disponibles" value="<?= $membresia['clases_restantes'] ?>" required>
+    <input type="number" name="clases_disponibles" id="clases_disponibles" value="<?= $membresia['clases_disponibles'] ?>" required>
 
     <label>Fecha de Inicio:</label>
-    <input type="date" name="fecha_inicio" value="<?= $membresia['fecha_inicio'] ?>" required>
+    <input type="date" name="fecha_inicio" id="fecha_inicio" value="<?= $membresia['fecha_inicio'] ?>" required>
 
     <label>Fecha de Vencimiento:</label>
-    <input type="date" name="fecha_vencimiento" value="<?= $membresia['fecha_vencimiento'] ?>" required>
+    <input type="date" name="fecha_vencimiento" id="fecha_vencimiento" value="<?= $membresia['fecha_vencimiento'] ?>" required>
 
     <label>Otros Pagos:</label>
     <input type="number" name="otros_pagos" value="<?= $membresia['otros_pagos'] ?>">
@@ -77,10 +96,32 @@ $clientes = $conexion->query("SELECT id, nombre, apellido, dni FROM clientes WHE
     </select>
 
     <label>Total:</label>
-    <input type="number" name="total" value="<?= $membresia['total'] ?>" required>
+    <input type="number" name="total" id="total" value="<?= $membresia['total'] ?>" required>
 
-    <button type="submit">Guardar Cambios</button>
-    <a href="ver_membresias.php"><button type="button">Volver</button></a>
+    <div class="botones">
+        <button type="submit">Guardar Cambios</button>
+        <button type="button" onclick="window.location.href='ver_membresias.php'">Volver</button>
+    </div>
 </form>
+
+<script>
+const planes = <?= json_encode($planes_data) ?>;
+document.getElementById('plan_id').addEventListener('change', function() {
+    const plan = planes[this.value];
+    if (plan) {
+        document.getElementById('precio').value = plan.precio;
+        document.getElementById('clases_disponibles').value = plan.clases;
+
+        const inicio = document.getElementById('fecha_inicio').value;
+        if (inicio) {
+            const fecha = new Date(inicio);
+            fecha.setMonth(fecha.getMonth() + parseInt(plan.duracion));
+            const venc = fecha.toISOString().split('T')[0];
+            document.getElementById('fecha_vencimiento').value = venc;
+        }
+    }
+});
+</script>
+
 </body>
 </html>
