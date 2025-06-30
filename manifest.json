@@ -1,7 +1,7 @@
 {
-    "name": "Fight Academy - Turnos",
-    "short_name": "FightTurnos",
-    "start_url": "cliente_turnos.php",
+    "name": "Fight Academy - Cliente",
+    "short_name": "FightCliente",
+    "start_url": "panel_cliente.php",
     "display": "standalone",
     "background_color": "#000000",
     "theme_color": "#FFD700",
