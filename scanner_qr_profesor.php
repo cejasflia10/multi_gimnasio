@@ -6,33 +6,38 @@ $profesor_id = $_SESSION['profesor_id'] ?? 0;
 if ($profesor_id == 0) die("Acceso denegado.");
 
 $mensaje = "";
+$datos_cliente = null;
 
-if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST['qr'])) {
-    $dni = trim($_POST['qr']);
+if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST['dni'])) {
+    $dni = trim($_POST['dni']);
     $fecha_hoy = date("Y-m-d");
     $hora_actual = date("H:i:s");
 
-    // Buscar cliente
-    $q = $conexion->query("SELECT id FROM clientes WHERE dni = '$dni'");
+    $q = $conexion->query("SELECT id, apellido, nombre FROM clientes WHERE dni = '$dni'");
     if ($q->num_rows == 0) {
         $mensaje = "Cliente no encontrado.";
     } else {
-        $cliente_id = $q->fetch_assoc()['id'];
+        $cliente = $q->fetch_assoc();
+        $cliente_id = $cliente['id'];
 
-        // Verificar membresía
         $membresia = $conexion->query("
-            SELECT id FROM membresias
-            WHERE cliente_id = $cliente_id AND clases_disponibles > 0 AND fecha_vencimiento >= '$fecha_hoy'
-            ORDER BY fecha_inicio DESC LIMIT 1
+            SELECT id, clases_disponibles, fecha_vencimiento
+            FROM membresias
+            WHERE cliente_id = $cliente_id
+              AND fecha_vencimiento >= '$fecha_hoy'
+              AND clases_disponibles > 0
+            ORDER BY fecha_inicio DESC
+            LIMIT 1
         ");
 
         if ($membresia->num_rows == 0) {
-            $mensaje = "El cliente no tiene clases o membresía vigente.";
+            $mensaje = "No tiene clases disponibles o la membresía está vencida.";
         } else {
             $mem = $membresia->fetch_assoc();
             $membresia_id = $mem['id'];
+            $clases_disponibles = $mem['clases_disponibles'] - 1;
+            $vencimiento = $mem['fecha_vencimiento'];
 
-            // Registrar asistencia
             $conexion->query("
                 INSERT INTO asistencias_clientes (cliente_id, fecha, hora, profesor_id)
                 VALUES ($cliente_id, '$fecha_hoy', '$hora_actual', $profesor_id)
@@ -43,7 +48,6 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST['qr'])) {
                 WHERE id = $membresia_id
             ");
 
-            // Registrar asistencia profesor si no existe
             $ya = $conexion->query("
                 SELECT id FROM asistencias_profesor
                 WHERE profesor_id = $profesor_id AND fecha = '$fecha_hoy'
@@ -51,4 +55,18 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST['qr'])) {
             if ($ya->num_rows == 0) {
                 $conexion->query("
                     INSERT INTO asistencias_profesor (profesor_id, fecha, hora_ingreso)
-                    VALUE
+                    VALUES ($profesor_id, '$fecha_hoy', '$hora_actual')
+                ");
+            }
+
+            $mensaje = "Asistencia registrada correctamente.";
+            $datos_cliente = [
+                'nombre' => $cliente['nombre'],
+                'apellido' => $cliente['apellido'],
+                'clases_restantes' => $clases_disponibles,
+                'vencimiento' => $vencimiento
+            ];
+        }
+    }
+}
+?>
