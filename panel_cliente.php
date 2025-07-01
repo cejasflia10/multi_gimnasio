@@ -1,18 +1,22 @@
 <?php
-if (session_status() === PHP_SESSION_NONE) session_start();
+// Iniciar sesión correctamente
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
 
+// Validar que exista sesión del cliente
 if (!isset($_SESSION['cliente_id'])) {
     echo "Acceso denegado.";
     exit;
 }
 
-include 'conexion.php';          // ✅ conexión después de validar sesión
-include 'menu_cliente.php';      // ✅ menú después de validar sesión
-
+include 'conexion.php';
+include 'menu_cliente.php';
 
 $cliente_id = $_SESSION['cliente_id'];
 $cliente_nombre = $_SESSION['cliente_nombre'] ?? 'Cliente';
 
+// Obtener los datos del cliente
 $cliente = $conexion->query("SELECT * FROM clientes WHERE id = $cliente_id")->fetch_assoc();
 ?>
 
@@ -41,14 +45,6 @@ $cliente = $conexion->query("SELECT * FROM clientes WHERE id = $cliente_id")->fe
             margin: auto;
             border: 1px solid gold;
         }
-        pre {
-            background-color: #111;
-            color: lime;
-            padding: 10px;
-            margin: 20px auto;
-            max-width: 600px;
-            overflow: auto;
-        }
     </style>
 </head>
 <body>
@@ -61,10 +57,6 @@ $cliente = $conexion->query("SELECT * FROM clientes WHERE id = $cliente_id")->fe
     <p><strong>Teléfono:</strong> <?= $cliente['telefono'] ?></p>
     <p><strong>Disciplina:</strong> <?= $cliente['disciplina'] ?></p>
 </div>
-
-<pre>🧪 SESIÓN ACTUAL:
-<?php print_r($_SESSION); ?>
-</pre>
 
 </body>
 </html>
