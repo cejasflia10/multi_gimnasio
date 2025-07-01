@@ -3,19 +3,15 @@ session_start();
 include 'conexion.php';
 include 'menu_profesor.php';
 
-$profesor_id = $_SESSION['profesor_id'] ?? 0;
-if ($profesor_id == 0) die("Acceso denegado.");
-
-// Obtener lista de alumnos del profesor
+// Obtener gimnasio del profesor logueado
 $gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
 
+// Consulta correcta de alumnos del gimnasio
 $alumnos = $conexion->query("
-    SELECT DISTINCT c.id, c.apellido, c.nombre
-    FROM reservas r
-    JOIN turnos t ON r.turno_id = t.id
-    JOIN clientes c ON r.cliente_id = c.id
-    WHERE t.id_profesor = $profesor_id
-    ORDER BY c.apellido
+    SELECT id, apellido, nombre
+    FROM clientes
+    WHERE gimnasio_id = $gimnasio_id
+    ORDER BY apellido
 ");
 
 $mensaje = "";
