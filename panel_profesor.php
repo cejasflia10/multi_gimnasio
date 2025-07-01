@@ -1,13 +1,21 @@
 <?php
+// Iniciar sesión segura
 ini_set('session.use_strict_mode', 1);
 ini_set('session.cookie_httponly', 1);
-ini_set('session.cookie_secure', 0); // CAMBIA a 1 si usás https
+ini_set('session.cookie_secure', 0); // ⚠️ poné 1 si usás https
 session_start();
 
+// Validar sesión
 if (!isset($_SESSION['profesor_id'])) {
     echo "Acceso denegado.";
     exit;
 }
+
+// CONEXIÓN
+include 'conexion.php';
+
+$profesor_id = $_SESSION['profesor_id'];
+$profesor_nombre = $_SESSION['profesor_nombre'] ?? 'Profesor';
 
 $profesor_id = $_SESSION['profesor_id'];
 
