@@ -7,12 +7,12 @@ include 'menu_profesor.php';
 $profesor_id = $_SESSION['profesor_id'] ?? 0;
 if ($profesor_id == 0) die("Acceso denegado.");
 
-$progresos = $conexion->query("
-    SELECT p.fecha, p.peso, p.altura, p.observaciones, c.apellido, c.nombre
-    FROM progreso_fisico p
-    JOIN clientes c ON p.cliente_id = c.id
-    WHERE p.profesor_id = $profesor_id
-    ORDER BY p.fecha DESC
+$archivos = $conexion->query("
+    SELECT a.id, a.tipo, a.archivo, a.fecha, c.apellido, c.nombre
+    FROM archivos_profesor a
+    JOIN clientes c ON a.cliente_id = c.id
+    WHERE a.profesor_id = $profesor_id
+    ORDER BY a.fecha DESC
 ");
 ?>
 
@@ -20,7 +20,7 @@ $progresos = $conexion->query("
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>Historial Progreso Físico</title>
+    <title>Archivos Cargados</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
         body { background-color: #000; color: gold; font-family: Arial, sans-serif; padding: 20px; }
@@ -36,37 +36,38 @@ $progresos = $conexion->query("
             text-align: center;
         }
         th { background-color: #222; }
+        a { color: gold; text-decoration: underline; }
     </style>
 </head>
 <body>
 
-<h1>📋 Historial de Progreso Físico</h1>
+<h1>📂 Archivos Subidos</h1>
 
-<?php if ($progresos->num_rows > 0): ?>
+<?php if ($archivos->num_rows > 0): ?>
 <table>
     <thead>
         <tr>
             <th>Alumno</th>
+            <th>Tipo</th>
+            <th>Archivo</th>
             <th>Fecha</th>
-            <th>Peso</th>
-            <th>Altura</th>
-            <th>Observaciones</th>
+            <th>Descargar</th>
         </tr>
     </thead>
     <tbody>
-        <?php while ($p = $progresos->fetch_assoc()): ?>
+        <?php while ($a = $archivos->fetch_assoc()): ?>
         <tr>
-            <td><?= $p['apellido'] ?>, <?= $p['nombre'] ?></td>
-            <td><?= $p['fecha'] ?></td>
-            <td><?= $p['peso'] ?> kg</td>
-            <td><?= $p['altura'] ?> cm</td>
-            <td><?= $p['observaciones'] ?></td>
+            <td><?= $a['apellido'] ?>, <?= $a['nombre'] ?></td>
+            <td><?= $a['tipo'] ?></td>
+            <td><?= basename($a['archivo']) ?></td>
+            <td><?= $a['fecha'] ?></td>
+            <td><a href="<?= $a['archivo'] ?>" target="_blank">Ver</a></td>
         </tr>
         <?php endwhile; ?>
     </tbody>
 </table>
 <?php else: ?>
-    <p style="text-align: center;">No hay registros de progreso físico aún.</p>
+    <p style="text-align: center;">No hay archivos cargados.</p>
 <?php endif; ?>
 
 </body>
