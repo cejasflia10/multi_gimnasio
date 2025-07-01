@@ -1,11 +1,14 @@
-
 <?php
+ini_set('session.use_strict_mode', 1);
+ini_set('session.cookie_httponly', 1);
+ini_set('session.cookie_secure', 0); // 1 si usás HTTPS
 session_start();
-include 'conexion.php';
+echo "<pre>SESION ACTIVA:\n";
+print_r($_SESSION);
+echo "</pre>";
 
-// Verificar sesión válida
 if (!isset($_SESSION['profesor_id'])) {
-    header("Location: login_profesor.php");
+    echo "Acceso denegado.";
     exit;
 }
 
