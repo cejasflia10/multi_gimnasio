@@ -1,22 +1,14 @@
 <?php
-// Mostrar errores (para desarrollo)
-ini_set('display_errors', 1);
-ini_set('display_startup_errors', 1);
-error_reporting(E_ALL);
+if (session_status() === PHP_SESSION_NONE) session_start();
 
-// Iniciar sesión correctamente
-if (session_status() === PHP_SESSION_NONE) {
-    session_start();
-}
-
-// Validar sesión antes de mostrar el panel
 if (!isset($_SESSION['cliente_id'])) {
-    echo "<div style='color:red; font-size:20px; text-align:center;'>❌ Acceso denegado.</div>";
+    echo "Acceso denegado.";
     exit;
 }
 
-include 'conexion.php';
-include 'menu_cliente.php';
+include 'conexion.php';          // ✅ conexión después de validar sesión
+include 'menu_cliente.php';      // ✅ menú después de validar sesión
+
 
 $cliente_id = $_SESSION['cliente_id'];
 $cliente_nombre = $_SESSION['cliente_nombre'] ?? 'Cliente';
