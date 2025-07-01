@@ -1,0 +1,10 @@
+
+<!-- App Instalable -->
+<link rel="manifest" href="manifest_profesor.json">
+<link rel="icon" href="icono_profesor.png">
+<meta name="theme-color" content="#a00a00">
+<script>
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('service-worker.js');
+  }
+</script>

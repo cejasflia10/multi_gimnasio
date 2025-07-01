@@ -44,5 +44,5 @@
     <a href="registrar_datos_fisicos.php">Datos Físicos</a>
     <a href="ver_datos_fisicos_profesor.php">Ver Datos</a>
     <a href="ver_saldo.php">Saldo</a>
-    <a href="logout.php">Salir</a>
+    <a href="logout_profesor.php">Cerrar Sesión</a>
 </div>

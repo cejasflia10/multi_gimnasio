@@ -1,5 +1,6 @@
 <?php
 session_start();
+
 include 'conexion.php';
 include 'menu_profesor.php';
 
@@ -42,6 +43,16 @@ $saldo = $total_horas * $valor_hora;
 <!DOCTYPE html>
 <html lang="es">
 <head>
+    <!-- App Instalable -->
+<link rel="manifest" href="manifest_profesor.json">
+<link rel="icon" href="icono_profesor.png">
+<meta name="theme-color" content="#a00a00">
+<script>
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('service-worker.js');
+  }
+</script>
+
     <meta charset="UTF-8">
     <title>Panel Profesor</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
