@@ -129,6 +129,7 @@ if (session_status() === PHP_SESSION_NONE) { session_start(); } ?>
     <a href="agregar_profesor.php">Agregar Profesor</a></li>
     <a href="ver_profesores.php">Ver Profesores</a></li>
     <a href="ver_asistencias_profesor.php">Ver Asistencias / Pagos</a></li>
+    <a href="editar_pago_profesor.php">Pagos a Profesores</a></li>
     <a href="reporte_horas_profesor.php">Reporte Horas Profesor</a>
     <a href="turnos_profesor.php">Turnos Profesor</a>
     <a href="ver_pagos_profesor.php">Ver Pagos Profesor</a>
