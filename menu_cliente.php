@@ -1,53 +1,45 @@
+
 <style>
-    .menu-cliente {
-        background-color: #111;
-        padding: 10px;
-        display: flex;
-        flex-wrap: wrap;
-        justify-content: center;
-        gap: 10px;
-        font-family: Arial, sans-serif;
-        margin-bottom: 20px;
+.menu-horizontal {
+    background-color: #111;
+    overflow-x: auto;
+    white-space: nowrap;
+    padding: 10px;
+    display: flex;
+    gap: 10px;
+    font-family: Arial, sans-serif;
+    border-bottom: 1px solid gold;
+}
+.menu-horizontal a {
+    color: gold;
+    text-decoration: none;
+    font-weight: bold;
+    padding: 10px 15px;
+    flex-shrink: 0;
+    border-radius: 6px;
+    white-space: nowrap;
+}
+.menu-horizontal a:hover {
+    background-color: gold;
+    color: black;
+}
+@media screen and (max-width: 768px) {
+    .menu-horizontal {
+        flex-wrap: nowrap;
+        overflow-x: auto;
     }
-    .menu-cliente a {
-        color: gold;
-        text-decoration: none;
-        font-weight: bold;
-        background-color: #222;
-        padding: 10px 12px;
-        border-radius: 6px;
-        transition: background 0.3s;
-        font-size: 14px;
-    }
-    .menu-cliente a:hover {
-        background-color: gold;
-        color: black;
-    }
-    @media (max-width: 600px) {
-        .menu-cliente {
-            flex-direction: column;
-            align-items: center;
-        }
-        .menu-cliente a {
-            width: 90%;
-            text-align: center;
-            font-size: 16px;
-        }
-    }
+}
 </style>
 
-<div class="menu-cliente">
-    <a href="panel_cliente.php">🏠 Inicio</a>
-    <a href="reservar_turno.php">📅 Reservar Turno</a>
-    <a href="ver_mis_turnos.php">📋 Ver Mis Turnos</a> <a href="ver_mis_pagos.php">Mis Pagos</a>
+<div class="menu-horizontal">
+    <a href="panel_cliente.php">Inicio</a>
+    <a href="ver_mis_pagos.php">Mis Pagos</a>
     <a href="pago_online.php">Pago Online</a>
-    <a href="ver_mis_asistencias.php">🧾 Mis Asistencias</a>
-    <a href="ver_mis_pagos.php">💳 Mis Pagos</a>
-    <a href="ver_graduacion.php">🎓 Mi Graduación</a>
-    <a href="ver_competencias.php">🥋 Mis Competencias</a>
-    <a href="ver_progreso_fisico.php">📊 Progreso Físico</a>
-    <a href="ver_progreso_cliente.php">Mi Progreso Físico</a>
-    <a href="ver_archivos_entrenamiento.php">📄 Mis Archivos</a>
-    <a href="ver_qr_cliente.php">📷 Ver mi QR</a>
-    <a href="logout.php">⏪ Cerrar Sesión</a>
+    <a href="ver_turnos.php">Mis Turnos</a>
+    <a href="ver_progreso_cliente.php">Progreso</a>
+    <a href="ver_graduaciones_cliente.php">Graduaciones</a>
+    <a href="ver_competencias_cliente.php">Competencias</a>
+    <a href="ver_datos_fisicos_cliente.php">Datos Físicos</a>
+    <a href="grafico_progreso_cliente.php">Evolución</a>
+    <a href="logout.php">Salir</a>
 </div>
