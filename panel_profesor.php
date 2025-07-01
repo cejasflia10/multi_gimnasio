@@ -1,17 +1,25 @@
 <?php
-if (session_status() === PHP_SESSION_NONE) session_start();
+session_start();
 include 'conexion.php';
 
-// Verificar sesión válida
-if (!isset($_SESSION['profesor_id'])) {
-    header("Location: login_profesor.php");
-    exit;
+if ($_SERVER["REQUEST_METHOD"] === "POST") {
+    $usuario = $_POST['usuario'];
+    $clave = $_POST['clave'];
+
+    $query = $conexion->query("SELECT * FROM profesores WHERE usuario = '$usuario' AND clave = '$clave' LIMIT 1");
+
+    if ($query->num_rows === 1) {
+        $profesor = $query->fetch_assoc();
+
+        $_SESSION['profesor_id'] = $profesor['id'];
+        $_SESSION['profesor_nombre'] = $profesor['nombre'] . ' ' . $profesor['apellido'];
+
+        header("Location: panel_profesor.php");
+        exit;
+    } else {
+        echo "Usuario o clave incorrectos";
+    }
 }
-
-$profesor_id = $_SESSION['profesor_id'];
-$profesor_nombre = $_SESSION['profesor_nombre'] ?? 'Profesor';
-
-include 'menu_profesor.php';
 
 $fecha_hoy = date('Y-m-d');
 
