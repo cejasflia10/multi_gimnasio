@@ -1,5 +1,12 @@
 <?php
-if (session_status() === PHP_SESSION_NONE) session_start();
+// Reforzar sesión para Render / producción
+if (session_status() === PHP_SESSION_NONE) {
+    ini_set('session.use_strict_mode', 1);
+    ini_set('session.cookie_httponly', 1);
+    ini_set('session.cookie_secure', 0); // ⚠️ cambiar a 1 si usás HTTPS
+    session_start();
+}
+
 include 'conexion.php';
 date_default_timezone_set('America/Argentina/Buenos_Aires');
 
@@ -35,40 +42,3 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST['dni'])) {
         }
     }
 }
-?>
-
-<!DOCTYPE html>
-<html>
-<head>
-    <link rel="manifest" href="manifest_cliente.json">
-<link rel="icon" href="icono_cliente.png">
-<meta name="theme-color" content="#FFD700">
-<script>
-  if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('service-worker.js');
-  }
-</script>
-
-    <meta charset="UTF-8">
-    <title>Login Cliente</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <style>
-        body { background: #000; color: gold; font-family: Arial, sans-serif; text-align: center; padding: 30px; }
-        input, button { padding: 10px; font-size: 18px; margin: 10px; width: 80%; max-width: 300px; }
-        button { background-color: gold; color: black; border: none; border-radius: 6px; cursor: pointer; }
-    </style>
-</head>
-<body>
-
-    <h2>🎟️ Ingresar al Panel del Cliente</h2>
-    <form method="POST">
-        <input type="text" name="dni" placeholder="Ingresá tu DNI" required><br>
-        <button type="submit">Ingresar</button>
-    </form>
-
-    <?php if (!empty($mensaje)): ?>
-        <p style="color:red;"><?= $mensaje ?></p>
-    <?php endif; ?>
-
-</body>
-</html>
