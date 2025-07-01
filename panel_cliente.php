@@ -4,8 +4,11 @@ if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 
-// Validar que exista sesión del cliente
-if (!isset($_SESSION['cliente_id'])) {
+// Validar que exista sesión del cliente y gimnasio
+$cliente_id = $_SESSION['cliente_id'] ?? 0;
+$gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
+
+if ($cliente_id == 0 || $gimnasio_id == 0) {
     echo "Acceso denegado.";
     exit;
 }
@@ -13,11 +16,15 @@ if (!isset($_SESSION['cliente_id'])) {
 include 'conexion.php';
 include 'menu_cliente.php';
 
-$cliente_id = $_SESSION['cliente_id'];
-$cliente_nombre = $_SESSION['cliente_nombre'] ?? 'Cliente';
+// Validar que el cliente pertenezca al gimnasio
+$cliente = $conexion->query("SELECT * FROM clientes WHERE id = $cliente_id AND gimnasio_id = $gimnasio_id")->fetch_assoc();
 
-// Obtener los datos del cliente
-$cliente = $conexion->query("SELECT * FROM clientes WHERE id = $cliente_id")->fetch_assoc();
+if (!$cliente) {
+    echo "<div style='color:red; text-align:center; font-size:20px;'>❌ Acceso denegado al gimnasio.</div>";
+    exit;
+}
+
+$cliente_nombre = $cliente['apellido'] . ' ' . $cliente['nombre'];
 ?>
 
 <!DOCTYPE html>
