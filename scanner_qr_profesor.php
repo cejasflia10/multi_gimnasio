@@ -1,84 +1,72 @@
-<!DOCTYPE html>
-<html lang="es">
-<head>
-  <meta charset="UTF-8">
-  <title>Escaneo QR para Ingreso</title>
-  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
-  <style>
-    body {
-      background-color: black;
-      color: gold;
-      font-family: Arial, sans-serif;
-      text-align: center;
-      padding-top: 20px;
-    }
-    #reader {
-      width: 300px;
-      margin: auto;
-      border: 2px solid gold;
-    }
-    #resultado {
-      margin-top: 20px;
-      font-size: 18px;
-    }
-  </style>
-</head>
-<body>
+<?php
+session_start();
+include 'conexion.php';
 
-  <h2>📷 Escaneo QR para Ingreso</h2>
-  <div id="reader"></div>
-  <div id="resultado"></div>
+$profesor_id = $_SESSION['profesor_id'] ?? 0;
+if ($profesor_id == 0) die("Acceso denegado.");
 
-  <script>
-    const scanner = new Html5Qrcode("reader");
+$mensaje = "";
+$datos_cliente = null;
 
-    function iniciarEscaneo() {
-      scanner.start(
-        { facingMode: "environment" },
-        {
-          fps: 10,
-          qrbox: { width: 250, height: 250 }
-        },
-        (decodedText, decodedResult) => {
-          scanner.stop().then(() => {
-            // Enviar DNI al backend
-            fetch("registrar_asistencia_qr.php", {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/x-www-form-urlencoded"
-              },
-              body: "dni=" + encodeURIComponent(decodedText)
-            })
-            .then(response => response.text())
-            .then(data => {
-              document.getElementById("resultado").innerHTML = data;
+if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST['dni'])) {
+    $dni = trim($_POST['dni']);
+    $fecha_hoy = date("Y-m-d");
+    $hora_actual = date("H:i:s");
 
-              // Reiniciar escaneo después de 4 segundos
-              setTimeout(() => {
-                document.getElementById("resultado").innerHTML = "";
-                iniciarEscaneo();
-              }, 4000);
-            })
-            .catch(error => {
-              document.getElementById("resultado").innerHTML = "<span style='color:red;'>❌ Error al registrar asistencia.</span>";
-              setTimeout(() => {
-                document.getElementById("resultado").innerHTML = "";
-                iniciarEscaneo();
-              }, 4000);
-            });
-          });
-        },
-        errorMessage => {
-          // Errores de lectura ignorados
+    $q = $conexion->query("SELECT id, apellido, nombre FROM clientes WHERE dni = '$dni'");
+    if ($q->num_rows == 0) {
+        $mensaje = "Cliente no encontrado.";
+    } else {
+        $cliente = $q->fetch_assoc();
+        $cliente_id = $cliente['id'];
+
+        $membresia = $conexion->query("
+            SELECT id, clases_disponibles, fecha_vencimiento
+            FROM membresias
+            WHERE cliente_id = $cliente_id
+              AND fecha_vencimiento >= '$fecha_hoy'
+              AND clases_disponibles > 0
+            ORDER BY fecha_inicio DESC
+            LIMIT 1
+        ");
+
+        if ($membresia->num_rows == 0) {
+            $mensaje = "No tiene clases disponibles o la membresía está vencida.";
+        } else {
+            $mem = $membresia->fetch_assoc();
+            $membresia_id = $mem['id'];
+            $clases_disponibles = $mem['clases_disponibles'] - 1;
+            $vencimiento = $mem['fecha_vencimiento'];
+
+            $conexion->query("
+                INSERT INTO asistencias_clientes (cliente_id, fecha, hora, profesor_id)
+                VALUES ($cliente_id, '$fecha_hoy', '$hora_actual', $profesor_id)
+            ");
+
+            $conexion->query("
+                UPDATE membresias SET clases_disponibles = clases_disponibles - 1
+                WHERE id = $membresia_id
+            ");
+
+            $ya = $conexion->query("
+                SELECT id FROM asistencias_profesor
+                WHERE profesor_id = $profesor_id AND fecha = '$fecha_hoy'
+            ");
+            if ($ya->num_rows == 0) {
+                $conexion->query("
+                    INSERT INTO asistencias_profesor (profesor_id, fecha, hora_ingreso)
+                    VALUES ($profesor_id, '$fecha_hoy', '$hora_actual')
+                ");
+            }
+
+            $mensaje = "Asistencia registrada correctamente.";
+            $datos_cliente = [
+                'nombre' => $cliente['nombre'],
+                'apellido' => $cliente['apellido'],
+                'clases_restantes' => $clases_disponibles,
+                'vencimiento' => $vencimiento
+            ];
         }
-      ).catch(err => {
-        document.getElementById("resultado").innerHTML = "<span style='color:red;'>❌ Error al acceder a la cámara</span>";
-      });
     }
-
-    // Iniciar al cargar
-    window.onload = iniciarEscaneo;
-  </script>
-
-</body>
-</html>
+}
+?>
