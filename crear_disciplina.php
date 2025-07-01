@@ -19,37 +19,7 @@ if (!isset($_SESSION['gimnasio_id'])) {
         input[type="submit"] { background-color: gold; color: black; padding: 10px 20px; margin-top: 20px; font-weight: bold; border: none; cursor: pointer; }
     </style>
 </head>
-<script>
-// Reactivar pantalla completa con el primer clic
-document.addEventListener('DOMContentLoaded', function () {
-    const body = document.body;
-
-    function entrarPantallaCompleta() {
-        if (!document.fullscreenElement && body.requestFullscreen) {
-            body.requestFullscreen().catch(err => {
-                console.warn("No se pudo activar pantalla completa:", err);
-            });
-        }
-    }
-
-    // Activar pantalla completa al hacer clic
-    body.addEventListener('click', entrarPantallaCompleta, { once: true });
-});
-
-// Bloquear clic derecho
-document.addEventListener('contextmenu', e => e.preventDefault());
-
-// Bloquear combinaciones como F12, Ctrl+Shift+I
-document.addEventListener('keydown', function (e) {
-    if (
-        e.key === "F12" ||
-        (e.ctrlKey && e.shiftKey && (e.key === "I" || e.key === "J")) ||
-        (e.ctrlKey && e.key === "U")
-    ) {
-        e.preventDefault();
-    }
-});
-</script>
+<script src="fullscreen.js"></script>
 
 <body>
     <h2 style="text-align:center;">Agregar Nueva Disciplina</h2>
