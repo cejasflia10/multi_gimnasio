@@ -11,7 +11,7 @@ if (session_status() === PHP_SESSION_NONE) {
 
 // Validar sesión antes de mostrar el panel
 if (!isset($_SESSION['cliente_id'])) {
-    echo "Acceso denegado.";
+    echo "<div style='color:red; font-size:20px; text-align:center;'>❌ Acceso denegado.</div>";
     exit;
 }
 
@@ -49,19 +49,30 @@ $cliente = $conexion->query("SELECT * FROM clientes WHERE id = $cliente_id")->fe
             margin: auto;
             border: 1px solid gold;
         }
+        pre {
+            background-color: #111;
+            color: lime;
+            padding: 10px;
+            margin: 20px auto;
+            max-width: 600px;
+            overflow: auto;
+        }
     </style>
 </head>
 <body>
 
-<h1>Bienvenido <?= htmlspecialchars($cliente_nombre) ?></h1>
+<h1>👋 Bienvenido <?= htmlspecialchars($cliente_nombre) ?></h1>
 
 <div class="datos">
     <p><strong>DNI:</strong> <?= $cliente['dni'] ?></p>
     <p><strong>Email:</strong> <?= $cliente['email'] ?></p>
     <p><strong>Teléfono:</strong> <?= $cliente['telefono'] ?></p>
     <p><strong>Disciplina:</strong> <?= $cliente['disciplina'] ?></p>
-    <p><strong>Fecha de nacimiento:</strong> <?= $cliente['fecha_nacimiento'] ?></p>
 </div>
+
+<pre>🧪 SESIÓN ACTUAL:
+<?php print_r($_SESSION); ?>
+</pre>
 
 </body>
 </html>
