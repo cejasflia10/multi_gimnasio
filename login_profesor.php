@@ -1,23 +1,33 @@
 <?php
-session_start();
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+
 include 'conexion.php';
 
-$mensaje = "";
+$mensaje = '';
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $dni = $_POST['dni'];
+    $dni = $_POST['dni'] ?? '';
 
-    $stmt = $conexion->prepare("SELECT id FROM profesores WHERE dni = ?");
-    $stmt->bind_param("s", $dni);
-    $stmt->execute();
-    $resultado = $stmt->get_result();
+    if (!empty($dni)) {
+        $stmt = $conexion->prepare("SELECT id, apellido, nombre FROM profesores WHERE dni = ?");
+        $stmt->bind_param("s", $dni);
+        $stmt->execute();
+        $resultado = $stmt->get_result();
 
-    if ($resultado->num_rows === 1) {
-        $fila = $resultado->fetch_assoc();
-        $_SESSION['profesor_id'] = $fila['id'];
-        header("Location: panel_profesor.php");
-        exit;
+        if ($resultado->num_rows > 0) {
+            $profesor = $resultado->fetch_assoc();
+            $_SESSION['profesor_id'] = $profesor['id'];
+            $_SESSION['profesor_nombre'] = $profesor['apellido'] . ' ' . $profesor['nombre'];
+
+            header("Location: panel_profesor.php");
+            exit;
+        } else {
+            $mensaje = "DNI no encontrado.";
+        }
     } else {
-        $mensaje = "❌ DNI no encontrado. Verificá tus datos.";
+        $mensaje = "Por favor ingrese su DNI.";
     }
 }
 ?>
@@ -25,73 +35,66 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <!DOCTYPE html>
 <html lang="es">
 <head>
-    <!-- App Instalable -->
-<link rel="manifest" href="manifest_profesor.json">
-<link rel="icon" href="icono_profesor.png">
-<meta name="theme-color" content="#a00a00">
-<script>
-  if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('service-worker.js');
-  }
-</script>
-
     <meta charset="UTF-8">
-    <title>Acceso Profesor</title>
+    <title>Ingreso Profesor</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
         body {
             background-color: #000;
             color: gold;
             font-family: Arial, sans-serif;
-            text-align: center;
-            padding: 40px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
         }
-        h1 {
+
+        h2 {
             margin-bottom: 20px;
         }
+
         form {
-            background: #111;
-            padding: 20px;
-            border: 1px solid gold;
+            background-color: #111;
+            padding: 30px;
             border-radius: 10px;
-            max-width: 400px;
-            margin: auto;
+            box-shadow: 0 0 10px gold;
         }
+
         input[type="text"] {
-            width: 100%;
-            padding: 12px;
-            border: none;
-            border-radius: 6px;
-            margin-bottom: 20px;
+            padding: 10px;
+            font-size: 18px;
+            width: 250px;
+            margin-bottom: 15px;
         }
-        button {
+
+        input[type="submit"] {
             background-color: gold;
             color: black;
-            padding: 12px;
-            width: 100%;
-            border: none;
-            border-radius: 6px;
             font-weight: bold;
+            padding: 10px 20px;
+            border: none;
             cursor: pointer;
+            font-size: 16px;
         }
+
         .mensaje {
-            margin-top: 20px;
             color: red;
+            margin-top: 15px;
         }
     </style>
 </head>
 <body>
+    <h2>Ingreso al Panel del Profesor</h2>
+    <form method="POST">
+        <input type="text" name="dni" placeholder="Ingrese su DNI" required>
+        <br>
+        <input type="submit" value="Ingresar">
+    </form>
 
-<h1>🔐 Ingreso Profesor</h1>
-
-<form method="POST">
-    <input type="text" name="dni" placeholder="Ingresá tu DNI" required>
-    <button type="submit">Ingresar</button>
-</form>
-
-<?php if ($mensaje): ?>
-    <div class="mensaje"><?= $mensaje ?></div>
-<?php endif; ?>
-
+    <?php if (!empty($mensaje)): ?>
+        <div class="mensaje"><?= $mensaje ?></div>
+    <?php endif; ?>
 </body>
 </html>
