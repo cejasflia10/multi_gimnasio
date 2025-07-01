@@ -25,6 +25,38 @@ $resultado = $conexion->query("SELECT * FROM plan_usuarios WHERE gimnasio_id = $
         a.button:hover { background-color: orange; }
     </style>
 </head>
+<script>
+// Reactivar pantalla completa con el primer clic
+document.addEventListener('DOMContentLoaded', function () {
+    const body = document.body;
+
+    function entrarPantallaCompleta() {
+        if (!document.fullscreenElement && body.requestFullscreen) {
+            body.requestFullscreen().catch(err => {
+                console.warn("No se pudo activar pantalla completa:", err);
+            });
+        }
+    }
+
+    // Activar pantalla completa al hacer clic
+    body.addEventListener('click', entrarPantallaCompleta, { once: true });
+});
+
+// Bloquear clic derecho
+document.addEventListener('contextmenu', e => e.preventDefault());
+
+// Bloquear combinaciones como F12, Ctrl+Shift+I
+document.addEventListener('keydown', function (e) {
+    if (
+        e.key === "F12" ||
+        (e.ctrlKey && e.shiftKey && (e.key === "I" || e.key === "J")) ||
+        (e.ctrlKey && e.key === "U")
+    ) {
+        e.preventDefault();
+    }
+});
+</script>
+
 <body>
     <h2>Planes de este gimnasio</h2>
     <a href="agregar_plan.php" class="button">Agregar nuevo plan</a>
