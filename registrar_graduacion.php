@@ -1,31 +1,16 @@
 <?php
-session_start();
+if (session_status() === PHP_SESSION_NONE) session_start();
 include 'conexion.php';
-include 'menu_profesor.php';
 
 $profesor_id = $_SESSION['profesor_id'] ?? 0;
 $gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
-if ($profesor_id == 0) die("Acceso denegado.");
 
-// Obtener alumnos del profesor
 $alumnos = $conexion->query("
-    SELECT id, apellido, nombre FROM clientes WHERE gimnasio_id = \$_SESSION['gimnasio_id']
-    ORDER BY c.apellido
+    SELECT id, apellido, nombre
+    FROM clientes
+    WHERE gimnasio_id = $gimnasio_id
+    ORDER BY apellido
 ");
-
-$mensaje = "";
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $cliente_id = $_POST['cliente_id'];
-    $fecha = $_POST['fecha'];
-    $disciplina = $_POST['disciplina'];
-    $nivel = $_POST['nivel'];
-    $obs = $_POST['observaciones'];
-
-    $stmt = $conexion->prepare("INSERT INTO graduaciones (profesor_id, cliente_id, fecha, disciplina, nivel, observaciones) VALUES (?, ?, ?, ?, ?, ?)");
-    $stmt->bind_param("iissss", $profesor_id, $cliente_id, $fecha, $disciplina, $nivel, $obs);
-    $stmt->execute();
-    $mensaje = "✅ Graduación registrada.";
-}
 ?>
 
 <!DOCTYPE html>
@@ -33,73 +18,49 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <head>
     <meta charset="UTF-8">
     <title>Registrar Graduación</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
     <style>
         body { background: #000; color: gold; font-family: Arial, sans-serif; padding: 20px; }
-        h1 { text-align: center; }
-        form {
-            max-width: 600px;
-            margin: auto;
-            background: #111;
-            padding: 20px;
-            border-radius: 10px;
-            border: 1px solid gold;
+        .formulario {
+            max-width: 500px; margin: auto; background: #111; padding: 20px;
+            border-radius: 10px; border: 1px solid gold;
         }
-        label, input, textarea, select {
-            display: block;
-            width: 100%;
-            margin-top: 10px;
-            padding: 10px;
-            border-radius: 6px;
-            border: none;
+        h2 { text-align: center; margin-bottom: 20px; }
+        label, select, input {
+            display: block; width: 100%; margin-top: 10px;
         }
-        button {
-            margin-top: 20px;
-            background: gold;
-            color: black;
-            font-weight: bold;
-            padding: 10px;
-            border-radius: 6px;
-            cursor: pointer;
+        select, input[type='text'], input[type='date'] {
+            background: #222; color: gold; border: 1px solid gold;
+            padding: 10px; border-radius: 5px;
         }
-        .mensaje {
-            text-align: center;
-            margin-top: 15px;
-            color: lightgreen;
+        input[type="submit"] {
+            background: gold; color: black; font-weight: bold; cursor: pointer;
+            border: none; padding: 12px; margin-top: 15px;
         }
     </style>
 </head>
 <body>
 
-<h1>🎓 Registrar Graduación</h1>
+<div class="formulario">
+    <h2>🎓 Registrar Graduación del Alumno</h2>
+    <form action="guardar_graduacion.php" method="POST">
+        <label for="cliente_id">Alumno:</label>
+        <select name="cliente_id" required>
+            <option value="">-- Elegir alumno --</option>
+            <?php while ($c = $alumnos->fetch_assoc()): ?>
+                <option value="<?= $c['id'] ?>"><?= $c['apellido'] . ', ' . $c['nombre'] ?></option>
+            <?php endwhile; ?>
+        </select>
 
-<form method="POST">
-    <label>Alumno:</label>
-    <select name="cliente_id" required>
-        <option value="">-- Seleccionar alumno --</option>
-        <?php while ($a = $alumnos->fetch_assoc()): ?>
-            <option value="<?= $a['id'] ?>"><?= $a['apellido'] ?>, <?= $a['nombre'] ?></option>
-        <?php endwhile; ?>
-    </select>
+        <label for="fecha">Fecha:</label>
+        <input type="date" name="fecha" required>
 
-    <label>Fecha:</label>
-    <input type="date" name="fecha" value="<?= date('Y-m-d') ?>" required>
+        <label for="nivel">Nivel / Graduación:</label>
+        <input type="text" name="nivel" required>
 
-    <label>Disciplina:</label>
-    <input type="text" name="disciplina" required>
-
-    <label>Nivel / Cinturón:</label>
-    <input type="text" name="nivel" required>
-
-    <label>Observaciones:</label>
-    <textarea name="observaciones" rows="4"></textarea>
-
-    <button type="submit">Guardar Graduación</button>
-</form>
-
-<?php if ($mensaje): ?>
-    <p class="mensaje"><?= $mensaje ?></p>
-<?php endif; ?>
+        <input type="submit" value="Registrar Graduación">
+    </form>
+</div>
 
 </body>
 </html>
