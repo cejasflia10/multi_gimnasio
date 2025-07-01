@@ -3,10 +3,10 @@ session_start();
 include 'conexion.php';
 include 'menu_horizontal.php';
 
-if ($_SESSION['rol'] !== 'usuario') {
-    die("Acceso denegado.");
+$gimnasio_id = $_SESSION['gimnasio_id'] ?? null;
+if (!$gimnasio_id) {
+    die("Gimnasio no especificado.");
 }
-
 // Guardar alias si se envió el formulario
 $mensaje = "";
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
