@@ -1,26 +1,26 @@
 <?php
-// Mostrar errores (para desarrollo)
-ini_set('display_errors', 1);
-ini_set('display_startup_errors', 1);
-error_reporting(E_ALL);
-
 if (session_status() === PHP_SESSION_NONE) session_start();
+include 'conexion.php';
 
-if (!isset($_SESSION['profesor_id']) || empty($_SESSION['profesor_id'])) {
+if (!isset($_SESSION['profesor_id'], $_SESSION['gimnasio_id'])) {
     echo "Acceso denegado.";
     exit;
 }
 
-include 'conexion.php';
+$profesor_id = $_SESSION['profesor_id'];
+$gimnasio_id = $_SESSION['gimnasio_id'];
+
+$valida = $conexion->query("SELECT id, apellido, nombre FROM profesores WHERE id = $profesor_id AND gimnasio_id = $gimnasio_id");
+if ($valida->num_rows == 0) {
+    echo "<p style='color:red;'>❌ Acceso denegado al gimnasio.</p>";
+    exit;
+}
+$prof = $valida->fetch_assoc();
+
 include 'menu_profesor.php';
 
-$profesor_id = $_SESSION['profesor_id'];
-$gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
 $fecha_hoy = date('Y-m-d');
 
-$prof = $conexion->query("SELECT apellido, nombre FROM profesores WHERE id = $profesor_id AND gimnasio_id = $gimnasio_id")->fetch_assoc();
-
-// Obtener alumnos de hoy
 $alumnos = $conexion->query("
     SELECT c.apellido, c.nombre
     FROM reservas r
@@ -30,15 +30,15 @@ $alumnos = $conexion->query("
     ORDER BY c.apellido
 ");
 
-// Calcular saldo mensual por horas
 $ingresos = $conexion->query("
     SELECT fecha, hora_ingreso, hora_egreso
     FROM asistencias_profesor
-    WHERE profesor_id = $profesor_id AND MONTH(fecha) = MONTH(CURDATE()) AND YEAR(fecha) = YEAR(CURDATE())");
+    WHERE profesor_id = $profesor_id AND MONTH(fecha) = MONTH(CURDATE()) AND YEAR(fecha) = YEAR(CURDATE())
+");
 
 $total_horas = 0;
 while ($fila = $ingresos->fetch_assoc()) {
-    if ($fila['hora_egreso'] && $fila['hora_ingreso']) {
+    if ($fila['hora_ingreso'] && $fila['hora_egreso']) {
         $inicio = strtotime($fila['hora_ingreso']);
         $fin = strtotime($fila['hora_egreso']);
         $total_horas += round(($fin - $inicio) / 3600, 2);
@@ -54,37 +54,20 @@ $saldo = $total_horas * $valor_hora;
     <title>Panel Profesor</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
-        body {
-            background-color: #000;
-            color: gold;
-            font-family: Arial, sans-serif;
-            padding: 20px;
-        }
+        body { background: #000; color: gold; font-family: Arial; padding: 20px; }
+        h1, h3 { text-align: center; }
         .card {
-            background-color: #111;
-            padding: 20px;
-            margin: 20px auto;
-            border: 1px solid gold;
-            border-radius: 10px;
-            max-width: 800px;
+            background: #111; padding: 20px; margin: 20px auto;
+            border: 1px solid gold; border-radius: 10px; max-width: 800px;
         }
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 10px;
-        }
-        th, td {
-            border: 1px solid gold;
-            padding: 10px;
-            text-align: center;
-        }
-        th {
-            background-color: #222;
-        }
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+        th, td { border: 1px solid gold; padding: 10px; text-align: center; }
+        th { background: #222; }
     </style>
 </head>
 <body>
-<h1 style="text-align:center;">👨‍🏫 Bienvenido <?= $prof['apellido'] . ', ' . $prof['nombre'] ?></h1>
+
+<h1>👨‍🏫 Bienvenido <?= $prof['apellido'] ?>, <?= $prof['nombre'] ?></h1>
 
 <div class="card">
     <h3>📅 Alumnos del día (<?= $fecha_hoy ?>)</h3>
