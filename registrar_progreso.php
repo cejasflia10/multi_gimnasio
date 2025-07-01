@@ -8,11 +8,7 @@ if ($profesor_id == 0) die("Acceso denegado.");
 
 // Obtener lista de alumnos del profesor
 $alumnos = $conexion->query("
-    SELECT DISTINCT c.id, c.apellido, c.nombre
-    FROM reservas r
-    JOIN turnos t ON r.turno_id = t.id
-    JOIN clientes c ON r.cliente_id = c.id
-    WHERE t.id_profesor = $profesor_id
+    SELECT id, apellido, nombre FROM clientes WHERE gimnasio_id = \$_SESSION['gimnasio_id']
     ORDER BY c.apellido
 ");
 
