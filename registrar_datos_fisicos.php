@@ -1,4 +1,6 @@
 <?php
+$gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
+?><?php
 session_start();
 include 'conexion.php';
 include 'menu_profesor.php';
