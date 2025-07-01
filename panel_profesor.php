@@ -1,16 +1,14 @@
 <?php
 ini_set('session.use_strict_mode', 1);
 ini_set('session.cookie_httponly', 1);
-ini_set('session.cookie_secure', 0); // 1 si usás HTTPS
+ini_set('session.cookie_secure', 0); // CAMBIA a 1 si usás https
 session_start();
-echo "<pre>SESION ACTIVA:\n";
-print_r($_SESSION);
-echo "</pre>";
 
 if (!isset($_SESSION['profesor_id'])) {
     echo "Acceso denegado.";
     exit;
 }
+
 $profesor_id = $_SESSION['profesor_id'];
 
 
