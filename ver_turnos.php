@@ -1,96 +1,82 @@
+
 <?php
 include 'conexion.php';
-include 'menu_horizontal.php';
 
-// Iniciar sesión y validar que exista gimnasio_id
-if (session_status() === PHP_SESSION_NONE) session_start();
-
-if (!isset($_SESSION['gimnasio_id'])) {
-    die("Acceso no autorizado. Inicie sesión.");
-}
-
-$gimnasio_id = $_SESSION['gimnasio_id'];
-
-// Consultas
-$dias = $conexion->query("SELECT * FROM dias");
-$horarios = $conexion->query("SELECT * FROM horarios");
-$profesores = $conexion->query("SELECT * FROM profesores WHERE gimnasio_id = $gimnasio_id");
+$resultado = $conexion->query("
+    SELECT t.id, t.dia, h.hora_inicio, h.hora_fin, p.apellido AS profesor, t.cupo_maximo
+    FROM turnos t
+    JOIN horarios h ON t.id_horario = h.id
+    JOIN profesores p ON t.id_profesor = p.id
+    ORDER BY FIELD(t.dia, 'Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'), h.hora_inicio
+");
 ?>
 
 <!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>Agregar Turno</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Ver Turnos</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
         body {
-            background-color: #111;
-            color: #f1c40f;
-            font-family: Arial;
-            margin-left: 260px;
-            padding: 20px;
-        }
-        form {
-            max-width: 400px;
-            margin: auto;
-            padding: 20px;
-            background: #222;
-            border-radius: 10px;
-        }
-        h2 {
-            text-align: center;
-            margin-bottom: 20px;
-        }
-        label, select, input {
-            display: block;
-            width: 100%;
-            margin-bottom: 15px;
-            padding: 8px;
-            font-size: 16px;
-            background-color: #111;
+            background: #000;
             color: gold;
-            border: 1px solid #555;
-            border-radius: 5px;
+            font-family: Arial, sans-serif;
+            padding: 20px;
         }
-        button {
-            background: #f1c40f;
-            border: none;
-            padding: 10px;
+        h1 {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        table {
             width: 100%;
-            color: #000;
+            border-collapse: collapse;
+            margin-top: 10px;
+        }
+        th, td {
+            border: 1px solid gold;
+            padding: 10px;
+            text-align: center;
+        }
+        th {
+            background: #222;
+        }
+        a.boton {
+            background: gold;
+            color: black;
+            padding: 6px 12px;
+            text-decoration: none;
             font-weight: bold;
-            cursor: pointer;
-            border-radius: 5px;
+            border-radius: 6px;
         }
     </style>
 </head>
 <body>
-    <form action="guardar_turno.php" method="POST">
-        <h2>Nuevo Turno</h2>
 
-        <label>Día:</label>
-        <select name="id_dia" required>
-            <?php while($d = $dias->fetch_assoc()) echo "<option value='{$d['id']}'>{$d['nombre']}</option>"; ?>
-        </select>
+<h1>📋 Lista de Turnos</h1>
 
-        <label>Horario:</label>
-        <select name="id_horario" required>
-            <?php while($h = $horarios->fetch_assoc()) {
-                $rango = substr($h['hora_inicio'], 0, 5) . " - " . substr($h['hora_fin'], 0, 5);
-                echo "<option value='{$h['id']}'>$rango</option>";
-            } ?>
-        </select>
+<table>
+    <thead>
+        <tr>
+            <th>Día</th>
+            <th>Horario</th>
+            <th>Profesor</th>
+            <th>Cupo Máximo</th>
+            <th>Acción</th>
+        </tr>
+    </thead>
+    <tbody>
+        <?php while ($t = $resultado->fetch_assoc()): ?>
+        <tr>
+            <td><?= $t['dia'] ?></td>
+            <td><?= $t['hora_inicio'] ?> - <?= $t['hora_fin'] ?></td>
+            <td><?= $t['profesor'] ?></td>
+            <td><?= $t['cupo_maximo'] ?></td>
+            <td><a class="boton" href="editar_turno.php?id=<?= $t['id'] ?>">Editar</a></td>
+        </tr>
+        <?php endwhile; ?>
+    </tbody>
+</table>
 
-        <label>Profesor:</label>
-        <select name="id_profesor" required>
-            <?php while($p = $profesores->fetch_assoc()) echo "<option value='{$p['id']}'>{$p['apellido']} {$p['nombre']}</option>"; ?>
-        </select>
-
-        <label>Cupo máximo:</label>
-        <input type="number" name="cupo_maximo" value="20" min="1">
-
-        <button type="submit">Guardar Turno</button>
-    </form>
 </body>
 </html>
