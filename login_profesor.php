@@ -1,8 +1,5 @@
 <?php
-if (session_status() === PHP_SESSION_NONE) {
-    session_start();
-}
-
+if (session_status() === PHP_SESSION_NONE) session_start();
 include 'conexion.php';
 
 $mensaje = '';
@@ -14,20 +11,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $stmt = $conexion->prepare("SELECT id, apellido, nombre FROM profesores WHERE dni = ?");
         $stmt->bind_param("s", $dni);
         $stmt->execute();
-        $resultado = $stmt->get_result();
+        $res = $stmt->get_result();
 
-        if ($resultado->num_rows > 0) {
-            $profesor = $resultado->fetch_assoc();
-            $_SESSION['profesor_id'] = $profesor['id'];
-            $_SESSION['profesor_nombre'] = $profesor['apellido'] . ' ' . $profesor['nombre'];
-
+        if ($res->num_rows > 0) {
+            $prof = $res->fetch_assoc();
+            $_SESSION['profesor_id'] = $prof['id'];
+            $_SESSION['profesor_nombre'] = $prof['apellido'] . ' ' . $prof['nombre'];
             header("Location: panel_profesor.php");
             exit;
         } else {
             $mensaje = "DNI no encontrado.";
         }
     } else {
-        $mensaje = "Por favor ingrese su DNI.";
+        $mensaje = "Ingrese un DNI válido.";
     }
 }
 ?>
@@ -36,51 +32,46 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>Ingreso Profesor</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login Profesor</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
     <style>
+        * { box-sizing: border-box; }
         body {
-            background-color: #000;
+            margin: 0;
+            background: #000;
             color: gold;
             font-family: Arial, sans-serif;
-            text-align: center;
-            padding: 40px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
         }
-
-        h2 {
-            margin-bottom: 30px;
-        }
-
-        form {
-            display: inline-block;
-            background-color: #111;
-            padding: 25px;
+        .contenedor {
+            background: #111;
+            padding: 30px;
             border-radius: 10px;
             box-shadow: 0 0 10px gold;
+            text-align: center;
         }
-
         input[type="text"] {
-            padding: 10px;
+            padding: 12px;
             font-size: 18px;
-            width: 240px;
-            margin-bottom: 20px;
-            border-radius: 5px;
+            width: 250px;
             border: 1px solid gold;
+            border-radius: 5px;
             background: #222;
             color: gold;
+            margin-bottom: 15px;
         }
-
         input[type="submit"] {
-            background-color: gold;
-            color: black;
-            font-weight: bold;
-            padding: 10px 25px;
-            border: none;
-            cursor: pointer;
+            padding: 12px 25px;
             font-size: 16px;
+            background: gold;
+            color: black;
+            border: none;
             border-radius: 5px;
+            cursor: pointer;
         }
-
         .mensaje {
             color: red;
             margin-top: 15px;
@@ -88,16 +79,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     </style>
 </head>
 <body>
-
-    <h2>Acceso al Panel del Profesor</h2>
-    <form method="POST">
-        <input type="text" name="dni" placeholder="Ingrese su DNI" required><br>
-        <input type="submit" value="Ingresar">
-    </form>
-
-    <?php if (!empty($mensaje)): ?>
-        <div class="mensaje"><?= $mensaje ?></div>
-    <?php endif; ?>
-
+    <div class="contenedor">
+        <h2>Ingreso Profesor</h2>
+        <form method="POST">
+            <input type="text" name="dni" placeholder="Ingrese DNI" autofocus required><br>
+            <input type="submit" value="Entrar">
+        </form>
+        <?php if (!empty($mensaje)): ?>
+            <div class="mensaje"><?= $mensaje ?></div>
+        <?php endif; ?>
+    </div>
 </body>
 </html>
