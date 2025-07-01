@@ -1,10 +1,15 @@
 <?php
 session_start();
 include 'conexion.php';
-include 'menu_cliente.php';
 
+// Verificar sesión válida antes de mostrar nada
 $cliente_id = $_SESSION['cliente_id'] ?? 0;
-if ($cliente_id == 0) die("Acceso denegado.");
+if ($cliente_id == 0) {
+    echo "Acceso denegado.";
+    exit;
+}
+
+include 'menu_cliente.php'; // Solo si la sesión es válida
 
 $cliente = $conexion->query("SELECT * FROM clientes WHERE id = $cliente_id")->fetch_assoc();
 $foto = $cliente['foto'] ?? '';
@@ -16,6 +21,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['nueva_foto'])) {
         $foto = $nombre_archivo;
     }
 }
+?>
+
 ?>
 
 <!DOCTYPE html>
