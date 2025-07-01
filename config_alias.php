@@ -3,7 +3,7 @@ session_start();
 include 'conexion.php';
 include 'menu_horizontal.php';
 
-if ($_SESSION['rol'] !== 'admin') {
+if ($_SESSION['rol'] !== 'usuario') {
     die("Acceso denegado.");
 }
 
