@@ -15,6 +15,7 @@ $mensaje = "";
 if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST['dni'])) {
     $dni = trim($_POST['dni']);
     $consulta = $conexion->query("SELECT * FROM clientes WHERE dni = '$dni'");
+    $_SESSION['gimnasio_id'] = $cliente['gimnasio_id'];
     $cliente = $consulta->fetch_assoc();
 
     if (!$cliente) {
