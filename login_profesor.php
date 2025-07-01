@@ -1,13 +1,15 @@
 <?php
-// Iniciar sesión de forma segura y compatible con Render
-if (session_status() === PHP_SESSION_NONE) {
-    ini_set('session.cookie_secure', '0'); // Cambiar a '1' si usás HTTPS
-    ini_set('session.cookie_httponly', '1');
-    ini_set('session.use_strict_mode', '1');
-    session_start();
-}
-
+ini_set('session.use_strict_mode', 1);
+ini_set('session.cookie_httponly', 1);
+ini_set('session.cookie_secure', 0); // poner en 1 si usás HTTPS con dominio SSL
+session_start();
 include 'conexion.php';
+
+$_SESSION['profesor_id'] = $prof['id'];
+$_SESSION['profesor_nombre'] = $prof['apellido'] . ' ' . $prof['nombre'];
+
+header("Location: panel_profesor.php");
+exit;
 
 $mensaje = '';
 
