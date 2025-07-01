@@ -43,21 +43,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             background-color: #000;
             color: gold;
             font-family: Arial, sans-serif;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            height: 100vh;
-            margin: 0;
+            text-align: center;
+            padding: 40px;
         }
 
         h2 {
-            margin-bottom: 20px;
+            margin-bottom: 30px;
         }
 
         form {
+            display: inline-block;
             background-color: #111;
-            padding: 30px;
+            padding: 25px;
             border-radius: 10px;
             box-shadow: 0 0 10px gold;
         }
@@ -65,18 +62,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         input[type="text"] {
             padding: 10px;
             font-size: 18px;
-            width: 250px;
-            margin-bottom: 15px;
+            width: 240px;
+            margin-bottom: 20px;
+            border-radius: 5px;
+            border: 1px solid gold;
+            background: #222;
+            color: gold;
         }
 
         input[type="submit"] {
             background-color: gold;
             color: black;
             font-weight: bold;
-            padding: 10px 20px;
+            padding: 10px 25px;
             border: none;
             cursor: pointer;
             font-size: 16px;
+            border-radius: 5px;
         }
 
         .mensaje {
@@ -86,15 +88,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     </style>
 </head>
 <body>
-    <h2>Ingreso al Panel del Profesor</h2>
+
+    <h2>Acceso al Panel del Profesor</h2>
     <form method="POST">
-        <input type="text" name="dni" placeholder="Ingrese su DNI" required>
-        <br>
+        <input type="text" name="dni" placeholder="Ingrese su DNI" required><br>
         <input type="submit" value="Ingresar">
     </form>
 
     <?php if (!empty($mensaje)): ?>
         <div class="mensaje"><?= $mensaje ?></div>
     <?php endif; ?>
+
 </body>
 </html>
