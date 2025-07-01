@@ -1,4 +1,3 @@
-
 <?php
 include 'conexion.php';
 include 'menu_horizontal.php';

@@ -1,88 +1,95 @@
 <?php
 session_start();
 include 'conexion.php';
-
-$cliente_id = $_SESSION['cliente_id'] ?? 0;
-if ($cliente_id == 0) {
-    header("Location: login_cliente.php");
-    exit;
-}
-
 include 'menu_cliente.php';
 
-$cliente = $conexion->query("SELECT * FROM clientes WHERE id = $cliente_id")->fetch_assoc();
-$datos = $conexion->query("SELECT * FROM datos_personales_cliente WHERE cliente_id = $cliente_id")->fetch_assoc();
+$cliente_id = $_SESSION['cliente_id'] ?? 0;
+if ($cliente_id == 0) die("Acceso denegado.");
 
-$foto = (!empty($cliente['foto']) && file_exists($cliente['foto'])) ? $cliente['foto'] : 'fotos/default.jpg';
+$cliente = $conexion->query("SELECT * FROM clientes WHERE id = $cliente_id")->fetch_assoc();
+$foto = $cliente['foto'] ?? '';
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['nueva_foto'])) {
+    $nombre_archivo = "fotos_clientes/" . uniqid() . "_" . basename($_FILES['nueva_foto']['name']);
+    if (move_uploaded_file($_FILES['nueva_foto']['tmp_name'], $nombre_archivo)) {
+        $conexion->query("UPDATE clientes SET foto = '$nombre_archivo' WHERE id = $cliente_id");
+        $foto = $nombre_archivo;
+    }
+}
 ?>
 
 <!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>🏠 Panel del Cliente</title>
+    <title>Panel Cliente</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
-        body {
-            background-color: #000;
-            color: gold;
-            font-family: Arial, sans-serif;
+        body { background: #000; color: gold; font-family: Arial, sans-serif; padding: 20px; }
+        h1 { text-align: center; }
+        .card {
+            background: #111;
+            border: 1px solid gold;
+            border-radius: 10px;
             padding: 20px;
-        }
-        .container {
-            max-width: 900px;
+            max-width: 600px;
             margin: auto;
-            background: #222;
-            padding: 20px;
+        }
+        .foto-perfil {
+            display: block;
+            margin: 10px auto;
+            border: 2px solid gold;
             border-radius: 10px;
-            box-shadow: 0 0 10px gold;
-        }
-        h2 {
-            text-align: center;
-            margin-bottom: 20px;
-        }
-        .foto {
-            text-align: center;
-            margin-bottom: 20px;
-        }
-        .foto img {
-            width: 180px;
-            border: 3px solid gold;
-            border-radius: 10px;
+            max-width: 200px;
         }
         table {
             width: 100%;
             border-collapse: collapse;
             margin-top: 15px;
         }
-        td {
-            padding: 10px;
+        th, td {
             border: 1px solid gold;
+            padding: 8px;
+            text-align: left;
         }
-        td.titulo {
-            font-weight: bold;
-            background-color: #111;
+        th { background: #222; }
+        button {
+            background: gold;
+            color: black;
+            padding: 10px;
+            margin-top: 10px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+        }
+        input[type="file"] {
+            margin-top: 10px;
+            color: gold;
         }
     </style>
 </head>
 <body>
-<div class="container">
-    <h2>🏋️ Bienvenido/a <?= htmlspecialchars($cliente['nombre'] . ' ' . $cliente['apellido']) ?></h2>
 
-    <div class="foto">
-        <img src="<?= $foto ?>" alt="Foto de perfil">
-    </div>
+<h1>🏋️ Bienvenido/a <?= $cliente['nombre'] ?> <?= $cliente['apellido'] ?></h1>
+
+<div class="card">
+    <img src="<?= $foto && file_exists($foto) ? $foto : 'img/foto_default.png' ?>" class="foto-perfil" alt="Foto de perfil">
+
+    <form method="POST" enctype="multipart/form-data">
+        <input type="file" name="nueva_foto" accept="image/*" capture="environment" required>
+        <button type="submit">Subir / Tomar Foto</button>
+    </form>
 
     <table>
-        <tr><td class="titulo">DNI</td><td><?= $cliente['dni'] ?></td></tr>
-        <tr><td class="titulo">Fecha de nacimiento</td><td><?= $cliente['fecha_nacimiento'] ?></td></tr>
-        <tr><td class="titulo">Edad</td><td><?= $cliente['edad'] ?> años</td></tr>
-        <tr><td class="titulo">Teléfono</td><td><?= $cliente['telefono'] ?></td></tr>
-        <tr><td class="titulo">Email</td><td><?= $cliente['email'] ?></td></tr>
-        <tr><td class="titulo">Domicilio</td><td><?= $cliente['domicilio'] ?></td></tr>
-        <tr><td class="titulo">Disciplina</td><td><?= $cliente['disciplina'] ?></td></tr>
-        <tr><td class="titulo">Fecha de vencimiento</td><td><?= $cliente['fecha_vencimiento'] ?></td></tr>
+        <tr><th>DNI</th><td><?= $cliente['dni'] ?></td></tr>
+        <tr><th>Fecha de nacimiento</th><td><?= $cliente['fecha_nacimiento'] ?></td></tr>
+        <tr><th>Edad</th><td><?= $cliente['edad'] ?> años</td></tr>
+        <tr><th>Teléfono</th><td><?= $cliente['telefono'] ?></td></tr>
+        <tr><th>Email</th><td><?= $cliente['email'] ?></td></tr>
+        <tr><th>Domicilio</th><td><?= $cliente['domicilio'] ?></td></tr>
+        <tr><th>Disciplina</th><td><?= $cliente['disciplina'] ?></td></tr>
     </table>
 </div>
+
 </body>
 </html>
