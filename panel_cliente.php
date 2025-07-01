@@ -2,9 +2,7 @@
 // Iniciar sesión correctamente
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
-    echo "<pre style='color:lime;background:black;padding:10px;'>🧪 SESIÓN ACTUAL:\n";
-print_r($_SESSION);
-echo "</pre>";
+   
 
 }
 
