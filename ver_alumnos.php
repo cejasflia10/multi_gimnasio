@@ -7,12 +7,13 @@ include 'menu_profesor.php';
 $profesor_id = $_SESSION['profesor_id'] ?? 0;
 if ($profesor_id == 0) die("Acceso denegado.");
 
-$progresos = $conexion->query("
-    SELECT p.fecha, p.peso, p.altura, p.observaciones, c.apellido, c.nombre
-    FROM progreso_fisico p
-    JOIN clientes c ON p.cliente_id = c.id
-    WHERE p.profesor_id = $profesor_id
-    ORDER BY p.fecha DESC
+$alumnos = $conexion->query("
+    SELECT DISTINCT c.apellido, c.nombre, c.dni, c.disciplina
+    FROM reservas r
+    JOIN turnos t ON r.turno_id = t.id
+    JOIN clientes c ON r.cliente_id = c.id
+    WHERE t.id_profesor = $profesor_id
+    ORDER BY c.apellido
 ");
 ?>
 
@@ -20,7 +21,7 @@ $progresos = $conexion->query("
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>Historial Progreso Físico</title>
+    <title>Mis Alumnos</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
         body { background-color: #000; color: gold; font-family: Arial, sans-serif; padding: 20px; }
@@ -40,33 +41,31 @@ $progresos = $conexion->query("
 </head>
 <body>
 
-<h1>📋 Historial de Progreso Físico</h1>
+<h1>👨‍🏫 Alumnos Asignados</h1>
 
-<?php if ($progresos->num_rows > 0): ?>
+<?php if ($alumnos->num_rows > 0): ?>
 <table>
     <thead>
         <tr>
-            <th>Alumno</th>
-            <th>Fecha</th>
-            <th>Peso</th>
-            <th>Altura</th>
-            <th>Observaciones</th>
+            <th>Apellido</th>
+            <th>Nombre</th>
+            <th>DNI</th>
+            <th>Disciplina</th>
         </tr>
     </thead>
     <tbody>
-        <?php while ($p = $progresos->fetch_assoc()): ?>
+        <?php while ($a = $alumnos->fetch_assoc()): ?>
         <tr>
-            <td><?= $p['apellido'] ?>, <?= $p['nombre'] ?></td>
-            <td><?= $p['fecha'] ?></td>
-            <td><?= $p['peso'] ?> kg</td>
-            <td><?= $p['altura'] ?> cm</td>
-            <td><?= $p['observaciones'] ?></td>
+            <td><?= $a['apellido'] ?></td>
+            <td><?= $a['nombre'] ?></td>
+            <td><?= $a['dni'] ?></td>
+            <td><?= $a['disciplina'] ?></td>
         </tr>
         <?php endwhile; ?>
     </tbody>
 </table>
 <?php else: ?>
-    <p style="text-align: center;">No hay registros de progreso físico aún.</p>
+    <p style="text-align: center;">No se encontraron alumnos asignados.</p>
 <?php endif; ?>
 
 </body>
