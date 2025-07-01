@@ -113,38 +113,7 @@ if ($deudas_q && $deudas_q->num_rows > 0) {
  }
 </style>
 </head>
-<script>
-// Solicitar pantalla completa automáticamente al hacer clic
-document.addEventListener('DOMContentLoaded', function () {
-    const body = document.body;
-
-    // Entrar en pantalla completa si no está ya
-    function entrarPantallaCompleta() {
-        if (!document.fullscreenElement) {
-            body.requestFullscreen().catch(err => {
-                console.warn("No se pudo activar pantalla completa:", err);
-            });
-        }
-    }
-
-    // Activar al primer clic
-    body.addEventListener('click', entrarPantallaCompleta, { once: true });
-});
-
-// Bloquear clic derecho
-document.addEventListener('contextmenu', e => e.preventDefault());
-
-// Bloquear combinaciones peligrosas (como F12)
-document.addEventListener('keydown', function (e) {
-    if (
-        e.key === "F12" || 
-        (e.ctrlKey && e.shiftKey && (e.key === "I" || e.key === "J")) ||
-        (e.ctrlKey && e.key === "U")
-    ) {
-        e.preventDefault();
-    }
-});
-</script>
+<script src="fullscreen.js"></script>
 
 <body>
 
