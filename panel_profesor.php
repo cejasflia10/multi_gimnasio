@@ -1,25 +1,17 @@
 <?php
-session_start();
+if (session_status() === PHP_SESSION_NONE) session_start();
 include 'conexion.php';
 
-if ($_SERVER["REQUEST_METHOD"] === "POST") {
-    $usuario = $_POST['usuario'];
-    $clave = $_POST['clave'];
-
-    $query = $conexion->query("SELECT * FROM profesores WHERE usuario = '$usuario' AND clave = '$clave' LIMIT 1");
-
-    if ($query->num_rows === 1) {
-        $profesor = $query->fetch_assoc();
-
-        $_SESSION['profesor_id'] = $profesor['id'];
-        $_SESSION['profesor_nombre'] = $profesor['nombre'] . ' ' . $profesor['apellido'];
-
-        header("Location: panel_profesor.php");
-        exit;
-    } else {
-        echo "Usuario o clave incorrectos";
-    }
+// Verificar sesión válida
+if (!isset($_SESSION['profesor_id'])) {
+    header("Location: login_profesor.php");
+    exit;
 }
+
+$profesor_id = $_SESSION['profesor_id'];
+$profesor_nombre = $_SESSION['profesor_nombre'] ?? 'Profesor';
+
+include 'menu_profesor.php';
 
 $fecha_hoy = date('Y-m-d');
 
@@ -175,35 +167,6 @@ $total_mes = array_sum(array_column($pagos_dia, 'monto'));
     <p style="text-align: center; font-size: 20px;">
         <strong>$<?= number_format($saldo, 2, ',', '.') ?></strong> por <?= $total_horas ?> horas trabajadas
     </p>
-</div>
-<div class="seccion">
-    <h3>Resumen de Clases Dictadas (<?= date('F Y') ?>)</h3>
-    <?php if (count($pagos_dia) > 0): ?>
-        <table style="width:100%; background:#111; color:gold; border:1px solid gold; border-collapse: collapse;">
-            <thead>
-                <tr>
-                    <th style="padding:8px; border:1px solid gold;">Fecha</th>
-                    <th style="padding:8px; border:1px solid gold;">Alumnos</th>
-                    <th style="padding:8px; border:1px solid gold;">Monto</th>
-                </tr>
-            </thead>
-            <tbody>
-                <?php foreach ($pagos_dia as $fila): ?>
-                    <tr>
-                        <td style="padding:5px; border:1px solid gold;"><?= $fila['fecha'] ?></td>
-                        <td style="padding:5px; border:1px solid gold;"><?= $fila['alumnos'] ?></td>
-                        <td style="padding:5px; border:1px solid gold;">$<?= $fila['monto'] ?></td>
-                    </tr>
-                <?php endforeach; ?>
-                <tr>
-                    <td colspan="2" style="padding:10px; text-align:right; font-weight:bold;">Total del Mes</td>
-                    <td style="padding:10px; font-weight:bold; color:lime;">$<?= $total_mes ?></td>
-                </tr>
-            </tbody>
-        </table>
-    <?php else: ?>
-        <p style="color:gray;">No hay clases registradas este mes.</p>
-    <?php endif; ?>
 </div>
 
 </body>

@@ -1,11 +1,18 @@
 <?php
-if (session_status() === PHP_SESSION_NONE) session_start();
+// Iniciar sesión de forma segura y compatible con Render
+if (session_status() === PHP_SESSION_NONE) {
+    ini_set('session.cookie_secure', '0'); // Cambiar a '1' si usás HTTPS
+    ini_set('session.cookie_httponly', '1');
+    ini_set('session.use_strict_mode', '1');
+    session_start();
+}
+
 include 'conexion.php';
 
 $mensaje = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $dni = $_POST['dni'] ?? '';
+    $dni = trim($_POST['dni'] ?? '');
 
     if (!empty($dni)) {
         $stmt = $conexion->prepare("SELECT id, apellido, nombre FROM profesores WHERE dni = ?");
@@ -17,13 +24,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $prof = $res->fetch_assoc();
             $_SESSION['profesor_id'] = $prof['id'];
             $_SESSION['profesor_nombre'] = $prof['apellido'] . ' ' . $prof['nombre'];
+
             header("Location: panel_profesor.php");
             exit;
         } else {
-            $mensaje = "DNI no encontrado.";
+            $mensaje = "❌ DNI no encontrado.";
         }
     } else {
-        $mensaje = "Ingrese un DNI válido.";
+        $mensaje = "❌ Ingrese un DNI válido.";
     }
 }
 ?>
