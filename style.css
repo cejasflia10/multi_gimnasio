@@ -1,3 +1,13 @@
+html, body {
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+    height: 100%;
+    background-color: #000;
+    color: gold;
+    font-family: Arial, sans-serif;
+}
+
 body {
     margin: 0;
     background-color: #000;
