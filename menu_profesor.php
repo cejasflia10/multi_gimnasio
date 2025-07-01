@@ -32,12 +32,12 @@
 
 <div class="menu-horizontal">
     <a href="panel_profesor.php">Inicio</a>
+    <a href="scanner_qr_profesor.php">Escanear Alumnos (QR)</a></li>
     <a href="ver_alumnos.php">Alumnos</a>
     <a href="subir_rutina.php">Subir Archivo</a>
     <a href="historial_alumnos.php">Archivos</a>
     <a href="registrar_progreso.php">Progreso Físico</a>
     <a href="ver_progreso_fisico.php">Ver Progreso</a>
-    <a href="scanner_qr_profesor.php">Escanear Alumnos (QR)</a></li>
     <a href="registrar_graduacion.php">Graduación</a>
     <a href="ver_graduaciones.php">Ver Graduaciones</a>
     <a href="registrar_competencia.php">Competencia</a>
