@@ -113,8 +113,6 @@ if ($deudas_q && $deudas_q->num_rows > 0) {
  }
 </style>
 </head>
-<script src="fullscreen.js"></script>
-
 <body>
 
 <header>
