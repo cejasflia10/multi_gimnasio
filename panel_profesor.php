@@ -1,26 +1,21 @@
 <?php
 if (session_status() === PHP_SESSION_NONE) session_start();
-include 'conexion.php';
 
-if (!isset($_SESSION['profesor_id'], $_SESSION['gimnasio_id'])) {
+if (!isset($_SESSION['profesor_id']) || empty($_SESSION['profesor_id'])) {
     echo "Acceso denegado.";
     exit;
 }
 
-$profesor_id = $_SESSION['profesor_id'];
-$gimnasio_id = $_SESSION['gimnasio_id'];
-
-$valida = $conexion->query("SELECT id, apellido, nombre FROM profesores WHERE id = $profesor_id AND gimnasio_id = $gimnasio_id");
-if ($valida->num_rows == 0) {
-    echo "<p style='color:red;'>❌ Acceso denegado al gimnasio.</p>";
-    exit;
-}
-$prof = $valida->fetch_assoc();
-
+include 'conexion.php';
 include 'menu_profesor.php';
 
+$profesor_id = $_SESSION['profesor_id'];
+$gimnasio_id = $_SESSION['gimnasio_id'];
 $fecha_hoy = date('Y-m-d');
 
+$prof = $conexion->query("SELECT apellido, nombre FROM profesores WHERE id = $profesor_id")->fetch_assoc();
+
+// Obtener alumnos del día
 $alumnos = $conexion->query("
     SELECT c.apellido, c.nombre
     FROM reservas r
@@ -30,67 +25,66 @@ $alumnos = $conexion->query("
     ORDER BY c.apellido
 ");
 
+// Calcular horas trabajadas
 $ingresos = $conexion->query("
     SELECT fecha, hora_ingreso, hora_egreso
     FROM asistencias_profesor
     WHERE profesor_id = $profesor_id AND MONTH(fecha) = MONTH(CURDATE()) AND YEAR(fecha) = YEAR(CURDATE())
 ");
-
-$total_horas = 0;
-while ($fila = $ingresos->fetch_assoc()) {
-    if ($fila['hora_ingreso'] && $fila['hora_egreso']) {
-        $inicio = strtotime($fila['hora_ingreso']);
-        $fin = strtotime($fila['hora_egreso']);
-        $total_horas += round(($fin - $inicio) / 3600, 2);
-    }
-}
-$valor_hora = 1500;
-$saldo = $total_horas * $valor_hora;
 ?>
+
 <!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">
     <title>Panel Profesor</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
     <style>
-        body { background: #000; color: gold; font-family: Arial; padding: 20px; }
-        h1, h3 { text-align: center; }
-        .card {
-            background: #111; padding: 20px; margin: 20px auto;
-            border: 1px solid gold; border-radius: 10px; max-width: 800px;
+        body {
+            background-color: #000;
+            color: gold;
+            font-family: Arial, sans-serif;
+            padding: 20px;
         }
-        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-        th, td { border: 1px solid gold; padding: 10px; text-align: center; }
-        th { background: #222; }
+        h2 {
+            color: gold;
+        }
+        .cuadro {
+            border: 1px solid gold;
+            padding: 10px;
+            margin-top: 15px;
+            border-radius: 8px;
+        }
     </style>
 </head>
 <body>
+    <h2>👨‍🏫 Bienvenido <?= $prof['apellido'] . ' ' . $prof['nombre'] ?></h2>
 
-<h1>👨‍🏫 Bienvenido <?= $prof['apellido'] ?>, <?= $prof['nombre'] ?></h1>
-
-<div class="card">
-    <h3>📅 Alumnos del día (<?= $fecha_hoy ?>)</h3>
-    <?php if ($alumnos->num_rows > 0): ?>
-        <table>
-            <thead><tr><th>Apellido</th><th>Nombre</th></tr></thead>
-            <tbody>
+    <div class="cuadro">
+        <h3>📌 Alumnos del día</h3>
+        <ul>
             <?php while ($a = $alumnos->fetch_assoc()): ?>
-                <tr><td><?= $a['apellido'] ?></td><td><?= $a['nombre'] ?></td></tr>
+                <li><?= $a['apellido'] . ' ' . $a['nombre'] ?></li>
             <?php endwhile; ?>
-            </tbody>
-        </table>
-    <?php else: ?>
-        <p style="text-align: center;">No hay alumnos registrados hoy.</p>
-    <?php endif; ?>
-</div>
+        </ul>
+    </div>
 
-<div class="card">
-    <h3>💰 Saldo mensual</h3>
-    <p style="text-align: center; font-size: 20px;">
-        <strong>$<?= number_format($saldo, 2, ',', '.') ?></strong> por <?= $total_horas ?> horas trabajadas
-    </p>
-</div>
-
+    <div class="cuadro">
+        <h3>🕒 Horas trabajadas este mes</h3>
+        <ul>
+            <?php
+            $total_horas = 0;
+            while ($i = $ingresos->fetch_assoc()):
+                if ($i['hora_ingreso'] && $i['hora_egreso']) {
+                    $inicio = strtotime($i['hora_ingreso']);
+                    $fin = strtotime($i['hora_egreso']);
+                    $horas = ($fin - $inicio) / 3600;
+                    $total_horas += $horas;
+                }
+            endwhile;
+            ?>
+            <li>Total: <?= round($total_horas, 2) ?> horas</li>
+        </ul>
+    </div>
 </body>
 </html>
