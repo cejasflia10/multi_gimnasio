@@ -1,10 +1,17 @@
 <?php
-session_start();
+if (session_status() === PHP_SESSION_NONE) session_start();
 include 'conexion.php';
-include 'menu_profesor.php';
 
-$profesor_id = $_SESSION['profesor_id'] ?? 0;
-if ($profesor_id == 0) die("Acceso denegado.");
+// Verificar sesión válida
+if (!isset($_SESSION['profesor_id'])) {
+    header("Location: login_profesor.php");
+    exit;
+}
+
+$profesor_id = $_SESSION['profesor_id'];
+$profesor_nombre = $_SESSION['profesor_nombre'] ?? 'Profesor';
+
+include 'menu_profesor.php';
 
 $fecha_hoy = date('Y-m-d');
 
