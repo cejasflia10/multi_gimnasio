@@ -4,14 +4,10 @@ ini_set('display_errors', 1);
 ini_set('display_startup_errors', 1);
 error_reporting(E_ALL);
 
-// Iniciar sesión correctamente
-if (session_status() === PHP_SESSION_NONE) {
-    session_start();
-}
+if (session_status() === PHP_SESSION_NONE) session_start();
 
-// Validar sesión antes de mostrar el panel
-if (!isset($_SESSION['cliente_id'])) {
-    echo "<div style='color:red; font-size:20px; text-align:center;'>❌ Acceso denegado.</div>";
+if (!isset($_SESSION['cliente_id']) || empty($_SESSION['cliente_id'])) {
+    echo "Acceso denegado.";
     exit;
 }
 
@@ -19,60 +15,51 @@ include 'conexion.php';
 include 'menu_cliente.php';
 
 $cliente_id = $_SESSION['cliente_id'];
-$cliente_nombre = $_SESSION['cliente_nombre'] ?? 'Cliente';
+$cliente_nombre = $_SESSION['cliente_nombre'] ?? '';
+$gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
 
-$cliente = $conexion->query("SELECT * FROM clientes WHERE id = $cliente_id")->fetch_assoc();
+$cliente = $conexion->query("SELECT * FROM clientes WHERE id = $cliente_id AND gimnasio_id = $gimnasio_id")->fetch_assoc();
 ?>
-
 <!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>Panel del Cliente</title>
+    <title>Panel Cliente</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
         body {
-            background-color: black;
+            background-color: #000;
             color: gold;
             font-family: Arial, sans-serif;
             padding: 20px;
         }
-        h1 {
+        h2 {
             text-align: center;
-            margin-top: 30px;
+            margin-bottom: 20px;
         }
-        .datos {
-            background: #111;
-            padding: 20px;
-            border-radius: 10px;
-            max-width: 600px;
-            margin: auto;
+        .card {
             border: 1px solid gold;
-        }
-        pre {
-            background-color: #111;
-            color: lime;
-            padding: 10px;
-            margin: 20px auto;
+            border-radius: 8px;
+            padding: 20px;
             max-width: 600px;
-            overflow: auto;
+            margin: 0 auto;
+            background-color: #111;
+        }
+        .dato {
+            margin: 10px 0;
         }
     </style>
 </head>
 <body>
 
-<h1>👋 Bienvenido <?= htmlspecialchars($cliente_nombre) ?></h1>
+<h2>👋 Bienvenido <?= $cliente['apellido'] . ' ' . $cliente['nombre'] ?></h2>
 
-<div class="datos">
-    <p><strong>DNI:</strong> <?= $cliente['dni'] ?></p>
-    <p><strong>Email:</strong> <?= $cliente['email'] ?></p>
-    <p><strong>Teléfono:</strong> <?= $cliente['telefono'] ?></p>
-    <p><strong>Disciplina:</strong> <?= $cliente['disciplina'] ?></p>
+<div class="card">
+    <div class="dato"><strong>DNI:</strong> <?= $cliente['dni'] ?></div>
+    <div class="dato"><strong>Email:</strong> <?= $cliente['email'] ?></div>
+    <div class="dato"><strong>Teléfono:</strong> <?= $cliente['telefono'] ?></div>
+    <div class="dato"><strong>Disciplina:</strong> <?= $cliente['disciplina'] ?></div>
 </div>
-
-<pre>🧪 SESIÓN ACTUAL:
-<?php print_r($_SESSION); ?>
-</pre>
 
 </body>
 </html>

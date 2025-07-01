@@ -1,28 +1,24 @@
 <?php
-// Iniciar sesión segura
-ini_set('session.use_strict_mode', 1);
-ini_set('session.cookie_httponly', 1);
-ini_set('session.cookie_secure', 0); // ⚠️ poné 1 si usás https
-session_start();
+// Mostrar errores (para desarrollo)
+ini_set('display_errors', 1);
+ini_set('display_startup_errors', 1);
+error_reporting(E_ALL);
 
-// Validar sesión
-if (!isset($_SESSION['profesor_id'])) {
+if (session_status() === PHP_SESSION_NONE) session_start();
+
+if (!isset($_SESSION['profesor_id']) || empty($_SESSION['profesor_id'])) {
     echo "Acceso denegado.";
     exit;
 }
 
-// CONEXIÓN
 include 'conexion.php';
+include 'menu_profesor.php';
 
 $profesor_id = $_SESSION['profesor_id'];
-$profesor_nombre = $_SESSION['profesor_nombre'] ?? 'Profesor';
-
-$profesor_id = $_SESSION['profesor_id'];
-
-
+$gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
 $fecha_hoy = date('Y-m-d');
 
-$prof = $conexion->query("SELECT apellido, nombre FROM profesores WHERE id = $profesor_id")->fetch_assoc();
+$prof = $conexion->query("SELECT apellido, nombre FROM profesores WHERE id = $profesor_id AND gimnasio_id = $gimnasio_id")->fetch_assoc();
 
 // Obtener alumnos de hoy
 $alumnos = $conexion->query("
@@ -34,12 +30,11 @@ $alumnos = $conexion->query("
     ORDER BY c.apellido
 ");
 
-// Calcular saldo mensual
+// Calcular saldo mensual por horas
 $ingresos = $conexion->query("
     SELECT fecha, hora_ingreso, hora_egreso
     FROM asistencias_profesor
-    WHERE profesor_id = $profesor_id AND MONTH(fecha) = MONTH(CURDATE()) AND YEAR(fecha) = YEAR(CURDATE())
-");
+    WHERE profesor_id = $profesor_id AND MONTH(fecha) = MONTH(CURDATE()) AND YEAR(fecha) = YEAR(CURDATE())");
 
 $total_horas = 0;
 while ($fila = $ingresos->fetch_assoc()) {
@@ -52,20 +47,9 @@ while ($fila = $ingresos->fetch_assoc()) {
 $valor_hora = 1500;
 $saldo = $total_horas * $valor_hora;
 ?>
-
 <!DOCTYPE html>
 <html lang="es">
 <head>
-    <!-- App Instalable -->
-<link rel="manifest" href="manifest_profesor.json">
-<link rel="icon" href="icono_profesor.png">
-<meta name="theme-color" content="#a00a00">
-<script>
-  if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('service-worker.js');
-  }
-</script>
-
     <meta charset="UTF-8">
     <title>Panel Profesor</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -75,9 +59,6 @@ $saldo = $total_horas * $valor_hora;
             color: gold;
             font-family: Arial, sans-serif;
             padding: 20px;
-        }
-        h1, h2 {
-            text-align: center;
         }
         .card {
             background-color: #111;
@@ -102,56 +83,8 @@ $saldo = $total_horas * $valor_hora;
         }
     </style>
 </head>
-<?php
-$mes_actual = date('m');
-$anio_actual = date('Y');
-
-$pagos_q = $conexion->query("
-    SELECT fecha
-    FROM asistencias_profesor
-    WHERE profesor_id = $profesor_id
-      AND MONTH(fecha) = $mes_actual
-      AND YEAR(fecha) = $anio_actual
-    ORDER BY fecha DESC
-");
-
-$pagos_dia = [];
-
-while ($p = $pagos_q->fetch_assoc()) {
-    $fecha = $p['fecha'];
-
-    $alumnos_q = $conexion->query("
-        SELECT COUNT(*) AS total
-        FROM asistencias_clientes
-        WHERE profesor_id = $profesor_id AND fecha = '$fecha'
-    ");
-
-    $alumnos = $alumnos_q->fetch_assoc()['total'];
-
-    // Calcular pago según cantidad de alumnos
-    if ($alumnos >= 5) {
-        $monto = 2000;
-    } elseif ($alumnos >= 2) {
-        $monto = 1500;
-    } elseif ($alumnos == 1) {
-        $monto = 1000;
-    } else {
-        $monto = 0;
-    }
-
-    $pagos_dia[] = [
-        'fecha' => $fecha,
-        'alumnos' => $alumnos,
-        'monto' => $monto
-    ];
-}
-
-$total_mes = array_sum(array_column($pagos_dia, 'monto'));
-?>
-
 <body>
-
-<h1>👨‍🏫 Bienvenido <?= $prof['apellido'] ?>, <?= $prof['nombre'] ?></h1>
+<h1 style="text-align:center;">👨‍🏫 Bienvenido <?= $prof['apellido'] . ', ' . $prof['nombre'] ?></h1>
 
 <div class="card">
     <h3>📅 Alumnos del día (<?= $fecha_hoy ?>)</h3>
