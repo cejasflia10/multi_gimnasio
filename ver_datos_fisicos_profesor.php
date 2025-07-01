@@ -7,12 +7,12 @@ include 'menu_profesor.php';
 $profesor_id = $_SESSION['profesor_id'] ?? 0;
 if ($profesor_id == 0) die("Acceso denegado.");
 
-$competencias = $conexion->query("
-    SELECT c.fecha, c.evento, c.resultado, c.observaciones, cli.apellido, cli.nombre
-    FROM competencias c
-    JOIN clientes cli ON c.cliente_id = cli.id
-    WHERE c.profesor_id = $profesor_id
-    ORDER BY c.fecha DESC
+$datos = $conexion->query("
+    SELECT d.fecha, d.peso, d.altura, d.talle_remera, d.talle_pantalon, d.talle_calzado, d.observaciones, c.apellido, c.nombre
+    FROM datos_fisicos d
+    JOIN clientes c ON d.cliente_id = c.id
+    WHERE d.profesor_id = $profesor_id
+    ORDER BY d.fecha DESC
 ");
 ?>
 
@@ -20,7 +20,7 @@ $competencias = $conexion->query("
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>Historial de Competencias</title>
+    <title>Datos Físicos de Alumnos</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
         body { background-color: #000; color: gold; font-family: Arial, sans-serif; padding: 20px; }
@@ -40,33 +40,39 @@ $competencias = $conexion->query("
 </head>
 <body>
 
-<h1>🏆 Historial de Competencias</h1>
+<h1>📋 Datos Físicos de Alumnos</h1>
 
-<?php if ($competencias->num_rows > 0): ?>
+<?php if ($datos->num_rows > 0): ?>
 <table>
     <thead>
         <tr>
             <th>Alumno</th>
             <th>Fecha</th>
-            <th>Evento</th>
-            <th>Resultado</th>
+            <th>Peso</th>
+            <th>Altura</th>
+            <th>Remera</th>
+            <th>Pantalón</th>
+            <th>Calzado</th>
             <th>Observaciones</th>
         </tr>
     </thead>
     <tbody>
-        <?php while ($c = $competencias->fetch_assoc()): ?>
+        <?php while ($d = $datos->fetch_assoc()): ?>
         <tr>
-            <td><?= $c['apellido'] ?>, <?= $c['nombre'] ?></td>
-            <td><?= $c['fecha'] ?></td>
-            <td><?= $c['evento'] ?></td>
-            <td><?= $c['resultado'] ?></td>
-            <td><?= $c['observaciones'] ?></td>
+            <td><?= $d['apellido'] ?>, <?= $d['nombre'] ?></td>
+            <td><?= $d['fecha'] ?></td>
+            <td><?= $d['peso'] ?> kg</td>
+            <td><?= $d['altura'] ?> cm</td>
+            <td><?= $d['talle_remera'] ?></td>
+            <td><?= $d['talle_pantalon'] ?></td>
+            <td><?= $d['talle_calzado'] ?></td>
+            <td><?= $d['observaciones'] ?></td>
         </tr>
         <?php endwhile; ?>
     </tbody>
 </table>
 <?php else: ?>
-    <p style="text-align: center;">No hay competencias registradas.</p>
+    <p style="text-align: center;">No hay datos físicos registrados.</p>
 <?php endif; ?>
 
 </body>
