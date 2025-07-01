@@ -1,10 +1,24 @@
 <?php
+session_start();
 include 'conexion.php';
+
 // Verificar sesión válida
 if (!isset($_SESSION['profesor_id'])) {
     header("Location: login_profesor.php");
     exit;
 }
+
+$profesor_id = $_SESSION['profesor_id'];
+
+// Obtener asistencias del profesor de hoy
+$fecha_hoy = date('Y-m-d');
+$asistencias_hoy = $conexion->query("
+    SELECT c.nombre, c.apellido, ac.hora
+    FROM asistencias_clientes ac
+    JOIN clientes c ON ac.cliente_id = c.id
+    WHERE ac.fecha = '$fecha_hoy' AND ac.profesor_id = $profesor_id
+    ORDER BY ac.hora ASC
+");
 ?>
 <!DOCTYPE html>
 <html lang="es">
@@ -12,7 +26,6 @@ if (!isset($_SESSION['profesor_id'])) {
   <meta charset="UTF-8">
   <title>Escaneo QR para Ingreso</title>
   <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
-  
   <style>
     body {
       background-color: black;
@@ -30,6 +43,18 @@ if (!isset($_SESSION['profesor_id'])) {
       margin-top: 20px;
       font-size: 18px;
     }
+    table {
+      margin: auto;
+      background: #111;
+      color: gold;
+      border: 1px solid gold;
+      border-collapse: collapse;
+      margin-top: 10px;
+    }
+    th, td {
+      padding: 5px;
+      border: 1px solid gold;
+    }
   </style>
 </head>
 <body>
@@ -37,6 +62,29 @@ if (!isset($_SESSION['profesor_id'])) {
   <h2>📷 Escaneo QR para Ingreso</h2>
   <div id="reader"></div>
   <div id="resultado"></div>
+
+  <h3 style="margin-top: 30px;">✅ Alumnos Ingresados Hoy</h3>
+
+  <?php if ($asistencias_hoy->num_rows > 0): ?>
+      <table>
+          <thead>
+              <tr>
+                  <th>Alumno</th>
+                  <th>Hora</th>
+              </tr>
+          </thead>
+          <tbody>
+              <?php while ($fila = $asistencias_hoy->fetch_assoc()): ?>
+                  <tr>
+                      <td><?= $fila['apellido'] . ', ' . $fila['nombre'] ?></td>
+                      <td><?= $fila['hora'] ?></td>
+                  </tr>
+              <?php endwhile; ?>
+          </tbody>
+      </table>
+  <?php else: ?>
+      <p style="color:gray;">Aún no se registraron ingresos.</p>
+  <?php endif; ?>
 
   <script>
     const scanner = new Html5Qrcode("reader");
@@ -62,17 +110,15 @@ if (!isset($_SESSION['profesor_id'])) {
             .then(data => {
               document.getElementById("resultado").innerHTML = data;
 
-              // Reiniciar escaneo después de 4 segundos
+              // Recargar para actualizar listado
               setTimeout(() => {
-                document.getElementById("resultado").innerHTML = "";
-                iniciarEscaneo();
+                window.location.reload();
               }, 4000);
             })
             .catch(error => {
               document.getElementById("resultado").innerHTML = "<span style='color:red;'>❌ Error al registrar asistencia.</span>";
               setTimeout(() => {
-                document.getElementById("resultado").innerHTML = "";
-                iniciarEscaneo();
+                window.location.reload();
               }, 4000);
             });
           });
@@ -85,47 +131,8 @@ if (!isset($_SESSION['profesor_id'])) {
       });
     }
 
-    // Iniciar al cargar
     window.onload = iniciarEscaneo;
   </script>
-<?php
-// Obtener asistencias del profesor de hoy
-$fecha_hoy = date('Y-m-d');
-$asistencias_hoy = $conexion->query("
-    SELECT c.nombre, c.apellido, ac.hora
-    FROM asistencias_clientes ac
-    JOIN clientes c ON ac.cliente_id = c.id
-    WHERE ac.fecha = '$fecha_hoy' AND ac.profesor_id = $profesor_id
-    ORDER BY ac.hora ASC
-");
-?>
-
-<h3 style="margin-top: 30px;">✅ Alumnos Ingresados Hoy</h3>
-
-<?php if ($asistencias_hoy->num_rows > 0): ?>
-    <table style="margin:auto; background:#111; color:gold; border:1px solid gold; border-collapse:collapse; margin-top:10px;">
-        <thead>
-            <tr>
-                <th style="padding:5px; border:1px solid gold;">Alumno</th>
-                <th style="padding:5px; border:1px solid gold;">Hora</th>
-            </tr>
-        </thead>
-        <tbody>
-            <?php while ($fila = $asistencias_hoy->fetch_assoc()): ?>
-                <tr>
-                    <td style="padding:5px; border:1px solid gold;">
-                        <?= $fila['apellido'] . ', ' . $fila['nombre'] ?>
-                    </td>
-                    <td style="padding:5px; border:1px solid gold;">
-                        <?= $fila['hora'] ?>
-                    </td>
-                </tr>
-            <?php endwhile; ?>
-        </tbody>
-    </table>
-<?php else: ?>
-    <p style="color:gray;">Aún no se registraron ingresos.</p>
-<?php endif; ?>
 
 </body>
 </html>
