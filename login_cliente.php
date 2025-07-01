@@ -40,6 +40,15 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST['dni'])) {
 <!DOCTYPE html>
 <html>
 <head>
+    <link rel="manifest" href="manifest_cliente.json">
+<link rel="icon" href="icono_cliente.png">
+<meta name="theme-color" content="#FFD700">
+<script>
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('service-worker.js');
+  }
+</script>
+
     <meta charset="UTF-8">
     <title>Login Cliente</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">

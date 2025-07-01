@@ -21,6 +21,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['nueva_foto'])) {
 <!DOCTYPE html>
 <html lang="es">
 <head>
+    <link rel="manifest" href="manifest_cliente.json">
+<link rel="icon" href="icono_cliente.png">
+<meta name="theme-color" content="#FFD700">
+<script>
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('service-worker.js');
+  }
+</script>
+
     <meta charset="UTF-8">
     <title>Panel Cliente</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
