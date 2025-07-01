@@ -46,6 +46,7 @@
     <a href="ver_graduacion.php">🎓 Mi Graduación</a>
     <a href="ver_competencias.php">🥋 Mis Competencias</a>
     <a href="ver_progreso_fisico.php">📊 Progreso Físico</a>
+    <a href="ver_progreso_cliente.php">Mi Progreso Físico</a>
     <a href="ver_archivos_entrenamiento.php">📄 Mis Archivos</a>
     <a href="ver_qr_cliente.php">📷 Ver mi QR</a>
     <a href="logout.php">⏪ Cerrar Sesión</a>
