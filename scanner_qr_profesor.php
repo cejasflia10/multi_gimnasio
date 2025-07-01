@@ -79,44 +79,6 @@
     // Iniciar al cargar
     window.onload = iniciarEscaneo;
   </script>
-<?php
-// Obtener asistencias del profesor de hoy
-$fecha_hoy = date('Y-m-d');
-$asistencias_hoy = $conexion->query("
-    SELECT c.nombre, c.apellido, ac.hora
-    FROM asistencias_clientes ac
-    JOIN clientes c ON ac.cliente_id = c.id
-    WHERE ac.fecha = '$fecha_hoy' AND ac.profesor_id = $profesor_id
-    ORDER BY ac.hora ASC
-");
-?>
-
-<h3 style="margin-top: 30px;">✅ Alumnos Ingresados Hoy</h3>
-
-<?php if ($asistencias_hoy->num_rows > 0): ?>
-    <table style="margin:auto; background:#111; color:gold; border:1px solid gold; border-collapse:collapse; margin-top:10px;">
-        <thead>
-            <tr>
-                <th style="padding:5px; border:1px solid gold;">Alumno</th>
-                <th style="padding:5px; border:1px solid gold;">Hora</th>
-            </tr>
-        </thead>
-        <tbody>
-            <?php while ($fila = $asistencias_hoy->fetch_assoc()): ?>
-                <tr>
-                    <td style="padding:5px; border:1px solid gold;">
-                        <?= $fila['apellido'] . ', ' . $fila['nombre'] ?>
-                    </td>
-                    <td style="padding:5px; border:1px solid gold;">
-                        <?= $fila['hora'] ?>
-                    </td>
-                </tr>
-            <?php endwhile; ?>
-        </tbody>
-    </table>
-<?php else: ?>
-    <p style="color:gray;">Aún no se registraron ingresos.</p>
-<?php endif; ?>
 
 </body>
 </html>
