@@ -1,5 +1,10 @@
 <?php
 include 'conexion.php';
+// Verificar sesión válida
+if (!isset($_SESSION['profesor_id'])) {
+    header("Location: login_profesor.php");
+    exit;
+}
 ?>
 <!DOCTYPE html>
 <html lang="es">
@@ -7,6 +12,7 @@ include 'conexion.php';
   <meta charset="UTF-8">
   <title>Escaneo QR para Ingreso</title>
   <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+  
   <style>
     body {
       background-color: black;
