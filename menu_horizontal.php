@@ -106,7 +106,6 @@ if (session_status() === PHP_SESSION_NONE) { session_start(); } ?>
     <a href="planes.php">Planes</a>
     <a href="adicionales.php">Adicionales</a>
     <a href="ver_pagos_pendientes.php">Aprobar Pagos</a> <!-- solo visible para admin -->
-    <a href="ver_pagos_pendientes.php">Aprobar Pagos</a> <!-- solo visible para admin -->
     <a href="config_alias.php">Alias Transferencia</a>
 </div>
 
