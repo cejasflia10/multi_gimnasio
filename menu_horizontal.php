@@ -105,11 +105,15 @@ if (session_status() === PHP_SESSION_NONE) { session_start(); } ?>
     <a href="disciplinas.php">Disciplinas</a>
     <a href="planes.php">Planes</a>
     <a href="adicionales.php">Adicionales</a>
+    <a href="ver_pagos_pendientes.php">Aprobar Pagos</a> <!-- solo visible para admin -->
+    <a href="ver_pagos_pendientes.php">Aprobar Pagos</a> <!-- solo visible para admin -->
+    <a href="config_alias.php">Alias Transferencia</a>
 </div>
 
 <!-- MENÚ LATERAL DE ASISTENCIAS -->
 <div id="menu-asistencias" class="menu-lateral">
     <h3>Asistencias</h3>
+    <a href="editar_turno.php?id=1">Editar Turno</a> <!-- ejemplo con ID=1 -->
     <a href="registrar_asistencia_qr.php">Registrar Asistencia QR</a>
     <a href="ver_asistencia_qr.php">Ver Asistencia QR</a>
     <a href="asistencia_qr.php">Asistencia QR</a>
