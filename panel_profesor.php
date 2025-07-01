@@ -95,6 +95,53 @@ $saldo = $total_horas * $valor_hora;
         }
     </style>
 </head>
+<?php
+$mes_actual = date('m');
+$anio_actual = date('Y');
+
+$pagos_q = $conexion->query("
+    SELECT fecha
+    FROM asistencias_profesor
+    WHERE profesor_id = $profesor_id
+      AND MONTH(fecha) = $mes_actual
+      AND YEAR(fecha) = $anio_actual
+    ORDER BY fecha DESC
+");
+
+$pagos_dia = [];
+
+while ($p = $pagos_q->fetch_assoc()) {
+    $fecha = $p['fecha'];
+
+    $alumnos_q = $conexion->query("
+        SELECT COUNT(*) AS total
+        FROM asistencias_clientes
+        WHERE profesor_id = $profesor_id AND fecha = '$fecha'
+    ");
+
+    $alumnos = $alumnos_q->fetch_assoc()['total'];
+
+    // Calcular pago según cantidad de alumnos
+    if ($alumnos >= 5) {
+        $monto = 2000;
+    } elseif ($alumnos >= 2) {
+        $monto = 1500;
+    } elseif ($alumnos == 1) {
+        $monto = 1000;
+    } else {
+        $monto = 0;
+    }
+
+    $pagos_dia[] = [
+        'fecha' => $fecha,
+        'alumnos' => $alumnos,
+        'monto' => $monto
+    ];
+}
+
+$total_mes = array_sum(array_column($pagos_dia, 'monto'));
+?>
+
 <body>
 
 <h1>👨‍🏫 Bienvenido <?= $prof['apellido'] ?>, <?= $prof['nombre'] ?></h1>
@@ -120,6 +167,35 @@ $saldo = $total_horas * $valor_hora;
     <p style="text-align: center; font-size: 20px;">
         <strong>$<?= number_format($saldo, 2, ',', '.') ?></strong> por <?= $total_horas ?> horas trabajadas
     </p>
+</div>
+<div class="seccion">
+    <h3>Resumen de Clases Dictadas (<?= date('F Y') ?>)</h3>
+    <?php if (count($pagos_dia) > 0): ?>
+        <table style="width:100%; background:#111; color:gold; border:1px solid gold; border-collapse: collapse;">
+            <thead>
+                <tr>
+                    <th style="padding:8px; border:1px solid gold;">Fecha</th>
+                    <th style="padding:8px; border:1px solid gold;">Alumnos</th>
+                    <th style="padding:8px; border:1px solid gold;">Monto</th>
+                </tr>
+            </thead>
+            <tbody>
+                <?php foreach ($pagos_dia as $fila): ?>
+                    <tr>
+                        <td style="padding:5px; border:1px solid gold;"><?= $fila['fecha'] ?></td>
+                        <td style="padding:5px; border:1px solid gold;"><?= $fila['alumnos'] ?></td>
+                        <td style="padding:5px; border:1px solid gold;">$<?= $fila['monto'] ?></td>
+                    </tr>
+                <?php endforeach; ?>
+                <tr>
+                    <td colspan="2" style="padding:10px; text-align:right; font-weight:bold;">Total del Mes</td>
+                    <td style="padding:10px; font-weight:bold; color:lime;">$<?= $total_mes ?></td>
+                </tr>
+            </tbody>
+        </table>
+    <?php else: ?>
+        <p style="color:gray;">No hay clases registradas este mes.</p>
+    <?php endif; ?>
 </div>
 
 </body>
