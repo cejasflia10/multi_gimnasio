@@ -1,21 +1,18 @@
 <?php
-if (session_status() === PHP_SESSION_NONE) session_start();
-echo '<pre>';
+ini_set('session.use_strict_mode', 1);
+ini_set('session.cookie_httponly', 1);
+ini_set('session.cookie_secure', 0); // 1 si usás HTTPS
+session_start();
+echo "<pre>SESION ACTIVA:\n";
 print_r($_SESSION);
-echo '</pre>';
+echo "</pre>";
 
-include 'conexion.php';
-
-// Verificar sesión válida
 if (!isset($_SESSION['profesor_id'])) {
-    header("Location: login_profesor.php");
+    echo "Acceso denegado.";
     exit;
 }
-
 $profesor_id = $_SESSION['profesor_id'];
-$profesor_nombre = $_SESSION['profesor_nombre'] ?? 'Profesor';
 
-include 'menu_profesor.php';
 
 $fecha_hoy = date('Y-m-d');
 
