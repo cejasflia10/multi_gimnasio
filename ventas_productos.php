@@ -97,7 +97,7 @@ $productos = $conexion->query("
 <div class="container">
   <h2>Registrar Venta de Producto</h2>
 
-  <form action="guardar_venta_producto.php" method="POST">
+  <form action="formas_pago.php" onsubmit="return prepararTotal()" method="POST">
     <label for="cliente">Cliente:</label>
     <select name="cliente_id" id="cliente" required>
       <option value="">Seleccionar cliente</option>
@@ -141,3 +141,16 @@ $productos = $conexion->query("
 
 </body>
 </html>
+
+<script>
+function prepararTotal() {
+    let total = 0;
+    document.querySelectorAll('.precio').forEach(el => {
+        const precio = parseFloat(el.dataset.precio || 0);
+        const cantidad = parseInt(el.closest('tr').querySelector('.cantidad').value || 1);
+        total += precio * cantidad;
+    });
+    document.getElementById('total_hidden').value = total.toFixed(2);
+    return true;
+}
+</script>
