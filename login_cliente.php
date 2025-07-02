@@ -1,32 +1,28 @@
 <?php
-if (session_status() === PHP_SESSION_NONE) session_start();
 include 'conexion.php';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $dni = trim($_POST['dni']);
-    echo "DNI ingresado: $dni<br>";
-
     $query = $conexion->query("SELECT * FROM clientes WHERE dni = '$dni'");
 
     if ($query && $query->num_rows === 1) {
-        echo "Cliente encontrado. Iniciando sesión...<br>";
         $cliente = $query->fetch_assoc();
-        $_SESSION['cliente_id'] = $cliente['id'];
-        $_SESSION['gimnasio_id'] = $cliente['gimnasio_id'];
-        echo "Sesión iniciada: cliente_id = " . $_SESSION['cliente_id'] . ", gimnasio_id = " . $_SESSION['gimnasio_id'] . "<br>";
-        echo "<script>setTimeout(function(){ window.location = 'panel_cliente.php'; }, 2000);</script>";
+        $cliente_id = $cliente['id'];
+        $gimnasio_id = $cliente['gimnasio_id'];
+        header("Location: panel_cliente.php?cliente_id=$cliente_id&gimnasio_id=$gimnasio_id");
+        exit;
     } else {
-        echo "<span style='color:red;'>❌ No se encontró el cliente con ese DNI.</span><br>";
+        echo "<script>alert('DNI no encontrado'); window.location='login_cliente.php';</script>";
     }
 }
 ?>
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Ingreso Cliente (Debug)</title>
+    <title>Ingreso Cliente</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <style>
-        body { background: #111; color: gold; font-family: Arial; text-align: center; padding-top: 80px; }
+        body { background: #000; color: gold; font-family: Arial; text-align: center; padding-top: 100px; }
         input, button { padding: 10px; font-size: 16px; margin-top: 10px; }
     </style>
 </head>
