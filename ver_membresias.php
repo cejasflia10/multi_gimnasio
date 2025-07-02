@@ -97,6 +97,11 @@ $resultado = $conexion->query($query);
 <body>
 
 <h1>Listado de Membresías</h1>
+
+<div style="text-align: center; margin-bottom: 15px;">
+    <input type="text" id="buscador" placeholder="Buscar membresía..." style="padding: 10px; width: 80%; border-radius: 8px; border: none; font-size: 16px;">
+</div>
+<div style="max-height: 500px; overflow-y: auto;">
 <table>
     <thead>
         <tr>
@@ -134,9 +139,22 @@ $resultado = $conexion->query($query);
         <?php $n++; endwhile; ?>
     </tbody>
 </table>
+</div>
 
 <a href="index.php" class="boton-volver">Volver al Menú</a>
 <a href="ver_historial_membresias.php?cliente_id=<?= $fila['cliente_id'] ?>">📜 Historial</a>
 
+
+<script>
+document.getElementById("buscador").addEventListener("keyup", function() {
+    let filtro = this.value.toLowerCase();
+    let filas = document.querySelectorAll("table tbody tr");
+
+    filas.forEach(fila => {
+        let texto = fila.textContent.toLowerCase();
+        fila.style.display = texto.includes(filtro) ? "" : "none";
+    });
+});
+</script>
 </body>
 </html>
