@@ -1,5 +1,7 @@
 <?php
 include 'conexion.php';
+include 'menu_horizontal.php';
+
 if (session_status() === PHP_SESSION_NONE) session_start();
 $gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
 
