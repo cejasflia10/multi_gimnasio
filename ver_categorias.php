@@ -56,7 +56,7 @@ $categorias = $conexion->query("SELECT * FROM categorias WHERE gimnasio_id = $gi
         <th>ID</th>
         <th>Nombre</th>
         <th>Acciones</th>
-    </tr>
+    <td><a href="editar_categoria.php?id=<?= $fila['id'] ?>" style="background-color: #555; color: white; padding: 5px 10px; border-radius: 5px; text-decoration: none;">Editar</a></td></tr>
     <?php while ($cat = $categorias->fetch_assoc()): ?>
     <tr>
         <td><?= $cat['id'] ?></td>
