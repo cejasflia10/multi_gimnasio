@@ -1,9 +1,8 @@
 <?php
-session_start();
 include 'conexion.php';
 
-$cliente_id = $_SESSION['cliente_id'] ?? null;
-$gimnasio_id = $_SESSION['gimnasio_id'] ?? null;
+$cliente_id = $_GET['cliente_id'] ?? null;
+$gimnasio_id = $_GET['gimnasio_id'] ?? null;
 
 if (!$cliente_id || !$gimnasio_id) {
     echo "Acceso denegado.";
