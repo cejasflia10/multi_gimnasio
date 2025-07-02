@@ -72,6 +72,12 @@ window.addEventListener('DOMContentLoaded', () => {
 </script>
 
 <body>
+    <div style="max-height: 500px; overflow-y: auto;">
+    <table>
+        <!-- contenido -->
+    </table>
+</div>
+
 <div class="container">
     <h1>Registrar Nueva Membresía</h1>
     <form method="POST" action="guardar_membresia.php">
