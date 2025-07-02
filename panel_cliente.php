@@ -1,18 +1,12 @@
 <?php
 if (session_status() === PHP_SESSION_NONE) session_start();
 
-$cliente_id = $_SESSION['cliente_id'] ?? ($_GET['cliente_id'] ?? 0);
-$gimnasio_id = $_SESSION['gimnasio_id'] ?? ($_GET['gimnasio_id'] ?? 0);
+$cliente_id = $_SESSION['cliente_id'] ?? 0;
+$gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
 
-if (!$cliente_id || !$gimnasio_id) {
+if ($cliente_id == 0 || $gimnasio_id == 0) {
     echo "<div style='color:red; font-size:20px; text-align:center;'>❌ Acceso denegado.</div>";
     exit;
-}
-
-// Si vino por GET y no hay sesión, la iniciamos
-if (!isset($_SESSION['cliente_id']) && isset($_GET['cliente_id'])) {
-    $_SESSION['cliente_id'] = $cliente_id;
-    $_SESSION['gimnasio_id'] = $gimnasio_id;
 }
 
 include 'conexion.php';
