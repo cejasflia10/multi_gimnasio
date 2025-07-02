@@ -1,26 +1,22 @@
 <?php
-if (session_status() === PHP_SESSION_NONE) {
-    session_start();
-}
+if (session_status() === PHP_SESSION_NONE) session_start();
 include 'conexion.php';
 
 if (!isset($_GET['id'])) {
-    echo "<script>alert('ID de membresía no proporcionado'); window.location='ver_membresias.php';</script>";
+    echo "ID no proporcionado.";
     exit;
 }
 
 $id = intval($_GET['id']);
-$gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
 
-// Confirmar que la membresía pertenece al gimnasio
-$check = $conexion->query("SELECT id FROM membresias WHERE id = $id AND gimnasio_id = $gimnasio_id LIMIT 1");
-if ($check->num_rows === 0) {
-    echo "<script>alert('Membresía no encontrada o no autorizada'); window.location='ver_membresias.php';</script>";
+// Eliminar primero los adicionales relacionados
+$conexion->query("DELETE FROM membresia_adicionales WHERE membresia_id = $id");
+
+// Luego eliminar la membresía
+if ($conexion->query("DELETE FROM membresias WHERE id = $id")) {
+    header("Location: ver_membresias.php?mensaje=eliminada");
     exit;
+} else {
+    echo "Error al eliminar la membresía.";
 }
-
-// Eliminar la membresía
-$conexion->query("DELETE FROM membresias WHERE id = $id");
-
-echo "<script>alert('Membresía eliminada correctamente'); window.location='ver_membresias.php';</script>";
 ?>
