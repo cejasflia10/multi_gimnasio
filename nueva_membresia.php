@@ -75,7 +75,7 @@ window.addEventListener('DOMContentLoaded', () => {
     
 <div class="container">
     <h1>Registrar Nueva Membresía</h1>
-    <form method="POST" action="guardar_membresia.php">
+    <form method="POST" action="guardar_membresia.php" onsubmit="calcularTotal()">
         <label>Buscar Cliente (DNI, nombre o apellido):</label>
         <input type="text" id="buscador_cliente" list="clientes" required oninput="buscarCliente()">
         <input type="hidden" name="cliente_id" id="cliente_id">
