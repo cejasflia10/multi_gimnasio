@@ -81,6 +81,17 @@ setInterval(actualizarTotalVisible, 500);
 </script>
 
 <body>
+<?php if (isset($_GET['exito']) && $_GET['exito'] == 1): ?>
+<div style="background-color: #0f0; color: black; padding: 10px; text-align: center; font-weight: bold; border-radius: 6px;">
+    ✅ Membresía cargada correctamente
+</div>
+<script>
+    setTimeout(() => {
+        window.location.href = "nueva_membresia.php";
+    }, 2500);
+</script>
+<?php endif; ?>
+
     
 <div class="container">
     <h1>Registrar Nueva Membresía</h1>
