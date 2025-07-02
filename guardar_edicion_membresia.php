@@ -35,7 +35,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
     // Actualizar membresía
     $stmt = $conexion->prepare("UPDATE membresias SET 
         plan_id = ?, fecha_inicio = ?, fecha_vencimiento = ?,
-        clases_disponibles = ?, forma_pago = ?, otros_pagos = ?, total = ?
+        clases_disponibles = ?, forma_pago = ?, otros_pagos = ?, total_pagado = ?
         WHERE id = ?");
 
     $stmt->bind_param("ississdi",
