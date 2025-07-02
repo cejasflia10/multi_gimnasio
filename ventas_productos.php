@@ -27,8 +27,27 @@ $productos = $conexion->query("
 
 <form method="POST" action="formas_pago.php" onsubmit="return prepararTotal()">
     <label>Cliente:</label>
-    <input type="text" name="cliente_nombre" placeholder="Apellido o DNI" required>
+    <input type="text" id="cliente_nombre" name="cliente_nombre" placeholder="Apellido o DNI" list="sugerencias" autocomplete="off" required>
+    <datalist id="sugerencias"></datalist>
     <label><input type="checkbox" name="cliente_temporal" value="1"> Cliente temporal</label>
+    <br><br>
+
+    <script>
+    document.getElementById("cliente_nombre").addEventListener("input", function() {
+        let valor = this.value;
+        fetch("buscar_clientes.php?q=" + encodeURIComponent(valor))
+            .then(res => res.json())
+            .then(data => {
+                const lista = document.getElementById("sugerencias");
+                lista.innerHTML = "";
+                data.forEach(c => {
+                    let opt = document.createElement("option");
+                    opt.value = c;
+                    lista.appendChild(opt);
+                });
+            });
+    });
+    </script>
     <br><br>
 
     <label>Producto:</label>
