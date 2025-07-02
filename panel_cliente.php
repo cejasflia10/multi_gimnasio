@@ -1,7 +1,9 @@
 <?php
 session_start();
-if (session_status() === PHP_SESSION_NONE) 
 include 'conexion.php';
+
+if (session_status() === PHP_SESSION_NONE) 
+
 
 $cliente_id = $_SESSION['cliente_id'] ?? null;
 $gimnasio_id = $_SESSION['gimnasio_id'] ?? null;
