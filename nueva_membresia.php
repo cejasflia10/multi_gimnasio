@@ -69,6 +69,15 @@ while ($c = $clientes->fetch_assoc()) {
 window.addEventListener('DOMContentLoaded', () => {
     calcularTotal();
 });
+
+function actualizarTotalVisible() {
+    const total = document.getElementById('total_pagar');
+    const span = document.getElementById('total_visible');
+    if (total && span) {
+        span.textContent = total.value;
+    }
+}
+setInterval(actualizarTotalVisible, 500);
 </script>
 
 <body>
@@ -137,6 +146,7 @@ window.addEventListener('DOMContentLoaded', () => {
 
         <label>Total a Pagar:</label>
         <input type="text" name="total_pagar" id="total_pagar" readonly>
+<p style="margin-top:5px; color: gold;">Total actual: <span id="total_visible" style="font-weight: bold;"></span></p>
 
         <label>Método de Pago:</label>
         <select name="metodo_pago" required>
