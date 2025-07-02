@@ -13,9 +13,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $precio = floatval($_POST['precio']);
     $otros_pagos = floatval($_POST['otros_pagos'] ?? 0);
     $descuento = floatval($_POST['descuento'] ?? 0);
-    $total_pagar = isset($_POST['total_pagar']) && $_POST['total_pagar'] !== ''
-    ? floatval($_POST['total_pagar'])
-    : ($precio + $otros_pagos - $descuento);
+    $total_pagar = floatval($_POST['total_pagar']);
+
+echo \"Total recibido: \$total_pagar\";
+exit;
     $metodo_pago = $_POST['metodo_pago'];
 
     $saldo_cc = ($metodo_pago === 'cuenta_corriente') ? -$total_pagar : 0;
