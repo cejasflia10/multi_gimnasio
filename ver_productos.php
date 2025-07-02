@@ -9,11 +9,9 @@ $gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
 
 // Unificar productos de distintas tablas con categoría
 $productos = $conexion->query("
-    SELECT id, nombre, 'Protección' AS tipo, precio_compra, precio_venta, stock FROM productos_proteccion WHERE gimnasio_id = $gimnasio_id
-    UNION ALL
-    SELECT id, nombre, 'Indumentaria' AS tipo, precio_compra, precio_venta, stock FROM productos_indumentaria WHERE gimnasio_id = $gimnasio_id
-    UNION ALL
-    SELECT id, nombre, 'Suplemento' AS tipo, precio_compra, precio_venta, stock FROM productos_suplemento WHERE gimnasio_id = $gimnasio_id
+    SELECT id, nombre, categoria AS tipo, compra AS precio_compra, venta AS precio_venta, stock
+    FROM productos
+    WHERE gimnasio_id = $gimnasio_id
 ");
 ?>
 
