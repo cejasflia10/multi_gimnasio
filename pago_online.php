@@ -7,7 +7,8 @@ if ($cliente_id == 0) die("Acceso denegado.");
 include 'menu_cliente.php';
 
 $mensaje = "";
-$planes = $conexion->query("SELECT * FROM planes ORDER BY nombre");
+$gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
+$planes = $conexion->query("SELECT * FROM planes WHERE gimnasio_id = $gimnasio_id ORDER BY nombre");
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $plan_id = $_POST['plan_id'];
@@ -84,6 +85,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 <div class="alias">
     ALIAS: <strong>FIGHT.ACADEMY.SCORPIONS</strong>
+</div>
+
+<?php
+$gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
+$alias = '';
+$res_alias = $conexion->query("SELECT alias FROM gimnasios WHERE id = $gimnasio_id");
+if ($res_alias && $row = $res_alias->fetch_assoc()) {
+    $alias = $row['alias'];
+}
+?>
+<div style="text-align:center; color:gold; font-size:18px; margin-top: 20px;">
+    💰 Alias para transferencia:<br>
+    <strong style="color:white;"><?= htmlspecialchars($alias ?: 'No disponible') ?></strong>
 </div>
 
 <form method="POST" enctype="multipart/form-data">
