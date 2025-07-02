@@ -60,6 +60,13 @@ $cliente_nombre = $cliente['apellido'] . ' ' . $cliente['nombre'];
 
 <h1>👋 Bienvenido <?= htmlspecialchars($cliente_nombre) ?></h1>
 
+<?php if (!empty($cliente['foto'])): ?>
+    <div style="text-align: center; margin-bottom: 20px;">
+        <img src="fotos_clientes/<?= htmlspecialchars($cliente['foto']) ?>" alt="Foto del Cliente" style="width: 150px; height: 150px; object-fit: cover; border-radius: 50%; border: 3px solid gold;">
+    </div>
+<?php endif; ?>
+
+
 <div class="datos">
     <p><strong>DNI:</strong> <?= $cliente['dni'] ?></p>
     <p><strong>Email:</strong> <?= $cliente['email'] ?></p>
@@ -96,5 +103,23 @@ $qr_url = "https://chart.googleapis.com/chart?cht=qr&chs=200x200&chl=C$dni";
 </div>
 </div>
 
+
+<div style="text-align: center; margin-top: 30px;">
+    <h3 style="color: gold;">📲 Tu código QR personal</h3>
+    <form method="post">
+        <button type="submit" name="generar_qr" style="background-color: gold; color: black; font-weight: bold; padding: 10px 20px; border: none; border-radius: 5px;">Generar QR</button>
+    </form>
+
+    <?php
+    if (isset($_POST['generar_qr'])) {
+        require_once 'phpqrcode/qrlib.php';
+        ob_start();
+        QRcode::png($cliente['dni'], false, QR_ECLEVEL_H, 6);
+        $imageString = base64_encode(ob_get_contents());
+        ob_end_clean();
+        echo "<div style='margin-top:20px;'><img src='data:image/png;base64,$imageString' alt='QR Cliente' style='width:200px; border: 3px solid gold; padding: 10px; background: white;'></div>";
+    }
+    ?>
+</div>
 </body>
 </html>

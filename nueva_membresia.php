@@ -64,7 +64,12 @@ while ($c = $clientes->fetch_assoc()) {
         }
     </style>
 </head>
-<script src="fullscreen.js"></script>
+<script src="fullscreen.js">
+// Calcular automáticamente al cargar la página
+window.addEventListener('DOMContentLoaded', () => {
+    calcularTotal();
+});
+</script>
 
 <body>
 <div class="container">
