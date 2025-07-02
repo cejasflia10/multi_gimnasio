@@ -148,6 +148,7 @@ if (session_status() === PHP_SESSION_NONE) { session_start(); } ?>
     <a href="agregar_indumentaria.php">Agregar Indumentaria</a>
     <a href="agregar_suplementos.php">Agregar Suplementos</a>
     <a href="ver_categorias.php">Categorías</a>
+    <a href="ver_ventas.php">Ver Ventas</a>
 
 </div>
 
