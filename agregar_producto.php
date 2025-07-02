@@ -15,8 +15,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['nombre'])) {
     $compra = $_POST['compra'];
     $venta = $_POST['venta'];
     $categoria = $_POST['categoria'];
+    $stock = $_POST['stock'] ?? 0;
 
-    $stmt = $conexion->prepare("INSERT INTO productos (nombre, detalle, compra, venta, categoria, gimnasio_id) VALUES (?, ?, ?, ?, ?, ?)");
+    $stmt = $conexion->prepare("INSERT INTO productos (nombre, detalle, compra, venta, categoria, stock, gimnasio_id) VALUES (?, ?, ?, ?, ?, ?)");
     $stmt->bind_param("ssddsi", $nombre, $detalle, $compra, $venta, $categoria, $gimnasio_id);
     if ($stmt->execute()) {
         $mensaje = "✅ Producto registrado exitosamente.";
