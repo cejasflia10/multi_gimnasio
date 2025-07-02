@@ -1,156 +1,104 @@
 <?php
-if (session_status() === PHP_SESSION_NONE) {
-    session_start();
-}
-
 include 'conexion.php';
-include 'menu_horizontal.php';
-
+if (session_status() === PHP_SESSION_NONE) session_start();
 $gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
 
-// Cargar clientes
-$clientes = $conexion->query("SELECT id, apellido, nombre FROM clientes WHERE gimnasio_id = $gimnasio_id ORDER BY apellido ASC");
-
-// Cargar productos combinados
 $productos = $conexion->query("
-    SELECT id, nombre, 'Protección' AS categoria, precio_venta FROM productos_proteccion WHERE gimnasio_id = $gimnasio_id
-    UNION
-    SELECT id, nombre, 'Indumentaria' AS categoria, precio_venta FROM productos_indumentaria WHERE gimnasio_id = $gimnasio_id
-    UNION
-    SELECT id, nombre, 'Suplemento' AS categoria, precio_venta FROM productos_suplemento WHERE gimnasio_id = $gimnasio_id
+    SELECT id, nombre, venta AS precio_venta, stock, categoria FROM productos WHERE gimnasio_id = $gimnasio_id
 ");
 ?>
 
 <!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Registrar Venta de Producto</title>
-  <style>
-    body {
-      background: #000;
-      color: gold;
-      font-family: Arial, sans-serif;
-      margin: 0;
-      padding: 0;
-    }
-
-    .container {
-      max-width: 600px;
-      margin: 30px auto;
-      background-color: #111;
-      padding: 20px;
-      border-radius: 10px;
-    }
-
-    h2 {
-      text-align: center;
-      color: #ffc107;
-    }
-
-    label {
-      display: block;
-      margin-top: 15px;
-      font-weight: bold;
-    }
-
-    select, input {
-      width: 100%;
-      padding: 10px;
-      margin-top: 5px;
-      border-radius: 5px;
-      border: none;
-    }
-
-    .btn {
-      margin-top: 20px;
-      width: 100%;
-      padding: 10px;
-      background: #ffc107;
-      color: #000;
-      border: none;
-      border-radius: 5px;
-      font-weight: bold;
-      cursor: pointer;
-    }
-  </style>
-  <script>
-    function actualizarTotal() {
-      const precio = parseFloat(document.getElementById('precio').value) || 0;
-      const cantidad = parseInt(document.getElementById('cantidad').value) || 0;
-      document.getElementById('total').value = (precio * cantidad).toFixed(2);
-    }
-
-    function cargarPrecio() {
-      const selector = document.getElementById('producto');
-      const precio = selector.options[selector.selectedIndex].dataset.precio;
-      document.getElementById('precio').value = precio;
-      actualizarTotal();
-    }
-  </script>
+    <meta charset="UTF-8">
+    <title>Venta de Productos</title>
+    <style>
+        body { background-color: #000; color: gold; font-family: sans-serif; padding: 20px; }
+        input, select, button { padding: 6px; margin: 4px; }
+        table { width: 100%; margin-top: 20px; border-collapse: collapse; }
+        th, td { padding: 10px; border: 1px solid #555; text-align: center; }
+    </style>
 </head>
-<script src="fullscreen.js"></script>
-
 <body>
+<h2>🛒 Venta de Productos</h2>
 
-<div class="container">
-  <h2>Registrar Venta de Producto</h2>
+<form method="POST" action="formas_pago.php" onsubmit="return prepararTotal()">
+    <label>Cliente:</label>
+    <input type="text" name="cliente_nombre" placeholder="Apellido o DNI" required>
+    <label><input type="checkbox" name="cliente_temporal" value="1"> Cliente temporal</label>
+    <br><br>
 
-  <form action="formas_pago.php" onsubmit="return prepararTotal()" method="POST">
-    <label for="cliente">Cliente:</label>
-    <select name="cliente_id" id="cliente" required>
-      <option value="">Seleccionar cliente</option>
-      <?php while ($c = $clientes->fetch_assoc()): ?>
-        <option value="<?= $c['id'] ?>"><?= $c['apellido'] . ' ' . $c['nombre'] ?></option>
-      <?php endwhile; ?>
+    <label>Producto:</label>
+    <select id="selector-producto">
+        <?php while($p = $productos->fetch_assoc()): ?>
+            <option value="<?= $p['id'] ?>" data-nombre="<?= $p['nombre'] ?>" data-precio="<?= $p['precio_venta'] ?>" data-stock="<?= $p['stock'] ?>">
+                <?= $p['categoria'] ?> - <?= $p['nombre'] ?> ($<?= $p['precio_venta'] ?> | Stock: <?= $p['stock'] ?>)
+            </option>
+        <?php endwhile; ?>
     </select>
+    <input type="number" id="cantidad" value="1" min="1">
+    <button type="button" onclick="agregarProducto()">➕ Agregar</button>
 
-    <label for="producto">Producto:</label>
-    <select name="producto_id" id="producto" onchange="cargarPrecio()" required>
-      <option value="">Seleccionar producto</option>
-      <?php while ($p = $productos->fetch_assoc()): ?>
-        <option value="<?= $p['id'] ?>" data-precio="<?= $p['precio_venta'] ?>">
-          <?= $p['nombre'] ?> (<?= $p['categoria'] ?>)
-        </option>
-      <?php endwhile; ?>
-    </select>
+    <table id="tabla-productos">
+        <thead>
+            <tr>
+                <th>Producto</th>
+                <th>Precio</th>
+                <th>Cantidad</th>
+                <th>Subtotal</th>
+                <th>Quitar</th>
+            </tr>
+        </thead>
+        <tbody></tbody>
+    </table>
 
-    <label for="precio">Precio Unitario:</label>
-    <input type="number" id="precio" name="precio" step="0.01" readonly>
-
-    <label for="cantidad">Cantidad:</label>
-    <input type="number" id="cantidad" name="cantidad" min="1" onchange="actualizarTotal()" onkeyup="actualizarTotal()" required>
-
-    <label for="metodo">Método de Pago:</label>
-    <select name="metodo_pago" id="metodo" required>
-      <option value="">Seleccionar método</option>
-      <option value="Efectivo">Efectivo</option>
-      <option value="Transferencia">Transferencia</option>
-      <option value="Tarjeta Débito">Tarjeta Débito</option>
-      <option value="Tarjeta Crédito">Tarjeta Crédito</option>
-      <option value="Cuenta Corriente">Cuenta Corriente</option>
-    </select>
-
-    <label for="total">Total:</label>
-    <input type="text" id="total" name="total" readonly>
-
-    <button type="submit" class="btn">Registrar Venta</button>
-  </form>
-</div>
-
-</body>
-</html>
+    <input type="hidden" name="total" id="total_hidden">
+    <br><br>
+    <button type="submit">Siguiente → Formas de Pago</button>
+</form>
 
 <script>
-function prepararTotal() {
+function agregarProducto() {
+    const selector = document.getElementById("selector-producto");
+    const selected = selector.options[selector.selectedIndex];
+    const nombre = selected.dataset.nombre;
+    const precio = parseFloat(selected.dataset.precio);
+    const stock = parseInt(selected.dataset.stock);
+    const cantidad = parseInt(document.getElementById("cantidad").value);
+
+    if (cantidad > stock) {
+        alert("Stock insuficiente.");
+        return;
+    }
+
+    const tbody = document.querySelector("#tabla-productos tbody");
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+        <td>${nombre}<input type="hidden" name="producto_nombre[]" value="${nombre}"></td>
+        <td>$${precio.toFixed(2)}<input type="hidden" name="precio[]" value="${precio}"></td>
+        <td><input type="hidden" name="cantidad[]" value="${cantidad}">${cantidad}</td>
+        <td>$${(precio * cantidad).toFixed(2)}</td>
+        <td><button type="button" onclick="this.closest('tr').remove();actualizarTotal()">❌</button></td>
+    `;
+    tbody.appendChild(tr);
+    actualizarTotal();
+}
+
+function actualizarTotal() {
     let total = 0;
-    document.querySelectorAll('.precio').forEach(el => {
-        const precio = parseFloat(el.dataset.precio || 0);
-        const cantidad = parseInt(el.closest('tr').querySelector('.cantidad').value || 1);
+    document.querySelectorAll("tbody tr").forEach(row => {
+        const precio = parseFloat(row.querySelector('input[name="precio[]"]').value);
+        const cantidad = parseInt(row.querySelector('input[name="cantidad[]"]').value);
         total += precio * cantidad;
     });
-    document.getElementById('total_hidden').value = total.toFixed(2);
+    document.getElementById("total_hidden").value = total.toFixed(2);
+}
+
+function prepararTotal() {
+    actualizarTotal();
     return true;
 }
 </script>
+</body>
+</html>
