@@ -2,37 +2,38 @@
 if (session_status() === PHP_SESSION_NONE) session_start();
 include 'conexion.php';
 
-$cliente_id = $_SESSION['cliente_id'] ?? null;
-$gimnasio_id = $_SESSION['gimnasio_id'] ?? null;
+$cliente_id = $_SESSION['cliente_id'] ?? 0;
+$gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
 
-if (!$cliente_id || !$gimnasio_id) {
+if ($cliente_id == 0 || $gimnasio_id == 0) {
     echo "Acceso denegado.";
     exit;
 }
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['foto'])) {
-    $foto = $_FILES['foto'];
+// Validar que venga el archivo
+if (isset($_FILES['foto']) && $_FILES['foto']['error'] === 0) {
+    $permitidos = ['image/jpeg', 'image/png', 'image/webp'];
+    $tipo = $_FILES['foto']['type'];
 
-    if ($foto['error'] === UPLOAD_ERR_OK) {
-        $ext = pathinfo($foto['name'], PATHINFO_EXTENSION);
-        $nombre_archivo = 'cliente_' . $cliente_id . '_' . time() . '.' . $ext;
-        $ruta_destino = 'fotos_clientes/' . $nombre_archivo;
+    if (!in_array($tipo, $permitidos)) {
+        echo "Formato no permitido.";
+        exit;
+    }
 
-        if (!file_exists('fotos_clientes')) {
-            mkdir('fotos_clientes', 0755, true);
-        }
+    // Convertir la imagen a base64
+    $contenido = file_get_contents($_FILES['foto']['tmp_name']);
+    $base64 = 'data:' . $tipo . ';base64,' . base64_encode($contenido);
 
-        if (move_uploaded_file($foto['tmp_name'], $ruta_destino)) {
-            $conexion->query("UPDATE clientes SET foto = '$ruta_destino' WHERE id = $cliente_id AND gimnasio_id = $gimnasio_id");
-            header("Location: panel_cliente.php");
-            exit;
-        } else {
-            echo "Error al mover la foto.";
-        }
+    // Guardar en la base de datos
+    $stmt = $conexion->prepare("UPDATE clientes SET foto_base64 = ? WHERE id = ? AND gimnasio_id = ?");
+    $stmt->bind_param('sii', $base64, $cliente_id, $gimnasio_id);
+    if ($stmt->execute()) {
+        header("Location: panel_cliente.php");
+        exit;
     } else {
-        echo "Error al subir la foto.";
+        echo "Error al guardar la imagen.";
     }
 } else {
-    echo "No se recibió ninguna imagen.";
+    echo "Error al subir la foto.";
 }
 ?>
