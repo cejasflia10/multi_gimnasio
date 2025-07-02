@@ -1,33 +1,27 @@
 <?php
+if (session_status() === PHP_SESSION_NONE) session_start();
 include 'conexion.php';
-if (session_status() === PHP_SESSION_NONE) {
-    session_start();
-}
-include 'menu_horizontal.php';
 
-$gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
 $mensaje = "";
-
-// Agregar nuevo producto
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['nombre'])) {
+if ($_SERVER["REQUEST_METHOD"] == "POST") {
     $nombre = $_POST['nombre'];
     $detalle = $_POST['detalle'];
     $compra = $_POST['compra'];
     $venta = $_POST['venta'];
     $categoria = $_POST['categoria'];
-    $stock = $_POST['stock'] ?? 0;
+    $stock = $_POST['stock'];
+    $gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
 
-    $stmt = $conexion->prepare("INSERT INTO productos (nombre, detalle, compra, venta, categoria, stock, gimnasio_id) VALUES (?, ?, ?, ?, ?, ?)");
-    $stmt->bind_param("ssddsi", $nombre, $detalle, $compra, $venta, $categoria, $gimnasio_id);
-    if ($stmt->execute()) {
-        $mensaje = "✅ Producto registrado exitosamente.";
+    $stmt = $conexion->prepare("INSERT INTO productos (nombre, detalle, compra, venta, categoria, stock, gimnasio_id) VALUES (?, ?, ?, ?, ?, ?, ?)");
+    $stmt->bind_param("ssddssi", $nombre, $detalle, $compra, $venta, $categoria, $stock, $gimnasio_id);
+    $stmt->execute();
+
+    if ($stmt->affected_rows > 0) {
+        $mensaje = "✅ Producto registrado correctamente.";
     } else {
-        $mensaje = "❌ Error al registrar: " . $stmt->error;
+        $mensaje = "❌ Error al registrar producto.";
     }
 }
-
-// Obtener categorías de productos
-$categorias = $conexion->query("SELECT * FROM categorias ORDER BY nombre");
 ?>
 
 <!DOCTYPE html>
@@ -35,101 +29,47 @@ $categorias = $conexion->query("SELECT * FROM categorias ORDER BY nombre");
 <head>
     <meta charset="UTF-8">
     <title>Agregar Producto</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
-        body {
-            background: #111;
-            color: gold;
-            font-family: Arial, sans-serif;
-            margin: 0;
-            padding: 0;
-        }
-
-        .container {
-            max-width: 600px;
-            margin: 30px auto;
-            padding: 20px;
-            background-color: #000;
-            border-radius: 10px;
-        }
-
-        h1 {
-            text-align: center;
-            color: #ffc107;
-        }
-
-        label {
-            display: block;
-            margin-top: 15px;
-            font-weight: bold;
-        }
-
-        input, select {
-            width: 100%;
-            padding: 10px;
-            margin-top: 5px;
-            border-radius: 5px;
-            border: none;
-        }
-
-        .btn {
-            margin-top: 20px;
-            width: 100%;
-            padding: 10px;
-            background: #ffc107;
-            color: #000;
-            border: none;
-            border-radius: 5px;
-            font-weight: bold;
-            cursor: pointer;
-        }
-
-        .mensaje {
-            margin-top: 20px;
-            text-align: center;
-            font-weight: bold;
-        }
-
-        @media (max-width: 768px) {
-            .container {
-                margin: 20px;
-            }
-        }
+        body { background-color: #000; color: gold; font-family: Arial, sans-serif; padding: 20px; }
+        input, select, button { padding: 8px; margin: 6px 0; width: 100%; }
+        label { font-weight: bold; display: block; margin-top: 10px; }
+        .container { max-width: 500px; margin: auto; }
     </style>
 </head>
-<script src="fullscreen.js"></script>
-
 <body>
-
 <div class="container">
-    <h1>Agregar Producto</h1>
+    <h2>📦 Agregar Producto</h2>
+
+    <?php if ($mensaje): ?>
+        <p><?= $mensaje ?></p>
+    <?php endif; ?>
+
     <form method="POST">
-        <label>Nombre del Producto:</label>
+        <label for="nombre">Nombre del producto:</label>
         <input type="text" name="nombre" required>
 
-        <label>Detalle:</label>
-        <input type="text" name="detalle" required>
+        <label for="detalle">Detalle:</label>
+        <input type="text" name="detalle">
 
-        <label>Precio de Compra:</label>
-        <input type="number" step="0.01" name="compra" required>
+        <label for="compra">Precio de Compra:</label>
+        <input type="number" name="compra" step="0.01" required>
 
-        <label>Precio de Venta:</label>
-        <input type="number" step="0.01" name="venta" required>
+        <label for="venta">Precio de Venta:</label>
+        <input type="number" name="venta" step="0.01" required>
 
-        <label>Categoría:</label>
+        <label for="stock">Stock inicial:</label>
+        <input type="number" name="stock" min="0" required>
+
+        <label for="categoria">Categoría:</label>
         <select name="categoria" required>
-            <option value="">-- Seleccionar Categoría --</option>
-            <?php while ($categoria = $categorias->fetch_assoc()): ?>
-                <option value="<?= $categoria['id'] ?>"><?= $categoria['nombre'] ?></option>
-            <?php endwhile; ?>
+            <option value="Protección">Protección</option>
+            <option value="Indumentaria">Indumentaria</option>
+            <option value="Suplemento">Suplemento</option>
         </select>
 
-        <button type="submit" class="btn">Registrar Producto</button>
+        <br><br>
+        <button type="submit">Registrar Producto</button>
     </form>
-
-    <?php if (!empty($mensaje)): ?>
-        <div class="mensaje"><?= $mensaje ?></div>
-    <?php endif; ?>
 </div>
 </body>
 </html>
