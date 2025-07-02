@@ -1,32 +1,26 @@
 <?php
 session_start();
 include 'conexion.php';
-include 'menu_horizontal.php';
 
-$gimnasio_id = $_SESSION['gimnasio_id'] ?? null;
-if (!$gimnasio_id) {
-    die("Gimnasio no especificado.");
-}
-// Guardar alias si se envió el formulario
-$mensaje = "";
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $alias = trim($_POST['alias']);
-    $gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
-    $conexion->query("UPDATE gimnasios SET alias = '$alias' WHERE id = $gimnasio_id");
-    echo "<script>alert('Alias actualizado correctamente'); window.location='config_alias.php';</script>";
+$gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
+
+if ($gimnasio_id == 0) {
+    echo "Acceso denegado.";
     exit;
-    $alias = trim($_POST['alias']);
-    $stmt = $conexion->prepare("REPLACE INTO configuraciones (clave, valor) VALUES ('alias_transferencia', ?)");
-    $stmt->bind_param("s", $alias);
-    $stmt->execute();
-    $mensaje = "✅ Alias actualizado correctamente.";
+}
+
+// Guardar alias si se envía el formulario
+if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['alias'])) {
+    $nuevo_alias = $conexion->real_escape_string(trim($_POST['alias']));
+    $conexion->query("UPDATE gimnasios SET alias = '$nuevo_alias' WHERE id = $gimnasio_id");
+    echo "<script>alert('Alias actualizado correctamente');</script>";
 }
 
 // Obtener alias actual
-$alias_actual = "";
-$res = $conexion->query("SELECT valor FROM configuraciones WHERE clave = 'alias_transferencia'");
-if ($fila = $res->fetch_assoc()) {
-    $alias_actual = $fila['valor'];
+$alias_actual = '';
+$res = $conexion->query("SELECT alias FROM gimnasios WHERE id = $gimnasio_id");
+if ($res && $row = $res->fetch_assoc()) {
+    $alias_actual = $row['alias'];
 }
 ?>
 
@@ -34,63 +28,29 @@ if ($fila = $res->fetch_assoc()) {
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>Editar Alias de Transferencia</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Configurar Alias</title>
     <style>
-        body { background-color: #000; color: gold; font-family: Arial, sans-serif; padding: 20px; }
-        h1 { text-align: center; }
-        form {
-            max-width: 500px;
-            margin: auto;
-            background: #111;
-            padding: 20px;
-            border: 1px solid gold;
-            border-radius: 10px;
-        }
-        label, input {
-            display: block;
-            width: 100%;
-            margin-top: 10px;
-        }
+        body { background-color: black; color: gold; font-family: Arial, sans-serif; padding: 30px; }
+        .contenedor { max-width: 500px; margin: auto; background: #111; padding: 20px; border-radius: 10px; border: 1px solid gold; }
         input[type="text"] {
-            padding: 10px;
-            border-radius: 6px;
-            border: none;
-            background: #fff;
-            color: #000;
+            width: 100%; padding: 10px; margin-top: 10px;
+            border-radius: 5px; border: 1px solid #ccc;
         }
         button {
-            margin-top: 20px;
-            background: gold;
-            color: black;
-            font-weight: bold;
-            padding: 10px;
-            border: none;
-            border-radius: 6px;
-            cursor: pointer;
-        }
-        .mensaje {
-            text-align: center;
-            margin-top: 20px;
-            color: lightgreen;
+            background: gold; color: black; padding: 10px 20px;
+            border: none; margin-top: 15px; font-weight: bold;
+            border-radius: 5px;
         }
     </style>
 </head>
-<script src="fullscreen.js"></script>
-
 <body>
-
-<h1>⚙️ Editar Alias de Transferencia</h1>
-
-<form method="POST">
-    <label>Alias actual:</label>
-    <input type="text" name="alias" value="<?= htmlspecialchars($alias_actual) ?>" required>
-    <button type="submit">Guardar Alias</button>
-</form>
-
-<?php if ($mensaje): ?>
-    <p class="mensaje"><?= $mensaje ?></p>
-<?php endif; ?>
-
+    <div class="contenedor">
+        <h2>⚙️ Configurar alias para transferencias</h2>
+        <form method="POST">
+            <label for="alias">Alias actual:</label>
+            <input type="text" name="alias" value="<?= htmlspecialchars($alias_actual) ?>" required>
+            <button type="submit">Guardar Alias</button>
+        </form>
+    </div>
 </body>
 </html>
