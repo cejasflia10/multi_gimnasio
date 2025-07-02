@@ -48,6 +48,12 @@ $categorias = $conexion->query("SELECT * FROM categorias WHERE gimnasio_id = $gi
 <script src="fullscreen.js"></script>
 
 <body>
+<?php if (isset($_GET['actualizado']) && $_GET['actualizado'] == 1): ?>
+<div style="background-color: #0f0; color: black; padding: 10px; margin: 10px 0; text-align: center; font-weight: bold; border-radius: 6px;">
+    ✅ Categoría actualizada correctamente
+</div>
+<?php endif; ?>
+
 <h1>Categorías de Productos</h1>
 <a href="agregar_categoria.php">Agregar Nueva Categoría</a>
 <a href="index.php">Volver al Menú</a>
