@@ -3,13 +3,11 @@ if (session_status() === PHP_SESSION_NONE) session_start();
 include 'conexion.php';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $dni = $_POST['dni'];
+    $dni = trim($_POST['dni']);
+    $query = $conexion->query("SELECT * FROM clientes WHERE dni = '$dni'");
 
-    // Buscar el cliente por DNI
-    $resultado = $conexion->query("SELECT * FROM clientes WHERE dni = '$dni'");
-
-    if ($resultado && $resultado->num_rows === 1) {
-        $cliente = $resultado->fetch_assoc();
+    if ($query && $query->num_rows === 1) {
+        $cliente = $query->fetch_assoc();
         $_SESSION['cliente_id'] = $cliente['id'];
         $_SESSION['gimnasio_id'] = $cliente['gimnasio_id'];
         header("Location: panel_cliente.php");
@@ -19,11 +17,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 ?>
-
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Login Cliente</title>
+    <title>Ingreso Cliente</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <style>
         body { background: #000; color: gold; font-family: Arial; text-align: center; padding-top: 100px; }
