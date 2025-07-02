@@ -130,7 +130,7 @@ $resultado = $conexion->query($query);
                 <td><?= $fila['fecha_vencimiento'] ?></td>
                 <td><?= $fila['clases_disponibles'] ?></td>
                 <td <?php if ($fila['total'] == 0) echo "style='color:red;font-weight:bold;'"; ?>>
-                $<?= number_format($fila['total'], 2) ?>
+                <td>$<?= number_format($fila['total_pagado'], 2) ?></td>
                 </td>
                 <td class="acciones">
                     <a href="editar_membresia.php?id=<?= $id_membresia ?>" class="editar">✏️</a>
