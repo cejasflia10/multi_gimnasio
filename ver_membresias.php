@@ -129,7 +129,9 @@ $resultado = $conexion->query($query);
                 <td><?= $fila['fecha_inicio'] ?></td>
                 <td><?= $fila['fecha_vencimiento'] ?></td>
                 <td><?= $fila['clases_disponibles'] ?></td>
-                <td>$<?= number_format($fila['total'], 2) ?></td>
+                <td <?php if ($fila['total'] == 0) echo "style='color:red;font-weight:bold;'"; ?>>
+                $<?= number_format($fila['total'], 2) ?>
+                </td>
                 <td class="acciones">
                     <a href="editar_membresia.php?id=<?= $id_membresia ?>" class="editar">✏️</a>
                     <a href="eliminar_membresia.php?id=<?= $id_membresia ?>" class="eliminar" onclick="return confirm('¿Eliminar esta membresía?')">❌</a>
