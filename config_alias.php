@@ -11,6 +11,11 @@ if (!$gimnasio_id) {
 $mensaje = "";
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $alias = trim($_POST['alias']);
+    $gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
+    $conexion->query("UPDATE gimnasios SET alias = '$alias' WHERE id = $gimnasio_id");
+    echo "<script>alert('Alias actualizado correctamente'); window.location='config_alias.php';</script>";
+    exit;
+    $alias = trim($_POST['alias']);
     $stmt = $conexion->prepare("REPLACE INTO configuraciones (clave, valor) VALUES ('alias_transferencia', ?)");
     $stmt->bind_param("s", $alias);
     $stmt->execute();
