@@ -24,7 +24,7 @@ function obtenerMonto($conexion, $tabla, $campo_fecha, $gimnasio_id, $modo = 'DI
             $columna = 'monto';
             break;
         case 'membresias':
-            $columna = 'total';
+            $columna = 'total_pagado';
             break;
         default:
             $columna = 'monto';
