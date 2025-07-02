@@ -84,7 +84,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <h1>💳 Pago por Transferencia</h1>
 
 <div class="alias">
-    ALIAS: <strong>FIGHT.ACADEMY.SCORPIONS</strong>
 </div>
 
 <?php
