@@ -72,12 +72,23 @@ $cliente_nombre = $cliente['apellido'] . ' ' . $cliente['nombre'];
 <body>
 
 <h1>👋 Bienvenido <?= htmlspecialchars($cliente_nombre) ?></h1>
+<!-- FOTO DEL CLIENTE -->
+<div style="text-align:center; margin-top:30px;">
+    <h3 style="color:gold;">📷 Foto del Cliente</h3>
 
-<?php if (!empty($cliente['foto'])): ?>
-    <div style="text-align: center; margin-bottom: 20px;">
-        <img src="fotos_clientes/<?= htmlspecialchars($cliente['foto']) ?>" alt="Foto del Cliente" style="width: 150px; height: 150px; object-fit: cover; border-radius: 50%; border: 3px solid gold;">
-    </div>
-<?php endif; ?>
+    <?php
+    if (!empty($cliente['foto']) && file_exists($cliente['foto'])) {
+        echo '<img src="' . $cliente['foto'] . '" alt="Foto del Cliente" style="width:150px;height:150px;border-radius:50%;border:3px solid gold;object-fit:cover;">';
+    } else {
+        echo '<div style="width:150px;height:150px;border-radius:50%;border:3px solid gold;color:gold;display:flex;align-items:center;justify-content:center;margin:auto;">Sin foto</div>';
+    }
+    ?>
+
+    <form action="subir_foto_cliente.php" method="post" enctype="multipart/form-data" style="margin-top:20px;">
+        <input type="file" name="foto" accept="image/*" capture="user" required><br><br>
+        <button type="submit" style="padding: 10px 20px; background: gold; color: black; border: none; border-radius: 5px;">Subir Foto</button>
+    </form>
+</div>
 
 
 <div class="datos">
@@ -86,36 +97,6 @@ $cliente_nombre = $cliente['apellido'] . ' ' . $cliente['nombre'];
     <p><strong>Teléfono:</strong> <?= $cliente['telefono'] ?></p>
     <p><strong>Disciplina:</strong> <?= $cliente['disciplina'] ?></p>
 </div>
-
-
-<!-- Mostrar foto del cliente y formulario -->
-<div style="text-align:center; margin-top: 30px;">
-<?php
-$foto_path = "fotos_clientes/" . $_SESSION['cliente_id'] . ".jpg";
-if (file_exists($foto_path)) {
-    echo "<img src='$foto_path' alt='Mi Foto' style='width:120px;height:120px;border-radius:50%;border:2px solid gold;margin:10px 0;'>";
-} else {
-    echo "<img src='fotos_clientes/default.jpg' alt='Sin Foto' style='width:120px;height:120px;border-radius:50%;border:2px solid gray;margin:10px 0;'>";
-}
-?>
-<form action="subir_foto_cliente.php" method="POST" enctype="multipart/form-data" style="margin-top:10px;">
-    <label style="color:gold;">Subir o cambiar mi foto:</label><br>
-    <input type="file" name="foto" accept="image/*" capture="environment" style="margin:5px 0;"><br>
-    <button type="submit" style="background-color:gold;color:black;padding:5px 10px;border:none;border-radius:5px;">Subir Foto</button>
-</form>
-
-<!-- Mostrar QR del cliente -->
-<?php
-$dni = $cliente['dni'];
-$qr_url = "https://chart.googleapis.com/chart?cht=qr&chs=200x200&chl=C$dni";
-?>
-<div style="margin-top: 20px;">
-    <h3 style="color:gold;">🎫 Tu código QR personal</h3>
-    <img src="<?= $qr_url ?>" alt="QR Cliente" style="width:180px;height:180px; border:4px solid gold; border-radius:10px; background:#fff; padding:10px;">
-    <p style="color:gold;">Escaneá este código al ingresar al gimnasio</p>
-</div>
-</div>
-
 
 <div style="text-align: center; margin-top: 30px;">
     <h3 style="color: gold;">📲 Tu código QR personal</h3>
@@ -134,5 +115,7 @@ $qr_url = "https://chart.googleapis.com/chart?cht=qr&chs=200x200&chl=C$dni";
     }
     ?>
 </div>
+
+
 </body>
 </html>
