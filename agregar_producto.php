@@ -1,6 +1,7 @@
 <?php
 if (session_status() === PHP_SESSION_NONE) session_start();
 include 'conexion.php';
+include 'menu_horizontal.php';
 
 $mensaje = "";
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
