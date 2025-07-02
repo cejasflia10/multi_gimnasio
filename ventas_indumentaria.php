@@ -4,14 +4,14 @@ if (session_status() === PHP_SESSION_NONE) session_start();
 $gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
 
 $clientes = $conexion->query("SELECT id, dni, apellido, nombre FROM clientes WHERE gimnasio_id = $gimnasio_id");
-$productos = $conexion->query("SELECT id, nombre, precio_venta, stock FROM productos_proteccion WHERE gimnasio_id = $gimnasio_id");
+$productos = $conexion->query("SELECT id, nombre, precio_venta, stock FROM productos_indumentaria WHERE gimnasio_id = $gimnasio_id");
 ?>
 
 <!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>Venta de Protecciones</title>
+    <title>Venta de Indumentaria</title>
     <style>
         body { background-color: #000; color: gold; font-family: sans-serif; padding: 20px; }
         input, select, button { padding: 8px; margin: 5px; }
@@ -20,7 +20,7 @@ $productos = $conexion->query("SELECT id, nombre, precio_venta, stock FROM produ
     </style>
 </head>
 <body>
-<h2>🥊 Venta de Protecciones</h2>
+<h2>👕 Venta de Indumentaria</h2>
 
 <form method="POST" action="formas_pago.php" onsubmit="return calcularTotal();">
     <label>Buscar Cliente:</label><br>
