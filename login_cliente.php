@@ -6,7 +6,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $dni = $_POST['dni'];
 
     // Buscar cliente con DNI
-    $sql = "SELECT * FROM clientes WHERE dni = '$dni'";
+    $sql = "SELECT * FROM clientes WHERE dni = '$dni';
     $resultado = $conexion->query($sql);
 
     if ($resultado && $resultado->num_rows == 1) {
