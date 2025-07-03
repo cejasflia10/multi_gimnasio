@@ -3,7 +3,7 @@ if (session_status() === PHP_SESSION_NONE) session_start();
 include 'conexion.php';
 
 $profesor_id = $_SESSION['profesor_id'] ?? 0;
-$gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
+$id_gimnasio = $_SESSION['id_gimnasio'] ?? 0;
 
 $mensaje = '';
 $hoy = date('Y-m-d');
@@ -12,7 +12,7 @@ $hora_actual = date('H:i:s');
 if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['dni'])) {
     $dni = trim($_POST['dni']);
 
-    $cliente = $conexion->query("SELECT * FROM clientes WHERE dni = '$dni' AND gimnasio_id = $gimnasio_id")->fetch_assoc();
+    $cliente = $conexion->query("SELECT * FROM clientes WHERE dni = '$dni' AND id_gimnasio = $id_gimnasio")->fetch_assoc();
     if (!$cliente) {
         $mensaje = "Cliente no encontrado.";
     } else {
@@ -25,8 +25,8 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['dni'])) {
         if (!$membresia) {
             $mensaje = "El cliente no tiene membresía activa o sin clases.";
         } else {
-            $conexion->query("INSERT INTO asistencias_clientes (cliente_id, fecha, gimnasio_id)
-                              VALUES ($cliente_id, '$hoy', $gimnasio_id)");
+            $conexion->query("INSERT INTO asistencias_clientes (cliente_id, fecha, id_gimnasio)
+                              VALUES ($cliente_id, '$hoy', $id_gimnasio)");
 
             $conexion->query("UPDATE membresias SET clases_disponibles = clases_disponibles - 1
                               WHERE id = {$membresia['id']}");
@@ -35,15 +35,15 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['dni'])) {
                 WHERE profesor_id = $profesor_id AND fecha = '$hoy'")->fetch_assoc();
 
             if (!$yaIngreso) {
-                $conexion->query("INSERT INTO asistencias_profesor (profesor_id, fecha, hora_ingreso, gimnasio_id)
-                                  VALUES ($profesor_id, '$hoy', '$hora_actual', $gimnasio_id)");
+                $conexion->query("INSERT INTO asistencias_profesor (profesor_id, fecha, hora_ingreso, id_gimnasio)
+                                  VALUES ($profesor_id, '$hoy', '$hora_actual', $id_gimnasio)");
             }
 
             $alumnos_q = $conexion->query("
                 SELECT COUNT(DISTINCT ac.cliente_id) AS cantidad
                 FROM asistencias_clientes ac
                 JOIN reservas_clientes rc ON ac.cliente_id = rc.cliente_id
-                WHERE rc.profesor_id = $profesor_id AND ac.fecha = '$hoy' AND rc.gimnasio_id = $gimnasio_id
+                WHERE rc.profesor_id = $profesor_id AND ac.fecha = '$hoy' AND rc.id_gimnasio = $id_gimnasio
             ");
             $alumnos = $alumnos_q->fetch_assoc()['cantidad'];
 
