@@ -219,15 +219,27 @@ if ($deudas_q && $deudas_q->num_rows > 0) {
       <p>No se registraron ingresos hoy.</p>
     <?php endif; ?>
   </div>
-<div style="display:flex; flex-wrap:wrap; gap:20px; justify-content:space-between; margin-top:30px;">
-    <!-- Ingresos del Día -->
-    <div style="flex:1; min-width:300px; background:#222; padding:15px; border-radius:10px;">
-        <h3 style="color:gold;">Ingresos del Día</h3>
-        <?php
-        // Tu lógica de ingresos del día
-        echo "<p style='color:white;'>No se registraron ingresos hoy.</p>"; // ejemplo
-        ?>
-    </div>
+<h3>📌 Alumnos del día</h3>
+<?php
+$fecha_hoy = date("Y-m-d");
+$alumnos_q = $conexion->query("
+    SELECT c.apellido, c.nombre
+    FROM asistencias_profesor ap
+    JOIN clientes c ON ap.cliente_id = c.id
+    WHERE ap.fecha = '$fecha_hoy' AND ap.profesor_id = $profesor_id
+    ORDER BY ap.hora_ingreso
+");
+
+if ($alumnos_q->num_rows > 0) {
+    echo "<ul style='list-style: none; padding: 0;'>";
+    while ($a = $alumnos_q->fetch_assoc()) {
+        echo "<li>👤 {$a['apellido']} {$a['nombre']}</li>";
+    }
+    echo "</ul>";
+} else {
+    echo "<p style='color: gray;'>Aún no se registraron alumnos escaneados hoy.</p>";
+}
+?>
 
     <!-- Reservas del Día -->
     <div style="flex:1; min-width:300px; background:#222; padding:15px; border-radius:10px;">
