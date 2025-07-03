@@ -9,9 +9,15 @@ $cliente_id = $_SESSION['cliente_id'] ?? 0;
 $dias = [];
 
 $fecha_mani = date('Y-m-d', strtotime('+1 day'));
+
+$formatter = new IntlDateFormatter(
+    'es_ES', IntlDateFormatter::FULL, IntlDateFormatter::NONE, 
+    null, null, 'EEEE'
+);
+
 for ($i = 0; $i < 3; $i++) {
     $fecha_actual = date('Y-m-d', strtotime("+$i day", strtotime($fecha_mani)));
-    $nombre_dia = ucfirst(strftime('%A', strtotime($fecha_actual)));
+    $nombre_dia = ucfirst($formatter->format(strtotime($fecha_actual)));
     if ($nombre_dia == 'Sunday') continue; // Saltear domingo si aparece
     $dias[] = $nombre_dia;
 }
