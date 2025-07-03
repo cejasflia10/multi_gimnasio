@@ -18,7 +18,6 @@ for ($i = 0; $i < 3; $i++) {
     $dias[] = $nombre_dia;
 }
 
-}
 
 $horas = [];
 for ($h = 8; $h < 23; $h++) {
