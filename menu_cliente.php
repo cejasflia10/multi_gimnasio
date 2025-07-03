@@ -34,6 +34,7 @@
     <a href="panel_cliente.php">Inicio</a>
     <a href="ver_mis_pagos.php">Mis Pagos</a>
     <a href="pago_online.php">Pago Online</a>
+    <a href="ver_turnos_cliente.php">Ver Turnos</a>
     <a href="ver_turnos.php">Mis Turnos</a>
     <a href="ver_progreso_cliente.php">Progreso</a>
     <a href="ver_graduaciones_cliente.php">Graduaciones</a>
