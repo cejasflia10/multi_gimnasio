@@ -24,9 +24,13 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['dni'])) {
 
         if (!$membresia) {
             $mensaje = "El cliente no tiene membresía activa o sin clases.";
-        } else {
-            $conexion->query("INSERT INTO asistencias_clientes (cliente_id, fecha, gimnasio_id)
-                              VALUES ($cliente_id, '$hoy', $gimnasio_id)");
+        } else {$fechaHoraCompleta = date("Y-m-d H:i:s");
+$fecha = date("Y-m-d");
+$hora = date("H:i:s");
+
+$conexion->query("INSERT INTO asistencias_clientes (cliente_id, fecha_hora, fecha, hora, gimnasio_id)
+                  VALUES ($cliente_id, '$fechaHoraCompleta', '$fecha', '$hora', $gimnasio_id)");
+
 
             $conexion->query("UPDATE membresias SET clases_disponibles = clases_disponibles - 1
                               WHERE id = {$membresia['id']}");
