@@ -89,17 +89,21 @@ $cliente_nombre = $cliente['apellido'] . ' ' . $cliente['nombre'];
     <form method="post">
         <button type="submit" name="generar_qr" style="background-color: gold; color: black; font-weight: bold; padding: 10px 20px; border: none; border-radius: 5px;">Generar QR</button>
     </form>
+<?php
+include 'phpqrcode/qrlib.php'; // Asegurate de tener esta librería incluida
 
-    <?php
-    if (isset($_POST['generar_qr'])) {
-        require_once 'phpqrcode/qrlib.php';
-        ob_start();
-        QRcode::png($cliente['dni'], false, QR_ECLEVEL_H, 6);
-        $imageString = base64_encode(ob_get_contents());
-        ob_end_clean();
-        echo "<div style='margin-top:20px;'><img src='data:image/png;base64,$imageString' alt='QR Cliente' style='width:200px; border: 3px solid gold; padding: 10px; background: white;'></div>";
-    }
-    ?>
+$dni_cliente = $_SESSION['dni'] ?? '';
+if ($dni_cliente) {
+    ob_start();
+    QRcode::png('C' . $dni_cliente, false, QR_ECLEVEL_L, 6);
+    $imageData = base64_encode(ob_get_clean());
+    echo "<div style='text-align:center; margin-top:20px;'>
+            <h3 style='color:gold;'>Mi QR de acceso</h3>
+            <img src='data:image/png;base64,{$imageData}' alt='QR Cliente'>
+          </div>";
+}
+?>
+
 </div>
 
 
