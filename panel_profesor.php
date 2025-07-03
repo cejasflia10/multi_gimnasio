@@ -15,15 +15,28 @@ $fecha_hoy = date('Y-m-d');
 
 $prof = $conexion->query("SELECT apellido, nombre FROM profesores WHERE id = $profesor_id")->fetch_assoc();
 
-// Obtener alumnos del día
-$alumnos = $conexion->query("
+<h3>📌 Alumnos del día</h3>
+<?php
+$fecha_hoy = date("Y-m-d");
+$alumnos_q = $conexion->query("
     SELECT c.apellido, c.nombre
-    FROM reservas r
-    JOIN turnos t ON r.turno_id = t.id
-    JOIN clientes c ON r.cliente_id = c.id
-    WHERE t.id_profesor = $profesor_id AND r.fecha = '$fecha_hoy'
-    ORDER BY c.apellido
+    FROM asistencias_profesor ap
+    JOIN clientes c ON ap.cliente_id = c.id
+    WHERE ap.fecha = '$fecha_hoy' AND ap.profesor_id = $profesor_id
+    ORDER BY ap.hora_ingreso
 ");
+
+if ($alumnos_q->num_rows > 0) {
+    echo "<ul style='list-style: none; padding: 0;'>";
+    while ($a = $alumnos_q->fetch_assoc()) {
+        echo "<li>👤 {$a['apellido']} {$a['nombre']}</li>";
+    }
+    echo "</ul>";
+} else {
+    echo "<p style='color: gray;'>Aún no se registraron alumnos escaneados hoy.</p>";
+}
+?>
+
 
 // Calcular horas trabajadas
 $ingresos = $conexion->query("
