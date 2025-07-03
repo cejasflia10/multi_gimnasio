@@ -2,21 +2,19 @@
 include 'conexion.php';
 include 'menu_cliente.php';
 
-// Obtener todos los turnos del gimnasio logueado
+
 $gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
 $dias_semana = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
 
-// Obtener todos los turnos
 $turnos = $conexion->query("
     SELECT * FROM turnos
     WHERE gimnasio_id = $gimnasio_id
-    ORDER BY FIELD(dia, 'Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'), hora_inicio
+    ORDER BY FIELD(dia, 'Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'), horario
 ");
 
-// Organizar turnos por hora y día
 $tabla = [];
 while ($t = $turnos->fetch_assoc()) {
-    $hora = $t['hora_inicio'] . ' - ' . $t['hora_fin'];
+    $hora = $t['horario']; // por ejemplo: "08:00 - 09:00"
     $dia = $t['dia'];
     $tabla[$hora][$dia] = $t['nombre_profesor'];
 }
