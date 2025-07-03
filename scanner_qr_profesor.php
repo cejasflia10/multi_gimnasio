@@ -46,8 +46,7 @@ $conexion->query("INSERT INTO asistencias_clientes (cliente_id, fecha_hora, fech
             $alumnos_q = $conexion->query("
                 SELECT COUNT(DISTINCT ac.cliente_id) AS cantidad
                 FROM asistencias_clientes ac
-                JOIN reservas_clientes rc ON ac.cliente_id = rc.cliente_id
-                WHERE rc.profesor_id = $profesor_id AND ac.fecha = '$hoy' AND rc.gimnasio_id = $gimnasio_id
+                WHERE ac.fecha = '$hoy' AND ac.gimnasio_id = $gimnasio_id
             ");
             $alumnos = $alumnos_q->fetch_assoc()['cantidad'];
 
