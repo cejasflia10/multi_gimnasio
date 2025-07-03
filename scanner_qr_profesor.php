@@ -24,48 +24,62 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['dni'])) {
 
         if (!$membresia) {
             $mensaje = "El cliente no tiene membresía activa o sin clases.";
-        } else {$fechaHoraCompleta = date("Y-m-d H:i:s");
-$fecha = date("Y-m-d");
-$hora = date("H:i:s");
+        } else {$fechaHoraCom// NUEVO BLOQUE: calcular monto turno y registrar asistencia profesor
+$hora_actual = date('H:i:s');
+$dia_actual = date('l'); // ej: Monday
+$dias = [
+    'Monday'=>'Lunes', 'Tuesday'=>'Martes', 'Wednesday'=>'Miércoles',
+    'Thursday'=>'Jueves', 'Friday'=>'Viernes', 'Saturday'=>'Sábado'
+];
+$dia_semana = $dias[$dia_actual] ?? '';
 
-$conexion->query("INSERT INTO asistencias_clientes (cliente_id, fecha_hora, fecha, hora, gimnasio_id)
-                  VALUES ($cliente_id, '$fechaHoraCompleta', '$fecha', '$hora', $gimnasio_id)");
+$turno = $conexion->query("
+    SELECT * FROM turnos_profesor 
+    WHERE profesor_id = $profesor_id 
+    AND gimnasio_id = $gimnasio_id 
+    AND dia = '$dia_semana'
+    AND '$hora_actual' BETWEEN hora_inicio AND hora_fin
+    LIMIT 1
+")->fetch_assoc();
 
+if ($turno) {
+    $hora_inicio = $turno['hora_inicio'];
+    $hora_fin = $turno['hora_fin'];
 
-            $conexion->query("UPDATE membresias SET clases_disponibles = clases_disponibles - 1
-                              WHERE id = {$membresia['id']}");
+    // Contar alumnos únicos que ingresaron en ese turno
+    $total_alumnos = $conexion->query("
+        SELECT COUNT(DISTINCT cliente_id) AS total
+        FROM asistencias_clientes
+        WHERE fecha = CURDATE()
+        AND hora BETWEEN '$hora_inicio' AND '$hora_fin'
+    ")->fetch_assoc()['total'];
 
-            $yaIngreso = $conexion->query("SELECT * FROM asistencias_profesor
-                WHERE profesor_id = $profesor_id AND fecha = '$hoy'")->fetch_assoc();
+    // Calcular monto del turno
+    $monto_turno = 0;
+    if ($total_alumnos >= 1 && $total_alumnos <= 3) {
+        $monto_turno = 1000;
+    } elseif ($total_alumnos >= 4 && $total_alumnos <= 10) {
+        $monto_turno = 2000;
+    } elseif ($total_alumnos > 10) {
+        $monto_turno = 3000;
+    }
 
-            if (!$yaIngreso) {
-                $conexion->query("INSERT INTO asistencias_profesor (profesor_id, fecha, hora_ingreso, gimnasio_id)
-                                  VALUES ($profesor_id, '$hoy', '$hora_actual', $gimnasio_id)");
-            }
+    // Verificar si ya fue registrada la asistencia del profesor en ese turno
+    $ya_existe = $conexion->query("
+        SELECT id FROM asistencias_profesor 
+        WHERE profesor_id = $profesor_id 
+        AND fecha = CURDATE()
+        AND hora_ingreso BETWEEN '$hora_inicio' AND '$hora_fin'
+    ");
 
-            $alumnos_q = $conexion->query("
-                SELECT COUNT(DISTINCT ac.cliente_id) AS cantidad
-                FROM asistencias_clientes ac
-                WHERE ac.fecha = '$hoy' AND ac.gimnasio_id = $gimnasio_id
-            ");
-            $alumnos = $alumnos_q->fetch_assoc()['cantidad'];
-
-            if ($alumnos >= 5) {
-                $monto = 2000;
-            } elseif ($alumnos >= 2) {
-                $monto = 1500;
-            } else {
-                $monto = 1000;
-            }
-
-            $conexion->query("UPDATE asistencias_profesor 
-                              SET monto_turno = $monto 
-                              WHERE profesor_id = $profesor_id AND fecha = '$hoy'");
-
-            $mensaje = "✅ {$cliente['apellido']} {$cliente['nombre']} ingresó correctamente. Total alumnos: $alumnos. Monto turno: $$monto";
-        }
+    if ($ya_existe->num_rows == 0 && $monto_turno > 0) {
+        $conexion->query("
+            INSERT INTO asistencias_profesor (profesor_id, fecha, hora_ingreso, gimnasio_id, monto_turno)
+            VALUES ($profesor_id, CURDATE(), '$hora_actual', $gimnasio_id, $monto_turno)
+        ");
     }
 }
+
 ?>
 <!DOCTYPE html>
 <html lang="es">
