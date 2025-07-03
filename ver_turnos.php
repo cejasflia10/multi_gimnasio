@@ -6,10 +6,10 @@ include 'menu_cliente.php';
 $gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
 $dias_semana = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
 
-$turnos = $conexion->query("
-    SELECT * FROM turnos
+$turnos = $conexion->query("SELECT * FROM turnos
     WHERE gimnasio_id = $gimnasio_id
     ORDER BY FIELD(dia, 'Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'), horario
+");
 
 $tabla = [];
 while ($t = $turnos->fetch_assoc()) {
