@@ -8,14 +8,16 @@ $dias_semana = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado']
 
 $turnos = $conexion->query("
     SELECT 
-        t.dia,
-        TIME_FORMAT(t.horario_inicio, '%H:%i') AS hora_inicio,
-        TIME_FORMAT(t.horario_fin, '%H:%i') AS hora_fin,
-        CONCAT(p.apellido, ' ', p.nombre) AS profesor
-    FROM turnos t
-    LEFT JOIN profesores p ON t.id_profesor = p.id
-    WHERE t.gimnasio_id = $gimnasio_id
-    ORDER BY FIELD(t.dia, 'Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'), t.horario_inicio
+        turnos.id AS turno_id,
+        turnos.dia,
+        TIME_FORMAT(turnos.horario_inicio, '%H:%i') AS horario_inicio,
+        TIME_FORMAT(turnos.horario_fin, '%H:%i') AS horario_fin,
+        profesores.nombre,
+        profesores.apellido
+    FROM turnos
+    LEFT JOIN profesores ON turnos.id_profesor = profesores.id
+    WHERE turnos.gimnasio_id = $gimnasio_id
+    ORDER BY FIELD(turnos.dia, 'Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'), turnos.horario_inicio
 ");
 
 
