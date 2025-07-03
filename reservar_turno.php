@@ -1,109 +1,92 @@
 <?php
-session_start();
+if (session_status() === PHP_SESSION_NONE) session_start();
+
 include 'conexion.php';
 
 $cliente_id = $_SESSION['cliente_id'] ?? 0;
-if ($cliente_id == 0) die("Acceso denegado.");
+$gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
 
-$hoy = date('Y-m-d');
-
-$fechas_semana = [
-    'Lunes' => '2025-06-30',
-    'Martes' => '2025-07-01',
-    'Miércoles' => '2025-07-02',
-    'Jueves' => '2025-07-03',
-    'Viernes' => '2025-07-04',
-    'Sábado' => '2025-07-05',
-];
-
-$membresia = $conexion->query("
-    SELECT * FROM membresias 
-    WHERE cliente_id = $cliente_id 
-      AND fecha_vencimiento >= '$hoy'
-      AND clases_disponibles > 0
-    ORDER BY fecha_vencimiento DESC LIMIT 1
-")->fetch_assoc();
-
-if (!$membresia) {
-    die("<h2 style='color: gold; text-align: center;'>No tenés una membresía activa o no tenés clases disponibles.</h2>");
+if ($cliente_id == 0 || $gimnasio_id == 0) {
+    echo "Acceso denegado.";
+    exit;
 }
 
-$turnos = $conexion->query("
-    SELECT 
-        t.id,
-        t.dia,
-        h.hora_inicio,
-        h.hora_fin,
-        p.apellido AS profesor,
-        t.cupo_maximo
-    FROM turnos t
-    JOIN horarios h ON t.id_horario = h.id
-    JOIN profesores p ON t.id_profesor = p.id
-");
+if ($_SERVER['REQUEST_METHOD'] == 'POST') {
+    $turno_id = intval($_POST['turno_id']);
+
+    // Obtener información del turno
+    $turno = $conexion->query("SELECT * FROM turnos_profesor WHERE id = $turno_id AND gimnasio_id = $gimnasio_id")->fetch_assoc();
+    if (!$turno) {
+        echo "Turno no encontrado.";
+        exit;
+    }
+
+    $dia = $turno['dia'];
+    $hora_inicio = $turno['horario_inicio'];
+
+    // Verificar si ya tiene dos turnos reservados ese día
+    $reservas_dia = $conexion->query("
+        SELECT t.horario_inicio FROM reservas r
+        JOIN turnos_profesor t ON r.turno_id = t.id
+        WHERE r.cliente_id = $cliente_id AND t.dia = '$dia'
+    ");
+
+    $horarios_reservados = [];
+    while ($r = $reservas_dia->fetch_assoc()) {
+        $horarios_reservados[] = $r['horario_inicio'];
+    }
+
+    if (in_array($hora_inicio, $horarios_reservados)) {
+        echo "Ya reservaste este turno.";
+        exit;
+    }
+
+    if (count($horarios_reservados) >= 2) {
+        echo "Ya tenés 2 turnos para ese día.";
+        exit;
+    }
+
+    if (count($horarios_reservados) == 1) {
+        $hora_ya = strtotime($horarios_reservados[0]);
+        $hora_nueva = strtotime($hora_inicio);
+        $diff = abs($hora_nueva - $hora_ya);
+
+        if ($diff != 3600) {
+            echo "Solo se permiten 2 turnos seguidos. No se permiten separados.";
+            exit;
+        }
+    }
+
+    // Verificar si tiene clases disponibles
+    $membresia = $conexion->query("
+        SELECT * FROM membresias 
+        WHERE cliente_id = $cliente_id 
+          AND clases_disponibles > 0 
+          AND fecha_vencimiento >= CURDATE()
+          AND gimnasio_id = $gimnasio_id
+        ORDER BY fecha_inicio DESC LIMIT 1
+    ")->fetch_assoc();
+
+    if (!$membresia) {
+        echo "No tenés clases disponibles.";
+        exit;
+    }
+
+    $membresia_id = $membresia['id'];
+
+    // Registrar reserva
+    $conexion->query("
+        INSERT INTO reservas (cliente_id, turno_id, fecha_reserva)
+        VALUES ($cliente_id, $turno_id, CURDATE())
+    ");
+
+    // Descontar clase
+    $conexion->query("
+        UPDATE membresias SET clases_disponibles = clases_disponibles - 1 
+        WHERE id = $membresia_id
+    ");
+
+    header("Location: ver_turnos_cliente.php?ok=1");
+    exit;
+}
 ?>
-<!DOCTYPE html>
-<html lang="es">
-<head>
-    <meta charset="UTF-8">
-    <title>📅 Reservar Turno</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <style>
-        body { background: #000; color: gold; font-family: Arial, sans-serif; padding: 20px; }
-        h1 { text-align: center; }
-        .turno {
-            background-color: #111;
-            border: 1px solid gold;
-            border-radius: 10px;
-            padding: 20px;
-            margin: 15px auto;
-            max-width: 600px;
-            box-shadow: 0 0 10px rgba(255,215,0,0.2);
-        }
-        .btn {
-            background-color: gold;
-            color: black;
-            font-weight: bold;
-            padding: 10px 20px;
-            border: none;
-            border-radius: 6px;
-            cursor: pointer;
-        }
-        .btn:disabled {
-            background: gray;
-            cursor: not-allowed;
-        }
-        @media (max-width: 600px) {
-            .btn { width: 100%; }
-        }
-    </style>
-</head>
-<body>
-
-<h1>📅 Reservar Turno</h1>
-
-<?php while ($t = $turnos->fetch_assoc()): 
-    $dia_normalizado = ucfirst(strtolower(trim($t['dia'])));
-    $fecha_turno = $fechas_semana[$dia_normalizado] ?? 'Fecha no asignada';
-
-    $ya = $conexion->query("SELECT 1 FROM reservas WHERE cliente_id = $cliente_id AND turno_id = {$t['id']} AND fecha = '$fecha_turno'");
-    $ya_reservado = $ya->num_rows > 0;
-?>
-    <div class="turno">
-        <strong><?= $dia_normalizado ?> (<?= $fecha_turno ?>) - <?= $t['hora_inicio'] ?> a <?= $t['hora_fin'] ?></strong><br>
-        Profesor: <b><?= $t['profesor'] ?></b><br>
-        Cupo máximo: <?= $t['cupo_maximo'] ?><br>
-
-        <?php if ($ya_reservado): ?>
-            <button class="btn" disabled>Ya reservaste este turno</button>
-        <?php else: ?>
-            <form action="guardar_reserva.php" method="POST">
-                <input type="hidden" name="turno_id" value="<?= $t['id'] ?>">
-                <input type="hidden" name="fecha" value="<?= $fecha_turno ?>">
-                <button class="btn" type="submit">Reservar</button>
-            </form>
-        <?php endif; ?>
-    </div>
-<?php endwhile; ?>
-
-</body>
-</html>
