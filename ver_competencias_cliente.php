@@ -1,17 +1,21 @@
 <?php
-session_start();
+if (session_status() === PHP_SESSION_NONE) session_start();
 include 'conexion.php';
 include 'menu_cliente.php';
 
 $cliente_id = $_SESSION['cliente_id'] ?? 0;
-if ($cliente_id == 0) die("Acceso denegado.");
+$gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
 
-$competencias = $conexion->query("
-    SELECT c.fecha, c.evento, c.resultado, c.observaciones, p.apellido AS profesor
-    FROM competencias c
-    JOIN profesores p ON c.profesor_id = p.id
-    WHERE c.cliente_id = $cliente_id
-    ORDER BY c.fecha DESC
+if (!$cliente_id || !$gimnasio_id) {
+    echo "<div style='color:red;'>Acceso denegado.</div>";
+    exit;
+}
+
+$resultado = $conexion->query("
+    SELECT nombre_competencia, lugar, fecha, resultado, observaciones
+    FROM competencias
+    WHERE cliente_id = $cliente_id
+    ORDER BY fecha DESC
 ");
 ?>
 
@@ -20,52 +24,43 @@ $competencias = $conexion->query("
 <head>
     <meta charset="UTF-8">
     <title>Mis Competencias</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
-        body { background-color: #000; color: gold; font-family: Arial, sans-serif; padding: 20px; }
-        h1 { text-align: center; }
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 20px;
-        }
-        th, td {
-            border: 1px solid gold;
-            padding: 10px;
-            text-align: center;
-        }
-        th { background-color: #222; }
+        body { background: black; color: gold; font-family: Arial; padding: 20px; text-align: center; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        th, td { border: 1px solid gold; padding: 10px; text-align: center; }
+        th { background: #222; }
+        td { background: #111; color: white; }
     </style>
 </head>
 <body>
 
-<h1>🏆 Mis Competencias</h1>
+<h2>🥇 Mis Competencias</h2>
 
-<?php if ($competencias->num_rows > 0): ?>
-<table>
-    <thead>
-        <tr>
-            <th>Fecha</th>
-            <th>Evento</th>
-            <th>Resultado</th>
-            <th>Profesor</th>
-            <th>Observaciones</th>
-        </tr>
-    </thead>
-    <tbody>
-        <?php while ($c = $competencias->fetch_assoc()): ?>
-        <tr>
-            <td><?= $c['fecha'] ?></td>
-            <td><?= $c['evento'] ?></td>
-            <td><?= $c['resultado'] ?></td>
-            <td><?= $c['profesor'] ?></td>
-            <td><?= $c['observaciones'] ?></td>
-        </tr>
-        <?php endwhile; ?>
-    </tbody>
-</table>
+<?php if ($resultado->num_rows > 0): ?>
+    <table>
+        <thead>
+            <tr>
+                <th>Competencia</th>
+                <th>Lugar</th>
+                <th>Fecha</th>
+                <th>Resultado</th>
+                <th>Observaciones</th>
+            </tr>
+        </thead>
+        <tbody>
+            <?php while($row = $resultado->fetch_assoc()): ?>
+                <tr>
+                    <td><?= htmlspecialchars($row['nombre_competencia']) ?></td>
+                    <td><?= htmlspecialchars($row['lugar']) ?></td>
+                    <td><?= date('d/m/Y', strtotime($row['fecha'])) ?></td>
+                    <td><?= htmlspecialchars($row['resultado']) ?></td>
+                    <td><?= nl2br(htmlspecialchars($row['observaciones'])) ?></td>
+                </tr>
+            <?php endwhile; ?>
+        </tbody>
+    </table>
 <?php else: ?>
-    <p style="text-align: center;">No hay competencias registradas.</p>
+    <p>No hay competencias registradas aún.</p>
 <?php endif; ?>
 
 </body>
