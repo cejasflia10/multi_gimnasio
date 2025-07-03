@@ -1,36 +1,43 @@
 <?php
 include 'conexion.php';
+include 'menu_cliente.php';
 
-$resultado = $conexion->query("
-    SELECT t.id, t.dia, h.hora_inicio, h.hora_fin, p.apellido AS profesor, t.cupo_maximo
-    FROM turnos t
-    JOIN horarios h ON t.id_horario = h.id
-    JOIN profesores p ON t.id_profesor = p.id
-    ORDER BY FIELD(t.dia, 'Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'), h.hora_inicio
+// Obtener todos los turnos del gimnasio logueado
+$gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
+$dias_semana = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+
+// Obtener todos los turnos
+$turnos = $conexion->query("
+    SELECT * FROM turnos
+    WHERE gimnasio_id = $gimnasio_id
+    ORDER BY FIELD(dia, 'Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'), hora_inicio
 ");
+
+// Organizar turnos por hora y día
+$tabla = [];
+while ($t = $turnos->fetch_assoc()) {
+    $hora = $t['hora_inicio'] . ' - ' . $t['hora_fin'];
+    $dia = $t['dia'];
+    $tabla[$hora][$dia] = $t['nombre_profesor'];
+}
 ?>
 
 <!DOCTYPE html>
-<html lang="es">
+<html>
 <head>
     <meta charset="UTF-8">
-    <title>Ver Turnos</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Turnos Semanales</title>
     <style>
         body {
-            background: #000;
+            background: black;
             color: gold;
             font-family: Arial, sans-serif;
-            padding: 20px;
-        }
-        h1 {
             text-align: center;
-            margin-bottom: 30px;
         }
         table {
             width: 100%;
             border-collapse: collapse;
-            margin-top: 10px;
+            margin-top: 30px;
         }
         th, td {
             border: 1px solid gold;
@@ -38,44 +45,36 @@ $resultado = $conexion->query("
             text-align: center;
         }
         th {
-            background: #222;
+            background-color: #222;
         }
-        a.boton {
-            background: gold;
-            color: black;
-            padding: 6px 12px;
-            text-decoration: none;
-            font-weight: bold;
-            border-radius: 6px;
+        td {
+            background-color: #111;
+            color: white;
         }
     </style>
 </head>
-<script src="fullscreen.js"></script>
-
 <body>
 
-<h1>📋 Lista de Turnos</h1>
+<h2>📅 Turnos Semanales</h2>
 
 <table>
     <thead>
         <tr>
-            <th>Día</th>
             <th>Horario</th>
-            <th>Profesor</th>
-            <th>Cupo Máximo</th>
-            <th>Acción</th>
+            <?php foreach ($dias_semana as $dia): ?>
+                <th><?= $dia ?></th>
+            <?php endforeach; ?>
         </tr>
     </thead>
     <tbody>
-        <?php while ($t = $resultado->fetch_assoc()): ?>
-        <tr>
-            <td><?= $t['dia'] ?></td>
-            <td><?= $t['hora_inicio'] ?> - <?= $t['hora_fin'] ?></td>
-            <td><?= $t['profesor'] ?></td>
-            <td><?= $t['cupo_maximo'] ?></td>
-            <td><a class="boton" href="editar_turno.php?id=<?= $t['id'] ?>">Editar</a></td>
-        </tr>
-        <?php endwhile; ?>
+        <?php foreach ($tabla as $hora => $fila): ?>
+            <tr>
+                <td><?= $hora ?></td>
+                <?php foreach ($dias_semana as $dia): ?>
+                    <td><?= $fila[$dia] ?? '-' ?></td>
+                <?php endforeach; ?>
+            </tr>
+        <?php endforeach; ?>
     </tbody>
 </table>
 
