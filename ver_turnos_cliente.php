@@ -1,6 +1,10 @@
 <?php
+if (session_status() === PHP_SESSION_NONE) session_start();
 include 'conexion.php';
 include 'menu_cliente.php';
+
+$gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
+$cliente_id = $_SESSION['cliente_id'] ?? 0;
 
 $gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
 $cliente_id = $_SESSION['cliente_id'] ?? 0;
