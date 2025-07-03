@@ -15,28 +15,15 @@ $fecha_hoy = date('Y-m-d');
 
 $prof = $conexion->query("SELECT apellido, nombre FROM profesores WHERE id = $profesor_id")->fetch_assoc();
 
-<h3>📌 Alumnos del día</h3>
-<?php
-$fecha_hoy = date("Y-m-d");
-$alumnos_q = $conexion->query("
+// Obtener alumnos del día
+$alumnos = $conexion->query("
     SELECT c.apellido, c.nombre
-    FROM asistencias_profesor ap
-    JOIN clientes c ON ap.cliente_id = c.id
-    WHERE ap.fecha = '$fecha_hoy' AND ap.profesor_id = $profesor_id
-    ORDER BY ap.hora_ingreso
+    FROM reservas r
+    JOIN turnos t ON r.turno_id = t.id
+    JOIN clientes c ON r.cliente_id = c.id
+    WHERE t.id_profesor = $profesor_id AND r.fecha = '$fecha_hoy'
+    ORDER BY c.apellido
 ");
-
-if ($alumnos_q->num_rows > 0) {
-    echo "<ul style='list-style: none; padding: 0;'>";
-    while ($a = $alumnos_q->fetch_assoc()) {
-        echo "<li>👤 {$a['apellido']} {$a['nombre']}</li>";
-    }
-    echo "</ul>";
-} else {
-    echo "<p style='color: gray;'>Aún no se registraron alumnos escaneados hoy.</p>";
-}
-?>
-
 
 // Calcular horas trabajadas
 $ingresos = $conexion->query("
@@ -74,12 +61,13 @@ $ingresos = $conexion->query("
     <h2>👨‍🏫 Bienvenido <?= $prof['apellido'] . ' ' . $prof['nombre'] ?></h2>
 
     <div class="cuadro">
-        <h3>📌 Alumnos del día</h3>
-        <ul>
-            <?php while ($a = $alumnos->fetch_assoc()): ?>
-                <li><?= $a['apellido'] . ' ' . $a['nombre'] ?></li>
-            <?php endwhile; ?>
-        </ul>
+<?php echo "<h3>📌 Alumnos del día</h3>"; ?>
+<ul>
+    <?php while ($a = $alumnos->fetch_assoc()): ?>
+        <li><?= $a['apellido'] . ' ' . $a['nombre'] ?></li>
+    <?php endwhile; ?>
+</ul>
+
     </div>
 <div style="display:flex; flex-wrap:wrap; gap:20px; justify-content:space-between; margin-top:30px;">
     <!-- Ingresos del Día -->
@@ -140,37 +128,5 @@ $ingresos = $conexion->query("
             <li>Total: <?= round($total_horas, 2) ?> horas</li>
         </ul>
     </div>
-
-<!-- BLOQUE NUEVO: MONTO A COBRAR POR ASISTENCIAS -->
-<?php
-$profesor_id = $_SESSION['profesor_id'] ?? 0;
-$gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
-$fecha_hoy = date('Y-m-d');
-$monto_total = 0;
-
-$asistencias = $conexion->query("
-    SELECT COUNT(*) AS total
-    FROM asistencias_profesor
-    WHERE profesor_id = $profesor_id 
-      AND gimnasio_id = $gimnasio_id
-      AND fecha = '$fecha_hoy'
-");
-
-$cantidad = $asistencias->fetch_assoc()['total'] ?? 0;
-
-if ($cantidad >= 10) {
-    $monto_total = 2000;
-} elseif ($cantidad >= 5) {
-    $monto_total = 1500;
-} elseif ($cantidad > 0) {
-    $monto_total = 1000;
-}
-?>
-<div class="cuadro" style="margin-top: 20px;">
-    <h3>💰 Monto a cobrar hoy</h3>
-    <p>Total por asistencias escaneadas: <strong>$<?= $monto_total ?></strong></p>
-</div>
-<!-- FIN BLOQUE NUEVO -->
-
 </body>
 </html>
