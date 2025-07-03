@@ -6,149 +6,118 @@ include 'menu_cliente.php';
 $gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
 $cliente_id = $_SESSION['cliente_id'] ?? 0;
 
-$dias = [];
-$fecha_mani = date('Y-m-d', strtotime('+1 day'));
-$nombres_dias = ['Sunday'=>'Domingo', 'Monday'=>'Lunes', 'Tuesday'=>'Martes', 'Wednesday'=>'Miércoles', 'Thursday'=>'Jueves', 'Friday'=>'Viernes', 'Saturday'=>'Sábado'];
+$dia_hoy = date('l');
+$nombres_dias = ['Monday'=>'Lunes','Tuesday'=>'Martes','Wednesday'=>'Miércoles','Thursday'=>'Jueves','Friday'=>'Viernes','Saturday'=>'Sábado','Sunday'=>'Domingo'];
+$dia_hoy = $nombres_dias[$dia_hoy];
+$hora_actual = date('H:i:s');
+$fecha_hoy = date('Y-m-d');
 
-for ($i = 0; $i < 3; $i++) {
-    $fecha_actual = date('Y-m-d', strtotime("+$i day", strtotime($fecha_mani)));
-    $nombre_ingles = date('l', strtotime($fecha_actual));
-    $nombre_dia = $nombres_dias[$nombre_ingles];
-    if ($nombre_dia == 'Domingo') continue;
-    $dias[] = $nombre_dia;
-}
+// Obtener membresía activa
+$membresia = $conexion->query("SELECT * FROM membresias 
+    WHERE cliente_id = $cliente_id AND clases_disponibles > 0 AND fecha_vencimiento >= CURDATE()
+    ORDER BY fecha_inicio DESC LIMIT 1")->fetch_assoc();
+$membresia_id = $membresia['id'] ?? null;
 
-
-$horas = [];
-for ($h = 8; $h < 23; $h++) {
-    $hora_inicio = str_pad($h, 2, '0', STR_PAD_LEFT) . ":00:00";
-    $hora_fin = str_pad($h + 1, 2, '0', STR_PAD_LEFT) . ":00:00";
-    $horas[] = ['inicio' => $hora_inicio, 'fin' => $hora_fin];
-}
-
-// Procesar reserva o cancelación
+// Procesar reserva
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $dia = $_POST['dia'];
-    $hora = $_POST['hora'];
+    $turno_id = $_POST['turno_id'];
 
-    if (isset($_POST['reservar'])) {
-        // Validar que no tenga otra reserva ese día
-        $yaReservo = $conexion->query("SELECT * FROM reservas_clientes 
-            WHERE cliente_id = $cliente_id AND dia_semana = '$dia' 
-            AND gimnasio_id = $gimnasio_id")->num_rows;
+    // Obtener turno
+    $turno = $conexion->query("SELECT * FROM turnos_disponibles WHERE id = $turno_id")->fetch_assoc();
+$profesor_id = $turno['profesor_id'];
+    $hora_inicio = $turno['hora_inicio'];
+    $dia_turno = $turno['dia'];
 
-        // Contar cuántos ya reservaron ese turno
-        $cupo = $conexion->query("SELECT COUNT(*) as total FROM reservas_clientes 
-            WHERE dia_semana = '$dia' AND hora_inicio = '$hora' AND gimnasio_id = $gimnasio_id")->fetch_assoc()['total'];
-
-        if ($yaReservo < 2 && $cupo < 15) {
-            $profQ = $conexion->query("SELECT profesor_id FROM turnos_profesor 
-                WHERE dia = '$dia' AND hora_inicio = '$hora' AND gimnasio_id = $gimnasio_id");
-            $prof = $profQ->fetch_assoc();
-            if ($prof) {
-                $conexion->query("INSERT INTO reservas_clientes 
-                    (cliente_id, profesor_id, dia_semana, hora_inicio, fecha_reserva, gimnasio_id)
-                    VALUES ($cliente_id, {$prof['profesor_id']}, '$dia', '$hora', CURDATE(), $gimnasio_id)");
-            }
-        }
-    }
+   $fecha_reserva = date('Y-m-d');
+$conexion->query("INSERT INTO reservas_clientes 
+(cliente_id, turno_id, dia_semana, hora_inicio, gimnasio_id, profesor_id, fecha_reserva)
+VALUES ($cliente_id, $turno_id, '$dia_turno', '$hora_inicio', $gimnasio_id, $profesor_id, '$fecha_reserva')");
 
     if (isset($_POST['cancelar'])) {
-        // Validar que sea 1h antes del turno
-        if ($hora > date("H:i:s", strtotime('+1 hour'))) {
-            $conexion->query("DELETE FROM reservas_clientes 
-                WHERE cliente_id = $cliente_id AND dia_semana = '$dia' 
-                AND hora_inicio = '$hora' AND gimnasio_id = $gimnasio_id");
+        // Verificar si falta más de 1h
+        $hora_turno_ts = strtotime("$hora_inicio");
+        $ahora_ts = strtotime(date("H:i:s"));
+        if (($hora_turno_ts - $ahora_ts) >= 3600) {
+            // Devolver clase
+            $conexion->query("UPDATE membresias SET clases_disponibles = clases_disponibles + 1 WHERE id = $membresia_id");
         }
+
+        // Eliminar reserva
+        $conexion->query("DELETE FROM reservas_clientes WHERE cliente_id = $cliente_id AND turno_id = $turno_id");
     }
 
     header("Location: ver_turnos_cliente.php");
     exit;
 }
 
-// Obtener turnos
-$turnosQ = $conexion->query("
-    SELECT tp.dia, tp.hora_inicio, tp.hora_fin, p.nombre, p.apellido, tp.profesor_id
-    FROM turnos_profesor tp
-    JOIN profesores p ON tp.profesor_id = p.id
-    WHERE tp.gimnasio_id = $gimnasio_id
-");
-$turnos = [];
-while ($t = $turnosQ->fetch_assoc()) {
-    $turnos[$t['dia']][$t['hora_inicio']] = $t['apellido'] . ' ' . $t['nombre'];
+// Obtener reservas actuales
+$reservas = [];
+$res_q = $conexion->query("SELECT turno_id FROM reservas_clientes WHERE cliente_id = $cliente_id AND gimnasio_id = $gimnasio_id");
+while ($r = $res_q->fetch_assoc()) {
+    $reservas[$r['turno_id']] = true;
 }
 
-// Obtener reservas del cliente
-$resQ = $conexion->query("
-    SELECT dia_semana, hora_inicio FROM reservas_clientes
-    WHERE cliente_id = $cliente_id AND gimnasio_id = $gimnasio_id
+// Turnos del día
+$turnos = $conexion->query("
+    SELECT td.*, p.nombre, p.apellido FROM turnos_disponibles td
+    JOIN profesores p ON td.profesor_id = p.id
+    WHERE td.gimnasio_id = $gimnasio_id AND LOWER(TRIM(td.dia)) = LOWER('$dia_hoy')
+    ORDER BY td.hora_inicio
 ");
-$reservas = [];
-while ($r = $resQ->fetch_assoc()) {
-    $reservas[$r['dia_semana']][$r['hora_inicio']] = true;
-}
 ?>
 
 <!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>Turnos Semanales</title>
+    <title>Turnos Disponibles</title>
     <style>
-        body { background: black; color: gold; font-family: Arial; padding: 20px; text-align: center; }
-        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-        th, td { border: 1px solid gold; padding: 8px; text-align: center; vertical-align: middle; }
+        body { background: black; color: gold; font-family: Arial; padding: 20px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; color: white; }
+        th, td { border: 1px solid gold; padding: 10px; text-align: center; }
         th { background: #222; }
-        td { background: #111; color: white; }
-        button { padding: 5px 10px; border: none; border-radius: 4px; }
+        td { background: #111; }
+        button { padding: 6px 12px; border-radius: 5px; font-weight: bold; }
+        .reservar { background: green; color: white; }
+        .cancelar { background: red; color: white; }
     </style>
 </head>
 <body>
 
-<h2>📅 Turnos Semanales</h2>
+<h2>📅 Turnos de Hoy: <?= $dia_hoy ?></h2>
+<p>⚠️ Cada clase reservada se descuenta automáticamente. Si cancelás con al menos 1h de anticipación, se devuelve la clase.</p>
+<p>🎫 Clases disponibles: <strong><?= $membresia['clases_disponibles'] ?? 0 ?></strong></p>
 
 <table>
     <tr>
-        <th>Horario</th>
-        <?php foreach ($dias as $dia): ?>
-            <th><?= $dia ?></th>
-        <?php endforeach; ?>
+        <th>Hora</th>
+        <th>Profesor</th>
+        <th>Acción</th>
     </tr>
-    <?php foreach ($horas as $h): ?>
-        <tr>
-            <td><?= substr($h['inicio'], 0, 5) ?> - <?= substr($h['fin'], 0, 5) ?></td>
-            <?php foreach ($dias as $dia): ?>
-                <td>
-                    <?php
-                    $profesor = $turnos[$dia][$h['inicio']] ?? null;
-                    $reservado = $reservas[$dia][$h['inicio']] ?? false;
-                    $cupo_actual = $conexion->query("
-                        SELECT COUNT(*) as total FROM reservas_clientes
-                        WHERE dia_semana = '$dia' AND hora_inicio = '{$h['inicio']}' AND gimnasio_id = $gimnasio_id
-                    ")->fetch_assoc()['total'];
-
-                    if ($profesor && !$reservado && $cupo_actual < 15) {
-                        echo "<form method='post'>
-                                <input type='hidden' name='dia' value='$dia'>
-                                <input type='hidden' name='hora' value='{$h['inicio']}'>
-                                <button type='submit' name='reservar' style='background:blue;color:white;'>Reservar</button><br>
-                              </form><small>$profesor</small>";
-                    } elseif ($reservado) {
-                        echo "<form method='post'>
-                                <input type='hidden' name='dia' value='$dia'>
-                                <input type='hidden' name='hora' value='{$h['inicio']}'>
-                                <button type='submit' name='cancelar' style='background:orange;color:black;'>Cancelar</button><br>
-                              </form><small>$profesor</small>";
-                    } elseif ($cupo_actual >= 15) {
-                        echo "<span style='color:red;'>Cupo completo</span><br><small>$profesor</small>";
-                    } elseif (!$profesor) {
-                        echo "-";
-                    }
-                    ?>
-                </td>
-            <?php endforeach; ?>
-        </tr>
-    <?php endforeach; ?>
+    <?php while ($t = $turnos->fetch_assoc()): 
+        $tid = $t['id'];
+        $reservado = isset($reservas[$tid]);
+        $hora_inicio = $t['hora_inicio'];
+        $hora_ts = strtotime($hora_inicio);
+        $ahora_ts = strtotime($hora_actual);
+    ?>
+    <tr>
+        <td><?= substr($t['hora_inicio'], 0, 5) ?> - <?= substr($t['hora_fin'], 0, 5) ?></td>
+        <td><?= $t['apellido'] . ' ' . $t['nombre'] ?></td>
+        <td>
+            <form method="POST">
+                <input type="hidden" name="turno_id" value="<?= $tid ?>">
+                <?php if ($reservado): ?>
+                    <button name="cancelar" class="cancelar">Cancelar</button>
+                <?php elseif ($membresia && $membresia['clases_disponibles'] > 0): ?>
+                    <button name="reservar" class="reservar">Reservar</button>
+                <?php else: ?>
+                    <span>Sin clases disponibles</span>
+                <?php endif; ?>
+            </form>
+        </td>
+    </tr>
+    <?php endwhile; ?>
 </table>
 
 </body>
