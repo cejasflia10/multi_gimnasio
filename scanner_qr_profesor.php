@@ -8,6 +8,8 @@ $gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
 $mensaje = '';
 $hoy = date('Y-m-d');
 $hora_actual = date('H:i:s');
+$dias = ['Monday'=>'Lunes','Tuesday'=>'Martes','Wednesday'=>'Miércoles','Thursday'=>'Jueves','Friday'=>'Viernes','Saturday'=>'Sábado','Sunday'=>'Domingo'];
+$dia_semana = $dias[date('l')];
 
 if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['dni'])) {
     $dni = trim($_POST['dni']);
@@ -63,41 +65,6 @@ $conexion->query("INSERT INTO asistencias_clientes (cliente_id, fecha_hora, fech
                               WHERE profesor_id = $profesor_id AND fecha = '$hoy'");
 
             $mensaje = "✅ {$cliente['apellido']} {$cliente['nombre']} ingresó correctamente. Total alumnos: $alumnos. Monto turno: $$monto";
-            // NUEVO: registrar asistencia detallada por alumno para pago al profesor
-            $turnos_prof = $conexion->query("SELECT * FROM turnos_profesor 
-                WHERE profesor_id = $profesor_id 
-                AND dia = '$dia_semana' 
-                AND hora_inicio <= '$hora_actual' AND hora_fin > '$hora_actual' 
-                AND gimnasio_id = $gimnasio_id 
-                LIMIT 1");
-
-            if ($turnos_prof && $turnos_prof->num_rows > 0) {
-                $turno = $turnos_prof->fetch_assoc();
-                $h_inicio = $turno['hora_inicio'];
-                $h_fin = $turno['hora_fin'];
-
-                // Contar asistencias del turno específico
-                $cuantos_q = $conexion->query("SELECT COUNT(*) AS total 
-                    FROM asistencias_profesor 
-                    WHERE profesor_id = $profesor_id AND fecha = '$hoy'
-                    AND hora_ingreso BETWEEN '$h_inicio' AND '$h_fin'");
-
-                $cuantos = $cuantos_q->fetch_assoc()['total'];
-
-                if ($cuantos >= 10) {
-                    $monto_turno = 2000;
-                } elseif ($cuantos >= 5) {
-                    $monto_turno = 1500;
-                } else {
-                    $monto_turno = 1000;
-                }
-
-                // Insertar nuevo registro por alumno
-                $conexion->query("INSERT INTO asistencias_profesor 
-                    (profesor_id, cliente_id, fecha, hora_ingreso, gimnasio_id, monto_turno)
-                    VALUES ($profesor_id, $cliente_id, '$hoy', '$hora_actual', $gimnasio_id, $monto_turno)");
-            }
-
         }
     }
 }
