@@ -5,32 +5,6 @@ include 'menu_horizontal.php';
 
 $gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
 
-$reservas_q = $conexion->query("
-    SELECT r.dia_semana AS dia, r.hora_inicio, r.hora_fin, r.fecha_reserva,
-           c.nombre, c.apellido,
-           CONCAT(p.apellido, ' ', p.nombre) AS profesor
-    FROM reservas_clientes r
-    JOIN clientes c ON r.cliente_id = c.id
-    JOIN profesores p ON r.profesor_id = p.id
-    WHERE r.fecha_reserva = CURDATE()
-      AND r.gimnasio_id = $gimnasio_id
-    ORDER BY r.hora_inicio
-");
-
-echo "<h3 style='color:gold; margin-top:20px;'>📋 Reservas del Día</h3>";
-
-if ($reservas_q->num_rows > 0) {
-    while ($res = $reservas_q->fetch_assoc()) {
-        echo "<p style='color:white;'>
-        🕒 {$res['hora_inicio']} - {$res['hora_fin']} |
-        👤 {$res['apellido']} {$res['nombre']} |
-        👨‍🏫 Prof. {$res['profesor']}
-        </p>";
-    }
-} else {
-    echo "<p style='color:gray;'>No hay reservas registradas para hoy.</p>";
-}
-
 // Aquí es donde pegás las llamadas
 $pagos_dia = obtenerMonto($conexion, 'membresias', 'fecha_inicio', $gimnasio_id, 'DIA');
 $pagos_mes = obtenerMonto($conexion, 'membresias', 'fecha_inicio', $gimnasio_id, 'MES');
@@ -197,31 +171,6 @@ if ($deudas_q && $deudas_q->num_rows > 0) {
 
 </div>
 
-<div style="display: flex; flex-wrap: wrap; gap: 20px; margin-top: 20px;">
-  <div style="flex: 1; background:#1f1f1f; padding: 20px; border-radius: 12px;">
-    <h3 style="color: gold;">Próximos Vencimientos</h3>
-    <ul style="color: #fff; padding-left: 20px;">
-      <?php
-      $query_venc = "
-        SELECT clientes.nombre, clientes.apellido, membresias.fecha_vencimiento
-        FROM clientes
-        JOIN membresias ON clientes.id = membresias.cliente_id
-        WHERE clientes.gimnasio_id = $gimnasio_id
-          AND membresias.fecha_vencimiento >= CURDATE()
-        ORDER BY membresias.fecha_vencimiento ASC
-        LIMIT 5
-      ";
-      $result_venc = $conexion->query($query_venc);
-      if ($result_venc && $result_venc->num_rows > 0) {
-          while ($v = $result_venc->fetch_assoc()) {
-              echo "<li>{$v['nombre']} {$v['apellido']} – " . date('d/m/Y', strtotime($v['fecha_vencimiento'])) . "</li>";
-          }
-      } else {
-          echo "<li>No hay vencimientos próximos.</li>";
-      }
-      ?>
-    </ul>
-  </div>
 <div style="flex: 1; background:#1f1f1f; padding: 20px; border-radius: 12px;">
     <h3 style="color: gold;">Próximos Cumpleaños</h3>
     <ul style="color: #fff; padding-left: 20px;">
@@ -246,46 +195,6 @@ if ($deudas_q && $deudas_q->num_rows > 0) {
     </ul>
   </div>
 </div>
-<?php
-include 'conexion.php';
-$gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
-
-$reservas_hoy = $conexion->query("
-    SELECT r.hora_inicio, c.nombre AS nombre_cliente, c.apellido AS apellido_cliente,
-           p.nombre AS nombre_prof, p.apellido AS apellido_prof
-    FROM reservas_clientes r
-    JOIN clientes c ON r.cliente_id = c.id
-    JOIN profesores p ON r.profesor_id = p.id
-    WHERE r.fecha_reserva = CURDATE()
-      AND r.gimnasio_id = $gimnasio_id
-    ORDER BY r.hora_inicio
-");
-?>
-
-<h2 style="color:gold; margin-top:30px;">📋 Reservas del Día</h2>
-<table style="width:100%; border-collapse:collapse; color:white; margin-top:10px;">
-    <tr style="background:#222;">
-        <th style="padding:8px;">Hora</th>
-        <th>Cliente</th>
-        <th>Profesor</th>
-    </tr>
-    <?php while ($r = $reservas_hoy->fetch_assoc()): ?>
-    <tr style="background:#111;">
-        <td style="padding:8px;"><?= substr($r['hora_inicio'], 0, 5) ?></td>
-        <td><?= $r['apellido_cliente'] . ' ' . $r['nombre_cliente'] ?></td>
-        <td><?= $r['apellido_prof'] . ' ' . $r['nombre_prof'] ?></td>
-    </tr>
-    <?php endwhile; ?>
-</table>
-
-if ($reservas_q->num_rows > 0) {
-    while ($res = $reservas_q->fetch_assoc()) {
-        echo "<p><strong>{$res['apellido']} {$res['nombre']}</strong> – {$res['dia']} de {$res['hora_inicio']} a {$res['hora_fin']} con Prof. <strong>{$res['profesor']}</strong></p><hr>";
-    }
-} else {
-    echo "<p>No hay reservas registradas para hoy.</p>";
-}
-?>
 
 
 <div class="card">
@@ -310,7 +219,48 @@ if ($reservas_q->num_rows > 0) {
       <p>No se registraron ingresos hoy.</p>
     <?php endif; ?>
   </div>
-  
+<div style="display:flex; flex-wrap:wrap; gap:20px; justify-content:space-between; margin-top:30px;">
+    <!-- Ingresos del Día -->
+    <div style="flex:1; min-width:300px; background:#222; padding:15px; border-radius:10px;">
+        <h3 style="color:gold;">Ingresos del Día</h3>
+        <?php
+        // Tu lógica de ingresos del día
+        echo "<p style='color:white;'>No se registraron ingresos hoy.</p>"; // ejemplo
+        ?>
+    </div>
+
+    <!-- Reservas del Día -->
+    <div style="flex:1; min-width:300px; background:#222; padding:15px; border-radius:10px;">
+        <h3 style="color:gold;">Reservas del Día</h3>
+        <?php
+        $reservas_q = $conexion->query("
+            SELECT r.dia_semana AS dia, r.hora_inicio, td.hora_fin,
+                   c.nombre, c.apellido,
+                   CONCAT(p.apellido, ' ', p.nombre) AS profesor
+            FROM reservas_clientes r
+            JOIN clientes c ON r.cliente_id = c.id
+            JOIN profesores p ON r.profesor_id = p.id
+            JOIN turnos_disponibles td ON r.turno_id = td.id
+            WHERE r.fecha_reserva = CURDATE()
+              AND r.gimnasio_id = $gimnasio_id
+            ORDER BY r.hora_inicio
+        ");
+
+        if ($reservas_q->num_rows > 0) {
+            while ($res = $reservas_q->fetch_assoc()) {
+                echo "<p style='color:white; margin:5px 0;'>
+                    🕒 {$res['hora_inicio']} a {$res['hora_fin']}<br>
+                    👤 {$res['apellido']} {$res['nombre']}<br>
+                    👨‍🏫 Prof. {$res['profesor']}
+                </p>";
+            }
+        } else {
+            echo "<p style='color:gray;'>No hay reservas registradas para hoy.</p>";
+        }
+        ?>
+    </div>
+</div>
+
     </ul>
   </div>
 <div class="bar-section">
