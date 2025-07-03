@@ -220,20 +220,37 @@ if ($deudas_q && $deudas_q->num_rows > 0) {
     </ul>
   </div>
 </div>
-<h3 style="color:gold; margin-top:30px;">📅 Reservas de Turnos de Hoy</h3>
-<div style="background-color:#111; color:white; padding:15px; border:1px solid gold; border-radius:10px; max-height:300px; overflow-y:auto;">
 <?php
-$reservas_q = $conexion->query("
-    SELECT r.fecha_reserva, c.apellido, c.nombre, d.nombre AS dia, h.hora_inicio, h.hora_fin, p.apellido AS profesor
-    FROM reservas r
+include 'conexion.php';
+$gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
+
+$reservas_hoy = $conexion->query("
+    SELECT r.hora_inicio, c.nombre AS nombre_cliente, c.apellido AS apellido_cliente,
+           p.nombre AS nombre_prof, p.apellido AS apellido_prof
+    FROM reservas_clientes r
     JOIN clientes c ON r.cliente_id = c.id
-    JOIN turnos t ON r.turno_id = t.id
-    JOIN dias d ON t.dia = d.id
-    JOIN horarios h ON t.horario_id = h.id
-    JOIN profesores p ON t.profesor_id = p.id
+    JOIN profesores p ON r.profesor_id = p.id
     WHERE r.fecha_reserva = CURDATE()
-    ORDER BY h.hora_inicio
+      AND r.gimnasio_id = $gimnasio_id
+    ORDER BY r.hora_inicio
 ");
+?>
+
+<h2 style="color:gold; margin-top:30px;">📋 Reservas del Día</h2>
+<table style="width:100%; border-collapse:collapse; color:white; margin-top:10px;">
+    <tr style="background:#222;">
+        <th style="padding:8px;">Hora</th>
+        <th>Cliente</th>
+        <th>Profesor</th>
+    </tr>
+    <?php while ($r = $reservas_hoy->fetch_assoc()): ?>
+    <tr style="background:#111;">
+        <td style="padding:8px;"><?= substr($r['hora_inicio'], 0, 5) ?></td>
+        <td><?= $r['apellido_cliente'] . ' ' . $r['nombre_cliente'] ?></td>
+        <td><?= $r['apellido_prof'] . ' ' . $r['nombre_prof'] ?></td>
+    </tr>
+    <?php endwhile; ?>
+</table>
 
 if ($reservas_q->num_rows > 0) {
     while ($res = $reservas_q->fetch_assoc()) {
