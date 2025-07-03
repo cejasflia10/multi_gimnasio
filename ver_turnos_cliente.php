@@ -66,13 +66,6 @@ while ($t = $turnosQ->fetch_assoc()) {
     $turnos[$t['dia']][$t['hora_inicio']] = $t['apellido'] . ' ' . $t['nombre'];
 }
 
-<?php
-// DEBUG: mostrar estructura del array de turnos
-echo "<pre style='background:#111;color:gold;padding:10px;'>";
-print_r($turnos);
-echo "</pre>";
-?>
-
 // Obtener reservas del cliente
 $resQ = $conexion->query("
     SELECT dia_semana, hora_inicio FROM reservas_clientes
