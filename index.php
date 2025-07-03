@@ -5,6 +5,32 @@ include 'menu_horizontal.php';
 
 $gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
 
+$reservas_q = $conexion->query("
+    SELECT r.dia_semana AS dia, r.hora_inicio, r.hora_fin, r.fecha_reserva,
+           c.nombre, c.apellido,
+           CONCAT(p.apellido, ' ', p.nombre) AS profesor
+    FROM reservas_clientes r
+    JOIN clientes c ON r.cliente_id = c.id
+    JOIN profesores p ON r.profesor_id = p.id
+    WHERE r.fecha_reserva = CURDATE()
+      AND r.gimnasio_id = $gimnasio_id
+    ORDER BY r.hora_inicio
+");
+
+echo "<h3 style='color:gold; margin-top:20px;'>📋 Reservas del Día</h3>";
+
+if ($reservas_q->num_rows > 0) {
+    while ($res = $reservas_q->fetch_assoc()) {
+        echo "<p style='color:white;'>
+        🕒 {$res['hora_inicio']} - {$res['hora_fin']} |
+        👤 {$res['apellido']} {$res['nombre']} |
+        👨‍🏫 Prof. {$res['profesor']}
+        </p>";
+    }
+} else {
+    echo "<p style='color:gray;'>No hay reservas registradas para hoy.</p>";
+}
+
 // Aquí es donde pegás las llamadas
 $pagos_dia = obtenerMonto($conexion, 'membresias', 'fecha_inicio', $gimnasio_id, 'DIA');
 $pagos_mes = obtenerMonto($conexion, 'membresias', 'fecha_inicio', $gimnasio_id, 'MES');
