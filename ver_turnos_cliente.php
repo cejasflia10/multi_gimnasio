@@ -6,7 +6,16 @@ include 'menu_cliente.php';
 $gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
 $cliente_id = $_SESSION['cliente_id'] ?? 0;
 
-$dias = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+$dias = [];
+
+$fecha_mani = date('Y-m-d', strtotime('+1 day'));
+for ($i = 0; $i < 3; $i++) {
+    $fecha_actual = date('Y-m-d', strtotime("+$i day", strtotime($fecha_mani)));
+    $nombre_dia = ucfirst(strftime('%A', strtotime($fecha_actual)));
+    if ($nombre_dia == 'Sunday') continue; // Saltear domingo si aparece
+    $dias[] = $nombre_dia;
+}
+
 $horas = [];
 for ($h = 8; $h < 23; $h++) {
     $hora_inicio = str_pad($h, 2, '0', STR_PAD_LEFT) . ":00:00";
