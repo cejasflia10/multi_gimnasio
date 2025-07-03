@@ -24,7 +24,8 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['dni'])) {
 
         if (!$membresia) {
             $mensaje = "El cliente no tiene membresía activa o sin clases.";
-        } else {$fechaHoraCom// NUEVO BLOQUE: calcular monto turno y registrar asistencia profesor
+} else {
+    // NUEVO BLOQUE: calcular monto turno y registrar asistencia profesor
 $hora_actual = date('H:i:s');
 $dia_actual = date('l'); // ej: Monday
 $dias = [
