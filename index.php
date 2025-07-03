@@ -197,50 +197,57 @@ if ($deudas_q && $deudas_q->num_rows > 0) {
 </div>
 
 
-<div class="card">
-    <h3>Ingresos del Día</h3>
-    <?php
-    $hoy = date('Y-m-d');
-    $query = "
-      SELECT c.nombre, c.apellido, a.hora
-      FROM asistencias a
-      JOIN clientes c ON a.cliente_id = c.id
-      WHERE a.fecha = '$hoy' AND c.gimnasio_id = $gimnasio_id
-      ORDER BY a.hora DESC
-    ";
-    $res = $conexion->query($query);
-    if ($res && $res->num_rows > 0): ?>
-      <ul style="list-style:none; padding:0; color:#fff;">
-        <?php while ($fila = $res->fetch_assoc()): ?>
-          <li><?= $fila['nombre'] . ' ' . $fila['apellido'] . ' – ' . date('H:i', strtotime($fila['hora'])) ?></li>
-        <?php endwhile; ?>
-      </ul>
-    <?php else: ?>
-      <p>No se registraron ingresos hoy.</p>
-    <?php endif; ?>
-  </div>
-<h3>📌 Alumnos del día</h3>
-<?php
-$fecha_hoy = date("Y-m-d");
+<div style="display: flex; flex-wrap: wrap; gap: 20px; margin-top: 30px;">
+    <!-- INGRESOS DEL DÍA -->
+    <div style="flex: 1; min-width: 300px; background: #111; padding: 20px; color: gold; border: 1px solid #333;">
+        <h3>📥 Ingresos del día</h3>
+        <?php
+        $ingresos = $conexion->query("
+            SELECT c.apellido, c.nombre, a.hora
+            FROM asistencias_clientes a
+            JOIN clientes c ON a.cliente_id = c.id
+            WHERE a.fecha = CURDATE() AND a.gimnasio_id = $gimnasio_id
+            ORDER BY a.hora DESC
+        ");
 
-$alumnos_q = $conexion->query("
-    SELECT c.apellido, c.nombre
-    FROM asistencias_profesor ap
-    JOIN clientes c ON ap.cliente_id = c.id
-    WHERE ap.fecha = '$fecha_hoy' AND ap.profesor_id = $profesor_id
-    ORDER BY ap.hora_ingreso
-");
+        if ($ingresos->num_rows > 0) {
+            echo "<ul style='list-style: none; padding: 0;'>";
+            while ($i = $ingresos->fetch_assoc()) {
+                echo "<li>🕒 {$i['apellido']} {$i['nombre']} - {$i['hora']}</li>";
+            }
+            echo "</ul>";
+        } else {
+            echo "<p style='color: gray;'>Aún no se registraron ingresos hoy.</p>";
+        }
+        ?>
+    </div>
 
-if ($alumnos_q && $alumnos_q->num_rows > 0) {
-    echo "<ul style='list-style: none; padding: 0;'>";
-    while ($a = $alumnos_q->fetch_assoc()) {
-        echo "<li>👤 " . $a['apellido'] . " " . $a['nombre'] . "</li>";
-    }
-    echo "</ul>";
-} else {
-    echo "<p style='color: gray;'>Aún no se registraron alumnos escaneados hoy.</p>";
-}
-?>
+    <!-- PRÓXIMOS VENCIMIENTOS -->
+    <div style="flex: 1; min-width: 300px; background: #111; padding: 20px; color: gold; border: 1px solid #333;">
+        <h3>📅 Próximos vencimientos</h3>
+        <?php
+        $vencimientos = $conexion->query("
+            SELECT c.apellido, c.nombre, m.fecha_vencimiento
+            FROM membresias m
+            JOIN clientes c ON m.cliente_id = c.id
+            WHERE m.fecha_vencimiento BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 5 DAY)
+              AND m.gimnasio_id = $gimnasio_id
+            ORDER BY m.fecha_vencimiento ASC
+        ");
+
+        if ($vencimientos->num_rows > 0) {
+            echo "<ul style='list-style: none; padding: 0;'>";
+            while ($v = $vencimientos->fetch_assoc()) {
+                echo "<li>📌 {$v['apellido']} {$v['nombre']} - vence el {$v['fecha_vencimiento']}</li>";
+            }
+            echo "</ul>";
+        } else {
+            echo "<p style='color: gray;'>No hay vencimientos en los próximos días.</p>";
+        }
+        ?>
+    </div>
+</div>
+
 
     <!-- Reservas del Día -->
     <div style="flex:1; min-width:300px; background:#222; padding:15px; border-radius:10px;">
