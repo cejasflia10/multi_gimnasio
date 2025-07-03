@@ -68,6 +68,47 @@ $ingresos = $conexion->query("
             <?php endwhile; ?>
         </ul>
     </div>
+<div style="display:flex; flex-wrap:wrap; gap:20px; justify-content:space-between; margin-top:30px;">
+    <!-- Ingresos del Día -->
+    <div style="flex:1; min-width:300px; background:#222; padding:15px; border-radius:10px;">
+        <h3 style="color:gold;">Ingresos del Día</h3>
+        <?php
+        // Tu lógica de ingresos del día
+        echo "<p style='color:white;'>No se registraron ingresos hoy.</p>"; // ejemplo
+        ?>
+    </div>
+
+    <!-- Reservas del Día -->
+    <div style="flex:1; min-width:300px; background:#222; padding:15px; border-radius:10px;">
+        <h3 style="color:gold;">Reservas del Día</h3>
+        <?php
+        $reservas_q = $conexion->query("
+            SELECT r.dia_semana AS dia, r.hora_inicio, td.hora_fin,
+                   c.nombre, c.apellido,
+                   CONCAT(p.apellido, ' ', p.nombre) AS profesor
+            FROM reservas_clientes r
+            JOIN clientes c ON r.cliente_id = c.id
+            JOIN profesores p ON r.profesor_id = p.id
+            JOIN turnos_disponibles td ON r.turno_id = td.id
+            WHERE r.fecha_reserva = CURDATE()
+              AND r.gimnasio_id = $gimnasio_id
+            ORDER BY r.hora_inicio
+        ");
+
+        if ($reservas_q->num_rows > 0) {
+            while ($res = $reservas_q->fetch_assoc()) {
+                echo "<p style='color:white; margin:5px 0;'>
+                    🕒 {$res['hora_inicio']} a {$res['hora_fin']}<br>
+                    👤 {$res['apellido']} {$res['nombre']}<br>
+                    👨‍🏫 Prof. {$res['profesor']}
+                </p>";
+            }
+        } else {
+            echo "<p style='color:gray;'>No hay reservas registradas para hoy.</p>";
+        }
+        ?>
+    </div>
+</div>
 
     <div class="cuadro">
         <h3>🕒 Horas trabajadas este mes</h3>
