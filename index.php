@@ -222,6 +222,7 @@ if ($deudas_q && $deudas_q->num_rows > 0) {
 <h3>📌 Alumnos del día</h3>
 <?php
 $fecha_hoy = date("Y-m-d");
+
 $alumnos_q = $conexion->query("
     SELECT c.apellido, c.nombre
     FROM asistencias_profesor ap
@@ -230,10 +231,10 @@ $alumnos_q = $conexion->query("
     ORDER BY ap.hora_ingreso
 ");
 
-if ($alumnos_q->num_rows > 0) {
+if ($alumnos_q && $alumnos_q->num_rows > 0) {
     echo "<ul style='list-style: none; padding: 0;'>";
     while ($a = $alumnos_q->fetch_assoc()) {
-        echo "<li>👤 {$a['apellido']} {$a['nombre']}</li>";
+        echo "<li>👤 " . $a['apellido'] . " " . $a['nombre'] . "</li>";
     }
     echo "</ul>";
 } else {
