@@ -6,9 +6,6 @@ include 'menu_cliente.php';
 $gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
 $cliente_id = $_SESSION['cliente_id'] ?? 0;
 
-$gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
-$cliente_id = $_SESSION['cliente_id'] ?? 0;
-
 if ($gimnasio_id == 0 || $cliente_id == 0) {
     echo "<div style='color:red; text-align:center;'>❌ Acceso denegado</div>";
     exit;
