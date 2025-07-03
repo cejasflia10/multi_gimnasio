@@ -1,72 +1,108 @@
 <?php
-session_start();
+if (session_status() === PHP_SESSION_NONE) session_start();
 include 'conexion.php';
 
 $profesor_id = $_SESSION['profesor_id'] ?? 0;
-if ($profesor_id == 0) die("Acceso denegado.");
+$gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
 
-$mensaje = "";
-$datos_cliente = null;
+$mensaje = '';
+$hoy = date('Y-m-d');
+$hora_actual = date('H:i:s');
 
-if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST['dni'])) {
+if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['dni'])) {
     $dni = trim($_POST['dni']);
-    $fecha_hoy = date("Y-m-d");
-    $hora_actual = date("H:i:s");
 
-    $q = $conexion->query("SELECT id, apellido, nombre FROM clientes WHERE dni = '$dni'");
-    if ($q->num_rows == 0) {
+    $cliente = $conexion->query("SELECT * FROM clientes WHERE dni = '$dni' AND gimnasio_id = $gimnasio_id")->fetch_assoc();
+    if (!$cliente) {
         $mensaje = "Cliente no encontrado.";
     } else {
-        $cliente = $q->fetch_assoc();
         $cliente_id = $cliente['id'];
 
-        $membresia = $conexion->query("
-            SELECT id, clases_disponibles, fecha_vencimiento
-            FROM membresias
-            WHERE cliente_id = $cliente_id
-              AND fecha_vencimiento >= '$fecha_hoy'
-              AND clases_disponibles > 0
-            ORDER BY fecha_inicio DESC
-            LIMIT 1
-        ");
+        $membresia = $conexion->query("SELECT * FROM membresias
+            WHERE cliente_id = $cliente_id AND clases_disponibles > 0 AND fecha_vencimiento >= CURDATE()
+            ORDER BY fecha_inicio DESC LIMIT 1")->fetch_assoc();
 
-        if ($membresia->num_rows == 0) {
-            $mensaje = "No tiene clases disponibles o la membresía está vencida.";
+        if (!$membresia) {
+            $mensaje = "El cliente no tiene membresía activa o sin clases.";
         } else {
-            $mem = $membresia->fetch_assoc();
-            $membresia_id = $mem['id'];
-            $clases_disponibles = $mem['clases_disponibles'] - 1;
-            $vencimiento = $mem['fecha_vencimiento'];
+            $conexion->query("INSERT INTO asistencias_clientes (cliente_id, fecha, hora_ingreso, gimnasio_id)
+                              VALUES ($cliente_id, '$hoy', '$hora_actual', $gimnasio_id)");
 
-            $conexion->query("
-                INSERT INTO asistencias_clientes (cliente_id, fecha, hora, profesor_id)
-                VALUES ($cliente_id, '$fecha_hoy', '$hora_actual', $profesor_id)
-            ");
+            $conexion->query("UPDATE membresias SET clases_disponibles = clases_disponibles - 1
+                              WHERE id = {$membresia['id']}");
 
-            $conexion->query("
-                UPDATE membresias SET clases_disponibles = clases_disponibles - 1
-                WHERE id = $membresia_id
-            ");
+            $yaIngreso = $conexion->query("SELECT * FROM asistencias_profesor
+                WHERE profesor_id = $profesor_id AND fecha = '$hoy'")->fetch_assoc();
 
-            $ya = $conexion->query("
-                SELECT id FROM asistencias_profesor
-                WHERE profesor_id = $profesor_id AND fecha = '$fecha_hoy'
-            ");
-            if ($ya->num_rows == 0) {
-                $conexion->query("
-                    INSERT INTO asistencias_profesor (profesor_id, fecha, hora_ingreso)
-                    VALUES ($profesor_id, '$fecha_hoy', '$hora_actual')
-                ");
+            if (!$yaIngreso) {
+                $conexion->query("INSERT INTO asistencias_profesor (profesor_id, fecha, hora_ingreso, gimnasio_id)
+                                  VALUES ($profesor_id, '$hoy', '$hora_actual', $gimnasio_id)");
             }
 
-            $mensaje = "Asistencia registrada correctamente.";
-            $datos_cliente = [
-                'nombre' => $cliente['nombre'],
-                'apellido' => $cliente['apellido'],
-                'clases_restantes' => $clases_disponibles,
-                'vencimiento' => $vencimiento
-            ];
+            $alumnos_q = $conexion->query("
+                SELECT COUNT(DISTINCT ac.cliente_id) AS cantidad
+                FROM asistencias_clientes ac
+                JOIN reservas_clientes rc ON ac.cliente_id = rc.cliente_id
+                WHERE rc.profesor_id = $profesor_id AND ac.fecha = '$hoy' AND rc.gimnasio_id = $gimnasio_id
+            ");
+            $alumnos = $alumnos_q->fetch_assoc()['cantidad'];
+
+            if ($alumnos >= 5) {
+                $monto = 2000;
+            } elseif ($alumnos >= 2) {
+                $monto = 1500;
+            } else {
+                $monto = 1000;
+            }
+
+            $conexion->query("UPDATE asistencias_profesor 
+                              SET monto_turno = $monto 
+                              WHERE profesor_id = $profesor_id AND fecha = '$hoy'");
+
+            $mensaje = "✅ {$cliente['apellido']} {$cliente['nombre']} ingresó correctamente. Total alumnos: $alumnos. Monto turno: $$monto";
         }
     }
 }
 ?>
+
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Escáner QR Profesor</title>
+    <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+    <style>
+        body { background-color: black; color: gold; font-family: Arial; text-align: center; padding: 20px; }
+        #reader { width: 300px; margin: auto; }
+        .mensaje { margin-top: 20px; color: white; font-size: 18px; }
+    </style>
+</head>
+<body>
+    <h2>📲 Escanear QR de Alumno</h2>
+
+    <div id="reader"></div>
+    <form id="form_dni" method="POST" style="display:none;">
+        <input type="hidden" name="dni" id="dni">
+    </form>
+
+    <?php if (!empty($mensaje)): ?>
+        <div class="mensaje"><?= $mensaje ?></div>
+    <?php endif; ?>
+
+<script>
+function onScanSuccess(decodedText) {
+    document.getElementById("dni").value = decodedText;
+    document.getElementById("form_dni").submit();
+    html5QrcodeScanner.clear();
+}
+
+let html5QrcodeScanner = new Html5QrcodeScanner("reader", {
+    fps: 10,
+    qrbox: 250,
+    rememberLastUsedCamera: true
+});
+html5QrcodeScanner.render(onScanSuccess);
+</script>
+
+</body>
+</html>
