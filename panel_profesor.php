@@ -127,5 +127,37 @@ $ingresos = $conexion->query("
             <li>Total: <?= round($total_horas, 2) ?> horas</li>
         </ul>
     </div>
+
+<!-- BLOQUE NUEVO: MONTO A COBRAR POR ASISTENCIAS -->
+<?php
+$profesor_id = $_SESSION['profesor_id'] ?? 0;
+$gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
+$fecha_hoy = date('Y-m-d');
+$monto_total = 0;
+
+$asistencias = $conexion->query("
+    SELECT COUNT(*) AS total
+    FROM asistencias_profesor
+    WHERE profesor_id = $profesor_id 
+      AND gimnasio_id = $gimnasio_id
+      AND fecha = '$fecha_hoy'
+");
+
+$cantidad = $asistencias->fetch_assoc()['total'] ?? 0;
+
+if ($cantidad >= 10) {
+    $monto_total = 2000;
+} elseif ($cantidad >= 5) {
+    $monto_total = 1500;
+} elseif ($cantidad > 0) {
+    $monto_total = 1000;
+}
+?>
+<div class="cuadro" style="margin-top: 20px;">
+    <h3>💰 Monto a cobrar hoy</h3>
+    <p>Total por asistencias escaneadas: <strong>$<?= $monto_total ?></strong></p>
+</div>
+<!-- FIN BLOQUE NUEVO -->
+
 </body>
 </html>
