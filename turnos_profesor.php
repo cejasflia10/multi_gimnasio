@@ -1,3 +1,6 @@
+<?php if (session_status() === PHP_SESSION_NONE) session_start();
+$gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
+?>
 <?php
 include 'conexion.php';
 include 'menu_horizontal.php';
@@ -30,7 +33,7 @@ if (isset($_GET['eliminar'])) {
     exit();
 }
 
-$result = $conexion->query("SELECT id, apellido, nombre FROM profesores");
+$result = $conexion->query("SELECT id, apellido, nombre FROM profesores WHERE gimnasio_id = $gimnasio_id");
 $turnos = $conexion->query("SELECT t.*, p.apellido, p.nombre FROM turnos_profesor t JOIN profesores p ON t.profesor_id = p.id");
 ?>
 
