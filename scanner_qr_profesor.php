@@ -2,124 +2,89 @@
 if (session_status() === PHP_SESSION_NONE) session_start();
 include 'conexion.php';
 
+date_default_timezone_set('America/Argentina/Buenos_Aires');
+
+$fecha = date('Y-m-d');
+$hora_actual = date('H:i:s');
+$mensaje = "";
 $profesor_id = $_SESSION['profesor_id'] ?? 0;
 $gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
 
-$mensaje = '';
-$hoy = date('Y-m-d');
-$hora_actual = date('H:i:s');
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['dni'])) {
+    $dni = $conexion->real_escape_string($_POST['dni']);
+    $cliente = $conexion->query("SELECT id, apellido, nombre FROM clientes WHERE dni = '$dni' AND gimnasio_id = $gimnasio_id")->fetch_assoc();
 
-if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['dni'])) {
-    $dni = trim($_POST['dni']);
-
-    $cliente = $conexion->query("SELECT * FROM clientes WHERE dni = '$dni' AND gimnasio_id = $gimnasio_id")->fetch_assoc();
-    if (!$cliente) {
-        $mensaje = "Cliente no encontrado.";
-    } else {
+    if ($cliente) {
         $cliente_id = $cliente['id'];
+        $apellido = $cliente['apellido'];
+        $nombre = $cliente['nombre'];
 
-        $membresia = $conexion->query("SELECT * FROM membresias
-            WHERE cliente_id = $cliente_id AND clases_disponibles > 0 AND fecha_vencimiento >= CURDATE()
-            ORDER BY fecha_inicio DESC LIMIT 1")->fetch_assoc();
+        // Verificar si tiene membresía activa
+        $membresia = $conexion->query("SELECT * FROM membresias WHERE cliente_id = $cliente_id AND fecha_vencimiento >= CURDATE() AND clases_disponibles > 0 ORDER BY id DESC LIMIT 1")->fetch_assoc();
 
-        if (!$membresia) {
-            $mensaje = "El cliente no tiene membresía activa o sin clases.";
-} else {
-    // NUEVO BLOQUE: calcular monto turno y registrar asistencia profesor
-$hora_actual = date('H:i:s');
-$dia_actual = date('l'); // ej: Monday
-$dias = [
-    'Monday'=>'Lunes', 'Tuesday'=>'Martes', 'Wednesday'=>'Miércoles',
-    'Thursday'=>'Jueves', 'Friday'=>'Viernes', 'Saturday'=>'Sábado'
-];
-$dia_semana = $dias[$dia_actual] ?? '';
+        if ($membresia) {
+            // Descontar clase
+            $conexion->query("UPDATE membresias SET clases_disponibles = clases_disponibles - 1 WHERE id = {$membresia['id']}");
 
-$turno = $conexion->query("
-    SELECT * FROM turnos_profesor 
-    WHERE profesor_id = $profesor_id 
-    AND gimnasio_id = $gimnasio_id 
-    AND dia = '$dia_semana'
-    AND '$hora_actual' BETWEEN hora_inicio AND hora_fin
-    LIMIT 1
-")->fetch_assoc();
+            // Registrar ingreso
+            $conexion->query("INSERT INTO asistencias_clientes (cliente_id, gimnasio_id, fecha, hora) VALUES ($cliente_id, $gimnasio_id, '$fecha', '$hora_actual')");
 
-if ($turno) {
-    $hora_inicio = $turno['hora_inicio'];
-    $hora_fin = $turno['hora_fin'];
+            // Contar alumnos del turno actual (según hora exacta ± 30 minutos)
+            $hora_inicio = date("H:i:s", strtotime("-30 minutes"));
+            $hora_fin = date("H:i:s", strtotime("+30 minutes"));
+            $alumnos_q = $conexion->query("SELECT COUNT(*) as total FROM asistencias_clientes WHERE fecha = '$fecha' AND hora BETWEEN '$hora_inicio' AND '$hora_fin' AND gimnasio_id = $gimnasio_id");
+            $total_alumnos = $alumnos_q->fetch_assoc()['total'];
 
-    // Contar alumnos únicos que ingresaron en ese turno
-    $total_alumnos = $conexion->query("
-        SELECT COUNT(DISTINCT cliente_id) AS total
-        FROM asistencias_clientes
-        WHERE fecha = CURDATE()
-        AND hora BETWEEN '$hora_inicio' AND '$hora_fin'
-    ")->fetch_assoc()['total'];
+            // Obtener monto
+            $monto_q = $conexion->query("SELECT monto FROM pago_profesor WHERE cantidad_alumnos = $total_alumnos LIMIT 1");
+            $monto_turno = $monto_q->fetch_assoc()['monto'] ?? 0;
 
-    // Calcular monto del turno
-    $monto_turno = 0;
-    if ($total_alumnos >= 1 && $total_alumnos <= 3) {
-        $monto_turno = 1000;
-    } elseif ($total_alumnos >= 4 && $total_alumnos <= 10) {
-        $monto_turno = 2000;
-    } elseif ($total_alumnos > 10) {
-        $monto_turno = 3000;
-    }
+            // Registrar asistencia profesor si no está
+            $ya_registrado = $conexion->query("SELECT * FROM asistencias_profesor WHERE profesor_id = $profesor_id AND fecha = '$fecha' AND hora_ingreso = '$hora_actual'")->num_rows;
+            if ($ya_registrado == 0) {
+                $conexion->query("INSERT INTO asistencias_profesor (profesor_id, gimnasio_id, fecha, hora_ingreso, monto_turno) VALUES ($profesor_id, $gimnasio_id, '$fecha', '$hora_actual', $monto_turno)");
+            }
 
-    // Verificar si ya fue registrada la asistencia del profesor en ese turno
-    $ya_existe = $conexion->query("
-        SELECT id FROM asistencias_profesor 
-        WHERE profesor_id = $profesor_id 
-        AND fecha = CURDATE()
-        AND hora_ingreso BETWEEN '$hora_inicio' AND '$hora_fin'
-    ");
-
-    if ($ya_existe->num_rows == 0 && $monto_turno > 0) {
-        $conexion->query("
-            INSERT INTO asistencias_profesor (profesor_id, fecha, hora_ingreso, gimnasio_id, monto_turno)
-            VALUES ($profesor_id, CURDATE(), '$hora_actual', $gimnasio_id, $monto_turno)
-        ");
+            $mensaje = "✅ $apellido $nombre ingresó correctamente. Total alumnos: $total_alumnos. Monto turno: \$$monto_turno";
+        } else {
+            $mensaje = "❌ $apellido $nombre no tiene clases disponibles o membresía activa.";
+        }
+    } else {
+        $mensaje = "❌ DNI no encontrado.";
     }
 }
-
 ?>
+
 <!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>Escáner QR Profesor</title>
-    <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+    <title>Escanear QR</title>
+    <script src="https://unpkg.com/html5-qrcode"></script>
     <style>
-        body { background-color: black; color: gold; font-family: Arial; text-align: center; padding: 20px; }
-        #reader { width: 300px; margin: auto; }
-        .mensaje { margin-top: 20px; color: white; font-size: 18px; }
+        body { background: black; color: gold; text-align: center; font-family: Arial; }
+        .contenedor { margin-top: 30px; }
     </style>
 </head>
 <body>
-    <h2>📲 Escanear QR de Alumno</h2>
-
-    <div id="reader"></div>
-    <form id="form_dni" method="POST" style="display:none;">
-        <input type="hidden" name="dni" id="dni">
-    </form>
-
-    <?php if (!empty($mensaje)): ?>
-        <div class="mensaje"><?= $mensaje ?></div>
-    <?php endif; ?>
-
+<h3>📲 Escanear QR de Alumno</h3>
+<div class="contenedor">
+    <div id="reader" style="width:300px; margin:auto;"></div>
+</div>
+<?php if ($mensaje): ?>
+    <p style="color: white; margin-top: 20px;"><?= $mensaje ?></p>
+<?php endif; ?>
 <script>
-function onScanSuccess(decodedText) {
-    document.getElementById("dni").value = decodedText;
-    document.getElementById("form_dni").submit();
-    html5QrcodeScanner.clear();
-}
+    function onScanSuccess(decodedText, decodedResult) {
+        const form = new FormData();
+        form.append("dni", decodedText);
+        fetch("", { method: "POST", body: form })
+            .then(() => location.reload());
+        html5QrcodeScanner.clear();
+    }
 
-let html5QrcodeScanner = new Html5QrcodeScanner("reader", {
-    fps: 10,
-    qrbox: 250,
-    rememberLastUsedCamera: true
-});
-html5QrcodeScanner.render(onScanSuccess);
+    const html5QrcodeScanner = new Html5QrcodeScanner("reader", { fps: 10, qrbox: 250 });
+    html5QrcodeScanner.render(onScanSuccess);
 </script>
-
 </body>
 </html>
