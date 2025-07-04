@@ -13,9 +13,44 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['dni'])) {
     $dni = trim($_POST['dni']);
 
     $cliente = $conexion->query("SELECT * FROM clientes WHERE dni = '$dni' AND gimnasio_id = $gimnasio_id")->fetch_assoc();
+
     if (!$cliente) {
-        $mensaje = "Cliente no encontrado.";
+        $mensaje = "❌ Cliente no encontrado.";
     } else {
+        $cliente_id = $cliente['id'];
+
+        // Verificar si ya ingresó hoy
+        $hoy = date("Y-m-d");
+        $hora = date("H:i:s");
+
+        $yaIngreso = $conexion->query("SELECT * FROM asistencias_clientes 
+            WHERE cliente_id = $cliente_id AND fecha = '$hoy'")->num_rows;
+
+        if ($yaIngreso > 0) {
+            $mensaje = "✅ {$cliente['apellido']} {$cliente['nombre']} ya ingresó hoy.";
+        } else {
+            // Buscar membresía activa
+            $membresia = $conexion->query("SELECT * FROM membresias
+                WHERE cliente_id = $cliente_id AND clases_disponibles > 0 AND fecha_vencimiento >= CURDATE()
+                ORDER BY fecha_inicio DESC LIMIT 1")->fetch_assoc();
+
+            if (!$membresia) {
+                $mensaje = "❌ Sin membresía activa o sin clases.";
+            } else {
+                // Registrar asistencia y descontar clase
+                $conexion->query("INSERT INTO asistencias_clientes (cliente_id, fecha, hora, gimnasio_id) 
+                                  VALUES ($cliente_id, '$hoy', '$hora', $gimnasio_id)");
+
+                $conexion->query("UPDATE membresias 
+                                  SET clases_disponibles = clases_disponibles - 1 
+                                  WHERE id = {$membresia['id']}");
+
+                $mensaje = "✅ {$cliente['apellido']} {$cliente['nombre']} ingresó correctamente. Clases restantes: " . ($membresia['clases_disponibles'] - 1);
+            }
+        }
+    }
+}
+
         $cliente_id = $cliente['id'];
 
         $membresia = $conexion->query("SELECT * FROM membresias
