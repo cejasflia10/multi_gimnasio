@@ -26,7 +26,8 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['dni'])) {
     $mensaje = "❌ Membresía vencida o sin clases disponibles.";
     $dia_semana = date("l");
             $mensaje = "El cliente no tiene membresía activa o sin clases.";
-        } else {$fechaHoraCompleta = date("Y-m-d H:i:s");
+} else {
+    $fechaHoraCompleta = date("Y-m-d H:i:s");
 $fecha = date("Y-m-d");
 $hora = date("H:i:s");
 $fecha_hoy = date("Y-m-d");
