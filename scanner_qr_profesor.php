@@ -32,7 +32,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['dni'])) {
             $conexion->query("INSERT INTO asistencias_profesor (profesor_id, gimnasio_id, fecha, hora_ingreso)
                               VALUES ($profesor_id, $gimnasio_id, '$fecha', '$hora')");
 
-
+$fecha_hoy = date("Y-m-d");
 $alumnos_q = $conexion->query("
     SELECT c.apellido, c.nombre
     FROM asistencias_profesor ap
@@ -40,6 +40,7 @@ $alumnos_q = $conexion->query("
     WHERE ap.fecha = '$fecha_hoy' AND ap.profesor_id = $profesor_id
     ORDER BY ap.hora_ingreso
 ");
+
 
 if ($alumnos_q && $alumnos_q->num_rows > 0) {
     echo "<ul style='list-style: none; padding: 0;'>";
