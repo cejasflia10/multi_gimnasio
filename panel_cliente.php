@@ -6,6 +6,7 @@ include 'menu_cliente.php';
 
 $cliente_id = $_SESSION['cliente_id'] ?? 0;
 $gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
+$dni_cliente = $cliente['dni'] ?? '';
 
 if ($cliente_id == 0 || $gimnasio_id == 0) {
     echo "<div style='color:red; font-size:20px; text-align:center;'>❌ Acceso denegado.</div>";
@@ -19,7 +20,6 @@ if (!$cliente) {
     exit;
 }
 
-$dni_cliente = $cliente['dni'] ?? '';
 $cliente_nombre = $cliente['apellido'] . ' ' . $cliente['nombre'];
 ?>
 
@@ -88,23 +88,30 @@ $cliente_nombre = $cliente['apellido'] . ' ' . $cliente['nombre'];
     <p><strong>Teléfono:</strong> <?= $cliente['telefono'] ?></p>
     <p><strong>Disciplina:</strong> <?= $cliente['disciplina'] ?></p>
 </div>
+<div style="text-align:center; margin-top: 30px;">
+    <h3 style="color: gold;">📲 Tu código QR personal</h3>
+    <a class="btn-qr" href="generar_qr_individual.php?id=<?= $cliente['id'] ?>" target="_blank">
+        Generar QR
+    </a>
+</div>
 
-<?php
-// Mostrar QR generado dinámicamente desde el DNI
-include 'phpqrcode/qrlib.php';
-
-if (!empty($dni_cliente)) {
-    ob_start();
-    QRcode::png('C' . $dni_cliente, false, QR_ECLEVEL_L, 6);
-    $imageData = base64_encode(ob_get_clean());
-    echo "<div style='text-align:center; margin-top:20px;'>
-            <h3 style='color:gold;'>📲 Tu código QR personal</h3>
-            <img src='data:image/png;base64,{$imageData}' alt='QR Cliente' style='width:160px; height:160px; border:2px solid gold; padding:10px; border-radius:10px;'>
-          </div>";
-} else {
-    echo "<p style='color:red; text-align:center;'>❌ No se pudo generar el QR (DNI no disponible).</p>";
+<style>
+.btn-qr {
+    padding: 10px 20px;
+    background-color: #222;
+    color: gold;
+    border: 1px solid gold;
+    border-radius: 5px;
+    font-weight: bold;
+    text-decoration: none;
+    display: inline-block;
 }
-?>
+.btn-qr:hover {
+    background-color: #333;
+}
+</style>
+
+</div>
 
 <div class="form-foto">
     <form method="POST" enctype="multipart/form-data">
@@ -118,7 +125,7 @@ if (!empty($dni_cliente)) {
 </html>
 
 <?php
-// Subida de foto (solo en entorno con disco)
+// Subida de foto
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['nueva_foto'])) {
     if ($_FILES['nueva_foto']['error'] === UPLOAD_ERR_OK) {
         $foto_tmp = $_FILES['nueva_foto']['tmp_name'];
