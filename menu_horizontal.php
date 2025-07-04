@@ -78,6 +78,19 @@ if (session_status() === PHP_SESSION_NONE) { session_start(); } ?>
             top: 0;
         }
     }
+    @media screen and (max-width: 768px) {
+    /* Ocultar los submenús en celulares */
+    #menu-clientes,
+    #menu-asistencias,
+    #menu-profesores,
+    #menu-qr,
+    #menu-ventas,
+    #menu-panel,
+    #menu-configuraciones {
+        display: none !important;
+    }
+}
+
     </style>
 </head>
 <body>

@@ -1,58 +1,53 @@
 <?php
-session_start();
-require('fpdf/fpdf.php');
+if (session_status() === PHP_SESSION_NONE) session_start();
 include 'conexion.php';
 
-$cliente_nombre = $_POST['cliente_nombre'] ?? 'Cliente temporal';
-$cliente_temporal = $_POST['cliente_temporal'] ?? 0;
-$descuento = floatval($_POST['descuento'] ?? 0);
-$total_original = floatval($_POST['total_original'] ?? 0);
-$total_final = floatval($_POST['total_con_descuento'] ?? 0);
-$fecha = date("Y-m-d");
-$hora = date("H:i");
-$gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
-$gimnasio_nombre = $_SESSION['gimnasio_nombre'] ?? 'Mi Gimnasio';
+$cliente_nombre = $_POST['cliente_nombre'] ?? '';
+$es_temporal = $_POST['cliente_temporal'] ?? 0;
+$tipo_venta = $_POST['tipo_venta'] ?? 'productos';
+$gimnasio_id = intval($_POST['gimnasio_id'] ?? 0);
+$total = floatval($_POST['total'] ?? 0);
 
 // Métodos de pago
 $pago_efectivo = floatval($_POST['pago_efectivo'] ?? 0);
 $pago_transferencia = floatval($_POST['pago_transferencia'] ?? 0);
-$pago_debito = floatval($_POST['pago_debito'] ?? 0);
-$pago_credito = floatval($_POST['pago_credito'] ?? 0);
-$pago_cuenta_corriente = floatval($_POST['pago_cuenta_corriente'] ?? 0);
+$pago_tarjeta = floatval($_POST['pago_tarjeta'] ?? 0);
+$pago_cc = floatval($_POST['pago_cc'] ?? 0);
+$total_pagado = $pago_efectivo + $pago_transferencia + $pago_tarjeta + $pago_cc;
 
-// Guardar venta
-$stmt = $conexion->prepare("INSERT INTO ventas_productos (cliente_nombre, cliente_temporal, descuento, total, fecha, hora, efectivo, transferencia, debito, credito, cuenta_corriente, gimnasio_id) 
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
-$stmt->bind_param("sidssssddddi", $cliente_nombre, $cliente_temporal, $descuento, $total_final, $fecha, $hora, $pago_efectivo, $pago_transferencia, $pago_debito, $pago_credito, $pago_cuenta_corriente, $gimnasio_id);
-$stmt->execute();
-$venta_id = $stmt->insert_id;
+// Listado de productos vendidos
+$productos = $_POST['producto_nombre'] ?? [];
+$precios = $_POST['precio'] ?? [];
+$cantidades = $_POST['cantidad'] ?? [];
 
-// Generar factura PDF
-$pdf = new FPDF();
-$pdf->AddPage();
-$pdf->SetFont('Arial','B',14);
-$pdf->Cell(0,10,utf8_decode("Factura de Venta - $gimnasio_nombre"),0,1,'C');
-$pdf->SetFont('Arial','',12);
-$pdf->Cell(0,10,"Fecha: $fecha $hora",0,1);
-$pdf->Cell(0,10,"Cliente: $cliente_nombre",0,1);
-$pdf->Cell(0,10,"Total: $" . number_format($total_final, 2),0,1);
-$pdf->Ln(5);
-$pdf->Cell(0,10,"Descuento aplicado: $descuento%",0,1);
-$pdf->Ln(5);
-$pdf->SetFont('Arial','B',12);
-$pdf->Cell(0,10,"Metodos de Pago:",0,1);
-$pdf->SetFont('Arial','',12);
-$pdf->Cell(0,8,"Efectivo: $" . number_format($pago_efectivo, 2),0,1);
-$pdf->Cell(0,8,"Transferencia: $" . number_format($pago_transferencia, 2),0,1);
-$pdf->Cell(0,8,"Debito: $" . number_format($pago_debito, 2),0,1);
-$pdf->Cell(0,8,"Credito: $" . number_format($pago_credito, 2),0,1);
-$pdf->Cell(0,8,"Cuenta Corriente: $" . number_format($pago_cuenta_corriente, 2),0,1);
+// Validación mínima
+if ($total_pagado < $total) {
+    echo "<div style='color:red; font-size:20px;'>⚠️ El total pagado es menor al total. Se registrará saldo en cuenta corriente.</div>";
+}
 
-$nombre_archivo = "factura_venta_$venta_id.pdf";
-$ruta = "facturas/$nombre_archivo";
+// Registrar venta (puede ir todo en una tabla 'ventas' o separadas, en este ejemplo lo hacemos por tipo)
+$tabla = ($tipo_venta == 'suplementos') ? 'ventas_suplementos' : 'ventas_productos';
 
-if (!file_exists("facturas")) mkdir("facturas");
-$pdf->Output("F", $ruta); // Guarda en servidor
-$pdf->Output("D", $nombre_archivo); // Descarga
-exit;
-?>
+$conexion->query("INSERT INTO $tabla (cliente_nombre, total, pago_efectivo, pago_transferencia, pago_tarjeta, pago_cc, gimnasio_id, fecha)
+                  VALUES ('$cliente_nombre', $total, $pago_efectivo, $pago_transferencia, $pago_tarjeta, $pago_cc, $gimnasio_id, NOW())");
+
+$venta_id = $conexion->insert_id;
+
+// Guardar detalles de productos vendidos
+for ($i = 0; $i < count($productos); $i++) {
+    $nombre = $conexion->real_escape_string($productos[$i]);
+    $precio = floatval($precios[$i]);
+    $cantidad = intval($cantidades[$i]);
+    $subtotal = $precio * $cantidad;
+
+    $conexion->query("INSERT INTO {$tabla}_detalle (venta_id, producto, precio, cantidad, subtotal)
+                      VALUES ($venta_id, '$nombre', $precio, $cantidad, $subtotal)");
+
+    // Actualizar stock (suponiendo que el nombre es único o lo buscás por ID en una versión futura)
+    $tabla_stock = ($tipo_venta == 'suplementos') ? 'suplementos' : 'productos';
+    $conexion->query("UPDATE $tabla_stock SET stock = stock - $cantidad
+                      WHERE nombre = '$nombre' AND gimnasio_id = $gimnasio_id");
+}
+
+echo "<div style='color:lightgreen; font-size:20px;'>✅ Venta registrada correctamente.</div>";
+echo "<br><a href='ventas_$tipo_venta.php' style='color:gold;'>← Volver</a>";
