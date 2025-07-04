@@ -1,33 +1,20 @@
 <?php
 if (session_status() === PHP_SESSION_NONE) session_start();
 
+include 'conexion.php';
+include 'menu_cliente.php';
+
 $cliente_id = $_SESSION['cliente_id'] ?? 0;
 $gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
+$dni_cliente = $_SESSION['dni'] ?? '';
 
 if ($cliente_id == 0 || $gimnasio_id == 0) {
     echo "<div style='color:red; font-size:20px; text-align:center;'>❌ Acceso denegado.</div>";
     exit;
 }
 
-include 'conexion.php';
-include 'menu_cliente.php';
-
-// Validar que el cliente pertenezca al gimnasio
-$cliente_id = $_SESSION['cliente_id'] ?? null;
-$gimnasio_id = $_SESSION['gimnasio_id'] ?? null;
-
-if (!$cliente_id || !$gimnasio_id) {
-    echo "Acceso denegado";
-    exit;
-}
-
+// Verificar si el cliente pertenece al gimnasio
 $cliente = $conexion->query("SELECT * FROM clientes WHERE id = $cliente_id AND gimnasio_id = $gimnasio_id")->fetch_assoc();
-if (!$cliente) {
-    echo "Acceso denegado";
-    exit;
-}
-
-
 if (!$cliente) {
     echo "<div style='color:red; text-align:center; font-size:20px;'>❌ Acceso denegado al gimnasio.</div>";
     exit;
@@ -61,21 +48,39 @@ $cliente_nombre = $cliente['apellido'] . ' ' . $cliente['nombre'];
             margin: auto;
             border: 1px solid gold;
         }
+        .foto {
+            text-align: center;
+            margin: 20px auto;
+        }
+        .foto img {
+            width: 150px;
+            height: 150px;
+            border-radius: 50%;
+            object-fit: cover;
+            border: 2px solid gold;
+        }
+        .form-foto {
+            text-align: center;
+            margin-top: 10px;
+        }
     </style>
 </head>
 <body>
 
 <h1>👋 Bienvenido <?= htmlspecialchars($cliente_nombre) ?></h1>
-<?php if (!empty($cliente['foto_base64'])): ?>
-    <img src="<?= $cliente['foto_base64'] ?>" alt="Foto del Cliente"
-         style="width: 150px; height: 150px; object-fit: cover; border-radius: 50%; border: 3px solid gold;">
-<?php else: ?>
-    <div style="width: 150px; height: 150px; border-radius: 50%; border: 3px solid gold; background: #333; color: gold; display: flex; align-items: center; justify-content: center;">
-        Sin Foto
-    </div>
-<?php endif; ?>
 
+<div class="foto">
+    <?php
+    $foto = $cliente['foto'];
+    $ruta_foto = "fotos_clientes/" . $foto;
 
+    if (!empty($foto) && file_exists($ruta_foto)) {
+        echo "<img src='$ruta_foto' alt='Foto del cliente'>";
+    } else {
+        echo "<img src='fotos_clientes/default.png' alt='Sin foto' style='opacity:0.7;'>";
+    }
+    ?>
+</div>
 
 <div class="datos">
     <p><strong>DNI:</strong> <?= $cliente['dni'] ?></p>
@@ -86,71 +91,46 @@ $cliente_nombre = $cliente['apellido'] . ' ' . $cliente['nombre'];
 
 <div style="text-align: center; margin-top: 30px;">
     <h3 style="color: gold;">📲 Tu código QR personal</h3>
-    <form method="post">
-        <button type="submit" name="generar_qr" style="background-color: gold; color: black; font-weight: bold; padding: 10px 20px; border: none; border-radius: 5px;">Generar QR</button>
-    </form>
-<?php
-include 'phpqrcode/qrlib.php'; // Asegurate de tener esta librería incluida
 
-$dni_cliente = $_SESSION['dni'] ?? '';
-if ($dni_cliente) {
-    ob_start();
-    QRcode::png('C' . $dni_cliente, false, QR_ECLEVEL_L, 6);
-    $imageData = base64_encode(ob_get_clean());
-    echo "<div style='text-align:center; margin-top:20px;'>
-            <h3 style='color:gold;'>Mi QR de acceso</h3>
-            <img src='data:image/png;base64,{$imageData}' alt='QR Cliente'>
-          </div>";
-}
-?>
-
+    <?php
+    if (!empty($dni_cliente)) {
+        include 'phpqrcode/qrlib.php';
+        ob_start();
+        QRcode::png('C' . $dni_cliente, false, QR_ECLEVEL_L, 6);
+        $imageData = base64_encode(ob_get_clean());
+        echo "<img src='data:image/png;base64,{$imageData}' alt='QR Cliente' style='margin-top:10px;'>";
+    } else {
+        echo "<p style='color:red;'>No se pudo generar el QR (DNI no disponible).</p>";
+    }
+    ?>
 </div>
 
+<div class="form-foto">
+    <form method="POST" enctype="multipart/form-data">
+        <label for="nueva_foto" style="color:#FFD700;">📸 Subí tu foto (o tomá con la cámara)</label><br><br>
+        <input type="file" name="nueva_foto" accept="image/*" capture="user" required><br><br>
+        <button type="submit" style="padding:5px 15px; background:#FFD700; border:none; border-radius:5px;">Cargar foto</button>
+    </form>
+</div>
 
 </body>
 </html>
 
-
-
 <?php
+// Subida de foto
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['nueva_foto'])) {
-    $cliente_id = $_SESSION['cliente_id'] ?? 0;
-    if ($cliente_id > 0 && $_FILES['nueva_foto']['error'] === UPLOAD_ERR_OK) {
+    if ($_FILES['nueva_foto']['error'] === UPLOAD_ERR_OK) {
         $foto_tmp = $_FILES['nueva_foto']['tmp_name'];
         $nombre_archivo = 'cliente_' . $cliente_id . '_' . time() . '.jpg';
         $ruta_destino = 'fotos_clientes/' . $nombre_archivo;
 
         if (move_uploaded_file($foto_tmp, $ruta_destino)) {
-            // Guardar en base de datos
-            include 'conexion.php';
             $conexion->query("UPDATE clientes SET foto = '$nombre_archivo' WHERE id = $cliente_id");
-            echo "<script>location.href='panel_cliente.php';</script>"; // Recargar para ver la nueva foto
+            echo "<script>location.href='panel_cliente.php';</script>";
             exit;
         } else {
-            echo "<p style='color:red;'>Error al guardar la imagen.</p>";
+            echo "<p style='color:red; text-align:center;'>Error al guardar la imagen.</p>";
         }
     }
 }
 ?>
-
-<div style="text-align:center; margin-bottom:20px;">
-    <?php
-    $cliente_id = $_SESSION['cliente_id'] ?? 0;
-    include 'conexion.php';
-    $cliente = $conexion->query("SELECT foto FROM clientes WHERE id = $cliente_id")->fetch_assoc();
-    $foto = $cliente['foto'];
-    $ruta_foto = "fotos_clientes/" . $foto;
-
-    if (!empty($foto) && file_exists($ruta_foto)) {
-        echo "<img src='$ruta_foto' alt='Foto del cliente' style='width:150px; height:150px; border-radius:50%; object-fit:cover; border:2px solid gold;'><br>";
-    } else {
-        echo "<img src='fotos_clientes/default.png' alt='Sin foto' style='width:150px; height:150px; border-radius:50%; object-fit:cover; opacity:0.7;'><br>";
-    }
-    ?>
-</div>
-
-<form method="POST" enctype="multipart/form-data" style="text-align:center;">
-    <label for="nueva_foto" style="color:#FFD700;">📸 Subí tu foto (o tomá con la cámara)</label><br><br>
-    <input type="file" name="nueva_foto" accept="image/*" capture="user" required style="margin-bottom:10px;"><br>
-    <button type="submit" style="padding:5px 15px; background:#FFD700; border:none; border-radius:5px;">Cargar foto</button>
-</form>
