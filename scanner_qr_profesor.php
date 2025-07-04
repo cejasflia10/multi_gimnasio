@@ -12,27 +12,26 @@ $hora_actual = date('H:i:s');
 if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['dni'])) {
     $dni = trim($_POST['dni']);
 
-    // Corrección: buscar cliente solo si tiene membresía activa
-    $cliente = $conexion->query("
-        SELECT c.*, m.id AS membresia_id, m.clases_disponibles
-        FROM clientes c
-        JOIN membresias m ON m.cliente_id = c.id
+    // Buscar membresía activa directamente y obtener datos del cliente
+    $membresia = $conexion->query("
+        SELECT m.*, c.apellido, c.nombre, c.id AS cliente_id
+        FROM membresias m
+        JOIN clientes c ON m.cliente_id = c.id
         WHERE c.dni = '$dni'
-          AND c.gimnasio_id = $gimnasio_id
+          AND m.gimnasio_id = $gimnasio_id
           AND m.fecha_vencimiento >= CURDATE()
           AND m.clases_disponibles > 0
         ORDER BY m.fecha_inicio DESC
         LIMIT 1
     ")->fetch_assoc();
 
-    if (!$cliente) {
+    if (!$membresia) {
         $mensaje = "❌ Cliente no encontrado o sin membresía activa.";
     } else {
-        $cliente_id = $cliente['id'];
-        $apellido = $cliente['apellido'];
-        $nombre = $cliente['nombre'];
-        $membresia_id = $cliente['membresia_id'];
-        $clases_disponibles = $cliente['clases_disponibles'];
+        $cliente_id = $membresia['cliente_id'];
+        $apellido = $membresia['apellido'];
+        $nombre = $membresia['nombre'];
+        $membresia_id = $membresia['id'];
 
         $yaIngreso = $conexion->query("SELECT * FROM asistencias_clientes 
             WHERE cliente_id = $cliente_id AND fecha = '$hoy'")->num_rows;
@@ -113,11 +112,11 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['dni'])) {
 }
 ?>
 <!DOCTYPE html>
-<html lang="es">
+<html lang=\"es\">
 <head>
-    <meta charset="UTF-8">
+    <meta charset=\"UTF-8\">
     <title>Escáner QR Profesor</title>
-    <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+    <script src=\"https://unpkg.com/html5-qrcode\" type=\"text/javascript\"></script>
     <style>
         body { background-color: black; color: gold; font-family: Arial; text-align: center; padding: 20px; }
         #reader { width: 300px; margin: auto; }
@@ -127,23 +126,23 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['dni'])) {
 <body>
     <h2>📲 Escanear QR de Alumno</h2>
 
-    <div id="reader"></div>
-    <form id="form_dni" method="POST" style="display:none;">
-        <input type="hidden" name="dni" id="dni">
+    <div id=\"reader\"></div>
+    <form id=\"form_dni\" method=\"POST\" style=\"display:none;\">
+        <input type=\"hidden\" name=\"dni\" id=\"dni\">
     </form>
 
     <?php if (!empty($mensaje)): ?>
-        <div class="mensaje"><?= $mensaje ?></div>
+        <div class=\"mensaje\"><?= \$mensaje ?></div>
     <?php endif; ?>
 
 <script>
 function onScanSuccess(decodedText) {
-    document.getElementById("dni").value = decodedText;
-    document.getElementById("form_dni").submit();
+    document.getElementById(\"dni\").value = decodedText;
+    document.getElementById(\"form_dni\").submit();
     html5QrcodeScanner.clear();
 }
 
-let html5QrcodeScanner = new Html5QrcodeScanner("reader", {
+let html5QrcodeScanner = new Html5QrcodeScanner(\"reader\", {
     fps: 10,
     qrbox: 250,
     rememberLastUsedCamera: true
