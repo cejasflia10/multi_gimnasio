@@ -28,6 +28,20 @@ if (!tiene_permiso('usuarios_gimnasio')) {
 </head>
 <body>
   <h2>Usuarios por Gimnasio</h2>
+
+  <?php
+  $resultado = $conexion->query("
+      SELECT u.*, g.nombre AS gimnasio
+      FROM usuarios u
+      LEFT JOIN gimnasios g ON u.gimnasio_id = g.id
+  ");
+
+  if (!$resultado) {
+      echo "<div style='color:red;'>❌ Error en la consulta: " . $conexion->error . "</div>";
+      exit;
+  }
+  ?>
+
   <table>
     <tr>
       <th>Usuario</th>
@@ -42,17 +56,17 @@ if (!tiene_permiso('usuarios_gimnasio')) {
     </tr>
     <?php while($row = $resultado->fetch_assoc()) { ?>
       <tr>
-        <td><?php echo htmlspecialchars($row['usuario']); ?></td>
-        <td><?php echo htmlspecialchars($row['rol']); ?></td>
-        <td><?php echo htmlspecialchars($row['gimnasio'] ?? 'Sin asignar'); ?></td>
-        <td><?= $row['clientes'] ? '✔️' : '❌' ?></td>
-        <td><?= $row['membresias'] ? '✔️' : '❌' ?></td>
-        <td><?= $row['profesores'] ? '✔️' : '❌' ?></td>
-        <td><?= $row['ventas'] ? '✔️' : '❌' ?></td>
-        <td><?= $row['asistencias'] ? '✔️' : '❌' ?></td>
+        <td><?= htmlspecialchars($row['usuario']) ?></td>
+        <td><?= htmlspecialchars($row['rol']) ?></td>
+        <td><?= htmlspecialchars($row['gimnasio'] ?? 'Sin asignar') ?></td>
+        <td><?= !empty($row['clientes']) ? '✔️' : '❌' ?></td>
+        <td><?= !empty($row['membresias']) ? '✔️' : '❌' ?></td>
+        <td><?= !empty($row['profesores']) ? '✔️' : '❌' ?></td>
+        <td><?= !empty($row['ventas']) ? '✔️' : '❌' ?></td>
+        <td><?= !empty($row['asistencias']) ? '✔️' : '❌' ?></td>
         <td>
-          <a class="boton" href="editar_usuario.php?id=<?php echo $row['id']; ?>">Editar</a>
-          <a class="boton" href="eliminar_usuario.php?id=<?php echo $row['id']; ?>" onclick="return confirm('¿Seguro que deseas eliminar este usuario?')">Eliminar</a>
+          <a class="boton" href="editar_usuario.php?id=<?= $row['id'] ?>">Editar</a>
+          <a class="boton" href="eliminar_usuario.php?id=<?= $row['id'] ?>" onclick="return confirm('¿Seguro que deseas eliminar este usuario?')">Eliminar</a>
         </td>
       </tr>
     <?php } ?>
