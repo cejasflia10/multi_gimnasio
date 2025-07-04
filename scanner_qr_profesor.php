@@ -112,11 +112,11 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['dni'])) {
 }
 ?>
 <!DOCTYPE html>
-<html lang=\"es\">
+<html lang="es">
 <head>
-    <meta charset=\"UTF-8\">
+    <meta charset="UTF-8">
     <title>Escáner QR Profesor</title>
-    <script src=\"https://unpkg.com/html5-qrcode\" type=\"text/javascript\"></script>
+    <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
     <style>
         body { background-color: black; color: gold; font-family: Arial; text-align: center; padding: 20px; }
         #reader { width: 300px; margin: auto; }
@@ -126,23 +126,23 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['dni'])) {
 <body>
     <h2>📲 Escanear QR de Alumno</h2>
 
-    <div id=\"reader\"></div>
-    <form id=\"form_dni\" method=\"POST\" style=\"display:none;\">
-        <input type=\"hidden\" name=\"dni\" id=\"dni\">
+    <div id="reader"></div>
+    <form id="form_dni" method="POST" style="display:none;">
+        <input type="hidden" name="dni" id="dni">
     </form>
 
     <?php if (!empty($mensaje)): ?>
-        <div class=\"mensaje\"><?= \$mensaje ?></div>
+        <div class="mensaje"><?= $mensaje ?></div>
     <?php endif; ?>
 
 <script>
 function onScanSuccess(decodedText) {
-    document.getElementById(\"dni\").value = decodedText;
-    document.getElementById(\"form_dni\").submit();
+    document.getElementById("dni").value = decodedText;
+    document.getElementById("form_dni").submit();
     html5QrcodeScanner.clear();
 }
 
-let html5QrcodeScanner = new Html5QrcodeScanner(\"reader\", {
+let html5QrcodeScanner = new Html5QrcodeScanner("reader", {
     fps: 10,
     qrbox: 250,
     rememberLastUsedCamera: true
