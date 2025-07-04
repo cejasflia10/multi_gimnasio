@@ -73,14 +73,15 @@ $ingresos = $conexion->query("
     <h3 style="color:gold;">Ingresos del Día</h3>
     <?php
     $alumnos_q = $conexion->query("
-        SELECT c.apellido, c.nombre, ap.hora_ingreso
-        FROM asistencias_profesor ap
-        JOIN clientes c ON ap.cliente_id = c.id
-        WHERE ap.fecha = CURDATE()
-          AND ap.profesor_id = $profesor_id
-          AND ap.gimnasio_id = $gimnasio_id
-        ORDER BY ap.hora_ingreso ASC
-    ");
+    SELECT c.apellido, c.nombre, ap.hora_ingreso
+    FROM clientes c
+    JOIN asistencias_profesor ap ON ap.profesor_id = $profesor_id
+        AND ap.cliente_id = c.id
+        AND ap.fecha = CURDATE()
+        AND ap.gimnasio_id = $gimnasio_id
+    ORDER BY ap.hora_ingreso ASC
+");
+
 
     if ($alumnos_q && $alumnos_q->num_rows > 0) {
         while ($row = $alumnos_q->fetch_assoc()) {
