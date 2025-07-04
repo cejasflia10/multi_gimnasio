@@ -1,4 +1,3 @@
-
 <?php
 if (session_status() === PHP_SESSION_NONE) session_start();
 include 'conexion.php';
@@ -22,14 +21,12 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['dni'])) {
         $apellido = $cliente['apellido'];
         $nombre = $cliente['nombre'];
 
-        // Verificar si ya ingresó hoy
         $yaIngreso = $conexion->query("SELECT * FROM asistencias_clientes 
             WHERE cliente_id = $cliente_id AND fecha = '$hoy'")->num_rows;
 
         if ($yaIngreso > 0) {
             $mensaje = "✅ $apellido $nombre ya ingresó hoy.";
         } else {
-            // Buscar membresía activa
             $membresia = $conexion->query("SELECT * FROM membresias
                 WHERE cliente_id = $cliente_id AND clases_disponibles > 0 AND fecha_vencimiento >= CURDATE()
                 ORDER BY fecha_inicio DESC LIMIT 1")->fetch_assoc();
@@ -42,7 +39,6 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['dni'])) {
                 $hora = date("H:i:s");
                 $dia_semana = date("l");
 
-                // Registrar asistencia cliente
                 $conexion->query("INSERT INTO asistencias_clientes (cliente_id, fecha_hora, fecha, hora, gimnasio_id)
                                   VALUES ($cliente_id, '$fechaHoraCompleta', '$fecha', '$hora', $gimnasio_id)");
 
@@ -50,7 +46,6 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['dni'])) {
                                   SET clases_disponibles = clases_disponibles - 1 
                                   WHERE id = {$membresia['id']}");
 
-                // Registrar ingreso de profesor si no está aún
                 $yaIngresoProf = $conexion->query("SELECT * FROM asistencias_profesor
                     WHERE profesor_id = $profesor_id AND fecha = '$hoy'")->fetch_assoc();
 
@@ -59,7 +54,6 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['dni'])) {
                                       VALUES ($profesor_id, '$hoy', '$hora_actual', $gimnasio_id)");
                 }
 
-                // Calcular cantidad de alumnos
                 $alumnos_q = $conexion->query("
                     SELECT COUNT(DISTINCT ac.cliente_id) AS cantidad
                     FROM asistencias_clientes ac
@@ -67,19 +61,6 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['dni'])) {
                 ");
                 $alumnos = $alumnos_q->fetch_assoc()['cantidad'];
 
-                if ($alumnos >= 5) {
-                    $monto = 2000;
-                } elseif ($alumnos >= 2) {
-                    $monto = 1500;
-                } else {
-                    $monto = 1000;
-                }
-
-                $conexion->query("UPDATE asistencias_profesor 
-                                  SET monto_turno = $monto 
-                                  WHERE profesor_id = $profesor_id AND fecha = '$hoy'");
-
-                // Asistencia por turno
                 $turnos_prof = $conexion->query("SELECT * FROM turnos_profesor 
                     WHERE profesor_id = $profesor_id 
                     AND dia = '$dia_semana' 
@@ -96,7 +77,6 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['dni'])) {
                         FROM asistencias_profesor 
                         WHERE profesor_id = $profesor_id AND fecha = '$hoy'
                         AND hora_ingreso BETWEEN '$h_inicio' AND '$h_fin'");
-
                     $cuantos = $cuantos_q->fetch_assoc()['total'];
 
                     if ($cuantos >= 10) {
@@ -115,9 +95,13 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['dni'])) {
                             (profesor_id, cliente_id, fecha, hora_ingreso, gimnasio_id, monto_turno)
                             VALUES ($profesor_id, $cliente_id, '$hoy', '$hora_actual', $gimnasio_id, $monto_turno)");
                     }
+
+                    $conexion->query("UPDATE asistencias_profesor 
+                                      SET monto_turno = $monto_turno 
+                                      WHERE profesor_id = $profesor_id AND fecha = '$hoy'");
                 }
 
-                $mensaje = "✅ $apellido $nombre ingresó correctamente. Total alumnos: $alumnos. Monto turno: $$monto";
+                $mensaje = "✅ $apellido $nombre ingresó correctamente. Total alumnos: $alumnos.";
             }
         }
     }
