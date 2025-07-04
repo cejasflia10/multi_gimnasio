@@ -142,9 +142,9 @@ $conexion->query("INSERT INTO asistencias_clientes (cliente_id, fecha_hora, fech
                 $cuantos = $cuantos_q->fetch_assoc()['total'];
 
                 if ($cuantos >= 10) {
-                    $monto_turno = 2000;
+                    $monto_turno = 3000;
                 } elseif ($cuantos >= 5) {
-                    $monto_turno = 1500;
+                    $monto_turno = 2000;
                 } else {
                     $monto_turno = 1000;
                 }
