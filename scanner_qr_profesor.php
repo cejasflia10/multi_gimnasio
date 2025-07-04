@@ -39,7 +39,7 @@ $alumnos_q = $conexion->query("
     JOIN clientes c ON ap.cliente_id = c.id
     WHERE ap.fecha = '$fecha_hoy' AND ap.profesor_id = $profesor_id
     ORDER BY ap.hora_ingreso
-")
+");
 
 if ($alumnos_q && $alumnos_q->num_rows > 0) {
     echo "<ul style='list-style: none; padding: 0;'>";
