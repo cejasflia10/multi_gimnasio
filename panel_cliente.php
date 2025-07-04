@@ -6,7 +6,7 @@ include 'menu_cliente.php';
 
 $cliente_id = $_SESSION['cliente_id'] ?? 0;
 $gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
-$dni_cliente = $_SESSION['dni'] ?? '';
+$dni_cliente = $cliente['dni'] ?? '';
 
 if ($cliente_id == 0 || $gimnasio_id == 0) {
     echo "<div style='color:red; font-size:20px; text-align:center;'>❌ Acceso denegado.</div>";
@@ -88,21 +88,23 @@ $cliente_nombre = $cliente['apellido'] . ' ' . $cliente['nombre'];
     <p><strong>Teléfono:</strong> <?= $cliente['telefono'] ?></p>
     <p><strong>Disciplina:</strong> <?= $cliente['disciplina'] ?></p>
 </div>
+<?php
+// ...
+echo "<h3 style='color: gold;'>📲 Tu código QR personal</h3>";
 
-<div style="text-align: center; margin-top: 30px;">
-    <h3 style="color: gold;">📲 Tu código QR personal</h3>
+include 'phpqrcode/qrlib.php';
+$dni_cliente = $cliente['dni'] ?? ''; // <-- cambio clave aquí
 
-    <?php
-    if (!empty($dni_cliente)) {
-        include 'phpqrcode/qrlib.php';
-        ob_start();
-        QRcode::png('C' . $dni_cliente, false, QR_ECLEVEL_L, 6);
-        $imageData = base64_encode(ob_get_clean());
-        echo "<img src='data:image/png;base64,{$imageData}' alt='QR Cliente' style='margin-top:10px;'>";
-    } else {
-        echo "<p style='color:red;'>No se pudo generar el QR (DNI no disponible).</p>";
-    }
-    ?>
+if (!empty($dni_cliente)) {
+    ob_start();
+    QRcode::png('C' . $dni_cliente, false, QR_ECLEVEL_L, 6);
+    $imageData = base64_encode(ob_get_clean());
+    echo "<img src='data:image/png;base64,{$imageData}' alt='QR Cliente' style='margin-top:10px;'>";
+} else {
+    echo "<p style='color:red;'>No se pudo generar el QR (DNI no disponible).</p>";
+}
+?>
+
 </div>
 
 <div class="form-foto">
