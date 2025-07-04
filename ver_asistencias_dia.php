@@ -6,17 +6,17 @@ include 'menu_horizontal.php';
 $fecha = date('Y-m-d');
 $gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
 
-// Clientes
+// Clientes - corregido a asistencias_clientes
 $clientes_q = $conexion->query("
-    SELECT c.apellido, c.nombre, a.hora
-    FROM asistencias a
-    INNER JOIN clientes c ON a.cliente_id = c.id
-    WHERE a.fecha = '$fecha' AND a.gimnasio_id = $gimnasio_id
+    SELECT c.apellido, c.nombre, ac.hora
+    FROM asistencias_clientes ac
+    INNER JOIN clientes c ON ac.cliente_id = c.id
+    WHERE ac.fecha = '$fecha' AND ac.gimnasio_id = $gimnasio_id
 ");
 
 // Profesores
 $profesores_q = $conexion->query("
-    SELECT p.apellido, p.nombre, a.hora_entrada, a.hora_salida
+    SELECT p.apellido, p.nombre, a.hora_ingreso, a.hora_egreso
     FROM asistencias_profesor a
     INNER JOIN profesores p ON a.profesor_id = p.id
     WHERE a.fecha = '$fecha' AND a.gimnasio_id = $gimnasio_id
@@ -66,14 +66,13 @@ $profesores_q = $conexion->query("
                 <tr>
                     <td><?= $p['apellido'] ?></td>
                     <td><?= $p['nombre'] ?></td>
-                    <td><?= $p['hora_entrada'] ?? '-' ?></td>
-                    <td><?= $p['hora_salida'] ?? '-' ?></td>
+                    <td><?= $p['hora_ingreso'] ?? '-' ?></td>
+                    <td><?= $p['hora_egreso'] ?? '-' ?></td>
                 </tr>
             <?php endwhile; ?>
         <?php else: ?>
             <tr><td colspan="4">Sin registros</td></tr>
         <?php endif; ?>
     </table>
-    
 </body>
 </html>
