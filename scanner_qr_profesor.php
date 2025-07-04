@@ -23,24 +23,21 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['dni'])) {
             ORDER BY fecha_inicio DESC LIMIT 1")->fetch_assoc();
 
         if (!$membresia) {
-                    } else {
-            $fechaHoraCompleta = date("Y-m-d H:i:s");
-            $fecha = date("Y-m-d");
-            $hora = date("H:i:s");
-
-            // Insertar registro en asistencias_profesor
-            $conexion->query("INSERT INTO asistencias_profesor (profesor_id, gimnasio_id, fecha, hora_ingreso)
-                              VALUES ($profesor_id, $gimnasio_id, '$fecha', '$hora')");
-
+    $mensaje = "❌ Membresía vencida o sin clases disponibles.";
+    $dia_semana = date("l");
+            $mensaje = "El cliente no tiene membresía activa o sin clases.";
+        } else {$fechaHoraCompleta = date("Y-m-d H:i:s");
+$fecha = date("Y-m-d");
+$hora = date("H:i:s"
 $fecha_hoy = date("Y-m-d");
+
 $alumnos_q = $conexion->query("
     SELECT c.apellido, c.nombre
     FROM asistencias_profesor ap
     JOIN clientes c ON ap.cliente_id = c.id
     WHERE ap.fecha = '$fecha_hoy' AND ap.profesor_id = $profesor_id
     ORDER BY ap.hora_ingreso
-");
-
+")
 
 if ($alumnos_q && $alumnos_q->num_rows > 0) {
     echo "<ul style='list-style: none; padding: 0;'>";
@@ -117,9 +114,14 @@ $conexion->query("INSERT INTO asistencias_clientes (cliente_id, fecha_hora, fech
                 }
 
                 // Insertar nuevo registro por alumno
-                $conexion->query("INSERT INTO asistencias_profesor 
-                    (profesor_id, cliente_id, fecha, hora_ingreso, gimnasio_id, monto_turno)
-                    VALUES ($profesor_id, $cliente_id, '$hoy', '$hora_actual', $gimnasio_id, $monto_turno)");
+                $yaExiste = $conexion->query("SELECT * FROM asistencias_profesor
+    WHERE profesor_id = $profesor_id AND cliente_id = $cliente_id AND fecha = '$hoy'")->num_rows;
+
+if ($yaExiste == 0) {
+    $conexion->query("INSERT INTO asistencias_profesor 
+        (profesor_id, cliente_id, fecha, hora_ingreso, gimnasio_id, monto_turno)
+        VALUES ($profesor_id, $cliente_id, '$hoy', '$hora_actual', $gimnasio_id, $monto_turno)");
+}
             }
 
         }
