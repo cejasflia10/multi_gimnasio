@@ -72,15 +72,26 @@ $ingresos = $conexion->query("
 <div style="flex:1; min-width:300px; background:#222; padding:15px; border-radius:10px;">
     <h3 style="color:gold;">Ingresos del Día</h3>
     <?php
-    $alumnos_q = $conexion->query("
-    SELECT c.apellido, c.nombre, ap.hora_ingreso
-    FROM clientes c
-    JOIN asistencias_profesor ap ON ap.profesor_id = $profesor_id
-        AND ap.cliente_id = c.id
-        AND ap.fecha = CURDATE()
-        AND ap.gimnasio_id = $gimnasio_id
-    ORDER BY ap.hora_ingreso ASC
-");
+    $ingresos_dia = $conexion->query("
+        SELECT c.apellido, c.nombre, ac.hora
+        FROM asistencias_clientes ac
+        JOIN clientes c ON ac.cliente_id = c.id
+        WHERE ac.fecha = CURDATE() AND ac.gimnasio_id = $gimnasio_id
+        ORDER BY ac.hora
+    ");
+
+    if ($ingresos_dia->num_rows > 0) {
+        while ($ing = $ingresos_dia->fetch_assoc()) {
+            echo "<p style='color:white; margin:5px 0;'>
+                🧍 {$ing['apellido']} {$ing['nombre']}<br>
+                ⏰ {$ing['hora']}
+            </p>";
+        }
+    } else {
+        echo "<p style='color:gray;'>No se registraron ingresos hoy.</p>";
+    }
+    ?>
+</div>
 
 
     if ($alumnos_q && $alumnos_q->num_rows > 0) {
