@@ -1,5 +1,7 @@
 <?php
 if (session_status() === PHP_SESSION_NONE) session_start();
+date_default_timezone_set('America/Argentina/Buenos_Aires'); // ✅ Agregado
+
 include 'conexion.php';
 
 $profesor_id = $_SESSION['profesor_id'] ?? 0;
