@@ -120,6 +120,46 @@ $cliente_nombre = $cliente['apellido'] . ' ' . $cliente['nombre'];
         <button type="submit" style="padding:5px 15px; background:#FFD700; border:none; border-radius:5px;">Cargar foto</button>
     </form>
 </div>
+<h2 style="color:gold; text-align:center; margin-top:30px;">📌 Turnos de Hoy con Reservas</h2>
+<div style="max-width: 800px; margin: auto; background: #111; padding: 20px; border-radius: 10px; color: white;">
+    <table style="width:100%; border-collapse: collapse; color: white;">
+        <thead>
+            <tr style="background-color: #333;">
+                <th style="padding:10px; border:1px solid #444;">Horario</th>
+                <th style="padding:10px; border:1px solid #444;">Disciplina</th>
+                <th style="padding:10px; border:1px solid #444;">Profesor</th>
+                <th style="padding:10px; border:1px solid #444;">Reservas</th>
+            </tr>
+        </thead>
+        <tbody>
+            <?php
+            $fecha_hoy = date('Y-m-d');
+            $turnos = $conexion->query("
+                SELECT tp.horario_inicio, tp.horario_fin, tp.disciplina, p.apellido, p.nombre, COUNT(r.id) AS cantidad_reservas
+                FROM turnos_profesor tp
+                JOIN reservas r ON r.turno_id = tp.id AND r.fecha = '$fecha_hoy'
+                JOIN profesores p ON tp.id_profesor = p.id
+                WHERE tp.gimnasio_id = $gimnasio_id
+                GROUP BY tp.id
+                ORDER BY tp.horario_inicio
+            ");
+
+            while ($t = $turnos->fetch_assoc()) {
+                $horario = $t['horario_inicio'] . ' - ' . $t['horario_fin'];
+                $disciplina = $t['disciplina'];
+                $profesor = $t['apellido'] . ' ' . $t['nombre'];
+                $cantidad = $t['cantidad_reservas'];
+                echo "<tr>
+                        <td style='padding:10px; border:1px solid #444;'>$horario</td>
+                        <td style='padding:10px; border:1px solid #444;'>$disciplina</td>
+                        <td style='padding:10px; border:1px solid #444;'>$profesor</td>
+                        <td style='padding:10px; border:1px solid #444;'>$cantidad</td>
+                      </tr>";
+            }
+            ?>
+        </tbody>
+    </table>
+</div>
 
 </body>
 </html>
@@ -141,4 +181,5 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['nueva_foto'])) {
         }
     }
 }
+
 ?>
