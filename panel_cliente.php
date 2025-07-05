@@ -126,16 +126,23 @@ $cliente_nombre = $cliente['apellido'] . ' ' . $cliente['nombre'];
         <?php
         $fecha_hoy = date('Y-m-d');
         $turnos = $conexion->query("
-            SELECT DISTINCT tp.nombre_turno
+            SELECT tp.dia, tp.hora_inicio, tp.hora_fin, COUNT(r.id) AS cantidad
             FROM reservas r
             JOIN turnos_profesor tp ON r.turno_id = tp.id
             WHERE r.fecha = '$fecha_hoy' AND tp.gimnasio_id = $gimnasio_id
+            GROUP BY tp.id
+            ORDER BY tp.hora_inicio
         ");
-        while ($t = $turnos->fetch_assoc()) {
-            echo "<li style='padding: 10px; border-bottom: 1px solid #444;'>📍 " . htmlspecialchars($t['nombre_turno']) . "</li>";
-        }
-        if ($turnos->num_rows === 0) {
-            echo "<li style='padding: 10px; color: gray;'>No hay reservas para hoy.</li>";
+        if ($turnos->num_rows > 0) {
+            while ($t = $turnos->fetch_assoc()) {
+                $dia = $t['dia'];
+                $inicio = substr($t['hora_inicio'], 0, 5);
+                $fin = substr($t['hora_fin'], 0, 5);
+                $cantidad = $t['cantidad'];
+                echo "<li style='padding: 10px; border-bottom: 1px solid #444;'>📍 <b>$dia</b> | $inicio - $fin hs → $cantidad reservas</li>";
+            }
+        } else {
+            echo "<li style='padding: 10px; color: gray;'>No hay reservas registradas para hoy.</li>";
         }
         ?>
     </ul>
