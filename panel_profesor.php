@@ -91,30 +91,7 @@ $ingresos = $conexion->query("
         echo "<p style='color:gray;'>No se registraron ingresos hoy.</p>";
     }
     ?>
-</div>
-<div style="flex:1; min-width:300px; background:#222; padding:15px; border-radius:10px;">
-    <h3 style="color:gold;">Ingresos del Día</h3>
-    <?php
-    $alumnos_q = $conexion->query("
-        SELECT c.apellido, c.nombre, ac.hora
-        FROM asistencias_clientes ac
-        JOIN clientes c ON ac.cliente_id = c.id
-        WHERE ac.fecha = CURDATE() AND ac.gimnasio_id = $gimnasio_id
-        ORDER BY ac.hora
-    ");
-
-    if ($alumnos_q && $alumnos_q->num_rows > 0) {
-        while ($row = $alumnos_q->fetch_assoc()) {
-            echo "<p style='color:white;'>
-                🧍 {$row['apellido']} {$row['nombre']}<br>
-                🕒 {$row['hora']}
-            </p>";
-        }
-    } else {
-        echo "<p style='color:gray;'>No se escanearon alumnos hoy.</p>";
-    }
-    ?>
-</div>
+    
 
     <!-- Reservas del Día -->
     <div style="flex:1; min-width:300px; background:#222; padding:15px; border-radius:10px;">
