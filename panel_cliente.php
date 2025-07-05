@@ -120,34 +120,37 @@ $cliente_nombre = $cliente['apellido'] . ' ' . $cliente['nombre'];
         <button type="submit" style="padding:5px 15px; background:#FFD700; border:none; border-radius:5px;">Cargar foto</button>
     </form>
 </div>
-<h2 style="color:gold; text-align:center; margin-top:30px;">📌 Turnos de Hoy con Reservas</h2>
-<div style="max-width: 600px; margin: auto; background: #111; padding: 20px; border-radius: 10px; color: white;">
-    <ul style="list-style: none; padding: 0;">
+ <!-- Reservas del Día -->
+    <div style="flex:1; min-width:300px; background:#222; padding:15px; border-radius:10px;">
+        <h3 style="color:gold;">Reservas del Día</h3>
         <?php
-        $fecha_hoy = date('Y-m-d');
-        $turnos = $conexion->query("
-            SELECT tp.dia, tp.hora_inicio, tp.hora_fin, COUNT(r.id) AS cantidad
-            FROM reservas r
-            JOIN turnos_profesor tp ON r.turno_id = tp.id
-            WHERE r.fecha = '$fecha_hoy' AND tp.gimnasio_id = $gimnasio_id
-            GROUP BY tp.id
-            ORDER BY tp.hora_inicio
+        $reservas_q = $conexion->query("
+            SELECT r.dia_semana AS dia, r.hora_inicio, td.hora_fin,
+                   c.nombre, c.apellido,
+                   CONCAT(p.apellido, ' ', p.nombre) AS profesor
+            FROM reservas_clientes r
+            JOIN clientes c ON r.cliente_id = c.id
+            JOIN profesores p ON r.profesor_id = p.id
+            JOIN turnos_disponibles td ON r.turno_id = td.id
+            WHERE r.fecha_reserva = CURDATE()
+              AND r.gimnasio_id = $gimnasio_id
+            ORDER BY r.hora_inicio
         ");
-        if ($turnos->num_rows > 0) {
-            while ($t = $turnos->fetch_assoc()) {
-                $dia = $t['dia'];
-                $inicio = substr($t['hora_inicio'], 0, 5);
-                $fin = substr($t['hora_fin'], 0, 5);
-                $cantidad = $t['cantidad'];
-                echo "<li style='padding: 10px; border-bottom: 1px solid #444;'>📍 <b>$dia</b> | $inicio - $fin hs → $cantidad reservas</li>";
+
+        if ($reservas_q->num_rows > 0) {
+            while ($res = $reservas_q->fetch_assoc()) {
+                echo "<p style='color:white; margin:5px 0;'>
+                    🕒 {$res['hora_inicio']} a {$res['hora_fin']}<br>
+                    👤 {$res['apellido']} {$res['nombre']}<br>
+                    👨‍🏫 Prof. {$res['profesor']}
+                </p>";
             }
         } else {
-            echo "<li style='padding: 10px; color: gray;'>No hay reservas registradas para hoy.</li>";
+            echo "<p style='color:gray;'>No hay reservas registradas para hoy.</p>";
         }
         ?>
-    </ul>
+    </div>
 </div>
-
 </body>
 </html>
 
