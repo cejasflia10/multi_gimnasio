@@ -31,11 +31,14 @@
 </style>
 
 <div class="menu-horizontal">
+    <a href="chat_profesor.php">
+    Chat con alumnos <span id="contador-mensajes" class="badge-mensajes"></span>
+    </a>
     <a href="panel_profesor.php">Inicio</a>
+    <a href="scanner_qr_profesor.php">Escanear Alumnos (QR)</a>
     <a href="turnos_profesor.php">Mis Turnos</a>
     <a href="ver_reservas_turno.php">👥 Alumnos por Turno</a>
     <a href="ver_alumnos_profesor.php">🧍‍♂️ Mis Alumnos</a>
-    <a href="scanner_qr_profesor.php">Escanear Alumnos (QR)</a>
     <a href="ver_alumnos.php">Alumnos</a>
     <a href="subir_rutina.php">Subir Archivo</a>
     <a href="historial_alumnos.php">Archivos</a>

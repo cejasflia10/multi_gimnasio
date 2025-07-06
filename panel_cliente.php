@@ -65,6 +65,28 @@ $cliente_nombre = $cliente['apellido'] . ' ' . $cliente['nombre'];
         }
     </style>
 </head>
+<script>
+function actualizarContadorMensajes() {
+    fetch('contador_mensajes.php')
+        .then(response => response.text())
+        .then(numero => {
+            const contenedor = document.getElementById('contador-mensajes');
+            if (contenedor) {
+                if (parseInt(numero) > 0) {
+                    contenedor.innerText = '🔔 ' + numero;
+                    contenedor.style.display = 'inline-block';
+                } else {
+                    contenedor.innerText = '';
+                    contenedor.style.display = 'none';
+                }
+            }
+        });
+}
+
+setInterval(actualizarContadorMensajes, 30000); // cada 30 segundos
+actualizarContadorMensajes(); // al cargar
+</script>
+
 <body>
 
 <h1>👋 Bienvenido <?= htmlspecialchars($cliente_nombre) ?></h1>
@@ -81,6 +103,10 @@ $cliente_nombre = $cliente['apellido'] . ' ' . $cliente['nombre'];
     }
     ?>
 </div>
+<?php include 'notificacion_mensajes.php'; ?>
+<?php include 'notificacion_mensajes.php'; ?>
+<?php include 'resumen_mensajes.php'; ?>
+<span id="contador-mensajes" class="badge-mensajes" style="margin-left: 8px;">0</span>
 
 <div class="datos">
     <p><strong>DNI:</strong> <?= $cliente['dni'] ?></p>

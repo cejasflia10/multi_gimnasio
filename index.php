@@ -50,6 +50,28 @@ $total_ventas = obtenerMonto($conexion, 'ventas', 'fecha', $gimnasio_id, 'DIA');
     }
   </style>
 </head>
+<script>
+function actualizarContadorMensajes() {
+    fetch('contador_mensajes.php')
+        .then(response => response.text())
+        .then(numero => {
+            const contenedor = document.getElementById('contador-mensajes');
+            if (contenedor) {
+                if (parseInt(numero) > 0) {
+                    contenedor.innerText = '🔔 ' + numero;
+                    contenedor.style.display = 'inline-block';
+                } else {
+                    contenedor.innerText = '';
+                    contenedor.style.display = 'none';
+                }
+            }
+        });
+}
+
+setInterval(actualizarContadorMensajes, 30000); // cada 30 segundos
+actualizarContadorMensajes(); // al cargar
+</script>
+
 <body>
 <h2>🏠 Panel General</h2>
 
@@ -69,6 +91,10 @@ $total_ventas = obtenerMonto($conexion, 'ventas', 'fecha', $gimnasio_id, 'DIA');
   <h3>🧾 Ventas del Día</h3>
   <p>$<?= number_format($total_ventas, 0, ',', '.') ?></p>
 </div>
+<?php include 'notificacion_mensajes.php'; ?>
+<?php include 'notificacion_mensajes.php'; ?>
+<?php include 'resumen_mensajes.php'; ?>
+<span id="contador-mensajes" class="badge-mensajes" style="margin-left: 8px;">0</span>
 
 <!-- Disciplina Chart -->
 <div class="box">
