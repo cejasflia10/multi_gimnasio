@@ -107,6 +107,7 @@ actualizarContadorMensajes(); // al cargar
 <?php include 'notificacion_mensajes.php'; ?>
 <?php include 'resumen_mensajes.php'; ?>
 <span id="contador-mensajes" class="badge-mensajes" style="margin-left: 8px;">0</span>
+<?php include 'notificacion_subasta_ganada.php'; ?>
 
 <div class="datos">
     <p><strong>DNI:</strong> <?= $cliente['dni'] ?></p>
