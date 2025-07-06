@@ -12,39 +12,8 @@ $resultado = $conexion->query("SELECT * FROM clientes WHERE gimnasio_id = $gimna
 <head>
     <meta charset="UTF-8">
     <title>Listado de Clientes</title>
-    <style>
-        body {
-            background-color: #000;
-            color: gold;
-            font-family: Arial, sans-serif;
-        }
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            color: gold;
-        }
-        th, td {
-            padding: 10px;
-            border: 1px solid gold;
-            text-align: center;
-        }
-        .btn-qr {
-            padding: 6px 10px;
-            background: #222;
-            color: gold;
-            border: 1px solid gold;
-            cursor: pointer;
-            border-radius: 5px;
-            margin: 2px;
-            display: inline-block;
-        }
-        .buscador {
-            margin: 15px;
-            padding: 10px;
-            font-size: 16px;
-            width: 300px;
-        }
-    </style>
+    <link rel="stylesheet" href="estilo_unificado.css">
+      
     <script>
         function buscarCliente() {
             var input = document.getElementById("buscador").value.toLowerCase();
@@ -57,10 +26,9 @@ $resultado = $conexion->query("SELECT * FROM clientes WHERE gimnasio_id = $gimna
         }
     </script>
 </head>
-<script src="fullscreen.js"></script>
 
 <body>
-
+<div class="contenedor">
 <h2>Listado de Clientes</h2>
 
 <input type="text" id="buscador" class="buscador" placeholder="Buscar por nombre, apellido o DNI" onkeyup="buscarCliente()">
@@ -105,6 +73,6 @@ $resultado = $conexion->query("SELECT * FROM clientes WHERE gimnasio_id = $gimna
         ?>
     </tbody>
 </table>
-
+</div>
 </body>
 </html>
