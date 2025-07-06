@@ -5,33 +5,23 @@ include 'conexion.php';
 $cliente_id = $_SESSION['cliente_id'] ?? 0;
 $gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
 
-if ($cliente_id == 0 || $gimnasio_id == 0) {
-    echo "<div style='color:red;'>Acceso denegado.</div>";
+if (!$cliente_id || !$gimnasio_id) {
+    echo "Acceso denegado.";
     exit;
 }
 
-// Obtener profesores
+// Obtener profesores y otros clientes del gimnasio
 $profesores = $conexion->query("
-    SELECT id, nombre, apellido, 'profesor' AS tipo 
+    SELECT id, nombre, apellido 
     FROM profesores 
     WHERE gimnasio_id = $gimnasio_id
 ");
 
-// Obtener alumnos (excepto a sí mismo)
-$clientes = $conexion->query("
-    SELECT id, nombre, apellido, 'cliente' AS tipo 
+$alumnos = $conexion->query("
+    SELECT id, nombre, apellido 
     FROM clientes 
     WHERE gimnasio_id = $gimnasio_id AND id != $cliente_id
 ");
-
-// Combinar resultados en array
-$contactos = [];
-while ($p = $profesores->fetch_assoc()) $contactos[] = $p;
-while ($c = $clientes->fetch_assoc()) $contactos[] = $c;
-
-// Conversación activa
-$tipo = $_GET['tipo'] ?? '';
-$receptor_id = intval($_GET['id'] ?? 0);
 ?>
 
 <!DOCTYPE html>
@@ -42,46 +32,53 @@ $receptor_id = intval($_GET['id'] ?? 0);
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <link rel="stylesheet" href="estilo_unificado.css">
     <style>
-        .chat-layout {
+        .chat-contenedor {
             display: flex;
-            flex-direction: row;
-            gap: 20px;
+            flex-direction: column;
         }
 
-        .lista-contactos {
-            width: 100%;
-            max-width: 250px;
-            border-right: 1px solid #333;
+        .contactos {
+            max-height: 200px;
+            overflow-y: auto;
+            margin-bottom: 15px;
         }
 
-        .lista-contactos ul {
-            list-style: none;
-            padding: 0;
+        .contacto {
+            padding: 10px;
+            cursor: pointer;
+            border-bottom: 1px solid #444;
         }
 
-        .lista-contactos li {
-            margin: 10px 0;
+        .contacto:hover {
+            background-color: #222;
         }
 
-        .lista-contactos a {
-            color: gold;
-            text-decoration: none;
-            display: block;
+        .chat-box {
+            border: 1px solid #555;
+            padding: 10px;
+            height: 300px;
+            overflow-y: auto;
+            margin-bottom: 10px;
         }
 
-        .chat-area {
+        .chat-form {
+            display: flex;
+            gap: 10px;
+        }
+
+        .chat-form input[type="text"] {
             flex: 1;
+            padding: 10px;
         }
 
-        @media(max-width: 768px) {
-            .chat-layout {
-                flex-direction: column;
-            }
+        .oculto {
+            display: none;
+        }
 
-            .lista-contactos {
-                max-width: 100%;
-                border: none;
-            }
+        #buscador {
+            margin-bottom: 10px;
+            padding: 8px;
+            width: 100%;
         }
     </style>
 </head>
@@ -89,78 +86,78 @@ $receptor_id = intval($_GET['id'] ?? 0);
 <div class="contenedor">
     <h2 class="titulo-seccion">💬 Chat General</h2>
 
-    <div class="chat-layout">
-        <div class="lista-contactos">
-            <h4>Contactos</h4>
-            <ul>
-                <?php foreach ($contactos as $contacto): ?>
-                    <li>
-                        <a href="?tipo=<?= $contacto['tipo'] ?>&id=<?= $contacto['id'] ?>">
-                            <?= $contacto['apellido'] . ', ' . $contacto['nombre'] ?>
-                            <?= ($contacto['tipo'] === 'profesor') ? '👨‍🏫' : '👤' ?>
-                        </a>
-                    </li>
-                <?php endforeach; ?>
-            </ul>
-        </div>
+    <input type="text" id="buscador" placeholder="Buscar contacto...">
 
-        <div class="chat-area">
-            <?php if ($receptor_id && in_array($tipo, ['profesor', 'cliente'])): ?>
-                <div id="chat-box" class="chat-box" style="margin-bottom:10px;"></div>
-
-                <form id="form-mensaje" class="chat-form">
-                    <input type="hidden" name="cliente_id" value="<?= $cliente_id ?>">
-                    <?php if ($tipo === 'profesor'): ?>
-                        <input type="hidden" name="profesor_id" value="<?= $receptor_id ?>">
-                    <?php else: ?>
-                        <input type="hidden" name="cliente_receptor_id" value="<?= $receptor_id ?>">
-                    <?php endif; ?>
-                    <input type="text" name="mensaje" id="mensaje" placeholder="Escribe tu mensaje..." required>
-                    <button type="submit">Enviar</button>
-                </form>
-
-                <script>
-                    function cargarMensajes() {
-                        let url = '';
-                        <?php if ($tipo === 'profesor'): ?>
-                        url = 'ver_mensajes_chat.php?cliente_id=<?= $cliente_id ?>&profesor_id=<?= $receptor_id ?>';
-                        <?php else: ?>
-                        url = 'ver_chat_clientes.php?cliente_id=<?= $cliente_id ?>&cliente_receptor_id=<?= $receptor_id ?>';
-                        <?php endif; ?>
-
-                        fetch(url)
-                            .then(res => res.text())
-                            .then(data => {
-                                document.getElementById('chat-box').innerHTML = data;
-                                document.getElementById('chat-box').scrollTop = document.getElementById('chat-box').scrollHeight;
-                            });
-                    }
-
-                    document.getElementById('form-mensaje').addEventListener('submit', function (e) {
-                        e.preventDefault();
-                        const datos = new FormData(this);
-                        let action = 'guardar_mensaje_chat.php';
-                        <?php if ($tipo === 'cliente'): ?>
-                        action = 'guardar_chat_clientes.php';
-                        <?php endif; ?>
-
-                        fetch(action, {
-                            method: 'POST',
-                            body: datos
-                        }).then(() => {
-                            this.reset();
-                            cargarMensajes();
-                        });
-                    });
-
-                    cargarMensajes();
-                    setInterval(cargarMensajes, 3000);
-                </script>
-            <?php else: ?>
-                <p>Selecciona un contacto para comenzar a chatear.</p>
-            <?php endif; ?>
-        </div>
+    <div id="lista-contactos" class="contactos">
+        <?php while ($p = $profesores->fetch_assoc()): ?>
+            <div class="contacto" data-nombre="<?= strtolower($p['apellido'] . ' ' . $p['nombre']) ?>"
+                 onclick="cargarChat('profesor', <?= $p['id'] ?>, '<?= $p['apellido'] . ', ' . $p['nombre'] ?>')">
+                🧑‍🏫 <?= $p['apellido'] . ', ' . $p['nombre'] ?>
+            </div>
+        <?php endwhile; ?>
+        <?php while ($c = $alumnos->fetch_assoc()): ?>
+            <div class="contacto" data-nombre="<?= strtolower($c['apellido'] . ' ' . $c['nombre']) ?>"
+                 onclick="cargarChat('cliente', <?= $c['id'] ?>, '<?= $c['apellido'] . ', ' . $c['nombre'] ?>')">
+                🧑 <?= $c['apellido'] . ', ' . $c['nombre'] ?>
+            </div>
+        <?php endwhile; ?>
     </div>
+
+    <div id="chat-titulo" class="titulo-seccion oculto"></div>
+    <div id="chat-box" class="chat-box oculto"></div>
+
+    <form id="form-mensaje" class="chat-form oculto">
+        <input type="hidden" name="cliente_id" value="<?= $cliente_id ?>">
+        <input type="hidden" id="destino_tipo" name="destino_tipo">
+        <input type="hidden" id="destino_id" name="destino_id">
+        <input type="text" name="mensaje" id="mensaje" placeholder="Escribe tu mensaje..." required>
+        <button type="submit">Enviar</button>
+    </form>
 </div>
+
+<script>
+    const buscador = document.getElementById('buscador');
+    buscador.addEventListener('input', function () {
+        const texto = this.value.toLowerCase();
+        document.querySelectorAll('.contacto').forEach(el => {
+            el.style.display = el.dataset.nombre.includes(texto) ? 'block' : 'none';
+        });
+    });
+
+    function cargarChat(tipo, id, nombre) {
+        document.getElementById('chat-titulo').classList.remove('oculto');
+        document.getElementById('chat-box').classList.remove('oculto');
+        document.getElementById('form-mensaje').classList.remove('oculto');
+
+        document.getElementById('chat-titulo').innerText = "💬 Conversación con: " + nombre;
+        document.getElementById('destino_tipo').value = tipo;
+        document.getElementById('destino_id').value = id;
+
+        const url = `cargar_chat_cliente.php?tipo=${tipo}&id=${id}`;
+        fetch(url)
+            .then(res => res.text())
+            .then(html => {
+                document.getElementById('chat-box').innerHTML = html;
+                const box = document.getElementById('chat-box');
+                box.scrollTop = box.scrollHeight;
+            });
+    }
+
+    document.getElementById('form-mensaje').addEventListener('submit', function (e) {
+        e.preventDefault();
+        const datos = new FormData(this);
+        fetch('enviar_mensaje_general.php', {
+            method: 'POST',
+            body: datos
+        }).then(() => {
+            document.getElementById('mensaje').value = '';
+            cargarChat(
+                document.getElementById('destino_tipo').value,
+                document.getElementById('destino_id').value,
+                document.getElementById('chat-titulo').innerText.replace('💬 Conversación con: ', '')
+            );
+        });
+    });
+</script>
 </body>
 </html>
