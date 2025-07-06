@@ -31,6 +31,9 @@
 </style>
 
 <div class="menu-horizontal">
+    <a href="chat_cliente.php">
+    Chat con tu profesor <span id="contador-mensajes" class="badge-mensajes"></span>
+   </a>
     <a href="panel_cliente.php">Inicio</a>
     <a href="ver_mis_pagos.php">Mis Pagos</a>
     <a href="pago_online.php">Pago Online</a>
