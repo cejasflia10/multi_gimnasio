@@ -10,13 +10,10 @@ if (!$profesor_id || !$gimnasio_id) {
     exit;
 }
 
-// Obtener alumnos que hayan reservado clases con este profesor
 $clientes = $conexion->query("
-    SELECT DISTINCT c.id, c.nombre, c.apellido 
-    FROM reservas r
-    JOIN turnos t ON r.turno_id = t.id
-    JOIN clientes c ON r.cliente_id = c.id
-    WHERE t.id_profesor = $profesor_id AND t.gimnasio_id = $gimnasio_id
+    SELECT id, nombre, apellido 
+    FROM clientes 
+    WHERE gimnasio_id = $gimnasio_id
 ");
 ?>
 
@@ -28,8 +25,14 @@ $clientes = $conexion->query("
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <link rel="stylesheet" href="estilo_unificado.css">
     <style>
-        .contacto {
+        #buscador {
+            margin-bottom: 10px;
             padding: 8px;
+            width: 100%;
+        }
+
+        .contacto {
+            padding: 10px;
             border-bottom: 1px solid #444;
             cursor: pointer;
         }
@@ -44,12 +47,6 @@ $clientes = $conexion->query("
             height: 300px;
             overflow-y: auto;
             margin-bottom: 10px;
-        }
-
-        #buscador {
-            margin-bottom: 10px;
-            padding: 8px;
-            width: 100%;
         }
 
         .chat-form {
@@ -124,8 +121,10 @@ $clientes = $conexion->query("
             body: datos
         }).then(() => {
             document.getElementById('mensaje').value = '';
-            cargarChat(document.getElementById('cliente_id').value,
-                document.getElementById('chat-titulo').innerText.replace('💬 Conversación con: ', ''));
+            cargarChat(
+                document.getElementById('cliente_id').value,
+                document.getElementById('chat-titulo').innerText.replace('💬 Conversación con: ', '')
+            );
         });
     });
 </script>
