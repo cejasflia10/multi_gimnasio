@@ -174,10 +174,6 @@ if (session_status() === PHP_SESSION_NONE) { session_start(); } ?>
     <a href="cliente_reservas.php">Reservas</a>
     <a href="clientes_pagos.php">Pagos</a>
     <a href="asistencias_cliente.php">Asistencias</a>
-    <a href="ver_qr.php">Ver QR</a>
-    <a href="crear_subasta.php">➕ Crear Subasta</a></li>
-    <a href="crear_sorteo.php">➕ Crear Sorteo</a>
-    <a href="ver_sorteos_admin.php">📋 Ver Sorteos</a>
     <a href="crear_sorteo.php">Crear Sorteo</a>
     <a href="ver_sorteos_admin.php">Ver Sorteos</a>
     <a href="crear_subasta.php">➕ Crear Subasta</a>
