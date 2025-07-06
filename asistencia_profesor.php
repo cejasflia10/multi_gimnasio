@@ -88,33 +88,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <!DOCTYPE html>
 <html>
 <head>
+    <link rel="stylesheet" href="estilo_unificado.css">
+
     <meta charset="UTF-8">
     <title>Asistencia Profesor</title>
-    <style>
-        body {
-            background-color: #000;
-            color: gold;
-            font-family: Arial, sans-serif;
-            text-align: center;
-            padding: 30px;
-        }
-        input {
-            padding: 10px;
-            font-size: 18px;
-            width: 60%;
-            margin-bottom: 10px;
-        }
-        button {
-            background-color: gold;
-            color: black;
-            font-weight: bold;
-            padding: 10px 20px;
-            border: none;
-            cursor: pointer;
-        }
-    </style>
+   
 </head>
 <body>
+    <div class="contenedor">
+
     <h1>Registro de Asistencia - Profesor</h1>
     <form method="POST">
         <input type="text" name="dni" placeholder="Escanear QR o ingresar DNI" required autofocus><br>
@@ -123,6 +105,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     <?php if ($mensaje): ?>
         <p><strong><?= $mensaje ?></strong></p>
-    <?php endif; ?>
+        <?php endif; ?>
+            </div>
+
 </body>
 </html>

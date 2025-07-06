@@ -12,35 +12,8 @@ $resultado = $conexion->query("SELECT * FROM planes WHERE gimnasio_id = $gimnasi
     <meta charset="UTF-8">
     <title>Planes del Gimnasio</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <style>
-        body {
-            background-color: #111;
-            color: gold;
-            font-family: Arial, sans-serif;
-            padding: 20px;
-        }
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            color: gold;
-        }
-        th, td {
-            border: 1px solid gold;
-            padding: 10px;
-            text-align: center;
-        }
-        th {
-            background-color: #222;
-        }
-        a, button {
-            background: gold;
-            color: black;
-            padding: 6px 12px;
-            text-decoration: none;
-            border: none;
-            cursor: pointer;
-        }
-    </style>
+    <link rel="stylesheet" href="estilo_unificado.css">
+
 </head>
 <script>
 // Reactivar pantalla completa con el primer clic
@@ -75,6 +48,7 @@ document.addEventListener('keydown', function (e) {
 </script>
 
 <body>
+<div class="contenedor">
 <h1>Planes del Gimnasio</h1>
 <a href="agregar_plan.php">Crear nuevo plan</a>
 <a href="index.php">Volver al menú</a>
@@ -102,5 +76,6 @@ document.addEventListener('keydown', function (e) {
         </tr>
     <?php endwhile; ?>
 </table>
+</div>
 </body>
 </html>

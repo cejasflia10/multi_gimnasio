@@ -33,21 +33,14 @@ $turnos = $conexion->query("SELECT td.*, p.nombre, p.apellido
 <!DOCTYPE html>
 <html lang="es">
 <head>
+    <link rel="stylesheet" href="estilo_unificado.css">
+
     <meta charset="UTF-8">
     <title>Cargar Turno</title>
-    <style>
-        body { background: black; color: gold; font-family: Arial; padding: 40px; text-align: center; }
-        form { background: #111; padding: 20px; border-radius: 10px; display: inline-block; margin-top: 30px; }
-        input, select { padding: 8px; margin: 10px; width: 200px; border-radius: 5px; border: none; }
-        button { padding: 10px 20px; background: gold; color: black; border: none; border-radius: 5px; font-weight: bold; }
-        table { width: 90%; margin: 40px auto; border-collapse: collapse; color: white; }
-        th, td { border: 1px solid gold; padding: 10px; }
-        th { background-color: #333; }
-        td { background-color: #111; }
-        a.btn { color: gold; font-weight: bold; text-decoration: none; }
-    </style>
+    
 </head>
 <body>
+<div class="contenedor">
 
 <h2>➕ Cargar Turno Disponible</h2>
 <?php if (isset($_GET['ok'])): ?>
@@ -102,6 +95,7 @@ $turnos = $conexion->query("SELECT td.*, p.nombre, p.apellido
     </tr>
     <?php endwhile; ?>
 </table>
+</div>
 
 </body>
 </html>

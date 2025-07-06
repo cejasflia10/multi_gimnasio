@@ -41,29 +41,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <meta charset="UTF-8">
     <title>Plan por Profesor</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <style>
-        body { background-color: #111; color: gold; font-family: Arial; padding: 20px; }
-        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-        th, td { padding: 10px; border: 1px solid #444; text-align: center; }
-        th { background-color: #222; }
-        tr:nth-child(even) { background-color: #1a1a1a; }
-        input[type="number"] {
-            background-color: #222; color: gold; border: 1px solid #555; padding: 6px;
-            width: 100px; text-align: right;
-        }
-        input[type="submit"] {
-            margin-top: 20px; padding: 10px 20px; background: gold; color: black; border: none;
-            font-weight: bold; border-radius: 5px;
-        }
-        .msg {
-            color: #0f0;
-            font-weight: bold;
-            margin-top: 10px;
-        }
-    </style>
+    <link rel="stylesheet" href="estilo_unificado.css">
+
 </head>
 <body>
-
+<div class="contenedor">
 <h1>💸 Valor por Hora de Cada Profesor</h1>
 
 <?php if (isset($_GET['guardado'])): ?>
@@ -92,6 +74,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     <input type="submit" value="Guardar Valores">
 </form>
-
+</div>
 </body>
 </html>

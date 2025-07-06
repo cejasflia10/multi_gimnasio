@@ -13,38 +13,16 @@ if (!$gimnasio_id) {
 <!DOCTYPE html>
 <html lang="es">
 <head>
+    <link rel="stylesheet" href="estilo_unificado.css">
+
     <meta charset="UTF-8">
     <title>Asistencia por QR</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <style>
-        body {
-            background-color: #111;
-            color: #ffd700;
-            font-family: Arial, sans-serif;
-            text-align: center;
-            padding: 20px;
-        }
-        h2 {
-            margin-bottom: 30px;
-        }
-        input[type="text"] {
-            width: 90%;
-            padding: 15px;
-            font-size: 20px;
-            border-radius: 8px;
-            border: none;
-            margin-bottom: 20px;
-            background-color: #222;
-            color: #ffd700;
-        }
-        .info {
-            margin-top: 20px;
-            font-size: 18px;
-            color: #fff;
-        }
-    </style>
+
 </head>
+
 <body>
+<div class="contenedor">
 
 <h2>Registro de Asistencia por QR</h2>
 
@@ -55,6 +33,7 @@ if (!$gimnasio_id) {
 
 <div class="info">
     Esperando escaneo...
+</div>
 </div>
 
 <script>

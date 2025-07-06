@@ -23,88 +23,17 @@ if ($rol == 'admin') {
 <!DOCTYPE html>
 <html lang="es">
 <head>
+    <link rel="stylesheet" href="estilo_unificado.css">
+
     <meta charset="UTF-8">
     <title>Agregar Cliente</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <style>
-        body {
-            background-color: #111;
-            color: #ffd700;
-            font-family: Arial, sans-serif;
-            padding: 20px;
-            margin: 0;
-        }
-        h2 {
-            text-align: center;
-            margin-bottom: 20px;
-        }
-        .volver-btn {
-            display: inline-block;
-            background-color: #ffd700;
-            color: #111;
-            padding: 10px 20px;
-            margin-bottom: 20px;
-            text-decoration: none;
-            border-radius: 5px;
-            font-weight: bold;
-        }
-        .volver-btn:hover {
-            background-color: #e5c100;
-        }
-        form {
-            max-width: 600px;
-            margin: auto;
-            background-color: #222;
-            padding: 20px;
-            border-radius: 8px;
-        }
-        label {
-            display: block;
-            margin-top: 12px;
-            font-weight: bold;
-        }
-        input, select {
-            width: 100%;
-            padding: 10px;
-            margin-top: 4px;
-            margin-bottom: 10px;
-            border: none;
-            border-radius: 4px;
-            font-size: 16px;
-        }
-        input[type="submit"] {
-            background-color: #ffd700;
-            color: #111;
-            font-weight: bold;
-            cursor: pointer;
-        }
-        input[type="submit"]:hover {
-            background-color: #e5c100;
-        }
-        .mensaje-error {
-            color: red;
-            font-weight: bold;
-            font-size: 14px;
-            display: none;
-            margin-top: -8px;
-            margin-bottom: 10px;
-        }
-        @media screen and (max-width: 480px) {
-            body {
-                padding: 10px;
-            }
-            form {
-                padding: 15px;
-            }
-            input, select {
-                font-size: 14px;
-            }
-        }
-    </style>
+    
 </head>
 <script src="fullscreen.js"></script>
 
 <body>
+<div class="contenedor">
 
 <a class="volver-btn" href="index.php">← Volver al Menú</a>
 
@@ -158,6 +87,7 @@ if ($rol == 'admin') {
 
     <input type="submit" value="Guardar Cliente">
 </form>
+</div>
 
 <script>
 function calcularEdad() {

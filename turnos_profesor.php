@@ -43,19 +43,10 @@ $turnos = $conexion->query("SELECT t.*, p.apellido, p.nombre FROM turnos_profeso
   <meta charset="UTF-8">
   <title>Turnos de Profesores</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <style>
-    body { background-color: #000; color: gold; font-family: Arial; text-align: center; padding: 20px; }
-    input, select, button { padding: 10px; margin: 5px; border: none; border-radius: 5px; }
-    button { background-color: gold; color: #000; font-weight: bold; cursor: pointer; }
-    table { width: 100%; margin-top: 30px; border-collapse: collapse; color: white; }
-    th, td { border: 1px solid gold; padding: 10px; }
-    th { background-color: #222; }
-    a.boton { color: gold; text-decoration: none; margin: 0 5px; font-weight: bold; }
-    a.boton:hover { text-decoration: underline; }
-  </style>
+  <link rel="stylesheet" href="estilo_unificado.css">
 </head>
 <body>
-
+<div class="contenedor">
   <h1>🕓 Turnos de Profesores</h1>
 
   <form method="POST">
@@ -97,6 +88,6 @@ $turnos = $conexion->query("SELECT t.*, p.apellido, p.nombre FROM turnos_profeso
       </tr>
     <?php endwhile; ?>
   </table>
-
+</div>
 </body>
 </html>

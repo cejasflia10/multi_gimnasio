@@ -7,6 +7,7 @@ if (!tiene_permiso('profesores')) {
     echo "<h2 style='color:red;'>⛔ Acceso denegado</h2>";
     exit;
 }
+
 $id = $_GET['id'] ?? 0;
 $id = intval($id);
 
@@ -23,75 +24,11 @@ $usuario = $result->fetch_assoc();
     <meta charset="UTF-8">
     <title>Editar Usuario</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <style>
-        body {
-            background-color: #111;
-            color: gold;
-            font-family: Arial, sans-serif;
-            margin: 0;
-            padding: 20px;
-        }
-        .container {
-            max-width: 550px;
-            margin: auto;
-            background: #222;
-            padding: 30px;
-            border-radius: 10px;
-            box-shadow: 0 0 10px #000;
-        }
-        h2 {
-            text-align: center;
-            margin-bottom: 20px;
-        }
-        label {
-            display: block;
-            margin-top: 15px;
-            font-weight: bold;
-        }
-        input, select {
-            width: 100%;
-            padding: 10px;
-            background-color: #111;
-            color: gold;
-            border: 1px solid gold;
-            border-radius: 5px;
-            margin-top: 5px;
-        }
-        .permisos-box {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 10px;
-            background: #111;
-            padding: 10px;
-            border-radius: 8px;
-            margin-top: 10px;
-        }
-        .permisos-box label {
-            font-weight: normal;
-        }
-        .btn-guardar, .btn-eliminar {
-            width: 100%;
-            padding: 12px;
-            font-weight: bold;
-            border: none;
-            margin-top: 20px;
-            cursor: pointer;
-            border-radius: 5px;
-        }
-        .btn-guardar {
-            background-color: gold;
-            color: #111;
-        }
-        .btn-eliminar {
-            background-color: red;
-            color: white;
-        }
-    </style>
+    <link rel="stylesheet" href="estilo_unificado.css">
 </head>
 <body>
-
-<div class="container">
-    <h2>Editar Usuario</h2>
+<div class="contenedor">
+    <h2>👤 Editar Usuario</h2>
 
     <form action="guardar_usuario.php" method="POST">
         <input type="hidden" name="id" value="<?= $usuario['id'] ?>">
@@ -130,14 +67,16 @@ $usuario = $result->fetch_assoc();
             ?>
         </div>
 
-        <button type="submit" class="btn-guardar">💾 Guardar Cambios</button>
+        <button type="submit">💾 Guardar Cambios</button>
     </form>
 
     <form action="eliminar_usuario.php" method="POST" onsubmit="return confirm('¿Seguro que deseas eliminar este usuario?')">
         <input type="hidden" name="id" value="<?= $usuario['id'] ?>">
-        <button type="submit" class="btn-eliminar">🗑️ Eliminar Usuario</button>
+        <button type="submit" style="background:red; color:white;">🗑️ Eliminar Usuario</button>
     </form>
-</div>
 
+    <br>
+    <a href="ver_usuarios.php" style="color:#ffd600;">⬅ Volver al listado</a>
+</div>
 </body>
 </html>

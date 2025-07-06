@@ -45,70 +45,14 @@ $alumnos_q = $conexion->query("
 <!DOCTYPE html>
 <html lang="es">
 <head>
+        <link rel="stylesheet" href="estilo_unificado.css">
     <meta charset="UTF-8">
     <title>Control Físico del Alumno</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <style>
-        body {
-            background-color: #111;
-            color: gold;
-            font-family: Arial, sans-serif;
-            padding: 20px;
-        }
-
-        h2, h3 {
-            text-align: center;
-        }
-
-        form {
-            max-width: 600px;
-            margin: auto;
-            background: #222;
-            padding: 20px;
-            border-radius: 10px;
-        }
-
-        label {
-            display: block;
-            margin-top: 10px;
-        }
-
-        input, select, textarea {
-            width: 100%;
-            padding: 8px;
-            margin-top: 5px;
-            background: #000;
-            color: gold;
-            border: 1px solid gold;
-            border-radius: 5px;
-        }
-
-        button {
-            margin-top: 20px;
-            background-color: gold;
-            color: black;
-            font-weight: bold;
-            padding: 10px;
-            border: none;
-            width: 100%;
-            border-radius: 5px;
-            cursor: pointer;
-        }
-
-        .card {
-            background: #222;
-            margin: 20px auto;
-            padding: 15px;
-            border-radius: 8px;
-            max-width: 700px;
-        }
-
-        .card h4 {
-            margin-bottom: 10px;
-        }
-    </style>
+    
 </head>
 <body>
+    <div class="contenedor">
     <h2>📋 Registrar Ficha Física</h2>
 
     <form method="POST">
@@ -172,6 +116,7 @@ $alumnos_q = $conexion->query("
                 Observaciones: <?= $f['observaciones'] ?>
             </div>
         <?php endwhile; ?>
+    </div>
     </div>
 </body>
 </html>

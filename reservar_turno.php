@@ -7,24 +7,38 @@ $cliente_id = $_SESSION['cliente_id'] ?? 0;
 $gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
 
 if ($cliente_id == 0 || $gimnasio_id == 0) {
-    echo "Acceso denegado.";
+    mostrar_error("⛔ Acceso denegado.");
     exit;
 }
 
-if ($_SERVER['REQUEST_METHOD'] == 'POST') {
-    $turno_id = intval($_POST['turno_id']);
+function mostrar_error($mensaje) {
+    echo "<!DOCTYPE html><html lang='es'><head>
+        <meta charset='UTF-8'>
+        <meta name='viewport' content='width=device-width, initial-scale=1.0'>
+        <title>Error</title>
+        <link rel='stylesheet' href='estilo_unificado.css'>
+    </head><body>
+    <div class='contenedor'>
+        <h2 style='color: red;'>$mensaje</h2>
+        <a href='ver_turnos_cliente.php' class='btn-principal'>Volver</a>
+    </div>
+    </body></html>";
+}
 
-    // Obtener información del turno
+if ($_SERVER['REQUEST_METHOD'] == 'POST') {
+    $turno_id = intval($_POST['turno_id'] ?? 0);
+
+    // Validar turno
     $turno = $conexion->query("SELECT * FROM turnos_profesor WHERE id = $turno_id AND gimnasio_id = $gimnasio_id")->fetch_assoc();
     if (!$turno) {
-        echo "Turno no encontrado.";
+        mostrar_error("❌ Turno no encontrado.");
         exit;
     }
 
     $dia = $turno['dia'];
     $hora_inicio = $turno['horario_inicio'];
 
-    // Verificar si ya tiene dos turnos reservados ese día
+    // Verificar reservas actuales del mismo día
     $reservas_dia = $conexion->query("
         SELECT t.horario_inicio FROM reservas r
         JOIN turnos_profesor t ON r.turno_id = t.id
@@ -37,12 +51,12 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     }
 
     if (in_array($hora_inicio, $horarios_reservados)) {
-        echo "Ya reservaste este turno.";
+        mostrar_error("⚠️ Ya reservaste este turno.");
         exit;
     }
 
     if (count($horarios_reservados) >= 2) {
-        echo "Ya tenés 2 turnos para ese día.";
+        mostrar_error("⚠️ Ya tenés 2 turnos para ese día.");
         exit;
     }
 
@@ -50,25 +64,24 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         $hora_ya = strtotime($horarios_reservados[0]);
         $hora_nueva = strtotime($hora_inicio);
         $diff = abs($hora_nueva - $hora_ya);
-
         if ($diff != 3600) {
-            echo "Solo se permiten 2 turnos seguidos. No se permiten separados.";
+            mostrar_error("⚠️ Solo se permiten 2 turnos seguidos. No se permiten separados.");
             exit;
         }
     }
 
-    // Verificar si tiene clases disponibles
+    // Validar membresía
     $membresia = $conexion->query("
         SELECT * FROM membresias 
         WHERE cliente_id = $cliente_id 
-          AND clases_disponibles > 0 
-          AND fecha_vencimiento >= CURDATE()
-          AND gimnasio_id = $gimnasio_id
+        AND clases_disponibles > 0 
+        AND fecha_vencimiento >= CURDATE()
+        AND gimnasio_id = $gimnasio_id
         ORDER BY fecha_inicio DESC LIMIT 1
     ")->fetch_assoc();
 
     if (!$membresia) {
-        echo "No tenés clases disponibles.";
+        mostrar_error("❌ No tenés clases disponibles.");
         exit;
     }
 

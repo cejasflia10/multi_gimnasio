@@ -22,48 +22,10 @@ while ($c = $clientes->fetch_assoc()) {
     <meta charset="UTF-8">
     <title>Agregar Membresía</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <style>
-        body {
-            background-color: #111;
-            color: gold;
-            font-family: Arial, sans-serif;
-            margin: 0;
-            padding: 0;
-        }
-        .container {
-            max-width: 650px;
-            margin: auto;
-            padding: 20px;
-        }
-        h1 {
-            text-align: center;
-            margin-top: 10px;
-        }
-        label {
-            display: block;
-            margin-top: 15px;
-            font-weight: bold;
-        }
-        input, select, button, datalist {
-            width: 100%;
-            padding: 10px;
-            margin-top: 5px;
-            border-radius: 6px;
-            border: none;
-            font-size: 16px;
-        }
-        input[readonly] {
-            background-color: #333;
-            color: gold;
-        }
-        button {
-            background-color: gold;
-            color: black;
-            font-weight: bold;
-            margin-top: 20px;
-        }
-    </style>
+    <link rel="stylesheet" href="estilo_unificado.css">
+
 </head>
+
 <script src="fullscreen.js">
 // Calcular automáticamente al cargar la página
 window.addEventListener('DOMContentLoaded', () => {
@@ -81,6 +43,7 @@ setInterval(actualizarTotalVisible, 500);
 </script>
 
 <body>
+<div class="contenedor">
 <?php if (isset($_GET['exito']) && $_GET['exito'] == 1): ?>
 <div style="background-color: #0f0; color: black; padding: 10px; text-align: center; font-weight: bold; border-radius: 6px;">
     ✅ Membresía cargada correctamente

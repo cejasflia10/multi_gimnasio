@@ -35,47 +35,14 @@ $precios = $conexion->query("SELECT * FROM precio_hora WHERE gimnasio_id = $gimn
 <!DOCTYPE html>
 <html lang="es">
 <head>
+        <link rel="stylesheet" href="estilo_unificado.css">
     <meta charset="UTF-8">
     <title>Configurar Precio por Hora</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <style>
-        body {
-            background: #000;
-            color: gold;
-            font-family: Arial, sans-serif;
-            padding: 20px;
-        }
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 20px;
-        }
-        th, td {
-            border: 1px solid gold;
-            padding: 8px;
-            text-align: center;
-        }
-        th {
-            background: #222;
-        }
-        input[type="number"] {
-            width: 80px;
-        }
-        input[type="submit"], button {
-            margin-top: 15px;
-            padding: 8px 16px;
-            font-size: 14px;
-            background-color: gold;
-            border: none;
-            cursor: pointer;
-        }
-        .eliminar {
-            background-color: red;
-            color: white;
-        }
-    </style>
-</head>
+    
 <body>
+    <div class="contenedor">
+
     <h1>Configurar Precios por Hora</h1>
     <form method="POST">
         <table>
@@ -114,5 +81,6 @@ $precios = $conexion->query("SELECT * FROM precio_hora WHERE gimnasio_id = $gimn
         Precio: <input type="number" step="0.01" name="nuevo_precio" required>
         <button type="submit">Agregar</button>
     </form>
+    </div>
 </body>
 </html>

@@ -22,110 +22,14 @@ $suplementos = $conexion->query("SELECT * FROM suplementos $condicion ORDER BY n
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Ver Suplementos</title>
-    <style>
-        body {
-            background-color: #000;
-            color: gold;
-            font-family: Arial, sans-serif;
-            margin: 0;
-            padding: 0;
-        }
-
-        .container {
-            padding: 30px 20px;
-            max-width: 1200px;
-            margin: 0 auto;
-        }
-
-        h1 {
-            text-align: center;
-            color: #ffc107;
-        }
-
-        form {
-            text-align: center;
-            margin-bottom: 20px;
-        }
-
-        select {
-            padding: 8px;
-            font-size: 16px;
-            border-radius: 5px;
-        }
-
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 20px;
-            overflow-x: auto;
-        }
-
-        th, td {
-            padding: 10px;
-            border-bottom: 1px solid #333;
-            text-align: center;
-        }
-
-        th {
-            color: #ffc107;
-        }
-
-        .btn {
-            padding: 5px 10px;
-            margin: 0 3px;
-            background: #ffc107;
-            color: #111;
-            border: none;
-            border-radius: 5px;
-            cursor: pointer;
-        }
-
-        @media screen and (max-width: 768px) {
-            .container {
-                padding: 15px 10px;
-            }
-
-            table, thead, tbody, th, td, tr {
-                display: block;
-                width: 100%;
-            }
-
-            thead tr {
-                display: none;
-            }
-
-            tr {
-                margin-bottom: 15px;
-                background-color: #222;
-                border-radius: 5px;
-                padding: 10px;
-            }
-
-            td {
-                text-align: left;
-                padding: 10px;
-                border: none;
-                border-bottom: 1px solid #333;
-            }
-
-            td:before {
-                content: attr(data-label);
-                font-weight: bold;
-                color: #ffc107;
-                display: block;
-                margin-bottom: 5px;
-            }
-        }
-    </style>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="estilo_unificado.css">
 </head>
-<script src="fullscreen.js"></script>
-
 <body>
+<div class="contenedor">
 
-<div class="container">
-    <h1>Suplementos</h1>
+    <h2>🥤 Suplementos</h2>
 
     <form method="GET">
         <label>Filtrar por tipo:</label>
@@ -159,14 +63,14 @@ $suplementos = $conexion->query("SELECT * FROM suplementos $condicion ORDER BY n
                 <td data-label="Venta">$<?= number_format($s['precio_venta'], 2) ?></td>
                 <td data-label="Stock"><?= $s['stock'] ?></td>
                 <td data-label="Acciones">
-                    <button class="btn" onclick="location.href='editar_suplemento.php?id=<?= $s['id'] ?>'">Editar</button>
-                    <button class="btn" onclick="if(confirm('¿Eliminar este suplemento?')) location.href='eliminar_suplemento.php?id=<?= $s['id'] ?>'">Eliminar</button>
+                    <a class="btn-editar" href="editar_suplemento.php?id=<?= $s['id'] ?>">✏️</a>
+                    <a class="btn-eliminar" href="eliminar_suplemento.php?id=<?= $s['id'] ?>" onclick="return confirm('¿Eliminar este suplemento?')">🗑️</a>
                 </td>
             </tr>
         <?php endwhile; ?>
         </tbody>
     </table>
-</div>
 
+</div>
 </body>
 </html>

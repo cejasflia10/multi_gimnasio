@@ -36,33 +36,12 @@ $planes = $conexion->query("SELECT * FROM planes WHERE gimnasio_id = $gimnasio_i
   <meta charset="UTF-8">
   <title>Renovar Membresía</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <style>
-    body { background-color: #000; color: gold; font-family: Arial, sans-serif; margin: 0; padding: 20px; }
-    .container { max-width: 600px; margin: auto; padding: 20px; }
-    label { display: block; margin-top: 10px; font-weight: bold; }
-    input, select, button {
-      width: 100%; padding: 10px; margin-top: 5px;
-      background-color: #111; color: gold; border: 1px solid gold; border-radius: 6px;
-    }
-    h1 { text-align: center; margin-bottom: 20px; }
-    button {
-      background-color: gold; color: black; font-weight: bold; cursor: pointer; margin-top: 20px;
-    }
-    .descuentos button {
-      width: 23%; margin: 5px 1%; background-color: #444;
-    }
-    .descuentos { text-align: center; margin-top: 10px; }
-    @media screen and (max-width: 600px) {
-      .container { padding: 10px; }
-      input, select, button { font-size: 15px; }
-      .descuentos button { width: 45%; margin: 5px 2%; }
-    }
-  </style>
+  <link rel="stylesheet" href="estilo_unificado.css">
+
 </head>
-<script src="fullscreen.js"></script>
 
 <body>
-<div class="container">
+<div class="contenedor">
 <h1>Renovar Membresía</h1>
 <form action="guardar_renovacion.php" method="POST">
   <input type="hidden" name="cliente_id" value="<?= $cliente['id'] ?>">
@@ -120,6 +99,7 @@ $planes = $conexion->query("SELECT * FROM planes WHERE gimnasio_id = $gimnasio_i
   <a href="ver_membresias.php"><button type="button">Cancelar</button></a>
 </form>
 </div>
+</div>
 
 <script>
 function cargarDatosPlan(planId) {
@@ -165,6 +145,6 @@ document.getElementById('fecha_inicio').addEventListener('change', () => {
   }
 });
 </script>
-
+</div>
 </body>
 </html>

@@ -31,14 +31,12 @@ while ($fila = $datos->fetch_assoc()) {
     <title>Gráfico de Evolución Física</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <style>
-        body { background: #000; color: gold; font-family: Arial, sans-serif; padding: 20px; }
-        h1 { text-align: center; }
-        canvas { background: #111; border: 1px solid gold; padding: 10px; border-radius: 10px; }
-    </style>
+    <link rel="stylesheet" href="estilo_unificado.css">
+
+
 </head>
 <body>
-
+<div class="contenedor">
 <h1>📊 Gráfico de Evolución Física</h1>
 
 <canvas id="grafico" width="400" height="200"></canvas>
@@ -86,6 +84,6 @@ const chart = new Chart(ctx, {
     }
 });
 </script>
-
+</div>
 </body>
 </html>

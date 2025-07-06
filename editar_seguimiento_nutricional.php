@@ -31,22 +31,13 @@ $seguimientos = $conexion->query("SELECT * FROM seguimiento_nutricional WHERE cl
   <meta charset="UTF-8">
   <title>Seguimiento Nutricional</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <style>
-    body { background-color: #000; color: gold; font-family: Arial, sans-serif; padding: 20px; }
-    .container { max-width: 800px; margin: auto; background: #222; padding: 20px; border-radius: 10px; }
-    h2 { text-align: center; }
-    input, textarea { width: 100%; padding: 10px; margin: 5px 0; background: #333; color: gold; border: 1px solid gold; border-radius: 5px; }
-    button, .volver { background: gold; color: black; padding: 10px; border: none; font-weight: bold; cursor: pointer; border-radius: 5px; margin-top: 10px; text-decoration: none; display: inline-block; text-align: center; }
-    table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-    th, td { border: 1px solid gold; padding: 8px; text-align: center; }
-    th { background-color: #333; }
-  </style>
+  <link rel="stylesheet" href="estilo_unificado.css">
 </head>
 <body>
-<div class="container">
+<div class="contenedor">
   <h2>🥗 Seguimiento Nutricional de <?= htmlspecialchars($cliente['nombre'] . ' ' . $cliente['apellido']) ?></h2>
 
-  <a class="volver" href="panel_cliente.php?id=<?= $cliente_id ?>">← Volver al Panel del Cliente</a>
+  <a class="btn-nueva" href="panel_cliente.php?id=<?= $cliente_id ?>">← Volver al Panel del Cliente</a>
 
   <form method="POST">
     <label>Fecha:</label>
@@ -61,21 +52,32 @@ $seguimientos = $conexion->query("SELECT * FROM seguimiento_nutricional WHERE cl
     <label>Observaciones:</label>
     <textarea name="observaciones" rows="3"></textarea>
 
-    <button type="submit">Guardar Seguimiento</button>
+    <button type="submit">💾 Guardar Seguimiento</button>
   </form>
 
-  <h3>Historial de Seguimientos</h3>
-  <table>
-    <tr><th>Fecha</th><th>Peso</th><th>Recomendaciones</th><th>Observaciones</th></tr>
-    <?php while ($s = $seguimientos->fetch_assoc()): ?>
-      <tr>
-        <td><?= $s['fecha'] ?></td>
-        <td><?= $s['peso'] ?> kg</td>
-        <td><?= htmlspecialchars($s['recomendaciones']) ?></td>
-        <td><?= htmlspecialchars($s['observaciones']) ?></td>
-      </tr>
-    <?php endwhile; ?>
-  </table>
+  <h3>📊 Historial de Seguimientos</h3>
+  <div style="overflow-x:auto;">
+    <table>
+      <thead>
+        <tr>
+          <th>Fecha</th>
+          <th>Peso</th>
+          <th>Recomendaciones</th>
+          <th>Observaciones</th>
+        </tr>
+      </thead>
+      <tbody>
+        <?php while ($s = $seguimientos->fetch_assoc()): ?>
+          <tr>
+            <td><?= $s['fecha'] ?></td>
+            <td><?= $s['peso'] ?> kg</td>
+            <td><?= htmlspecialchars($s['recomendaciones']) ?></td>
+            <td><?= htmlspecialchars($s['observaciones']) ?></td>
+          </tr>
+        <?php endwhile; ?>
+      </tbody>
+    </table>
+  </div>
 </div>
 </body>
 </html>

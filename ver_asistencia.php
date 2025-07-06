@@ -15,59 +15,13 @@ $rol = $_SESSION['rol'] ?? '';
     <meta charset="UTF-8">
     <title>Asistencias Registradas</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <style>
-        body {
-            background-color: #111;
-            color: gold;
-            font-family: Arial, sans-serif;
-            padding: 20px;
-        }
-        h1 {
-            text-align: center;
-            margin-bottom: 20px;
-        }
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            background-color: #222;
-        }
-        th, td {
-            padding: 12px;
-            text-align: left;
-            border-bottom: 1px solid gold;
-        }
-        th {
-            background-color: #333;
-            color: gold;
-        }
-        tr:hover {
-            background-color: #444;
-        }
-        @media (max-width: 600px) {
-            table, thead, tbody, th, td, tr {
-                display: block;
-            }
-            th {
-                display: none;
-            }
-            td {
-                border: none;
-                padding: 10px;
-                position: relative;
-            }
-            td::before {
-                content: attr(data-label);
-                font-weight: bold;
-                color: gold;
-                display: block;
-            }
-        }
-    </style>
+    <link rel="stylesheet" href="estilo_unificado.css">
 </head>
 <script src="fullscreen.js"></script>
-
 <body>
-    <h1>Asistencias Registradas</h1>
+
+<div class="contenedor">
+    <h1>📋 Asistencias Registradas</h1>
 
     <table>
         <thead>
@@ -102,5 +56,7 @@ $rol = $_SESSION['rol'] ?? '';
             ?>
         </tbody>
     </table>
+</div>
+
 </body>
 </html>

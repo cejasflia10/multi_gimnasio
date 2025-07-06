@@ -1,68 +1,53 @@
 <?php
-if (session_status() === PHP_SESSION_NONE) {
-    session_start();
-}
+if (session_status() === PHP_SESSION_NONE) session_start();
 include 'conexion.php';
+include 'menu_horizontal.php';
 
 $cliente_id = $_GET['id'] ?? 0;
 if (!$cliente_id) {
-    die("ID de cliente no proporcionado.");
+    echo "<div class='contenedor'><p class='error'>ID de cliente no proporcionado.</p></div>";
+    exit;
 }
 
 $query = "SELECT * FROM fichas_habitos WHERE cliente_id = $cliente_id ORDER BY fecha DESC LIMIT 1";
 $resultado = $conexion->query($query);
 
 if ($resultado->num_rows === 0) {
-    echo "<p style='color:gold; text-align:center;'>No hay ficha registrada para este cliente.</p>";
+    echo "<div class='contenedor'><p class='info'>No hay ficha registrada para este cliente.</p></div>";
     exit;
 }
 
 $ficha = $resultado->fetch_assoc();
 ?>
+
 <!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>Ficha del Cliente</title>
+    <title>Ficha de Hábitos</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <style>
-        body {
-            background-color: #000;
-            color: gold;
-            font-family: Arial, sans-serif;
-            padding: 20px;
-        }
-        h2 {
-            text-align: center;
-        }
-        .ficha {
-            max-width: 700px;
-            margin: auto;
-            background-color: #111;
-            padding: 20px;
-            border-radius: 8px;
-        }
-        .campo {
-            margin-bottom: 15px;
-        }
-        .campo label {
-            font-weight: bold;
-        }
-        .campo span {
-            display: block;
-            margin-top: 5px;
-        }
-    </style>
+    <link rel="stylesheet" href="estilo_unificado.css">
 </head>
 <body>
-    <h2>Ficha de Hábitos - Cliente ID: <?php echo $cliente_id; ?></h2>
-    <div class="ficha">
+
+<div class="contenedor">
+    <div class="tarjeta">
+        <h2 class="titulo-seccion">📄 Ficha de Hábitos - Cliente #<?= $cliente_id ?></h2>
+
         <?php foreach ($ficha as $campo => $valor): ?>
-            <div class="campo">
-                <label><?php echo ucfirst(str_replace('_', ' ', $campo)); ?>:</label>
-                <span><?php echo htmlspecialchars($valor); ?></span>
-            </div>
+            <?php if (!in_array($campo, ['id', 'cliente_id'])): ?>
+                <div class="grupo-campo">
+                    <label class="etiqueta"><?= ucfirst(str_replace('_', ' ', $campo)) ?>:</label>
+                    <div class="valor"><?= nl2br(htmlspecialchars($valor)) ?></div>
+                </div>
+            <?php endif; ?>
         <?php endforeach; ?>
+
+        <div class="centrado">
+            <a href="ver_clientes.php" class="boton volver">← Volver</a>
+        </div>
     </div>
+</div>
+
 </body>
 </html>

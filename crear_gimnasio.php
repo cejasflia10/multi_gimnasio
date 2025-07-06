@@ -42,60 +42,14 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
 <!DOCTYPE html>
 <html lang="es">
 <head>
+      <link rel="stylesheet" href="estilo_unificado.css">
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Agregar Gimnasio</title>
-  <style>
-    body {
-      background-color: #111;
-      color: #ffd700;
-      font-family: Arial, sans-serif;
-      margin: 0;
-      padding: 20px;
-    }
-    h2 {
-      text-align: center;
-      margin-bottom: 20px;
-    }
-    form {
-      background-color: #222;
-      padding: 20px;
-      border-radius: 12px;
-      max-width: 600px;
-      margin: auto;
-    }
-    label {
-      display: block;
-      margin-top: 10px;
-    }
-    input[type="text"],
-    input[type="email"],
-    input[type="number"] {
-      width: 100%;
-      padding: 8px;
-      border: none;
-      border-radius: 6px;
-      margin-top: 5px;
-      background-color: #333;
-      color: #ffd700;
-    }
-    input[type="submit"] {
-      margin-top: 20px;
-      background-color: #ffd700;
-      color: #111;
-      padding: 10px 20px;
-      border: none;
-      border-radius: 6px;
-      cursor: pointer;
-    }
-    .mensaje {
-      text-align: center;
-      margin-top: 15px;
-      color: #0f0;
-    }
-  </style>
+  
 </head>
 <body>
+  <div class="contenedor">
   <h2>Agregar Nuevo Gimnasio</h2>
   <form method="POST" action="">
     <label>Nombre del Gimnasio:</label>
@@ -124,5 +78,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
   </form>
 
   <?php if (!empty($mensaje)) echo "<p class='mensaje'>$mensaje</p>"; ?>
+</div>
 </body>
+
 </html>

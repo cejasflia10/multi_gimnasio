@@ -49,56 +49,11 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
     <meta charset="UTF-8">
     <title>Registro Online</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <style>
-        body {
-            background-color: #111;
-            color: gold;
-            font-family: Arial, sans-serif;
-            padding: 20px;
-        }
-        h2 {
-            text-align: center;
-            color: gold;
-        }
-        form {
-            max-width: 600px;
-            margin: auto;
-        }
-        label {
-            display: block;
-            margin-top: 15px;
-        }
-        input, select {
-            width: 100%;
-            padding: 10px;
-            background-color: #222;
-            border: 1px solid gold;
-            color: gold;
-        }
-        button {
-            margin-top: 20px;
-            padding: 12px;
-            width: 100%;
-            background-color: gold;
-            color: black;
-            font-weight: bold;
-            border: none;
-            cursor: pointer;
-        }
-        .mensaje {
-            text-align: center;
-            font-weight: bold;
-            margin-top: 20px;
-        }
-        .error {
-            color: red;
-        }
-        .exito {
-            color: lightgreen;
-        }
-    </style>
+    <link rel="stylesheet" href="estilo_unificado.css">
+
 </head>
 <body>
+<div class="contenedor">
     <h2>Registro de Cliente Online</h2>
 
     <?php if ($error): ?>
@@ -145,5 +100,6 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
 
         <button type="submit">Registrar Cliente</button>
     </form>
+</div>
 </body>
 </html>

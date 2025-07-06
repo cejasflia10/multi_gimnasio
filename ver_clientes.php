@@ -100,7 +100,7 @@ $resultado = $conexion->query("SELECT * FROM clientes WHERE gimnasio_id = $gimna
                     <a href='eliminar_cliente.php?id={$fila['id']}' class='btn-qr' onclick='return confirm(\"¿Seguro que querés eliminar este cliente?\")'>🗑️ Eliminar</a>
                   </td>";
             echo "</tr>";
-            $n;
+            $n++; // ✅ Corrección aquí
         }
         ?>
     </tbody>

@@ -48,22 +48,12 @@ $resultado = $stmt->get_result();
 <!DOCTYPE html>
 <html lang="es">
 <head>
+    <link rel="stylesheet" href="estilo_unificado.css">
     <meta charset="UTF-8">
     <title>Historial de Asistencias con Filtro</title>
-    <style>
-        body { background-color: #111; color: #fff; font-family: Arial, sans-serif; padding: 30px; }
-        table { width: 100%; border-collapse: collapse; background-color: #222; }
-        th, td { border: 1px solid #444; padding: 10px; text-align: left; }
-        th { background-color: #333; color: #ffc107; }
-        h2, label { color: #ffc107; }
-        input[type="date"], input[type="submit"], a.exportar {
-            padding: 8px; margin-top: 10px; font-size: 14px;
-            background-color: #ffc107; border: none; color: #000;
-            text-decoration: none;
-        }
-    </style>
 </head>
 <body>
+    <div class="contenedor">
     <h2>Historial de Asistencias</h2>
     <form method="get">
         <label for="fecha">Seleccionar fecha:</label>
@@ -92,5 +82,6 @@ $resultado = $stmt->get_result();
             <?php } ?>
         </tbody>
     </table>
+</div>
 </body>
 </html>

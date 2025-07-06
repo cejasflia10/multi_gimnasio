@@ -19,7 +19,7 @@ if (!$cliente) {
 
 $es_admin = ($_SESSION['rol'] ?? '') === 'admin';
 
-// Cargar disciplinas filtradas por gimnasio del cliente
+// Cargar disciplinas por gimnasio
 $gimnasio_id_cliente = $cliente['gimnasio_id'] ?? 0;
 $disciplinas = mysqli_query($conexion, "SELECT * FROM disciplinas WHERE gimnasio_id = $gimnasio_id_cliente");
 
@@ -33,62 +33,16 @@ if ($es_admin) {
 <head>
     <meta charset="UTF-8">
     <title>Editar Cliente</title>
-    <style>
-        body {
-            background-color: #111;
-            color: #f1c40f;
-            font-family: Arial, sans-serif;
-            margin: 0;
-            padding: 0;
-        }
-        .container {
-            margin: 80px auto;
-            max-width: 700px;
-            padding: 20px;
-            background-color: #1c1c1c;
-            border-radius: 10px;
-            box-shadow: 0 0 10px #000;
-        }
-        h2 {
-            text-align: center;
-            margin-bottom: 20px;
-            color: #f1c40f;
-        }
-        input, select {
-            width: 100%;
-            padding: 10px;
-            margin-top: 6px;
-            margin-bottom: 16px;
-            background-color: #222;
-            color: #fff;
-            border: 1px solid #f1c40f;
-            border-radius: 4px;
-        }
-        label {
-            font-weight: bold;
-        }
-        button {
-            background-color: #f1c40f;
-            color: #111;
-            border: none;
-            padding: 10px 20px;
-            cursor: pointer;
-            font-weight: bold;
-            border-radius: 5px;
-            width: 100%;
-        }
-        button:hover {
-            background-color: #d4ac0d;
-        }
-    </style>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="estilo_unificado.css">
 </head>
-<script src="fullscreen.js"></script>
-
 <body>
-<div class="container">
-    <h2>Editar Cliente</h2>
+<div class="contenedor">
+    <h2>✏️ Editar Cliente</h2>
+
     <form action="guardar_edicion_cliente.php" method="POST">
         <input type="hidden" name="id" value="<?= $cliente['id']; ?>">
+
         <label>Apellido:</label>
         <input type="text" name="apellido" value="<?= htmlspecialchars($cliente['apellido']); ?>" required>
 
@@ -133,6 +87,8 @@ if ($es_admin) {
         <?php endif; ?>
 
         <button type="submit">Guardar Cambios</button>
+        <br><br>
+        <a href="ver_clientes.php" style="color:#ffd600;">⬅ Volver al listado</a>
     </form>
 </div>
 </body>

@@ -21,93 +21,12 @@ $productos = $conexion->query("
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Ver Productos</title>
-  <style>
-    body {
-      background-color: #000;
-      color: gold;
-      font-family: Arial, sans-serif;
-      margin: 0;
-      padding: 0;
-    }
-
-    .container {
-      max-width: 1200px;
-      margin: 0 auto;
-      padding: 30px 20px;
-    }
-
-    h2 {
-      color: #ffc107;
-      text-align: center;
-      margin-bottom: 20px;
-    }
-
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      margin-top: 20px;
-    }
-
-    th, td {
-      padding: 10px;
-      border-bottom: 1px solid #444;
-      text-align: center;
-    }
-
-    th {
-      background-color: #111;
-      color: #ffc107;
-    }
-
-    .btn {
-      padding: 5px 10px;
-      background: #ffc107;
-      color: #000;
-      border: none;
-      border-radius: 5px;
-      text-decoration: none;
-      font-weight: bold;
-      cursor: pointer;
-    }
-
-    @media screen and (max-width: 768px) {
-      table, thead, tbody, th, td, tr {
-        display: block;
-      }
-
-      thead tr {
-        display: none;
-      }
-
-      tr {
-        margin-bottom: 15px;
-        background-color: #111;
-        padding: 10px;
-        border-radius: 5px;
-      }
-
-      td {
-        text-align: left;
-        padding: 10px;
-        border-bottom: 1px solid #333;
-      }
-
-      td:before {
-        content: attr(data-label);
-        font-weight: bold;
-        display: block;
-        color: #ffc107;
-        margin-bottom: 5px;
-      }
-    }
-  </style>
+  <link rel="stylesheet" href="estilo_unificado.css">
 </head>
-<script src="fullscreen.js"></script>
-
 <body>
 
-<div class="container">
-  <h2>Listado General de Productos</h2>
+<div class="contenedor">
+  <h2>📦 Listado General de Productos</h2>
 
   <table>
     <thead>

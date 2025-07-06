@@ -14,50 +14,15 @@ $gimnasios_resultado = $conexion->query("SELECT id, nombre FROM gimnasios");
 <!DOCTYPE html>
 <html lang="es">
 <head>
+    <link rel="stylesheet" href="estilo_unificado.css">
+
     <meta charset="UTF-8">
     <title>Agregar Usuario</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <style>
-        body {
-            background-color: #111;
-            color: gold;
-            font-family: Arial, sans-serif;
-            padding: 20px;
-        }
-        label {
-            display: block;
-            margin-top: 10px;
-        }
-        input, select {
-            width: 100%;
-            padding: 10px;
-            margin-top: 5px;
-            margin-bottom: 15px;
-            font-size: 16px;
-        }
-        .permisos-box {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 10px;
-            background: #222;
-            padding: 10px;
-            border-radius: 8px;
-            margin-bottom: 20px;
-        }
-        .permisos-box label {
-            margin: 0;
-        }
-        button {
-            background-color: gold;
-            color: black;
-            font-weight: bold;
-            padding: 10px 20px;
-            border: none;
-            cursor: pointer;
-        }
-    </style>
+    
 </head>
 <body>
+<div class="contenedor">
 
 <h2>Agregar Nuevo Usuario</h2>
 
@@ -95,6 +60,7 @@ $gimnasios_resultado = $conexion->query("SELECT id, nombre FROM gimnasios");
 
     <button type="submit">Crear Usuario</button>
 </form>
+    </div>
 
 </body>
 </html>

@@ -21,52 +21,38 @@ $progresos = $conexion->query("
     <meta charset="UTF-8">
     <title>Mi Progreso Físico</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <style>
-        body { background-color: #000; color: gold; font-family: Arial, sans-serif; padding: 20px; }
-        h1 { text-align: center; }
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 20px;
-        }
-        th, td {
-            border: 1px solid gold;
-            padding: 10px;
-            text-align: center;
-        }
-        th { background-color: #222; }
-    </style>
+    <link rel="stylesheet" href="estilo_unificado.css">
 </head>
 <body>
+<div class="contenedor">
+    <h1>📈 Mi Progreso Físico</h1>
 
-<h1>📈 Mi Progreso Físico</h1>
-
-<?php if ($progresos->num_rows > 0): ?>
-<table>
-    <thead>
-        <tr>
-            <th>Fecha</th>
-            <th>Peso</th>
-            <th>Altura</th>
-            <th>Profesor</th>
-            <th>Observaciones</th>
-        </tr>
-    </thead>
-    <tbody>
-        <?php while ($p = $progresos->fetch_assoc()): ?>
-        <tr>
-            <td><?= $p['fecha'] ?></td>
-            <td><?= $p['peso'] ?> kg</td>
-            <td><?= $p['altura'] ?> cm</td>
-            <td><?= $p['profesor'] ?></td>
-            <td><?= $p['observaciones'] ?></td>
-        </tr>
-        <?php endwhile; ?>
-    </tbody>
-</table>
-<?php else: ?>
-    <p style="text-align: center;">Todavía no hay registros de progreso físico.</p>
-<?php endif; ?>
-
+    <?php if ($progresos->num_rows > 0): ?>
+    <table>
+        <thead>
+            <tr>
+                <th>Fecha</th>
+                <th>Peso</th>
+                <th>Altura</th>
+                <th>Profesor</th>
+                <th>Observaciones</th>
+            </tr>
+        </thead>
+        <tbody>
+            <?php while ($p = $progresos->fetch_assoc()): ?>
+            <tr>
+                <td><?= $p['fecha'] ?></td>
+                <td><?= $p['peso'] ?> kg</td>
+                <td><?= $p['altura'] ?> cm</td>
+                <td><?= $p['profesor'] ?></td>
+                <td><?= $p['observaciones'] ?></td>
+            </tr>
+            <?php endwhile; ?>
+        </tbody>
+    </table>
+    <?php else: ?>
+        <p style="text-align: center;">Todavía no hay registros de progreso físico.</p>
+    <?php endif; ?>
+</div>
 </body>
 </html>

@@ -18,72 +18,16 @@ $resultado = $stmt->get_result();
 <html lang="es">
     
 <head>
+    <link rel="stylesheet" href="estilo_unificado.css">
+
     <meta charset="UTF-8">
     <title>Clientes</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            background-color: #111;
-            color: #FFD700;
-            margin: 0;
-            padding-top: 60px;
-        }
-        .contenido {
-            padding: 20px;
-        }
-        h1 {
-            text-align: center;
-            color: #FFD700;
-        }
-        .boton {
-            display: inline-block;
-            margin: 10px 5px;
-            padding: 10px 20px;
-            background-color: #FFD700;
-            color: #111;
-            text-decoration: none;
-            border-radius: 5px;
-            font-weight: bold;
-        }
-        .tabla-responsive {
-            overflow-x: auto;
-        }
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            background-color: #222;
-            color: #FFD700;
-        }
-        th, td {
-            padding: 10px;
-            border: 1px solid #FFD700;
-            text-align: center;
-        }
-        th {
-            background-color: #333;
-        }
-        .acciones a {
-            margin: 0 5px;
-            color: #FFD700;
-            text-decoration: none;
-            font-weight: bold;
-        }
-        .acciones a:hover {
-            color: #fff;
-        }
-        @media (max-width: 768px) {
-            th, td {
-                font-size: 12px;
-                padding: 6px;
-            }
-        }
-    </style>
+    
 </head>
-<script src="fullscreen.js"></script>
 
 <body>
-    <div class="contenido">
+<div class="contenedor">
         <h1>Clientes del Gimnasio</h1>
         <a href="agregar_cliente.php" class="boton">➕ Agregar Cliente</a>
         <a href="index.php" class="boton">🏠 Volver al Panel</a>
@@ -126,6 +70,8 @@ $resultado = $stmt->get_result();
             </tbody>
         </table>
         </div>
+</div>
+
     </div>
 </body>
 </html>

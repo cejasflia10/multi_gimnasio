@@ -36,20 +36,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <head>
     <meta charset="UTF-8">
     <title>Pagar Horas Profesor</title>
-    <style>
-        body { background-color: #111; color: #fff; font-family: Arial, sans-serif; padding: 30px; }
-        label { color: #ffc107; font-weight: bold; }
-        input, select { margin: 10px 0; padding: 8px; width: 100%; max-width: 400px; }
-        input[type="submit"] {
-            background-color: #ffc107;
-            color: #000;
-            border: none;
-            font-weight: bold;
-            cursor: pointer;
-        }
-    </style>
+    <link rel="stylesheet" href="estilo_unificado.css">
+
 </head>
 <body>
+    <div class="contenedor">
     <h2>💵 Registrar Pago a Profesor</h2>
     <form method="post">
         <label>ID Profesor:</label>
@@ -66,5 +57,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         <input type="submit" value="Registrar Pago">
     </form>
+</div>
 </body>
 </html>

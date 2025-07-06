@@ -27,21 +27,11 @@ if ($res && $row = $res->fetch_assoc()) {
 <!DOCTYPE html>
 <html lang="es">
 <head>
+    <link rel="stylesheet" href="estilo_unificado.css">
+
     <meta charset="UTF-8">
     <title>Configurar Alias</title>
-    <style>
-        body { background-color: black; color: gold; font-family: Arial, sans-serif; padding: 30px; }
-        .contenedor { max-width: 500px; margin: auto; background: #111; padding: 20px; border-radius: 10px; border: 1px solid gold; }
-        input[type="text"] {
-            width: 100%; padding: 10px; margin-top: 10px;
-            border-radius: 5px; border: 1px solid #ccc;
-        }
-        button {
-            background: gold; color: black; padding: 10px 20px;
-            border: none; margin-top: 15px; font-weight: bold;
-            border-radius: 5px;
-        }
-    </style>
+    
 </head>
 <body>
     <div class="contenedor">

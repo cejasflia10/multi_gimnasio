@@ -14,20 +14,14 @@ $gimnasios = $conexion->query("SELECT * FROM gimnasios ORDER BY nombre ASC");
 <!DOCTYPE html>
 <html lang="es">
 <head>
+        <link rel="stylesheet" href="estilo_unificado.css">
     <meta charset="UTF-8">
     <title>Configurar Accesos por Gimnasio</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <style>
-        body { background-color: #111; color: gold; font-family: Arial, sans-serif; padding: 20px; }
-        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-        th, td { padding: 10px; border: 1px solid #444; text-align: center; }
-        th { background-color: #222; }
-        tr:nth-child(even) { background-color: #1a1a1a; }
-        .boton { padding: 6px 10px; background: gold; color: black; text-decoration: none; border-radius: 5px; font-weight: bold; }
-        .boton:hover { background: #ffd700; }
-    </style>
+    
 </head>
 <body>
+<div class="contenedor">
 
     <h1>⚙️ Configurar Accesos por Gimnasio</h1>
 
@@ -55,6 +49,7 @@ $gimnasios = $conexion->query("SELECT * FROM gimnasios ORDER BY nombre ASC");
         <?php endwhile; ?>
         </tbody>
     </table>
+</div>
 
 </body>
 </html>

@@ -23,16 +23,22 @@ $categoria = $resultado->fetch_assoc();
 <head>
     <meta charset="UTF-8">
     <title>Editar Categoría</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="estilo_unificado.css">
 </head>
-<body style="background-color: #111; color: gold; font-family: sans-serif; padding: 20px;">
+<body>
+<div class="contenedor">
     <h2>✏️ Editar Categoría</h2>
 
     <form method="POST" action="guardar_edicion_categoria.php">
         <input type="hidden" name="id" value="<?= $categoria['id'] ?>">
-        <label for="nombre">Nombre:</label><br>
-        <input type="text" name="nombre" id="nombre" value="<?= htmlspecialchars($categoria['nombre']) ?>" required style="padding:10px; width: 300px;"><br><br>
-        <button type="submit" style="padding:10px 20px;">Guardar Cambios</button>
-        <a href="ver_categorias.php" style="margin-left: 20px; color: white;">Cancelar</a>
+
+        <label for="nombre">Nombre:</label>
+        <input type="text" name="nombre" id="nombre" value="<?= htmlspecialchars($categoria['nombre']) ?>" required>
+
+        <button type="submit">Guardar Cambios</button>
+        <a href="ver_categorias.php" style="display:inline-block; margin-top:10px; color:#ffd600;">⬅ Cancelar</a>
     </form>
+</div>
 </body>
 </html>

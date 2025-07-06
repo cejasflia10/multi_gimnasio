@@ -78,71 +78,11 @@ $clientes = $conexion->query("
 <head>
     <meta charset="UTF-8">
     <title>Registrar Asistencia</title>
-    <style>
-        body {
-            background-color: #111;
-            color: #f1f1f1;
-            font-family: Arial, sans-serif;
-            margin: 0;
-            padding: 0;
-        }
-        .logo {
-            text-align: center;
-            margin-top: 10px;
-        }
-        .input-container {
-            text-align: center;
-            margin-top: 20px;
-        }
-        .input-container input {
-            font-size: 24px;
-            padding: 10px;
-            width: 300px;
-            text-align: center;
-        }
-        .advertencia {
-            background-color: #ff4444;
-            color: white;
-            font-weight: bold;
-            padding: 10px;
-            margin: 20px auto;
-            text-align: center;
-            width: 80%;
-            border-radius: 8px;
-            display: <?= $advertencia ? 'block' : 'none' ?>;
-        }
-        .secciones {
-            display: flex;
-            justify-content: space-around;
-            margin: 30px 20px;
-        }
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 15px;
-        }
-        th, td {
-            padding: 10px;
-            text-align: center;
-            border: 1px solid #444;
-        }
-        th {
-            background-color: #333;
-            color: #ffc107;
-        }
-        .tabla-box {
-            width: 45%;
-            background-color: #222;
-            border-radius: 8px;
-            padding: 10px;
-        }
-        h2 {
-            color: #ffc107;
-            text-align: center;
-        }
-    </style>
+    <link rel="stylesheet" href="estilo_unificado.css">
+
 </head>
 <body>
+    <div class="contenedor">
     <div class="logo">
         <img src="logo.png" alt="Logo del Gimnasio" height="60">
     </div>
@@ -197,5 +137,6 @@ $clientes = $conexion->query("
         });
     </script>
     <?php endif; ?>
+</div>
 </body>
 </html>

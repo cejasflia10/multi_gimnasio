@@ -5,36 +5,29 @@ include 'menu_horizontal.php';
 if (session_status() === PHP_SESSION_NONE) session_start();
 $gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
 
-// Consulta a la tabla suplementos
 $suplementos = $conexion->query("
     SELECT id, nombre, precio_venta AS venta, stock FROM suplementos WHERE gimnasio_id = $gimnasio_id
 ");
 ?>
 
 <!DOCTYPE html>
-
 <html lang="es">
 <head>
     <meta charset="UTF-8">
     <title>Venta de Suplementos</title>
-    <style>
-        body { background-color: #000; color: gold; font-family: sans-serif; padding: 20px; }
-        input, select, button { padding: 6px; margin: 4px; }
-        table { width: 100%; margin-top: 20px; border-collapse: collapse; }
-        th, td { padding: 10px; border: 1px solid #555; text-align: center; }
-    </style>
+    <link rel="stylesheet" href="estilo_unificado.css">
 </head>
 <body>
+<div class="contenedor">
 <h2>🥤 Venta de Suplementos</h2>
 
 <form method="POST" action="formas_pago.php" onsubmit="return prepararTotal()">
     <label>Cliente:</label>
     <input type="text" id="cliente_nombre" name="cliente_nombre" list="sugerencias" placeholder="Apellido o DNI" autocomplete="off" required>
-<datalist id="sugerencias"></datalist>
+    <datalist id="sugerencias"></datalist>
 
     <label><input type="checkbox" name="cliente_temporal" value="1"> Cliente temporal</label>
     <br><br>
-
 
     <label>Suplemento:</label>
     <select id="selector-producto">
@@ -66,24 +59,24 @@ $suplementos = $conexion->query("
     <br><br>
     <button type="submit">Siguiente → Formas de Pago</button>
 </form>
+</div>
 
-    <script>
-    document.getElementById("cliente_nombre").addEventListener("input", function() {
-        let valor = this.value;
-        fetch("buscar_clientes.php?q=" + encodeURIComponent(valor))
-            .then(res => res.json())
-            .then(data => {
-                const lista = document.getElementById("sugerencias");
-                lista.innerHTML = "";
-                data.forEach(c => {
-                    let opt = document.createElement("option");
-                    opt.value = c;
-                    lista.appendChild(opt);
-                });
-            });
-    });
-    </script>
 <script>
+document.getElementById("cliente_nombre").addEventListener("input", function() {
+    let valor = this.value;
+    fetch("buscar_clientes.php?q=" + encodeURIComponent(valor))
+        .then(res => res.json())
+        .then(data => {
+            const lista = document.getElementById("sugerencias");
+            lista.innerHTML = "";
+            data.forEach(c => {
+                let opt = document.createElement("option");
+                opt.value = c;
+                lista.appendChild(opt);
+            });
+        });
+});
+
 function agregarProducto() {
     const selector = document.getElementById("selector-producto");
     const selected = selector.options[selector.selectedIndex];
@@ -124,7 +117,6 @@ function prepararTotal() {
     actualizarTotal();
     return true;
 }
-
 </script>
 </body>
 </html>

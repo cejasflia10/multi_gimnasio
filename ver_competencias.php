@@ -19,9 +19,8 @@ $competencias = $conexion->query("
     <meta charset="UTF-8">
     <title>Competencias del Alumno</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="stylesheet" href="estilo_unificado.css">
     <style>
-        body { background: #000; color: gold; font-family: Arial, sans-serif; padding: 20px; }
-        h2 { text-align: center; margin-bottom: 20px; }
         table {
             width: 100%; border-collapse: collapse; margin-top: 20px;
             background-color: #111; color: gold;
@@ -56,7 +55,7 @@ $competencias = $conexion->query("
                 <td><?= $fila['nombre_competencia'] ?></td>
                 <td><?= $fila['lugar'] ?></td>
                 <td><?= $fila['resultado'] ?></td>
-                <td><?= $fila['observaciones'] ?></td>
+                <td><?= nl2br(htmlspecialchars($fila['observaciones'])) ?></td>
             </tr>
         <?php endwhile; ?>
     </tbody>

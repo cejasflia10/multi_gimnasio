@@ -27,9 +27,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $stmt->bind_param("ssddii", $nombre, $detalle, $precio_compra, $precio_venta, $id, $gimnasio_id);
 
     if ($stmt->execute()) {
-        echo "<p style='color:lime'>✅ Producto actualizado correctamente.</p>";
+        echo "<p style='color:lime; text-align:center;'>✅ Producto actualizado correctamente.</p>";
     } else {
-        echo "<p style='color:red'>❌ Error: " . $stmt->error . "</p>";
+        echo "<p style='color:red; text-align:center;'>❌ Error: " . $stmt->error . "</p>";
     }
     exit();
 }
@@ -50,64 +50,18 @@ if (!$producto) {
 <head>
     <meta charset="UTF-8">
     <title>Editar Producto</title>
-    <style>
-        body {
-            background: #000;
-            color: gold;
-            font-family: Arial, sans-serif;
-            padding: 30px;
-        }
-
-        h2 {
-            color: #ffc107;
-        }
-
-        form {
-            max-width: 500px;
-            margin: auto;
-            background-color: #111;
-            padding: 20px;
-            border-radius: 10px;
-        }
-
-        label {
-            display: block;
-            margin-top: 15px;
-            color: #ffc107;
-        }
-
-        input[type="text"],
-        input[type="number"] {
-            width: 100%;
-            padding: 10px;
-            margin-top: 5px;
-            border-radius: 5px;
-            border: none;
-        }
-
-        input[type="submit"] {
-            margin-top: 20px;
-            padding: 10px;
-            width: 100%;
-            background-color: #ffc107;
-            color: #000;
-            border: none;
-            border-radius: 5px;
-            font-weight: bold;
-            cursor: pointer;
-        }
-    </style>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="estilo_unificado.css">
 </head>
-<script src="fullscreen.js"></script>
-
 <body>
-    <h2>Editar Producto (<?= ucfirst($tipo) ?>)</h2>
+<div class="contenedor">
+    <h2>✏️ Editar Producto (<?= ucfirst($tipo) ?>)</h2>
     <form method="post">
         <label>Nombre:</label>
-        <input type="text" name="nombre" value="<?= $producto['nombre'] ?>" required>
+        <input type="text" name="nombre" value="<?= htmlspecialchars($producto['nombre']) ?>" required>
 
         <label>Detalle:</label>
-        <input type="text" name="detalle" value="<?= $producto['detalle'] ?>">
+        <input type="text" name="detalle" value="<?= htmlspecialchars($producto['detalle']) ?>">
 
         <label>Precio Compra:</label>
         <input type="number" step="0.01" name="precio_compra" value="<?= $producto['precio_compra'] ?>" required>
@@ -115,7 +69,10 @@ if (!$producto) {
         <label>Precio Venta:</label>
         <input type="number" step="0.01" name="precio_venta" value="<?= $producto['precio_venta'] ?>" required>
 
-        <input type="submit" value="Guardar Cambios">
+        <button type="submit">💾 Guardar Cambios</button>
     </form>
+    <br>
+    <a href="productos_<?= $tipo ?>.php" style="color:#ffd600;">⬅ Volver al listado</a>
+</div>
 </body>
 </html>

@@ -37,29 +37,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <meta charset="UTF-8">
     <title>Registrar Competencia</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <style>
-        body { background: #000; color: gold; font-family: Arial, sans-serif; padding: 20px; }
-        .formulario {
-            max-width: 600px; margin: auto; background: #111; padding: 20px;
-            border-radius: 10px; border: 1px solid gold;
-        }
-        h2 { text-align: center; margin-bottom: 20px; }
-        label, select, input, textarea {
-            display: block; width: 100%; margin-top: 10px;
-        }
-        select, input[type='text'], input[type='date'], textarea {
-            background: #222; color: gold; border: 1px solid gold;
-            padding: 10px; border-radius: 5px;
-        }
-        input[type="submit"] {
-            background: gold; color: black; font-weight: bold; cursor: pointer;
-            border: none; padding: 12px; margin-top: 15px;
-        }
-        .mensaje { text-align: center; margin-top: 10px; color: lime; }
-    </style>
+    <link rel="stylesheet" href="estilo_unificado.css">
+
 </head>
 <body>
-
+<div class="contenedor">
 <div class="formulario">
     <h2>🏆 Registrar Competencia</h2>
     <?php if (!empty($mensaje)): ?>
@@ -92,6 +74,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <input type="submit" value="Registrar Competencia">
     </form>
 </div>
-
+</div>
 </body>
 </html>

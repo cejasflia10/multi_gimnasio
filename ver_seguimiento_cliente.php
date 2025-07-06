@@ -7,6 +7,11 @@ if (!in_array($rol, ['cliente', 'admin', 'profesor'])) {
     die("Acceso denegado.");
 }
 
+// Mostrar menú del cliente si aplica
+if ($rol === 'cliente') {
+    include 'menu_cliente.php';
+}
+
 $cliente_id = $_SESSION['cliente_id'] ?? ($_GET['id'] ?? null);
 if (!$cliente_id) {
     die("ID de cliente no especificado.");
@@ -23,47 +28,50 @@ while ($s = $seguimientos->fetch_assoc()) {
     $peso[] = $s['peso'];
 }
 ?>
+
 <!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="UTF-8">
-  <title>Mi Seguimiento Nutricional</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <style>
-    body { background-color: #000; color: gold; font-family: Arial, sans-serif; padding: 20px; }
-    .container { max-width: 800px; margin: auto; background: #222; padding: 20px; border-radius: 10px; }
-    h2 { text-align: center; }
-    table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-    th, td { border: 1px solid gold; padding: 8px; text-align: center; }
-    th { background-color: #333; }
-    a.volver { background: gold; color: black; padding: 10px; border-radius: 5px; font-weight: bold; text-decoration: none; display: inline-block; margin-top: 10px; }
-    .acciones { text-align: center; margin-top: 15px; }
-  </style>
+    <meta charset="UTF-8">
+    <title>Mi Seguimiento Nutricional</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="estilo_unificado.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
-<div class="container">
-  <h2>📋 Seguimiento Nutricional de <?= htmlspecialchars($cliente['nombre'] . ' ' . $cliente['apellido']) ?></h2>
+<div class="contenedor">
 
-  <div class="acciones">
-    <a class="volver" href="panel_cliente.php">← Volver al Panel</a>
-  </div>
+    <h2>📋 Seguimiento Nutricional de <?= htmlspecialchars($cliente['nombre'] . ' ' . $cliente['apellido']) ?></h2>
 
-  <canvas id="graficoPeso" height="100"></canvas>
+    <div class="acciones" style="text-align:center; margin: 10px 0;">
+        <a class="volver" href="panel_cliente.php">← Volver al Panel</a>
+    </div>
 
-  <table>
-    <tr><th>Fecha</th><th>Peso</th><th>Recomendaciones</th><th>Observaciones</th></tr>
-    <?php
-    $seguimientos = $conexion->query("SELECT * FROM seguimiento_nutricional WHERE cliente_id = $cliente_id ORDER BY fecha DESC");
-    while ($s = $seguimientos->fetch_assoc()): ?>
-      <tr>
-        <td><?= $s['fecha'] ?></td>
-        <td><?= $s['peso'] ?> kg</td>
-        <td><?= htmlspecialchars($s['recomendaciones']) ?></td>
-        <td><?= htmlspecialchars($s['observaciones']) ?></td>
-      </tr>
-    <?php endwhile; ?>
-  </table>
+    <canvas id="graficoPeso" height="100"></canvas>
+
+    <table>
+        <thead>
+            <tr>
+                <th>Fecha</th>
+                <th>Peso</th>
+                <th>Recomendaciones</th>
+                <th>Observaciones</th>
+            </tr>
+        </thead>
+        <tbody>
+            <?php
+            $seguimientos = $conexion->query("SELECT * FROM seguimiento_nutricional WHERE cliente_id = $cliente_id ORDER BY fecha DESC");
+            while ($s = $seguimientos->fetch_assoc()): ?>
+                <tr>
+                    <td><?= $s['fecha'] ?></td>
+                    <td><?= $s['peso'] ?> kg</td>
+                    <td><?= htmlspecialchars($s['recomendaciones']) ?></td>
+                    <td><?= htmlspecialchars($s['observaciones']) ?></td>
+                </tr>
+            <?php endwhile; ?>
+        </tbody>
+    </table>
+
 </div>
 
 <script>

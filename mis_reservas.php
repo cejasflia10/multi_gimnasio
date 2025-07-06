@@ -27,40 +27,10 @@ $reservas = $conexion->query($query);
   <meta charset="UTF-8">
   <title>Mis Reservas</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <style>
-    body {
-      background-color: #111;
-      color: gold;
-      font-family: Arial;
-      padding: 20px;
-    }
-    h2 { text-align: center; }
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      margin-top: 20px;
-    }
-    th, td {
-      border: 1px solid gold;
-      padding: 10px;
-      text-align: center;
-    }
-    .acciones form {
-      display: inline;
-    }
-    button {
-      padding: 6px 10px;
-      border: none;
-      border-radius: 5px;
-      cursor: pointer;
-      font-weight: bold;
-    }
-    .editar { background-color: gold; color: black; }
-    .cancelar { background-color: red; color: white; }
-  </style>
+  <link rel="stylesheet" href="estilo_unificado.css">
 </head>
 <body>
-
+<div class="contenedor">
 <h2>Mis Reservas</h2>
 
 <table>
@@ -94,6 +64,6 @@ $reservas = $conexion->query($query);
     <?php } ?>
   </tbody>
 </table>
-
+</div>
 </body>
 </html>

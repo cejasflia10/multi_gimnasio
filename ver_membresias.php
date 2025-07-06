@@ -1,13 +1,11 @@
 <?php
-if (session_status() === PHP_SESSION_NONE) {
-    session_start();
-}
+if (session_status() === PHP_SESSION_NONE) session_start();
 include 'conexion.php';
 include 'menu_horizontal.php';
 
 $gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
 
-$query = "SELECT m.*, c.nombre, c.apellido, p.nombre AS nombre_plan 
+$query = "SELECT m.*, c.nombre, c.apellido, p.nombre AS nombre_plan, m.total AS total_pagado, m.id AS id_membresia, m.cliente_id
           FROM membresias m 
           JOIN clientes c ON m.cliente_id = c.id 
           JOIN planes p ON m.plan_id = p.id 
@@ -20,107 +18,38 @@ $resultado = $conexion->query($query);
 <!DOCTYPE html>
 <html lang="es">
 <head>
-    <link rel="stylesheet" href="style.css">
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
-
     <meta charset="UTF-8">
-    <title>Membresías</title>
+    <title>Listado de Membresías</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <style>
-        body {
-            background-color: #000;
-            color: gold;
-            font-family: Arial, sans-serif;
-            padding: 20px;
-        }
-        h1 {
-            text-align: center;
-        }
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            background-color: #111;
-            margin-top: 20px;
-        }
-        th, td {
-            padding: 10px;
-            border: 1px solid gold;
-            text-align: center;
-        }
-        th {
-            background-color: #222;
-        }
-        tr.vencida {
-            background-color: #330000;
-        }
-        .acciones a {
-            margin: 0 5px;
-            text-decoration: none;
-            font-weight: bold;
-            padding: 6px 12px;
-            border-radius: 4px;
-        }
-        .editar { background-color: orange; color: black; }
-        .eliminar { background-color: crimson; color: white; }
-        .renovar { background-color: limegreen; color: black; }
-
-        .boton-volver {
-            background-color: gold;
-            color: black;
-            padding: 10px 20px;
-            margin-top: 20px;
-            text-decoration: none;
-            display: inline-block;
-            border-radius: 6px;
-            font-weight: bold;
-        }
-        @media screen and (max-width: 600px) {
-            table, thead, tbody, th, td, tr {
-                display: block;
-            }
-            th {
-                text-align: left;
-            }
-            td {
-                text-align: left;
-                border-bottom: 1px solid #444;
-            }
-            .acciones a {
-                display: block;
-                margin-bottom: 5px;
-            }
-        }
-    </style>
+    <link rel="stylesheet" href="estilo_unificado.css">
 </head>
-<script src="fullscreen.js"></script>
-
 <body>
+<div class="contenedor">
+    <h1>Listado de Membresías</h1>
 
-<h1>Listado de Membresías</h1>
+    <div class="buscador-contenedor">
+        <input type="text" id="buscador" placeholder="Buscar membresía...">
+    </div>
 
-<div style="text-align: center; margin-bottom: 15px;">
-    <input type="text" id="buscador" placeholder="Buscar membresía..." style="padding: 10px; width: 80%; border-radius: 8px; border: none; font-size: 16px;">
-</div>
-<div style="max-height: 500px; overflow-y: auto;">
-<table>
-    <thead>
-        <tr>
-            <th>#</th>
-            <th>Cliente</th>
-            <th>Plan</th>
-            <th>Inicio</th>
-            <th>Vencimiento</th>
-            <th>Clases</th>
-            <th>Total</th>
-            <th>Acciones</th>
-        </tr>
-    </thead>
-    <tbody>
+    <div class="tabla-scroll">
+    <table class="tabla">
+        <thead>
+            <tr>
+                <th>#</th>
+                <th>Cliente</th>
+                <th>Plan</th>
+                <th>Inicio</th>
+                <th>Vencimiento</th>
+                <th>Clases</th>
+                <th>Total</th>
+                <th>Acciones</th>
+            </tr>
+        </thead>
+        <tbody>
         <?php
         $n = 1;
         while ($fila = $resultado->fetch_assoc()):
             $vencida = (strtotime($fila['fecha_vencimiento']) < strtotime(date("Y-m-d"))) ? 'vencida' : '';
-            $id_membresia = $fila['id'];
         ?>
             <tr class="<?= $vencida ?>">
                 <td><?= $n ?></td>
@@ -129,32 +58,32 @@ $resultado = $conexion->query($query);
                 <td><?= $fila['fecha_inicio'] ?></td>
                 <td><?= $fila['fecha_vencimiento'] ?></td>
                 <td><?= $fila['clases_disponibles'] ?></td>
-                <td <?php if ($fila['total'] == 0) echo "style='color:red;font-weight:bold;'"; ?>>
-                <td>$<?= number_format($fila['total_pagado'], 2) ?></td>
+                <td class="<?= ($fila['total_pagado'] == 0 ? 'texto-rojo' : '') ?>">
+                    $<?= number_format($fila['total_pagado'], 2, ',', '.') ?>
                 </td>
                 <td class="acciones">
-                    <a href="editar_membresia.php?id=<?= $id_membresia ?>" class="editar">✏️</a>
-                    <a href="eliminar_membresia.php?id=<?= $id_membresia ?>" class="eliminar" onclick="return confirm('¿Eliminar esta membresía?')">❌</a>
-                    <a href="renovar_membresia.php?id=<?= $id_membresia ?>" class="renovar">♻️</a>
+                    <a href="editar_membresia.php?id=<?= $fila['id_membresia'] ?>" class="boton-naranja">✏️</a>
+                    <a href="eliminar_membresia.php?id=<?= $fila['id_membresia'] ?>" class="boton-rojo" onclick="return confirm('¿Eliminar esta membresía?')">❌</a>
+                    <a href="renovar_membresia.php?id=<?= $fila['id_membresia'] ?>" class="boton-verde">♻️</a>
+                    <a href="ver_historial_membresias.php?cliente_id=<?= $fila['cliente_id'] ?>" class="boton-azul">📜</a>
                 </td>
             </tr>
-        <?php $n++; endwhile; ?>
-    </tbody>
-</table>
+        <?php
+        $n++;
+        endwhile;
+        ?>
+        </tbody>
+    </table>
+    </div>
+
+    <a href="index.php" class="boton-volver">Volver al Menú</a>
 </div>
-
-<a href="index.php" class="boton-volver">Volver al Menú</a>
-<a href="ver_historial_membresias.php?cliente_id=<?= $fila['cliente_id'] ?>">📜 Historial</a>
-
 
 <script>
 document.getElementById("buscador").addEventListener("keyup", function() {
     let filtro = this.value.toLowerCase();
-    let filas = document.querySelectorAll("table tbody tr");
-
-    filas.forEach(fila => {
-        let texto = fila.textContent.toLowerCase();
-        fila.style.display = texto.includes(filtro) ? "" : "none";
+    document.querySelectorAll("table tbody tr").forEach(fila => {
+        fila.style.display = fila.textContent.toLowerCase().includes(filtro) ? '' : 'none';
     });
 });
 </script>

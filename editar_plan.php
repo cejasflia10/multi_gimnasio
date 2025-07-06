@@ -26,77 +26,33 @@ $plan = $resultado->fetch_assoc();
     <meta charset="UTF-8">
     <title>Editar Plan</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <style>
-        body {
-            background-color: #111;
-            color: gold;
-            font-family: Arial, sans-serif;
-            padding: 20px;
-        }
-        h1 {
-            text-align: center;
-        }
-        form {
-            max-width: 500px;
-            margin: auto;
-            background-color: #222;
-            padding: 20px;
-            border-radius: 10px;
-        }
-        label {
-            display: block;
-            margin-top: 10px;
-        }
-        input[type="text"],
-        input[type="number"] {
-            width: 100%;
-            padding: 10px;
-            margin-top: 5px;
-            background-color: #000;
-            color: gold;
-            border: 1px solid gold;
-        }
-        input[type="submit"] {
-            background-color: gold;
-            color: black;
-            padding: 10px 20px;
-            margin-top: 20px;
-            border: none;
-            cursor: pointer;
-        }
-        a {
-            display: inline-block;
-            margin-top: 15px;
-            color: #ccc;
-            text-align: center;
-        }
-    </style>
+    <link rel="stylesheet" href="estilo_unificado.css">
 </head>
-<script src="fullscreen.js"></script>
-
 <body>
 
-<h1>Editar Plan</h1>
-<form action="guardar_plan.php" method="post">
-    <input type="hidden" name="id" value="<?= $plan['id'] ?>">
-    
-    <label for="nombre">Nombre:</label>
-    <input type="text" name="nombre" value="<?= htmlspecialchars($plan['nombre'] ?? '') ?>" required>
-    
-    <label for="precio">Precio:</label>
-    <input type="text" name="precio" value="<?= htmlspecialchars($plan['precio'] ?? '') ?>" required>
+<div class="contenedor">
+    <h2>✏️ Editar Plan</h2>
 
-    <label for="dias_disponibles">Días disponibles:</label>
-    <input type="number" name="dias_disponibles" value="<?= htmlspecialchars($plan['dias_disponibles'] ?? '') ?>" required>
+    <form action="guardar_plan.php" method="post">
+        <input type="hidden" name="id" value="<?= $plan['id'] ?>">
 
-    <label for="duracion_meses">Duración (meses):</label>
-    <input type="number" name="duracion_meses" value="<?= htmlspecialchars($plan['duracion_meses'] ?? '') ?>" required>
+        <label for="nombre">Nombre:</label>
+        <input type="text" name="nombre" value="<?= htmlspecialchars($plan['nombre'] ?? '') ?>" required>
 
-    <input type="submit" value="Guardar cambios">
-</form>
+        <label for="precio">Precio:</label>
+        <input type="text" name="precio" value="<?= htmlspecialchars($plan['precio'] ?? '') ?>" required>
 
-<div style="text-align:center;">
-    <a href="planes.php">Volver</a>
+        <label for="dias_disponibles">Días disponibles:</label>
+        <input type="number" name="dias_disponibles" value="<?= htmlspecialchars($plan['dias_disponibles'] ?? '') ?>" required>
+
+        <label for="duracion_meses">Duración (meses):</label>
+        <input type="number" name="duracion_meses" value="<?= htmlspecialchars($plan['duracion_meses'] ?? '') ?>" required>
+
+        <button type="submit">Guardar cambios</button>
+    </form>
+
+    <br>
+    <a href="planes.php" style="color:#ffd600;">⬅ Volver al listado</a>
 </div>
 
 </body>

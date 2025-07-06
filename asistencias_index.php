@@ -25,87 +25,15 @@ $resultado = $conexion->query($query);
 <!DOCTYPE html>
 <html lang="es">
 <head>
+    <link rel="stylesheet" href="estilo_unificado.css">
+
     <meta charset="UTF-8">
     <title>Asistencias del Día</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <style>
-        body {
-            background-color: #111;
-            color: #f1c40f;
-            font-family: 'Segoe UI', sans-serif;
-            margin: 0;
-            padding: 20px;
-        }
-
-        h2 {
-            text-align: center;
-            margin-bottom: 10px;
-        }
-
-        .info {
-            text-align: center;
-            font-size: 16px;
-            margin-bottom: 15px;
-            color: lime;
-        }
-
-        .no-result {
-            text-align: center;
-            color: yellow;
-        }
-
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            background-color: #1c1c1c;
-        }
-
-        th, td {
-            padding: 10px;
-            border: 1px solid #f1c40f;
-            text-align: center;
-        }
-
-        th {
-            background-color: #222;
-        }
-
-        @media (max-width: 600px) {
-            table, thead, tbody, th, td, tr {
-                display: block;
-            }
-
-            th {
-                position: absolute;
-                top: -9999px;
-                left: -9999px;
-            }
-
-            td {
-                position: relative;
-                padding-left: 50%;
-                border: none;
-                border-bottom: 1px solid #f1c40f;
-            }
-
-            td::before {
-                position: absolute;
-                top: 10px;
-                left: 10px;
-                width: 45%;
-                white-space: nowrap;
-                color: #f1c40f;
-                font-weight: bold;
-            }
-
-            td:nth-of-type(1)::before { content: "Apellido"; }
-            td:nth-of-type(2)::before { content: "Nombre"; }
-            td:nth-of-type(3)::before { content: "Fecha"; }
-            td:nth-of-type(4)::before { content: "Hora"; }
-        }
-    </style>
+  
 </head>
 <body>
+<div class="contenedor">
 
 <h2>Asistencias del Día</h2>
 <div class="info">Gimnasio: <?= $gimnasio_id ?> | Fecha: <?= $hoy ?></div>
@@ -134,6 +62,7 @@ $resultado = $conexion->query($query);
         </tbody>
     </table>
 <?php endif; ?>
+</div>
 
 </body>
 </html>

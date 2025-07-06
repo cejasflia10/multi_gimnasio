@@ -45,38 +45,12 @@ $pagos_q = $conexion->query($sql);
     <meta charset="UTF-8">
     <title>Pagos a Profesores</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <style>
-        body {
-            background-color: #000;
-            color: gold;
-            font-family: Arial, sans-serif;
-            padding: 20px;
-        }
-        select, button {
-            padding: 8px;
-            font-size: 16px;
-            margin-right: 10px;
-        }
-        table {
-            width: 100%;
-            background-color: #111;
-            color: white;
-            border-collapse: collapse;
-            margin-top: 20px;
-        }
-        th, td {
-            padding: 10px;
-            border: 1px solid gold;
-            text-align: center;
-        }
-        th {
-            background-color: #222;
-        }
-    </style>
+    <link rel="stylesheet" href="estilo_unificado.css">
 </head>
 <body>
+<div class="contenedor">
 
-<h2>Pagos a Profesores</h2>
+<h2>📄 Pagos a Profesores</h2>
 
 <form method="GET">
     <label>Mes:</label>
@@ -127,5 +101,6 @@ $pagos_q = $conexion->query($sql);
     </tbody>
 </table>
 
+</div>
 </body>
 </html>
