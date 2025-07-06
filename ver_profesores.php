@@ -11,51 +11,10 @@ $resultado = $conexion->query("SELECT * FROM profesores WHERE gimnasio_id = $gim
     <meta charset="UTF-8">
     <title>Listado de Profesores</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <style>
-        body {
-            background-color: #000;
-            color: gold;
-            font-family: Arial, sans-serif;
-            padding: 20px;
-        }
-        h1 {
-            text-align: center;
-            color: gold;
-        }
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 20px;
-        }
-        th, td {
-            border: 1px solid gold;
-            padding: 10px;
-            text-align: center;
-        }
-        th {
-            background-color: #222;
-        }
-        .boton {
-            background-color: gold;
-            color: black;
-            border: none;
-            padding: 6px 10px;
-            cursor: pointer;
-            margin: 2px;
-            font-weight: bold;
-        }
-        .acciones {
-            display: flex;
-            flex-direction: column;
-            gap: 5px;
-        }
-        img.qr {
-            width: 80px;
-            height: 80px;
-        }
-    </style>
+    <link rel="stylesheet" href="estilo_unificado.css">
 </head>
 <body>
+<div class="contenedor">
     <h1>Listado de Profesores</h1>
     <table>
         <tr>
@@ -89,5 +48,6 @@ $resultado = $conexion->query("SELECT * FROM profesores WHERE gimnasio_id = $gim
             </tr>
         <?php endwhile; ?>
     </table>
+</div>
 </body>
 </html>

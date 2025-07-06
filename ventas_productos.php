@@ -9,20 +9,15 @@ $productos = $conexion->query("
     SELECT id, nombre, venta AS precio_venta, stock, categoria FROM productos WHERE gimnasio_id = $gimnasio_id
 ");
 ?>
-
 <!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">
     <title>Venta de Productos</title>
-    <style>
-        body { background-color: #000; color: gold; font-family: sans-serif; padding: 20px; }
-        input, select, button { padding: 6px; margin: 4px; }
-        table { width: 100%; margin-top: 20px; border-collapse: collapse; }
-        th, td { padding: 10px; border: 1px solid #555; text-align: center; }
-    </style>
+    <link rel="stylesheet" href="estilo_unificado.css">
 </head>
 <body>
+<div class="contenedor">
 <h2>🛒 Venta de Productos</h2>
 
 <form method="POST" action="formas_pago.php" onsubmit="return prepararTotal()">
@@ -48,7 +43,6 @@ $productos = $conexion->query("
             });
     });
     </script>
-    <br><br>
 
     <label>Producto:</label>
     <select id="selector-producto">
@@ -75,9 +69,10 @@ $productos = $conexion->query("
     </table>
 
     <input type="hidden" name="total" id="total_hidden">
-    <br><br>
+    <br>
     <button type="submit">Siguiente → Formas de Pago</button>
 </form>
+</div>
 
 <script>
 function agregarProducto() {

@@ -83,6 +83,7 @@ document.addEventListener('keydown', function (e) {
 </script>
 
 <head>
+    <link rel="stylesheet" href="estilo_unificado.css">
     <meta charset="UTF-8">
     <title>Turnos disponibles</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -96,7 +97,7 @@ document.addEventListener('keydown', function (e) {
     </style>
 </head>
 <body>
-
+<div class="contenedor">
 <h2>📅 Turnos disponibles</h2>
 
 <?php if (!$cliente_id): ?>
@@ -138,6 +139,6 @@ document.addEventListener('keydown', function (e) {
 <?php endif; ?>
 
 <?php if ($mensaje): ?><p class="sin-turnos"><?= $mensaje ?></p><?php endif; ?>
-
+</div>
 </body>
 </html>

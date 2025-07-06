@@ -13,65 +13,81 @@ $categorias = $conexion->query("SELECT * FROM categorias WHERE gimnasio_id = $gi
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Categorías</title>
+    <link rel="stylesheet" href="estilo_unificado.css">
     <style>
-        body {
-            background-color: #000;
-            color: gold;
-            font-family: Arial, sans-serif;
-            padding: 20px;
-        }
-        h1 {
-            text-align: center;
-        }
         table {
             width: 100%;
             border-collapse: collapse;
             margin-top: 20px;
+            background: #111;
         }
         th, td {
             border: 1px solid gold;
             padding: 10px;
             text-align: center;
         }
-        a, button {
-            background: gold;
+        th {
+            background-color: #222;
+        }
+        .acciones a {
+            background-color: gold;
             color: black;
-            text-decoration: none;
             padding: 6px 12px;
-            margin: 5px;
+            text-decoration: none;
+            margin: 0 5px;
+            border-radius: 4px;
             display: inline-block;
-            border: none;
-            cursor: pointer;
+        }
+        .acciones a:hover {
+            background-color: #e5c100;
+        }
+        .btn-top {
+            display: inline-block;
+            background-color: gold;
+            color: black;
+            padding: 10px 20px;
+            border-radius: 5px;
+            text-decoration: none;
+            margin-bottom: 15px;
         }
     </style>
 </head>
-<script src="fullscreen.js"></script>
-
 <body>
+
 <?php if (isset($_GET['actualizado']) && $_GET['actualizado'] == 1): ?>
 <div style="background-color: #0f0; color: black; padding: 10px; margin: 10px 0; text-align: center; font-weight: bold; border-radius: 6px;">
     ✅ Categoría actualizada correctamente
 </div>
 <?php endif; ?>
 
-<h1>Categorías de Productos</h1>
-<a href="agregar_categoria.php">Agregar Nueva Categoría</a>
-<a href="index.php">Volver al Menú</a>
+<h1 style="text-align:center;">📂 Categorías de Productos</h1>
+
+<div style="text-align:center; margin-bottom: 20px;">
+    <a class="btn-top" href="agregar_categoria.php">➕ Agregar Nueva Categoría</a>
+    <a class="btn-top" href="index.php">🏠 Volver al Menú</a>
+</div>
+
 <table>
-    <tr>
-        <th>ID</th>
-        <th>Nombre</th>
-        <th>Acciones</th>
-    <td><a href="editar_categoria.php?id=<?= $fila['id'] ?>" style="background-color: #555; color: white; padding: 5px 10px; border-radius: 5px; text-decoration: none;">Editar</a></td></tr>
-    <?php while ($cat = $categorias->fetch_assoc()): ?>
-    <tr>
-        <td><?= $cat['id'] ?></td>
-        <td><?= $cat['nombre'] ?></td>
-        <td>
-            <a href="eliminar_categoria.php?id=<?= $cat['id'] ?>" onclick="return confirm('¿Eliminar esta categoría?')">Eliminar</a>
-        </td>
-    </tr>
-    <?php endwhile; ?>
+    <thead>
+        <tr>
+            <th>ID</th>
+            <th>Nombre</th>
+            <th>Acciones</th>
+        </tr>
+    </thead>
+    <tbody>
+        <?php while ($cat = $categorias->fetch_assoc()): ?>
+        <tr>
+            <td><?= $cat['id'] ?></td>
+            <td><?= htmlspecialchars($cat['nombre']) ?></td>
+            <td class="acciones">
+                <a href="editar_categoria.php?id=<?= $cat['id'] ?>">✏️ Editar</a>
+                <a href="eliminar_categoria.php?id=<?= $cat['id'] ?>" onclick="return confirm('¿Eliminar esta categoría?')">🗑️ Eliminar</a>
+            </td>
+        </tr>
+        <?php endwhile; ?>
+    </tbody>
 </table>
+
 </body>
 </html>

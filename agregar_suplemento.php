@@ -14,6 +14,8 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     header("Location: ver_suplementos.php");
 }
 ?>
+<link rel="stylesheet" href="estilo_unificado.css">
+<div class="contenedor">
 
 <form method="POST">
     <input type="text" name="nombre" placeholder="Nombre" required><br>
@@ -23,4 +25,4 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     <input type="number" name="stock" placeholder="Stock"><br>
     <button type="submit">Agregar</button>
 </form>
-<script src="fullscreen.js"></script>
+</div>

@@ -35,52 +35,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <meta charset="UTF-8">
     <title>💳 Pago Online</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <style>
-        body { background: #000; color: gold; font-family: Arial, sans-serif; padding: 20px; }
-        h1 { text-align: center; }
-        form {
-            max-width: 500px;
-            margin: auto;
-            background: #111;
-            padding: 20px;
-            border: 1px solid gold;
-            border-radius: 10px;
-        }
-        label { display: block; margin-top: 10px; }
-        input, select {
-            width: 100%;
-            padding: 10px;
-            margin-top: 5px;
-            border-radius: 6px;
-            border: none;
-        }
-        button {
-            margin-top: 20px;
-            background: gold;
-            color: black;
-            font-weight: bold;
-            padding: 10px;
-            border: none;
-            border-radius: 6px;
-            cursor: pointer;
-        }
-        .alias {
-            text-align: center;
-            font-size: 20px;
-            margin-bottom: 15px;
-            background: #222;
-            padding: 10px;
-            border-radius: 10px;
-        }
-        .mensaje {
-            text-align: center;
-            margin-top: 15px;
-            color: lightgreen;
-        }
-    </style>
+    <link rel="stylesheet" href="estilo_unificado.css">
+
 </head>
 <body>
-
+<div class="contenedor">
 <h1>💳 Pago por Transferencia</h1>
 
 <div class="alias">
@@ -119,6 +78,6 @@ if ($res_alias && $row = $res_alias->fetch_assoc()) {
 <?php if ($mensaje): ?>
     <p class="mensaje"><?= $mensaje ?></p>
 <?php endif; ?>
-
+</div>
 </body>
 </html>

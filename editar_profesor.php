@@ -40,84 +40,11 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
     <meta charset="UTF-8">
     <title>Editar Profesor</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <style>
-        body {
-            background-color: #111;
-            color: gold;
-            font-family: 'Arial', sans-serif;
-            margin: 0;
-            padding: 20px;
-        }
-
-        h2 {
-            text-align: center;
-            color: gold;
-            margin-bottom: 30px;
-        }
-
-        form {
-            background-color: #222;
-            padding: 20px;
-            border-radius: 12px;
-            max-width: 600px;
-            margin: 0 auto;
-            box-shadow: 0 0 10px rgba(255, 215, 0, 0.2);
-        }
-
-        label {
-            display: block;
-            margin-top: 15px;
-            font-weight: bold;
-        }
-
-        input[type="text"], input[type="tel"], input[type="number"] {
-            width: 100%;
-            padding: 10px;
-            margin-top: 5px;
-            border: 1px solid gold;
-            border-radius: 6px;
-            background-color: #000;
-            color: gold;
-            font-size: 16px;
-        }
-
-        button {
-            margin-top: 25px;
-            width: 100%;
-            padding: 12px;
-            background-color: gold;
-            color: black;
-            border: none;
-            border-radius: 6px;
-            font-size: 16px;
-            font-weight: bold;
-            cursor: pointer;
-            transition: background-color 0.3s ease;
-        }
-
-        button:hover {
-            background-color: #e6b800;
-        }
-
-        @media (max-width: 600px) {
-            body {
-                padding: 10px;
-            }
-
-            form {
-                padding: 15px;
-            }
-
-            h2 {
-                font-size: 20px;
-            }
-        }
-    </style>
+    <link rel="stylesheet" href="estilo_unificado.css">
 </head>
-<script src="fullscreen.js"></script>
-
 <body>
-    <h2>Editar Datos del Profesor</h2>
+<div class="contenedor">
+    <h2>✏️ Editar Datos del Profesor</h2>
     <form method="POST">
         <label for="apellido">Apellido:</label>
         <input type="text" name="apellido" value="<?= htmlspecialchars($profesor['apellido']) ?>" required>
@@ -136,5 +63,9 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
 
         <button type="submit">Guardar Cambios</button>
     </form>
+
+    <br>
+    <a href="ver_profesores.php" style="color:#ffd600;">⬅ Volver al listado</a>
+</div>
 </body>
 </html>

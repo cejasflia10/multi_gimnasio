@@ -21,9 +21,8 @@ $datos = $conexion->query("
     <meta charset="UTF-8">
     <title>Mis Datos Físicos</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="estilo_unificado.css">
     <style>
-        body { background-color: #000; color: gold; font-family: Arial, sans-serif; padding: 20px; }
-        h1 { text-align: center; }
         table {
             width: 100%;
             border-collapse: collapse;
@@ -65,7 +64,7 @@ $datos = $conexion->query("
             <td><?= $d['talle_pantalon'] ?></td>
             <td><?= $d['talle_calzado'] ?></td>
             <td><?= $d['profesor'] ?></td>
-            <td><?= $d['observaciones'] ?></td>
+            <td><?= nl2br(htmlspecialchars($d['observaciones'])) ?></td>
         </tr>
         <?php endwhile; ?>
     </tbody>

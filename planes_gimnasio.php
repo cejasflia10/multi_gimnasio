@@ -48,88 +48,10 @@ $planes = $conexion->query("SELECT * FROM planes_gimnasio WHERE gimnasio_id = $g
     <meta charset="UTF-8">
     <title>Configurar Planes</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <style>
-        body {
-            background-color: #111;
-            color: gold;
-            font-family: Arial, sans-serif;
-            padding: 20px;
-        }
-        h1 { text-align: center; margin-bottom: 20px; }
-        form {
-            max-width: 500px;
-            margin: 0 auto;
-            background-color: #222;
-            padding: 20px;
-            border-radius: 10px;
-            border: 1px solid gold;
-        }
-        input[type="text"],
-        input[type="number"] {
-            width: 100%;
-            padding: 10px;
-            margin-top: 10px;
-            background-color: #000;
-            border: 1px solid gold;
-            color: gold;
-        }
-        input[type="submit"] {
-            margin-top: 15px;
-            padding: 10px;
-            background-color: gold;
-            border: none;
-            color: #111;
-            font-weight: bold;
-            cursor: pointer;
-        }
-        input[type="submit"]:hover {
-            background-color: #ffd700;
-        }
-        .mensaje {
-            text-align: center;
-            margin-top: 15px;
-            font-weight: bold;
-        }
-        .volver {
-            display: block;
-            text-align: center;
-            margin-top: 20px;
-        }
-        .volver a {
-            color: gold;
-            text-decoration: underline;
-        }
-        table {
-            width: 100%;
-            margin-top: 30px;
-            border-collapse: collapse;
-        }
-        th, td {
-            padding: 12px;
-            border: 1px solid gold;
-            text-align: center;
-        }
-        th {
-            background-color: #222;
-        }
-        tr:nth-child(even) {
-            background-color: #1a1a1a;
-        }
-        a.boton {
-            padding: 5px 10px;
-            background-color: gold;
-            color: #111;
-            text-decoration: none;
-            font-weight: bold;
-            border-radius: 4px;
-        }
-        a.boton:hover {
-            background-color: #ffd700;
-        }
-    </style>
+    <link rel="stylesheet" href="estilo_unificado.css">
 </head>
 <body>
-
+<div class="contenedor">
     <h1>Configurar Planes del Gimnasio</h1>
 
     <?php if ($mensaje): ?>
@@ -173,6 +95,6 @@ $planes = $conexion->query("SELECT * FROM planes_gimnasio WHERE gimnasio_id = $g
     <div class="volver">
         <a href="index.php">← Volver al panel</a>
     </div>
-
+</div>
 </body>
 </html>

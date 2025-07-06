@@ -17,50 +17,13 @@ $clientes = $conexion->query("SELECT id, nombre, apellido, dni FROM clientes WHE
     <meta charset="UTF-8">
     <title>Editar Membresía</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <style>
-        body {
-            background-color: #000;
-            color: gold;
-            font-family: Arial, sans-serif;
-            padding: 20px;
-        }
-        h1 {
-            text-align: center;
-        }
-        form {
-            max-width: 500px;
-            margin: auto;
-        }
-        label {
-            display: block;
-            margin-top: 10px;
-        }
-        input, select, button {
-            width: 100%;
-            padding: 10px;
-            background-color: #111;
-            color: gold;
-            border: 1px solid gold;
-            border-radius: 5px;
-            margin-top: 5px;
-        }
-        button {
-            background-color: gold;
-            color: black;
-            font-weight: bold;
-            margin-top: 20px;
-        }
-        @media (max-width: 600px) {
-            body {
-                padding: 10px;
-            }
-        }
-    </style>
+    <link rel="stylesheet" href="estilo_unificado.css">
 </head>
-<script src="fullscreen.js"></script>
 
 <body>
-<h1>Editar Membresía</h1>
+<div class="contenedor">
+<h2>✏️ Editar Membresía</h2>
+
 <form action="guardar_edicion_membresia.php" method="POST">
     <input type="hidden" name="id" value="<?= $membresia['id'] ?>">
 
@@ -116,9 +79,11 @@ $clientes = $conexion->query("SELECT id, nombre, apellido, dni FROM clientes WHE
     <label>Total:</label>
     <input type="number" step="0.01" name="total" id="total" value="<?= $membresia['total'] ?>" required>
 
-    <button type="submit">Guardar Cambios</button>
-    <a href="ver_membresias.php"><button type="button">Volver</button></a>
+    <button type="submit">💾 Guardar Cambios</button>
 </form>
+
+<br>
+<a href="ver_membresias.php" style="color:#ffd600;">⬅ Volver al listado</a>
 
 <script>
 const planes = <?= json_encode($planesData) ?>;
@@ -146,5 +111,6 @@ function actualizarCampos() {
 
 selectPlan.addEventListener('change', actualizarCampos);
 </script>
+</div>
 </body>
 </html>

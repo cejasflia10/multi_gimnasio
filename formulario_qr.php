@@ -2,6 +2,9 @@
 session_start();
 include 'conexion.php';
 
+$mensaje = '';
+$info = '';
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $dni = trim($_POST['dni']);
 
@@ -21,47 +24,93 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $vencimiento = $cliente['fecha_vencimiento'];
         $clases = (int)$cliente['clases_disponibles'];
 
-        if ($vencimiento >= $hoy && $clases > 0) {
+        // Verificar si ya registró ingreso hoy
+        $verificar = $conexion->prepare("SELECT id FROM asistencias WHERE cliente_id = ? AND fecha = CURDATE()");
+        $verificar->bind_param("i", $cliente['id']);
+        $verificar->execute();
+        $verificado = $verificar->get_result();
+
+        if ($verificado->num_rows > 0) {
+            $mensaje = "⚠️ Ya se registró un ingreso hoy.";
+        } elseif ($vencimiento >= $hoy && $clases > 0) {
             $nuevas_clases = $clases - 1;
-            $stmt2 = $conexion->prepare("UPDATE membresias SET clases_disponibles = ? WHERE cliente_id = ?");
-            $stmt2->bind_param("ii", $nuevas_clases, $cliente['id']);
-            $stmt2->execute();
+            $conexion->prepare("UPDATE membresias SET clases_disponibles = ? WHERE cliente_id = ?")
+                ->bind_param("ii", $nuevas_clases, $cliente['id'])->execute();
 
-            $stmt3 = $conexion->prepare("INSERT INTO asistencias (cliente_id, fecha, hora) VALUES (?, CURDATE(), CURTIME())");
-            $stmt3->bind_param("i", $cliente['id']);
-            $stmt3->execute();
+            $conexion->prepare("INSERT INTO asistencias (cliente_id, fecha, hora) VALUES (?, CURDATE(), CURTIME())")
+                ->bind_param("i", $cliente['id'])->execute();
 
-            echo "<h3>Ingreso registrado correctamente</h3>";
-            echo "<p>Cliente: <strong>{$cliente['apellido']} {$cliente['nombre']}</strong></p>";
-            echo "<p>Clases restantes: <strong>$nuevas_clases</strong></p>";
-            echo "<p>Vencimiento: <strong>$vencimiento</strong></p>";
+            $mensaje = "✅ Ingreso registrado correctamente";
+            $info = "Cliente: <strong>{$cliente['apellido']} {$cliente['nombre']}</strong><br>
+                     Clases restantes: <strong>$nuevas_clases</strong><br>
+                     Vencimiento: <strong>$vencimiento</strong>";
         } else {
-            echo "<h3>Plan vencido o sin clases disponibles</h3>";
+            $mensaje = "❌ Plan vencido o sin clases disponibles.";
         }
     } else {
-        echo "<h3>Cliente no encontrado o sin membresía activa</h3>";
+        $mensaje = "❌ Cliente no encontrado o sin membresía activa.";
     }
-    exit;
 }
 ?>
-
 <!DOCTYPE html>
 <html lang="es">
 <head>
   <meta charset="UTF-8">
-  <title>Registro por QR</title>
+  <title>Registro QR de Asistencia</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <style>
-    body { background-color: black; color: gold; font-family: Arial, sans-serif; text-align: center; }
-    input { font-size: 24px; padding: 10px; width: 80%; margin: 20px auto; background: #111; color: white; border: 2px solid gold; }
-    button { padding: 10px 20px; font-size: 20px; background: gold; border: none; color: black; cursor: pointer; }
+    body {
+      background-color: #000;
+      color: gold;
+      font-family: Arial, sans-serif;
+      text-align: center;
+      padding: 30px;
+    }
+    input {
+      font-size: 22px;
+      padding: 12px;
+      width: 80%;
+      background: #111;
+      color: white;
+      border: 2px solid gold;
+      border-radius: 8px;
+    }
+    button {
+      padding: 12px 30px;
+      font-size: 20px;
+      background: gold;
+      color: black;
+      border: none;
+      border-radius: 8px;
+      margin-top: 10px;
+      cursor: pointer;
+    }
+    .mensaje {
+      margin-top: 20px;
+      font-size: 20px;
+      font-weight: bold;
+      color: gold;
+    }
+    .info {
+      margin-top: 10px;
+      font-size: 16px;
+      color: #ccc;
+    }
   </style>
 </head>
 <body>
-  <h2>Escaneo QR - Registro de Asistencia</h2>
+
+  <h2>📲 Escaneo QR - Registro de Asistencia</h2>
   <form method="POST">
-    <input type="text" name="dni" placeholder="Escanee QR o escriba DNI" autofocus required>
+    <input type="text" name="dni" placeholder="Escanee el QR o escriba DNI" autofocus required>
     <br>
     <button type="submit">Registrar</button>
   </form>
+
+  <?php if ($mensaje): ?>
+    <div class="mensaje"><?= $mensaje ?></div>
+    <div class="info"><?= $info ?></div>
+  <?php endif; ?>
+
 </body>
 </html>

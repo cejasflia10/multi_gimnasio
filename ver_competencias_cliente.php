@@ -24,12 +24,25 @@ $resultado = $conexion->query("
 <head>
     <meta charset="UTF-8">
     <title>Mis Competencias</title>
+    <link rel="stylesheet" href="estilo_unificado.css">
     <style>
-        body { background: black; color: gold; font-family: Arial; padding: 20px; text-align: center; }
-        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-        th, td { border: 1px solid gold; padding: 10px; text-align: center; }
-        th { background: #222; }
-        td { background: #111; color: white; }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        th, td {
+            border: 1px solid gold;
+            padding: 10px;
+            text-align: center;
+        }
+        th {
+            background: #222;
+        }
+        td {
+            background: #111;
+            color: white;
+        }
     </style>
 </head>
 <body>

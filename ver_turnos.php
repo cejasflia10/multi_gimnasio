@@ -2,7 +2,6 @@
 include 'conexion.php';
 include 'menu_cliente.php';
 
-
 $gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
 $dias_semana = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
 
@@ -10,8 +9,8 @@ $turnos = $conexion->query("
     SELECT 
         turnos.id AS turno_id,
         turnos.dia,
-        TIME_FORMAT(turnos.horario_inicio, '%H:%i') AS horario_inicio,
-        TIME_FORMAT(turnos.horario_fin, '%H:%i') AS horario_fin,
+        TIME_FORMAT(turnos.horario_inicio, '%H:%i') AS inicio,
+        TIME_FORMAT(turnos.horario_fin, '%H:%i') AS fin,
         profesores.nombre,
         profesores.apellido
     FROM turnos
@@ -20,70 +19,47 @@ $turnos = $conexion->query("
     ORDER BY FIELD(turnos.dia, 'Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'), turnos.horario_inicio
 ");
 
-
 $tabla = [];
 while ($t = $turnos->fetch_assoc()) {
-    $hora = $t['horario']; // por ejemplo: "08:00 - 09:00"
+    $hora = "{$t['inicio']} - {$t['fin']}";
     $dia = $t['dia'];
-    $tabla[$hora][$dia] = $t['nombre_profesor'];
+    $profesor = "{$t['apellido']} {$t['nombre']}";
+    $tabla[$hora][$dia] = $profesor;
 }
 ?>
 
 <!DOCTYPE html>
-<html>
+<html lang="es">
 <head>
     <meta charset="UTF-8">
     <title>Turnos Semanales</title>
-    <style>
-        body {
-            background: black;
-            color: gold;
-            font-family: Arial, sans-serif;
-            text-align: center;
-        }
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 30px;
-        }
-        th, td {
-            border: 1px solid gold;
-            padding: 10px;
-            text-align: center;
-        }
-        th {
-            background-color: #222;
-        }
-        td {
-            background-color: #111;
-            color: white;
-        }
-    </style>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="estilo_unificado.css">
 </head>
 <body>
+<div class="contenedor">
+    <h2>📅 Turnos Semanales</h2>
 
-<h2>📅 Turnos Semanales</h2>
-
-<table>
-    <thead>
-        <tr>
-            <th>Horario</th>
-            <?php foreach ($dias_semana as $dia): ?>
-                <th><?= $dia ?></th>
-            <?php endforeach; ?>
-        </tr>
-    </thead>
-    <tbody>
-        <?php foreach ($tabla as $hora => $fila): ?>
+    <table>
+        <thead>
             <tr>
-                <td><?= $hora ?></td>
+                <th>Horario</th>
                 <?php foreach ($dias_semana as $dia): ?>
-                    <td><?= $fila[$dia] ?? '-' ?></td>
+                    <th><?= $dia ?></th>
                 <?php endforeach; ?>
             </tr>
-        <?php endforeach; ?>
-    </tbody>
-</table>
-
+        </thead>
+        <tbody>
+            <?php foreach ($tabla as $hora => $fila): ?>
+                <tr>
+                    <td><?= $hora ?></td>
+                    <?php foreach ($dias_semana as $dia): ?>
+                        <td><?= $fila[$dia] ?? '-' ?></td>
+                    <?php endforeach; ?>
+                </tr>
+            <?php endforeach; ?>
+        </tbody>
+    </table>
+</div>
 </body>
 </html>

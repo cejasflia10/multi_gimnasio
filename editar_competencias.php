@@ -42,23 +42,13 @@ $cliente = $conexion->query("SELECT nombre, apellido FROM clientes WHERE id = $c
     <meta charset="UTF-8">
     <title>Editar Competencias</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <style>
-        body { background-color: #000; color: gold; font-family: Arial, sans-serif; padding: 20px; }
-        .container { max-width: 750px; margin: auto; background: #222; padding: 20px; border-radius: 10px; }
-        h2 { text-align: center; }
-        input, select { width: 100%; padding: 10px; margin: 5px 0; background: #333; border: 1px solid gold; color: gold; border-radius: 5px; }
-        button, .volver { background: gold; color: #000; padding: 10px; border: none; font-weight: bold; cursor: pointer; border-radius: 5px; margin-top: 10px; text-decoration: none; display: inline-block; text-align: center; }
-        table { width: 100%; margin-top: 20px; border-collapse: collapse; }
-        th, td { border: 1px solid gold; padding: 8px; text-align: center; }
-        th { background: #333; }
-        a.eliminar { color: red; text-decoration: none; font-weight: bold; }
-    </style>
+    <link rel="stylesheet" href="estilo_unificado.css">
 </head>
 <body>
-<div class="container">
-    <h2>🥊 Editar Competencias de <?= htmlspecialchars($cliente['nombre'] . ' ' . $cliente['apellido']) ?></h2>
+<div class="contenedor">
+    <h2>🥊 Competencias de <?= htmlspecialchars($cliente['nombre'] . ' ' . $cliente['apellido']) ?></h2>
 
-    <a class="volver" href="panel_cliente.php?id=<?= $cliente_id ?>">← Volver al Panel del Cliente</a>
+    <a class="btn-nueva" href="panel_cliente.php?id=<?= $cliente_id ?>">← Volver al Panel del Cliente</a>
 
     <form method="POST">
         <label>Torneo:</label>
@@ -79,19 +69,30 @@ $cliente = $conexion->query("SELECT nombre, apellido FROM clientes WHERE id = $c
         <button type="submit">Agregar Competencia</button>
     </form>
 
-    <h3>Competencias Registradas</h3>
+    <h3>📄 Competencias Registradas</h3>
     <table>
-        <tr><th>Torneo</th><th>Fecha</th><th>Categoría</th><th>Resultado</th><th>Ciudad</th><th>Eliminar</th></tr>
-        <?php while ($c = $competencias->fetch_assoc()): ?>
+        <thead>
             <tr>
-                <td><?= htmlspecialchars($c['torneo']) ?></td>
-                <td><?= htmlspecialchars($c['fecha']) ?></td>
-                <td><?= htmlspecialchars($c['categoria']) ?></td>
-                <td><?= htmlspecialchars($c['resultado']) ?></td>
-                <td><?= htmlspecialchars($c['ciudad']) ?></td>
-                <td><a class="eliminar" href="?id=<?= $cliente_id ?>&eliminar=<?= $c['id'] ?>" onclick="return confirm('Eliminar esta competencia?')">🗑️</a></td>
+                <th>Torneo</th>
+                <th>Fecha</th>
+                <th>Categoría</th>
+                <th>Resultado</th>
+                <th>Ciudad</th>
+                <th>Eliminar</th>
             </tr>
-        <?php endwhile; ?>
+        </thead>
+        <tbody>
+            <?php while ($c = $competencias->fetch_assoc()): ?>
+                <tr>
+                    <td><?= htmlspecialchars($c['torneo']) ?></td>
+                    <td><?= htmlspecialchars($c['fecha']) ?></td>
+                    <td><?= htmlspecialchars($c['categoria']) ?></td>
+                    <td><?= htmlspecialchars($c['resultado']) ?></td>
+                    <td><?= htmlspecialchars($c['ciudad']) ?></td>
+                    <td><a class="eliminar" href="?id=<?= $cliente_id ?>&eliminar=<?= $c['id'] ?>" onclick="return confirm('¿Eliminar esta competencia?')">🗑️</a></td>
+                </tr>
+            <?php endwhile; ?>
+        </tbody>
     </table>
 </div>
 </body>

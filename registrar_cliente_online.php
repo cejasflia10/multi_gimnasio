@@ -23,48 +23,11 @@ if ($gimnasio_id) {
     <meta charset="UTF-8">
     <title>Registro de Cliente Online</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <style>
-        body {
-            background-color: #111;
-            color: gold;
-            font-family: Arial, sans-serif;
-            padding: 20px;
-        }
-        h2 {
-            text-align: center;
-            color: gold;
-        }
-        form {
-            max-width: 500px;
-            margin: auto;
-        }
-        label {
-            display: block;
-            margin-top: 12px;
-        }
-        input, select {
-            width: 100%;
-            padding: 8px;
-            margin-top: 4px;
-            background-color: #222;
-            color: white;
-            border: 1px solid gold;
-        }
-        input[type="submit"] {
-            background-color: gold;
-            color: black;
-            margin-top: 20px;
-            font-weight: bold;
-        }
-        .error {
-            color: red;
-            text-align: center;
-            margin-bottom: 10px;
-        }
-    </style>
+    <link rel="stylesheet" href="estilo_unificado.css">
+        
 </head>
 <body>
-
+<div class="contenedor">
 <h2>Registro de Cliente Online</h2>
 
 <form action="guardar_cliente_online.php" method="post">
@@ -103,6 +66,6 @@ if ($gimnasio_id) {
 
     <input type="submit" value="Registrar Cliente">
 </form>
-
+</div>
 </body>
 </html>

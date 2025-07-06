@@ -3,49 +3,54 @@
 <head>
   <meta charset="UTF-8">
   <title>Registro Online - Cliente</title>
-  <style>
-    body {
-      background-color: #111;
-      color: #f1c40f;
-      font-family: Arial, sans-serif;
-      padding: 20px;
-    }
-    form {
-      max-width: 600px;
-      margin: auto;
-      background-color: #1a1a1a;
-      padding: 20px;
-      border-radius: 10px;
-      border: 1px solid #f1c40f;
-    }
-    input, button {
-      width: 100%;
-      padding: 10px;
-      margin-top: 10px;
-      background-color: #222;
-      color: #fff;
-      border: 1px solid #f1c40f;
-      border-radius: 5px;
-    }
-    button {
-      background-color: #f1c40f;
-      color: #000;
-      font-weight: bold;
-    }
-  </style>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="estilo_unificado.css">
 </head>
 <body>
-  <h2 style="text-align:center;">Registro Online de Cliente</h2>
+<div class="contenedor">
+  <h2>📋 Registro Online de Cliente</h2>
+
   <form action="https://multi-gimnasio-1.onrender.com/registrar_cliente_online.php" method="POST">
-    <input type="text" name="apellido" placeholder="Apellido" required>
-    <input type="text" name="nombre" placeholder="Nombre" required>
-    <input type="text" name="dni" placeholder="DNI" required>
+    <label>Apellido:</label>
+    <input type="text" name="apellido" required>
+
+    <label>Nombre:</label>
+    <input type="text" name="nombre" required>
+
+    <label>DNI:</label>
+    <input type="text" name="dni" required>
+
+    <label>Fecha de nacimiento:</label>
     <input type="date" name="fecha_nacimiento" required>
-    <input type="text" name="domicilio" placeholder="Domicilio">
-    <input type="text" name="telefono" placeholder="Teléfono">
-    <input type="email" name="email" placeholder="Correo electrónico">
-    <input type="text" name="rfid_uid" placeholder="RFID UID (opcional)">
-    <button type="submit">Registrar Cliente</button>
+
+    <label>Domicilio:</label>
+    <input type="text" name="domicilio">
+
+    <label>Teléfono:</label>
+    <input type="text" name="telefono">
+
+    <label>Correo electrónico:</label>
+    <input type="email" name="email">
+
+    <label>Disciplina:</label>
+    <select name="disciplina" required>
+      <option value="">Seleccionar</option>
+      <option value="Boxeo">Boxeo</option>
+      <option value="Kickboxing">Kickboxing</option>
+      <option value="MMA">MMA</option>
+      <option value="Funcional">Funcional</option>
+    </select>
+
+    <label>Academia:</label>
+    <select name="gimnasio_id" required>
+      <option value="">Seleccionar gimnasio</option>
+      <option value="1">Fight Academy Centro</option>
+      <option value="2">Fight Academy Norte</option>
+      <option value="3">Fight Academy Sur</option>
+    </select>
+
+    <button type="submit">✅ Registrar Cliente</button>
   </form>
+</div>
 </body>
 </html>

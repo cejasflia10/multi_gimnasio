@@ -1,13 +1,14 @@
 <?php
 include 'conexion.php';
 if (session_status() === PHP_SESSION_NONE) session_start();
-include 'menu_horizontal.php'; // Este es el menú correcto según lo que pediste
+include 'menu_horizontal.php';
 include 'permisos.php';
 
 if (!tiene_permiso('profesores')) {
     echo "<h2 style='color:red;'>⛔ Acceso denegado</h2>";
     exit;
 }
+
 if (!isset($_GET['id'])) {
     die("ID de gimnasio no especificado.");
 }
@@ -53,7 +54,6 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
     if ($stmt->execute()) {
         if (!empty($_POST["usuario"]) && !empty($_POST["clave"])) {
             $usuario = $_POST["usuario"];
-
             $verificar = $conexion->prepare("SELECT id FROM usuarios WHERE usuario = ?");
             $verificar->bind_param("s", $usuario);
             $verificar->execute();
@@ -68,7 +68,6 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
             }
             $verificar->close();
         }
-
         header("Location: gimnasios.php");
         exit;
     } else {
@@ -83,130 +82,61 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
     <meta charset="UTF-8">
     <title>Editar Gimnasio</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <style>
-        body {
-            background-color: #111;
-            color: gold;
-            font-family: Arial, sans-serif;
-            margin: 0;
-            padding: 20px;
-        }
-        h2 {
-            text-align: center;
-            color: gold;
-        }
-        form {
-            max-width: 600px;
-            margin: auto;
-        }
-        label {
-            display: block;
-            margin-top: 15px;
-            font-weight: bold;
-        }
-        input[type="text"],
-        input[type="email"],
-        input[type="number"],
-        input[type="date"],
-        input[type="password"] {
-            width: 100%;
-            padding: 10px;
-            background-color: #222;
-            border: 1px solid gold;
-            color: gold;
-        }
-        .checkboxes {
-            margin-top: 15px;
-        }
-        .checkboxes label {
-            font-weight: normal;
-            display: block;
-        }
-        button {
-            margin-top: 20px;
-            padding: 12px;
-            width: 100%;
-            background-color: gold;
-            color: black;
-            font-weight: bold;
-            border: none;
-            cursor: pointer;
-        }
-        a {
-            display: block;
-            text-align: center;
-            color: gold;
-            margin-top: 20px;
-            text-decoration: underline;
-        }
-        .error {
-            text-align: center;
-            color: red;
-            margin-top: 10px;
-        }
-        .logo-preview {
-            text-align: center;
-            margin-bottom: 20px;
-        }
-        .logo-preview img {
-            max-height: 80px;
-            border-radius: 10px;
-            border: 2px solid gold;
-        }
-    </style>
+    <link rel="stylesheet" href="estilo_unificado.css">
 </head>
 <body>
 
-<h2>Editar Gimnasio</h2>
+<div class="contenedor">
+    <h2>🏋️ Editar Gimnasio</h2>
 
-<?php if (!empty($gimnasio['logo'])): ?>
-<div class="logo-preview">
-    <img src="logos/<?= htmlspecialchars($gimnasio['logo']) ?>" alt="Logo del gimnasio">
-</div>
-<?php endif; ?>
+    <?php if (!empty($gimnasio['logo'])): ?>
+    <div style="text-align:center; margin-bottom:20px;">
+        <img src="logos/<?= htmlspecialchars($gimnasio['logo']) ?>" alt="Logo del gimnasio" style="max-height:80px; border-radius:10px; border:2px solid gold;">
+    </div>
+    <?php endif; ?>
 
-<?php if (!empty($error)): ?>
-    <div class="error"><?= htmlspecialchars($error, ENT_QUOTES) ?></div>
-<?php endif; ?>
+    <?php if (!empty($error)): ?>
+        <div class="error"><?= htmlspecialchars($error, ENT_QUOTES) ?></div>
+    <?php endif; ?>
 
-<form method="POST">
-    <label>Nombre:</label>
-    <input type="text" name="nombre" value="<?= htmlspecialchars($gimnasio['nombre'] ?? '', ENT_QUOTES) ?>" required>
+    <form method="POST">
+        <label>Nombre:</label>
+        <input type="text" name="nombre" value="<?= htmlspecialchars($gimnasio['nombre'] ?? '', ENT_QUOTES) ?>" required>
 
-    <label>Dirección:</label>
-    <input type="text" name="direccion" value="<?= htmlspecialchars($gimnasio['direccion'] ?? '', ENT_QUOTES) ?>">
+        <label>Dirección:</label>
+        <input type="text" name="direccion" value="<?= htmlspecialchars($gimnasio['direccion'] ?? '', ENT_QUOTES) ?>">
 
-    <label>Teléfono:</label>
-    <input type="text" name="telefono" value="<?= htmlspecialchars($gimnasio['telefono'] ?? '', ENT_QUOTES) ?>">
+        <label>Teléfono:</label>
+        <input type="text" name="telefono" value="<?= htmlspecialchars($gimnasio['telefono'] ?? '', ENT_QUOTES) ?>">
 
-    <label>Email:</label>
-    <input type="email" name="email" value="<?= htmlspecialchars($gimnasio['email'] ?? '', ENT_QUOTES) ?>">
+        <label>Email:</label>
+        <input type="email" name="email" value="<?= htmlspecialchars($gimnasio['email'] ?? '', ENT_QUOTES) ?>">
 
-    <label>Plan:</label>
-    <input type="text" name="plan" maxlength="100" value="<?= htmlspecialchars($gimnasio['plan'] ?? '', ENT_QUOTES) ?>">
+        <label>Plan:</label>
+        <input type="text" name="plan" maxlength="100" value="<?= htmlspecialchars($gimnasio['plan'] ?? '', ENT_QUOTES) ?>">
 
-    <label>Fecha de vencimiento:</label>
-    <input type="date" name="fecha_vencimiento" value="<?= htmlspecialchars($gimnasio['fecha_vencimiento'] ?? '', ENT_QUOTES) ?>">
+        <label>Fecha de vencimiento:</label>
+        <input type="date" name="fecha_vencimiento" value="<?= htmlspecialchars($gimnasio['fecha_vencimiento'] ?? '', ENT_QUOTES) ?>">
 
-    <label>Duración del plan (en meses):</label>
-    <input type="number" name="duracion_plan" value="<?= htmlspecialchars($gimnasio['duracion_plan'] ?? '', ENT_QUOTES) ?>" min="1">
+        <label>Duración del plan (en meses):</label>
+        <input type="number" name="duracion_plan" value="<?= htmlspecialchars($gimnasio['duracion_plan'] ?? '', ENT_QUOTES) ?>" min="1">
 
-    <label>Límite de clientes:</label>
-    <input type="number" name="limite_clientes" value="<?= htmlspecialchars($gimnasio['limite_clientes'] ?? '', ENT_QUOTES) ?>" min="0">
+        <label>Límite de clientes:</label>
+        <input type="number" name="limite_clientes" value="<?= htmlspecialchars($gimnasio['limite_clientes'] ?? '', ENT_QUOTES) ?>" min="0">
 
-    <div class="checkboxes">
         <label><input type="checkbox" name="acceso_panel" <?= !empty($gimnasio['acceso_panel']) ? 'checked' : '' ?>> Acceso al panel</label>
         <label><input type="checkbox" name="acceso_ventas" <?= !empty($gimnasio['acceso_ventas']) ? 'checked' : '' ?>> Acceso a ventas</label>
         <label><input type="checkbox" name="acceso_asistencias" <?= !empty($gimnasio['acceso_asistencias']) ? 'checked' : '' ?>> Acceso a asistencias</label>
-    </div>
 
-    <label>Crear nuevo usuario (opcional):</label>
-    <input type="text" name="usuario" placeholder="Usuario">
-    <input type="password" name="clave" placeholder="Clave (mínimo 6 caracteres)">
+        <label>Crear nuevo usuario (opcional):</label>
+        <input type="text" name="usuario" placeholder="Usuario">
+        <input type="password" name="clave" placeholder="Clave (mínimo 6 caracteres)">
 
-    <button type="submit">Guardar cambios</button>
-    <a href="gimnasios.php">Volver</a>
-</form>
+        <button type="submit">Guardar cambios</button>
+        <br><br>
+        <a href="gimnasios.php" style="color:#ffd600;">⬅ Volver</a>
+    </form>
+</div>
 
 </body>
 </html>

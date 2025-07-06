@@ -39,19 +39,16 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 <head>
     <meta charset="UTF-8">
     <title>Editar Turno</title>
-    <style>
-        body { background: black; color: gold; font-family: Arial; text-align: center; padding: 40px; }
-        form { background: #111; padding: 20px; border-radius: 10px; display: inline-block; }
-        input, select { padding: 8px; margin: 10px; width: 200px; border-radius: 5px; border: none; }
-        button { padding: 10px 20px; background: gold; color: black; border: none; border-radius: 5px; font-weight: bold; }
-    </style>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="estilo_unificado.css">
 </head>
 <body>
 
-<h2>✏️ Editar Turno</h2>
+<div class="contenedor">
+    <h2>✏️ Editar Turno</h2>
 
-<form method="POST">
-    <label>Día:<br>
+    <form method="POST">
+        <label>Día:</label>
         <select name="dia" required>
             <?php
             $dias = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
@@ -61,20 +58,32 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             }
             ?>
         </select>
-    </label><br>
-    <label>Hora Inicio:<br><input type="time" name="hora_inicio" value="<?= $turno['hora_inicio'] ?>" required></label><br>
-    <label>Hora Fin:<br><input type="time" name="hora_fin" value="<?= $turno['hora_fin'] ?>" required></label><br>
-    <label>Profesor:<br>
+
+        <label>Hora Inicio:</label>
+        <input type="time" name="hora_inicio" value="<?= $turno['hora_inicio'] ?>" required>
+
+        <label>Hora Fin:</label>
+        <input type="time" name="hora_fin" value="<?= $turno['hora_fin'] ?>" required>
+
+        <label>Profesor:</label>
         <select name="profesor_id" required>
-            <?php while ($p = $profesores->fetch_assoc()): 
+            <?php while ($p = $profesores->fetch_assoc()):
                 $sel = ($p['id'] == $turno['profesor_id']) ? "selected" : ""; ?>
-                <option value="<?= $p['id'] ?>" <?= $sel ?>><?= $p['apellido'] ?> <?= $p['nombre'] ?></option>
+                <option value="<?= $p['id'] ?>" <?= $sel ?>>
+                    <?= $p['apellido'] . ' ' . $p['nombre'] ?>
+                </option>
             <?php endwhile; ?>
         </select>
-    </label><br>
-    <label>Cupo máximo:<br><input type="number" name="cupo_maximo" value="<?= $turno['cupo_maximo'] ?>" required min="1" max="50"></label><br>
-    <button type="submit">Guardar Cambios</button>
-</form>
+
+        <label>Cupo máximo:</label>
+        <input type="number" name="cupo_maximo" value="<?= $turno['cupo_maximo'] ?>" required min="1" max="50">
+
+        <button type="submit">💾 Guardar Cambios</button>
+    </form>
+
+    <br>
+    <a href="cargar_turno.php" style="color:#ffd600;">⬅ Volver a Turnos</a>
+</div>
 
 </body>
 </html>

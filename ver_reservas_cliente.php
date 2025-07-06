@@ -1,7 +1,7 @@
 <?php
 if (session_status() === PHP_SESSION_NONE) session_start();
 include 'conexion.php';
-include 'menu_horizontal.php';
+include 'menu_horizontal.php'; // O usar 'menu_cliente.php' si corresponde
 
 date_default_timezone_set('America/Argentina/Buenos_Aires');
 
@@ -24,42 +24,38 @@ $reservas_q = $conexion->query("
 ?>
 
 <!DOCTYPE html>
-<html>
+<html lang="es">
 <head>
     <meta charset="UTF-8">
     <title>Mis Reservas</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <style>
-        body { background: #000; color: gold; font-family: Arial, sans-serif; padding: 20px; }
-        .reserva { background: #111; border: 1px solid gold; border-radius: 6px; padding: 10px; margin: 10px 0; }
-        a.cancelar { background: red; color: #fff; padding: 5px 10px; text-decoration: none; border-radius: 4px; display: inline-block; margin-top: 5px; }
-    </style>
+    <link rel="stylesheet" href="estilo_unificado.css">
 </head>
-<script src="fullscreen.js"></script>
-
 <body>
+<div class="contenedor">
+    <h2 style="text-align: center;">🎟️ Mis Reservas</h2>
 
-<h2 style="text-align: center;">🎟️ Mis Reservas</h2>
+    <?php if ($reservas_q->num_rows === 0): ?>
+        <p style="text-align: center; color: orange;">No tenés reservas activas.</p>
+    <?php else: ?>
+        <?php while ($r = $reservas_q->fetch_assoc()): ?>
+            <div class="box" style="background:#111; padding:15px; border:1px solid gold; margin-bottom:10px; border-radius:8px;">
+                <strong>📅 Fecha:</strong> <?= $r['fecha'] ?><br>
+                <strong>📌 Día:</strong> <?= $r['dia'] ?><br>
+                <strong>🕐 Horario:</strong> <?= $r['hora_inicio'] ?> - <?= $r['hora_fin'] ?><br>
+                <strong>👨‍🏫 Profesor:</strong> <?= $r['profesor'] ?><br>
+                <?php if ($r['fecha'] >= date('Y-m-d')): ?>
+                    <a class="boton boton-rojo" href="cancelar_reserva.php?id=<?= $r['id'] ?>">Cancelar</a>
+                <?php else: ?>
+                    <span style="color: gray;">Reserva pasada</span>
+                <?php endif; ?>
+            </div>
+        <?php endwhile; ?>
+    <?php endif; ?>
 
-<?php if ($reservas_q->num_rows === 0): ?>
-    <p style="text-align: center; color: orange;">No tenés reservas activas.</p>
-<?php else: ?>
-    <?php while ($r = $reservas_q->fetch_assoc()): ?>
-        <div class="reserva">
-            <strong>Fecha:</strong> <?= $r['fecha'] ?><br>
-            <strong>Día:</strong> <?= $r['dia'] ?><br>
-            <strong>Horario:</strong> <?= $r['hora_inicio'] ?> - <?= $r['hora_fin'] ?><br>
-            <strong>Profesor:</strong> <?= $r['profesor'] ?><br>
-            <?php if ($r['fecha'] >= date('Y-m-d')): ?>
-                <a class="cancelar" href="cancelar_reserva.php?id=<?= $r['id'] ?>">Cancelar</a>
-            <?php else: ?>
-                <span style="color: gray;">Reserva pasada</span>
-            <?php endif; ?>
-        </div>
-    <?php endwhile; ?>
-<?php endif; ?>
-
-<a href="panel_cliente.php" style="display: inline-block; margin-top: 20px; padding: 10px 20px; background: gold; color: black; text-decoration: none; border-radius: 5px;">Volver al Panel</a>
-
+    <div style="text-align:center; margin-top: 20px;">
+        <a href="panel_cliente.php" class="boton">← Volver al Panel</a>
+    </div>
+</div>
 </body>
 </html>

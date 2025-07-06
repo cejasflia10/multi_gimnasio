@@ -22,24 +22,10 @@ $alumnos = $conexion->query("
     <meta charset="UTF-8">
     <title>Mis Alumnos</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <style>
-        body { background-color: #000; color: gold; font-family: Arial, sans-serif; padding: 20px; }
-        h1 { text-align: center; }
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 20px;
-        }
-        th, td {
-            border: 1px solid gold;
-            padding: 10px;
-            text-align: center;
-        }
-        th { background-color: #222; }
-    </style>
+    <link rel="stylesheet" href="estilo_unificado.css">
 </head>
 <body>
-
+<div class="contenedor">
 <h1>👨‍🏫 Alumnos Asignados</h1>
 
 <?php if ($alumnos->num_rows > 0): ?>
@@ -66,6 +52,8 @@ $alumnos = $conexion->query("
 <?php else: ?>
     <p style="text-align: center;">No se encontraron alumnos asignados.</p>
 <?php endif; ?>
+</div>
+
 <script>
 // Reactivar pantalla completa con el primer clic
 document.addEventListener('DOMContentLoaded', function () {

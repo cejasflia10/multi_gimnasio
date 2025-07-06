@@ -43,60 +43,21 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
     <meta charset="UTF-8">
     <title>Editar Turno</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <style>
-        body {
-            background-color: #000;
-            color: gold;
-            font-family: Arial, sans-serif;
-            padding: 20px;
-            text-align: center;
-        }
-        form {
-            max-width: 400px;
-            margin: auto;
-            background-color: #111;
-            padding: 20px;
-            border-radius: 10px;
-        }
-        input, select {
-            width: 100%;
-            padding: 10px;
-            margin: 10px 0;
-            background-color: #222;
-            border: 1px solid gold;
-            color: gold;
-            border-radius: 5px;
-        }
-        button {
-            background-color: gold;
-            color: black;
-            font-weight: bold;
-            border: none;
-            padding: 10px 20px;
-            border-radius: 5px;
-            cursor: pointer;
-        }
-        a {
-            color: gold;
-            text-decoration: none;
-            display: inline-block;
-            margin-top: 15px;
-        }
-    </style>
+    <link rel="stylesheet" href="estilo_unificado.css">
 </head>
-<script src="fullscreen.js"></script>
-
 <body>
 
-    <h1>✏️ Editar Turno de Profesor</h1>
+<div class="contenedor">
+    <h2>✏️ Editar Turno de Profesor</h2>
 
     <form method="POST">
         <label>Profesor:</label>
         <select name="profesor_id" required>
-            <?php while ($p = $profesores->fetch_assoc()) {
-                $selected = ($p['id'] == $turno['profesor_id']) ? "selected" : "";
-                echo "<option value='{$p['id']}' $selected>{$p['apellido']} {$p['nombre']}</option>";
-            } ?>
+            <?php while ($p = $profesores->fetch_assoc()): ?>
+                <option value="<?= $p['id'] ?>" <?= $p['id'] == $turno['profesor_id'] ? 'selected' : '' ?>>
+                    <?= $p['apellido'] . ' ' . $p['nombre'] ?>
+                </option>
+            <?php endwhile; ?>
         </select>
 
         <label>Día:</label>
@@ -116,10 +77,12 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
         <label>Hora Fin:</label>
         <input type="time" name="hora_fin" value="<?= $turno['hora_fin'] ?>" required>
 
-        <button type="submit">Guardar Cambios</button>
-        <br>
-        <a href="turnos_profesor.php">← Volver a Turnos</a>
+        <button type="submit">💾 Guardar Cambios</button>
     </form>
+
+    <br>
+    <a href="turnos_profesor.php" style="color:#ffd600;">← Volver a Turnos</a>
+</div>
 
 </body>
 </html>

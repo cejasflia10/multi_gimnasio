@@ -10,18 +10,16 @@ $profesores = $conexion->query("SELECT * FROM profesores");
 <!DOCTYPE html>
 <html lang="es">
 <head>
+    <link rel="stylesheet" href="estilo_unificado.css">
+
     <meta charset="UTF-8">
     <title>Agregar Turno</title>
-    <style>
-        body { background-color: #111; color: #f1c40f; font-family: Arial; }
-        form { max-width: 400px; margin: auto; padding: 20px; background: #222; border-radius: 10px; }
-        label, select, input { display: block; width: 100%; margin-bottom: 15px; }
-        button { background: #f1c40f; border: none; padding: 10px; width: 100%; color: #000; font-weight: bold; cursor: pointer; }
-    </style>
+    
 </head>
-<script src="fullscreen.js"></script>
 
 <body>
+    <div class="contenedor">
+
     <form action="guardar_turno.php" method="POST">
         <h2>Nuevo Turno</h2>
         
@@ -45,5 +43,7 @@ $profesores = $conexion->query("SELECT * FROM profesores");
 
         <button type="submit">Guardar Turno</button>
     </form>
+</div>
+
 </body>
 </html>

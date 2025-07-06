@@ -20,43 +20,32 @@ $alumnos = $conexion->query("
     <meta charset="UTF-8">
     <title>Subir Rutina</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <style>
-    body { background: #000; color: gold; font-family: Arial, sans-serif; padding: 20px; }
-    .formulario {
-        max-width: 500px; margin: auto; background: #111; padding: 20px;
-        border-radius: 10px; border: 1px solid gold;
-    }
-    h2 { text-align: center; margin-bottom: 20px; }
-    label, select, input, textarea {
-        display: block; width: 100%; margin-top: 10px;
-    }
-    select, input[type="file"], input[type='text'], input[type='date'], textarea {
-        background: #222; color: gold; border: 1px solid gold;
-        padding: 10px; border-radius: 5px;
-    }
-    input[type="submit"] {
-        background: gold; color: black; font-weight: bold; cursor: pointer;
-        border: none; padding: 12px; margin-top: 15px;
-    }
-</style>
+    <link rel="stylesheet" href="estilo_unificado.css">
 </head>
 <body>
 
-<div class="formulario">
-    <h2>📄 Subir Rutina / Archivo</h2>
-    <form action="guardar_rutina.php" method="POST" enctype="multipart/form-data">
-        <label for="cliente_id">Alumno:</label>
-        <select name="cliente_id" required>
-            <option value="">-- Elegir alumno --</option>
-            <?php while ($c = $alumnos->fetch_assoc()): ?>
-                <option value="<?= $c['id'] ?>"><?= $c['apellido'] . ', ' . $c['nombre'] ?></option>
-            <?php endwhile; ?>
-        </select>
+<div class="contenedor">
+    <h2 class="titulo-seccion">📄 Subir Rutina / Archivo al Alumno</h2>
 
-        <label for="archivo">Archivo:</label>
-        <input type="file" name="archivo" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" required>
+    <form action="guardar_rutina.php" method="POST" enctype="multipart/form-data" class="formulario">
+        <div class="grupo-formulario">
+            <label for="cliente_id">Alumno:</label>
+            <select name="cliente_id" required>
+                <option value="">-- Elegir alumno --</option>
+                <?php while ($c = $alumnos->fetch_assoc()): ?>
+                    <option value="<?= $c['id'] ?>"><?= $c['apellido'] . ', ' . $c['nombre'] ?></option>
+                <?php endwhile; ?>
+            </select>
+        </div>
 
-        <input type="submit" value="Subir Rutina">
+        <div class="grupo-formulario">
+            <label for="archivo">Archivo:</label>
+            <input type="file" name="archivo" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" required>
+        </div>
+
+        <div class="grupo-formulario">
+            <input type="submit" value="Subir Rutina" class="btn-principal">
+        </div>
     </form>
 </div>
 

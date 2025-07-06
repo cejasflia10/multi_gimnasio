@@ -1,21 +1,16 @@
 <?php
-if (session_status() === PHP_SESSION_NONE) {
-    session_start();
-}
-if (!isset($_SESSION['gimnasio_id'])) {
-    die("Acceso denegado.");
-}
+if (session_status() === PHP_SESSION_NONE) session_start();
 include 'conexion.php';
 include 'menu_horizontal.php';
 
-$gimnasio_id = $_SESSION['gimnasio_id'];
+$gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
 
-if (!isset($_GET['id'])) {
-    die("ID de disciplina no especificado.");
+if (!$gimnasio_id || !isset($_GET['id'])) {
+    die("Acceso denegado.");
 }
 
 $id = intval($_GET['id']);
-$query = "SELECT * FROM disciplinas WHERE id = $id AND id_gimnasio = $gimnasio_id";
+$query = "SELECT * FROM disciplinas WHERE id = $id AND gimnasio_id = $gimnasio_id";
 $resultado = $conexion->query($query);
 
 if ($resultado->num_rows === 0) {
@@ -28,7 +23,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $nombre = trim($_POST['nombre']);
     $descripcion = trim($_POST['descripcion']);
 
-    $stmt = $conexion->prepare("UPDATE disciplinas SET nombre = ?, descripcion = ? WHERE id = ? AND id_gimnasio = ?");
+    $stmt = $conexion->prepare("UPDATE disciplinas SET nombre = ?, descripcion = ? WHERE id = ? AND gimnasio_id = ?");
     $stmt->bind_param("ssii", $nombre, $descripcion, $id, $gimnasio_id);
 
     if ($stmt->execute()) {
@@ -46,62 +41,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <meta charset="UTF-8">
     <title>Editar Disciplina</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <style>
-        body {
-            background-color: #111;
-            color: gold;
-            font-family: Arial, sans-serif;
-            padding: 20px;
-            margin: 0;
-        }
-        .container {
-            max-width: 500px;
-            margin: auto;
-            background-color: #222;
-            padding: 20px;
-            border-radius: 10px;
-            box-shadow: 0 0 15px gold;
-        }
-        h2 {
-            text-align: center;
-        }
-        label {
-            display: block;
-            margin-top: 10px;
-        }
-        input[type="text"], textarea {
-            width: 100%;
-            padding: 10px;
-            margin-top: 5px;
-            background: #333;
-            color: gold;
-            border: 1px solid gold;
-            border-radius: 5px;
-        }
-        button {
-            margin-top: 20px;
-            width: 100%;
-            padding: 12px;
-            background: gold;
-            color: black;
-            font-weight: bold;
-            border: none;
-            border-radius: 5px;
-            cursor: pointer;
-        }
-        @media (max-width: 600px) {
-            .container {
-                margin: 10px;
-                padding: 15px;
-            }
-        }
-    </style>
+    <link rel="stylesheet" href="estilo_unificado.css">
 </head>
-<script src="fullscreen.js"></script>
-
 <body>
-<div class="container">
-    <h2>Editar Disciplina</h2>
+<div class="contenedor">
+    <h2>✏️ Editar Disciplina</h2>
     <form method="POST">
         <label for="nombre">Nombre:</label>
         <input type="text" name="nombre" id="nombre" value="<?= htmlspecialchars($disciplina['nombre']) ?>" required>
@@ -110,6 +54,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <textarea name="descripcion" id="descripcion" rows="4"><?= htmlspecialchars($disciplina['descripcion']) ?></textarea>
 
         <button type="submit">Guardar Cambios</button>
+        <br><br>
+        <a href="disciplinas.php" class="btn-volver">⬅ Volver al listado</a>
     </form>
 </div>
 </body>

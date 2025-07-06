@@ -28,54 +28,16 @@ $resultado = $conexion->query("SELECT * FROM planes_adicionales WHERE gimnasio_i
 <!DOCTYPE html>
 <html lang="es">
 <head>
+
     <meta charset="UTF-8">
     <title>Planes Adicionales</title>
-    <style>
-        body {
-            background-color: #000;
-            color: gold;
-            font-family: Arial, sans-serif;
-            text-align: center;
-        }
-        table {
-            margin: 20px auto;
-            border-collapse: collapse;
-            width: 90%;
-            color: #fff;
-        }
-        th, td {
-            border: 1px solid gold;
-            padding: 10px;
-        }
-        th {
-            background-color: #111;
-        }
-        input, button {
-            padding: 10px;
-            margin: 5px;
-        }
-        .volver {
-            margin-top: 20px;
-            display: inline-block;
-            padding: 10px 20px;
-            background-color: gold;
-            color: black;
-            text-decoration: none;
-            border-radius: 5px;
-        }
-        .btn-eliminar {
-            background-color: gold;
-            color: black;
-            padding: 6px 10px;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-        }
-    </style>
+    <link rel="stylesheet" href="estilo_unificado.css">
+
 </head>
-<script src="fullscreen.js"></script>
 
 <body>
+<div class="contenedor">
+    <!-- Contenido aquí -->
 
 <h1>Planes Adicionales</h1>
 
@@ -103,6 +65,7 @@ $resultado = $conexion->query("SELECT * FROM planes_adicionales WHERE gimnasio_i
 </table>
 
 <a href="index.php" class="volver">Volver al menú</a>
+</div>
 
 </body>
 </html>

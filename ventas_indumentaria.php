@@ -14,14 +14,10 @@ $productos = $conexion->query("SELECT id, nombre, precio_venta, stock FROM produ
 <head>
     <meta charset="UTF-8">
     <title>Venta de Indumentaria</title>
-    <style>
-        body { background-color: #000; color: gold; font-family: sans-serif; padding: 20px; }
-        input, select, button { padding: 8px; margin: 5px; }
-        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-        th, td { padding: 10px; border: 1px solid #444; text-align: center; }
-    </style>
+    <link rel="stylesheet" href="estilo_unificado.css">
 </head>
 <body>
+<div class="contenedor">
 <h2>👕 Venta de Indumentaria</h2>
 
 <form method="POST" action="formas_pago.php" onsubmit="return calcularTotal();">
@@ -64,7 +60,7 @@ $productos = $conexion->query("SELECT id, nombre, precio_venta, stock FROM produ
     <input type="hidden" name="total" id="total_hidden">
     <br><button type="submit">Siguiente → Formas de Pago</button>
 </form>
-
+</div>
 <script>
 function calcularTotal() {
     let total = 0;
@@ -77,5 +73,6 @@ function calcularTotal() {
     return true;
 }
 </script>
+</div>
 </body>
 </html>

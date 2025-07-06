@@ -21,52 +21,42 @@ $graduaciones = $conexion->query("
     <meta charset="UTF-8">
     <title>Mis Graduaciones</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <style>
-        body { background-color: #000; color: gold; font-family: Arial, sans-serif; padding: 20px; }
-        h1 { text-align: center; }
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 20px;
-        }
-        th, td {
-            border: 1px solid gold;
-            padding: 10px;
-            text-align: center;
-        }
-        th { background-color: #222; }
-    </style>
+    <link rel="stylesheet" href="estilo_unificado.css">
 </head>
 <body>
 
-<h1>🎓 Mis Graduaciones</h1>
+<div class="contenedor">
+    <h1 class="titulo-seccion">🎓 Mis Graduaciones</h1>
 
-<?php if ($graduaciones->num_rows > 0): ?>
-<table>
-    <thead>
-        <tr>
-            <th>Fecha</th>
-            <th>Disciplina</th>
-            <th>Nivel</th>
-            <th>Profesor</th>
-            <th>Observaciones</th>
-        </tr>
-    </thead>
-    <tbody>
-        <?php while ($g = $graduaciones->fetch_assoc()): ?>
-        <tr>
-            <td><?= $g['fecha'] ?></td>
-            <td><?= $g['disciplina'] ?></td>
-            <td><?= $g['nivel'] ?></td>
-            <td><?= $g['profesor'] ?></td>
-            <td><?= $g['observaciones'] ?></td>
-        </tr>
-        <?php endwhile; ?>
-    </tbody>
-</table>
-<?php else: ?>
-    <p style="text-align: center;">Aún no tenés graduaciones registradas.</p>
-<?php endif; ?>
+    <?php if ($graduaciones->num_rows > 0): ?>
+        <div class="tabla-contenedor">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Fecha</th>
+                        <th>Disciplina</th>
+                        <th>Nivel</th>
+                        <th>Profesor</th>
+                        <th>Observaciones</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php while ($g = $graduaciones->fetch_assoc()): ?>
+                    <tr>
+                        <td><?= $g['fecha'] ?></td>
+                        <td><?= $g['disciplina'] ?></td>
+                        <td><?= $g['nivel'] ?></td>
+                        <td><?= $g['profesor'] ?></td>
+                        <td><?= nl2br(htmlspecialchars($g['observaciones'])) ?></td>
+                    </tr>
+                    <?php endwhile; ?>
+                </tbody>
+            </table>
+        </div>
+    <?php else: ?>
+        <p class="info" style="text-align:center;">Aún no tenés graduaciones registradas.</p>
+    <?php endif; ?>
+</div>
 
 </body>
 </html>

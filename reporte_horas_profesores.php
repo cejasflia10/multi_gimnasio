@@ -50,40 +50,10 @@ while ($fila = $query->fetch_assoc()) {
     <meta charset="UTF-8">
     <title>Horas Trabajadas Profesores</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <style>
-        body {
-            background-color: #000;
-            color: gold;
-            font-family: Arial, sans-serif;
-            padding: 20px;
-        }
-        h2 {
-            margin-top: 40px;
-            border-bottom: 1px solid gold;
-            padding-bottom: 5px;
-        }
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-bottom: 30px;
-        }
-        th, td {
-            border: 1px solid gold;
-            padding: 8px;
-            text-align: center;
-        }
-        th {
-            background-color: #222;
-        }
-        .mensaje {
-            margin-top: 30px;
-            color: orangered;
-            font-size: 20px;
-            text-align: center;
-        }
-    </style>
+    <link rel="stylesheet" href="estilo_unificado.css">
 </head>
 <body>
+   <div class="contenedor"> 
     <h1>Horas Trabajadas por Profesores - <?= date('F Y') ?></h1>
 
     <?php if (empty($datos)): ?>
@@ -116,5 +86,6 @@ while ($fila = $query->fetch_assoc()) {
             </tr>
         </table>
     <?php endforeach; ?>
+</div>
 </body>
 </html>

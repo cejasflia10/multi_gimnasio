@@ -48,25 +48,11 @@ $alumnos = $conexion->query("
     <meta charset="UTF-8">
     <title>Plan de Entrenamiento</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <style>
-        body { background: #111; color: gold; font-family: Arial; padding: 20px; }
-        form {
-            background: #222; padding: 20px; max-width: 700px;
-            margin: auto; border-radius: 10px;
-        }
-        label { display: block; margin-top: 10px; }
-        input, textarea, select {
-            width: 100%; background: #000; color: gold;
-            padding: 8px; border: 1px solid gold; border-radius: 5px;
-        }
-        button {
-            margin-top: 20px; width: 100%; padding: 10px;
-            background: gold; color: black; font-weight: bold;
-            border: none; border-radius: 5px; cursor: pointer;
-        }
-    </style>
+    <link rel="stylesheet" href="estilo_unificado.css">
+        
 </head>
 <body>
+    <div class="contenedor">
     <h2 style="text-align:center;">📋 Crear Plan de Entrenamiento</h2>
     <form method="POST" enctype="multipart/form-data">
         <label>Alumno:</label>
@@ -97,5 +83,6 @@ $alumnos = $conexion->query("
 
         <button type="submit">Guardar Plan</button>
     </form>
+</div>
 </body>
 </html>

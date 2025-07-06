@@ -25,50 +25,17 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 <!DOCTYPE html>
 <html lang="es">
 <head>
+  <link rel="stylesheet" href="estilo_unificado.css">
+
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Agregar Suplemento</title>
-  <style>
-    body {
-      background-color: #000;
-      color: gold;
-      font-family: Arial, sans-serif;
-      padding: 20px;
-    }
-    .container {
-      max-width: 600px;
-      margin: auto;
-    }
-    label, input, select, button {
-      display: block;
-      width: 100%;
-      margin-top: 10px;
-      padding: 10px;
-      font-size: 16px;
-      border-radius: 6px;
-    }
-    input, select {
-      background-color: #111;
-      color: gold;
-      border: 1px solid gold;
-    }
-    button {
-      background-color: gold;
-      color: black;
-      border: none;
-      margin-top: 20px;
-      font-weight: bold;
-      cursor: pointer;
-    }
-    h1 {
-      text-align: center;
-    }
-  </style>
+ 
 </head>
 <script src="fullscreen.js"></script>
 
 <body>
-  <div class="container">
+<div class="contenedor">
     <h1>Agregar Suplemento</h1>
     <form method="POST">
       <label>Nombre:</label>
@@ -97,5 +64,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
       <button type="submit">Guardar Suplemento</button>
     </form>
   </div>
+    </div>
+
 </body>
 </html>

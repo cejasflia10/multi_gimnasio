@@ -35,33 +35,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <!DOCTYPE html>
 <html lang="es">
 <head>
+    <link rel="stylesheet" href="estilo_unificado.css">
+
     <meta charset="UTF-8">
     <title>Agregar Profesor</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <style>
-        body { background-color: #111; color: gold; font-family: Arial; padding: 20px; }
-        form { max-width: 400px; margin: auto; }
-        label { display: block; margin-top: 10px; }
-        input[type="text"], input[type="number"] {
-            width: 100%; padding: 8px; background: #222; color: gold; border: 1px solid #444;
-        }
-        .botones {
-            margin-top: 20px;
-            display: flex;
-            justify-content: space-between;
-        }
-        input[type="submit"], a {
-            background: gold; color: black; padding: 10px 20px; text-decoration: none;
-            font-weight: bold; border: none; border-radius: 5px;
-        }
-        input[type="submit"]:hover, a:hover {
-            background: #ffd700;
-        }
-    </style>
+
 </head>
 <script src="fullscreen.js"></script>
 
 <body>
+<div class="contenedor">
 
 <h1>➕ Agregar Profesor</h1>
 
@@ -84,6 +68,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <div class="botones">
         <input type="submit" value="Guardar">
         <a href="index.php">Volver al menú</a>
+    </div>
+
     </div>
 </form>
 

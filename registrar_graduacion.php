@@ -20,28 +20,11 @@ $alumnos = $conexion->query("
     <meta charset="UTF-8">
     <title>Registrar Graduación</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <style>
-        body { background: #000; color: gold; font-family: Arial, sans-serif; padding: 20px; }
-        .formulario {
-            max-width: 500px; margin: auto; background: #111; padding: 20px;
-            border-radius: 10px; border: 1px solid gold;
-        }
-        h2 { text-align: center; margin-bottom: 20px; }
-        label, select, input {
-            display: block; width: 100%; margin-top: 10px;
-        }
-        select, input[type='text'], input[type='date'] {
-            background: #222; color: gold; border: 1px solid gold;
-            padding: 10px; border-radius: 5px;
-        }
-        input[type="submit"] {
-            background: gold; color: black; font-weight: bold; cursor: pointer;
-            border: none; padding: 12px; margin-top: 15px;
-        }
-    </style>
+    <link rel="stylesheet" href="estilo_unificado.css">
+
 </head>
 <body>
-
+<div class="contenedor">
 <div class="formulario">
     <h2>🎓 Registrar Graduación del Alumno</h2>
     <form action="guardar_graduacion.php" method="POST">
@@ -62,6 +45,6 @@ $alumnos = $conexion->query("
         <input type="submit" value="Registrar Graduación">
     </form>
 </div>
-
+</div>
 </body>
 </html>

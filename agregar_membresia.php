@@ -15,55 +15,17 @@ $adicionales = $conexion->query("SELECT id, nombre FROM planes_adicionales WHERE
 <!DOCTYPE html>
 <html lang="es">
 <head>
+    <link rel="stylesheet" href="estilo_unificado.css">
+
     <meta charset="UTF-8">
     <title>Agregar Membresía</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <style>
-        body {
-            background-color: #111;
-            color: gold;
-            font-family: Arial, sans-serif;
-            margin: 0;
-            padding: 0;
-        }
-        .container {
-            max-width: 650px;
-            margin: auto;
-            padding: 20px;
-        }
-        h1 {
-            text-align: center;
-            margin-top: 10px;
-        }
-        label {
-            display: block;
-            margin-top: 15px;
-            font-weight: bold;
-        }
-        input, select, button {
-            width: 100%;
-            padding: 10px;
-            margin-top: 5px;
-            border-radius: 6px;
-            border: none;
-            font-size: 16px;
-        }
-        input[readonly] {
-            background-color: #333;
-            color: gold;
-        }
-        button {
-            background-color: gold;
-            color: black;
-            font-weight: bold;
-            margin-top: 20px;
-        }
-    </style>
+   
 </head>
 <script src="fullscreen.js"></script>
 
 <body>
-<div class="container">
+<div class="contenedor">
     <h1>Registrar Nueva Membresía</h1>
     <form method="POST" action="guardar_membresia.php">
         <label>Cliente:</label>

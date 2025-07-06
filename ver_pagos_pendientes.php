@@ -7,7 +7,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $accion = $_POST['accion'];
 
     if ($accion === 'aprobar') {
-        // Obtener datos del pago pendiente
         $pago = $conexion->query("SELECT * FROM pagos_pendientes WHERE id = $id")->fetch_assoc();
         $plan = $conexion->query("SELECT * FROM planes WHERE id = " . $pago['plan_id'])->fetch_assoc();
 
@@ -26,7 +25,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-// Obtener pagos pendientes
 $pagos = $conexion->query("
     SELECT pp.*, c.apellido, c.nombre, p.nombre AS nombre_plan
     FROM pagos_pendientes pp
@@ -43,68 +41,10 @@ $pagos = $conexion->query("
     <meta charset="UTF-8">
     <title>Pagos Pendientes</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <style>
-        body { background-color: #000; color: gold; font-family: Arial, sans-serif; padding: 20px; }
-        h1 { text-align: center; margin-bottom: 30px; }
-        table {
-            width: 100%;
-            border-collapse: collapse;
-        }
-        th, td {
-            border: 1px solid gold;
-            padding: 10px;
-            text-align: center;
-        }
-        th { background-color: #222; }
-        form { display: inline; }
-        button {
-            background: gold;
-            color: black;
-            font-weight: bold;
-            border: none;
-            padding: 6px 12px;
-            border-radius: 6px;
-            cursor: pointer;
-        }
-        a {
-            color: gold;
-            text-decoration: underline;
-        }
-    </style>
+    <link rel="stylesheet" href="estilo_unificado.css">
 </head>
-<script>
-// Reactivar pantalla completa con el primer clic
-document.addEventListener('DOMContentLoaded', function () {
-    const body = document.body;
-
-    function entrarPantallaCompleta() {
-        if (!document.fullscreenElement && body.requestFullscreen) {
-            body.requestFullscreen().catch(err => {
-                console.warn("No se pudo activar pantalla completa:", err);
-            });
-        }
-    }
-
-    // Activar pantalla completa al hacer clic
-    body.addEventListener('click', entrarPantallaCompleta, { once: true });
-});
-
-// Bloquear clic derecho
-document.addEventListener('contextmenu', e => e.preventDefault());
-
-// Bloquear combinaciones como F12, Ctrl+Shift+I
-document.addEventListener('keydown', function (e) {
-    if (
-        e.key === "F12" ||
-        (e.ctrlKey && e.shiftKey && (e.key === "I" || e.key === "J")) ||
-        (e.ctrlKey && e.key === "U")
-    ) {
-        e.preventDefault();
-    }
-});
-</script>
-
 <body>
+<div class="contenedor">
 
 <h1>📤 Pagos Pendientes de Aprobación</h1>
 
@@ -129,8 +69,16 @@ document.addEventListener('keydown', function (e) {
             <td><a href="<?= $p['archivo_comprobante'] ?>" target="_blank">Ver</a></td>
             <td><?= $p['fecha_envio'] ?></td>
             <td>
-                <form method="POST"><input type="hidden" name="id" value="<?= $p['id'] ?>"><input type="hidden" name="accion" value="aprobar"><button type="submit">✅ Aprobar</button></form>
-                <form method="POST"><input type="hidden" name="id" value="<?= $p['id'] ?>"><input type="hidden" name="accion" value="rechazar"><button type="submit">❌ Rechazar</button></form>
+                <form method="POST" style="display:inline;">
+                    <input type="hidden" name="id" value="<?= $p['id'] ?>">
+                    <input type="hidden" name="accion" value="aprobar">
+                    <button type="submit">✅ Aprobar</button>
+                </form>
+                <form method="POST" style="display:inline;">
+                    <input type="hidden" name="id" value="<?= $p['id'] ?>">
+                    <input type="hidden" name="accion" value="rechazar">
+                    <button type="submit">❌ Rechazar</button>
+                </form>
             </td>
         </tr>
         <?php endwhile; ?>
@@ -140,5 +88,6 @@ document.addEventListener('keydown', function (e) {
 <p style="text-align: center;">No hay pagos pendientes.</p>
 <?php endif; ?>
 
+</div>
 </body>
 </html>
