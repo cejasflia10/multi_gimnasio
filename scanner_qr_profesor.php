@@ -83,6 +83,34 @@ if ($ya_asistio && $ya_asistio->num_rows > 0) {
         }
     }
 }
+// ▶️ Registrar asistencia del profesor (si está logueado)
+if (isset($_SESSION['profesor_id'])) {
+    $profesor_id = $_SESSION['profesor_id'];
+    $gimnasio_id = $_SESSION['gimnasio_id'];
+    
+    $verificar = $conexion->query("
+        SELECT id 
+        FROM asistencias_profesores 
+        WHERE profesor_id = $profesor_id 
+          AND fecha = '$fecha' 
+          AND hora_salida IS NULL
+    ");
+
+    if ($verificar->num_rows > 0) {
+        // Ya tiene ingreso → registrar salida
+        $conexion->query("UPDATE asistencias_profesores 
+                          SET hora_salida = '$hora' 
+                          WHERE profesor_id = $profesor_id 
+                            AND fecha = '$fecha' 
+                            AND hora_salida IS NULL");
+    } else {
+        // No tiene ingreso → registrar nuevo ingreso
+        $conexion->query("INSERT INTO asistencias_profesores 
+                          (profesor_id, fecha, hora_ingreso, gimnasio_id) 
+                          VALUES ($profesor_id, '$fecha', '$hora', $gimnasio_id)");
+    }
+}
+
 ?>
 
 <!DOCTYPE html>
