@@ -1,46 +1,64 @@
 <?php
-if (session_status() === PHP_SESSION_NONE) session_start();
-date_default_timezone_set('America/Argentina/Buenos_Aires');
-
+session_start();
 include 'conexion.php';
 
 $profesor_id = $_SESSION['profesor_id'] ?? 0;
 $gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
+$mensaje = '';
 
-$fecha = date('Y-m-d');
-$hora_actual = date('H:i:s');
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $dni = trim($_POST['dni']);
 
-if ($profesor_id == 0 || $gimnasio_id == 0) {
-    die("Error: sesión inválida");
-}
+    if ($dni !== '') {
+        $dni = $conexion->real_escape_string($dni);
 
-// Buscar si ya tiene ingreso hoy sin egreso
-$verificar = $conexion->query("
-    SELECT id FROM asistencias_profesor 
-    WHERE profesor_id = $profesor_id 
-    AND fecha = '$fecha' 
-    AND gimnasio_id = $gimnasio_id 
-    AND hora_egreso IS NULL
-");
+        // Buscar cliente
+        $cliente = $conexion->query("SELECT id, nombre, apellido FROM clientes WHERE dni = '$dni'")->fetch_assoc();
 
-if ($verificar->num_rows > 0) {
-    // Si ya tiene ingreso sin egreso: marcar salida
-    $conexion->query("
-        UPDATE asistencias_profesor 
-        SET hora_egreso = '$hora_actual' 
-        WHERE profesor_id = $profesor_id 
-        AND fecha = '$fecha' 
-        AND hora_egreso IS NULL 
-        AND gimnasio_id = $gimnasio_id
-    ");
-    $mensaje = "👋 ¡Egreso registrado correctamente!";
-} else {
-    // Sino, registrar ingreso
-    $conexion->query("
-        INSERT INTO asistencias_profesor (profesor_id, fecha, hora_ingreso, gimnasio_id)
-        VALUES ($profesor_id, '$fecha', '$hora_actual', $gimnasio_id)
-    ");
-    $mensaje = "👋 ¡Ingreso registrado correctamente!";
+        if ($cliente) {
+            $cliente_id = $cliente['id'];
+            $nombre = $cliente['nombre'];
+            $apellido = $cliente['apellido'];
+
+            // Verificar membresía activa
+            $membresia = $conexion->query("
+                SELECT id, clases_disponibles, fecha_vencimiento 
+                FROM membresias 
+                WHERE cliente_id = $cliente_id 
+                  AND fecha_vencimiento >= CURDATE() 
+                  AND clases_disponibles > 0
+                ORDER BY fecha_vencimiento DESC LIMIT 1
+            ")->fetch_assoc();
+
+            if ($membresia) {
+                $membresia_id = $membresia['id'];
+                $clases = $membresia['clases_disponibles'] - 1;
+
+                // Descontar clase
+                $conexion->query("UPDATE membresias SET clases_disponibles = $clases WHERE id = $membresia_id");
+
+                // Registrar asistencia
+                $fecha = date('Y-m-d');
+                $hora = date('H:i:s');
+                $conexion->query("
+                    INSERT INTO asistencias_clientes (cliente_id, fecha, hora, gimnasio_id) 
+                    VALUES ($cliente_id, '$fecha', '$hora', $gimnasio_id)
+                ");
+
+                // Registrar relación con profesor
+                $conexion->query("
+                    INSERT INTO alumnos_turno_profesor (profesor_id, cliente_id, fecha, hora, gimnasio_id) 
+                    VALUES ($profesor_id, $cliente_id, '$fecha', '$hora', $gimnasio_id)
+                ");
+
+                $mensaje = "✅ $apellido $nombre<br>Clases disponibles: $clases";
+            } else {
+                $mensaje = "⚠️ $apellido $nombre<br>Sin clases disponibles o membresía vencida.";
+            }
+        } else {
+            $mensaje = "❌ Cliente no encontrado.";
+        }
+    }
 }
 ?>
 
@@ -48,15 +66,43 @@ if ($verificar->num_rows > 0) {
 <html lang="es">
 <head>
   <meta charset="UTF-8">
-  <title>Ingreso/Egreso Profesor</title>
-  <link rel="stylesheet" href="estilo_unificado.css">
+  <title>Escanear Ingreso Cliente</title>
+  <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
   <style>
-    body { background: #000; color: gold; font-family: Arial; text-align: center; padding: 30px; }
-    .mensaje { font-size: 24px; margin-top: 40px; }
+    body { background-color: #000; color: gold; text-align: center; padding: 20px; font-family: Arial; }
+    #reader { width: 100%; max-width: 400px; margin: auto; display: <?= $mensaje ? 'none' : 'block' ?>; }
+    .mensaje { font-size: 18px; margin-top: 20px; }
   </style>
 </head>
 <body>
-  <h2 class="mensaje"><?= $mensaje ?></h2>
-  <a href="panel_profesor.php" style="color: gold; text-decoration: underline;">⬅ Volver al panel</a>
+
+<h2>📲 Escanear QR del Alumno</h2>
+
+<div id="reader"></div>
+
+<?php if ($mensaje): ?>
+  <div class="mensaje"><?= $mensaje ?></div>
+  <script>
+    setTimeout(() => {
+      window.location.href = 'scanner_qr_profesor.php';
+    }, 4000);
+  </script>
+<?php endif; ?>
+
+<form method="POST" id="formulario">
+  <input type="hidden" name="dni" id="dni">
+</form>
+
+<script>
+  function onScanSuccess(decodedText) {
+    document.getElementById("dni").value = decodedText;
+    document.getElementById("formulario").submit();
+    html5QrcodeScanner.clear();
+  }
+
+  let html5QrcodeScanner = new Html5QrcodeScanner("reader", { fps: 10, qrbox: 250 });
+  html5QrcodeScanner.render(onScanSuccess);
+</script>
+
 </body>
 </html>
