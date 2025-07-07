@@ -124,6 +124,9 @@ $ingresos_profesores = $conexion->query("
     <?php endwhile; ?>
   </ul></div>
 </div>
+<?php if ($r && isset($r['apellido'], $r['nombre'], $r['horario_inicio'])): ?>
+  <li><?= $r['apellido'] . ', ' . $r['nombre'] ?> - <?= $r['horario_inicio'] ?></li>
+<?php endif; ?>
 
 </body>
 </html>
