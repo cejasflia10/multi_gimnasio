@@ -105,12 +105,16 @@ $ingresos_profesores = $conexion->query("
       <li><?= $v['apellido'] . ', ' . $v['nombre'] ?> (<?= date('d/m', strtotime($v['fecha_vencimiento'])) ?>)</li>
     <?php endwhile; ?>
   </ul></div>
-
   <div class="box"><h2>📋 Reservas de Hoy</h2><ul>
-    <?php while($r = $reservas->fetch_assoc()): ?>
-      <li><?= $r['apellido'] . ', ' . $r['nombre'] ?> - <?= $r['hora'] ?></li>
-    <?php endwhile; ?>
+    <?php if ($reservas->num_rows > 0): ?>
+      <?php while($r = $reservas->fetch_assoc()): ?>
+        <li><?= $r['apellido'] . ', ' . $r['nombre'] ?> - <?= $r['horario_inicio'] ?></li>
+      <?php endwhile; ?>
+    <?php else: ?>
+        <li>Sin reservas para hoy.</li>
+    <?php endif; ?>
   </ul></div>
+
 
   <div class="box"><h2>👤 Ingresos Clientes</h2><ul>
     <?php while($i = $ingresos_clientes->fetch_assoc()): ?>
