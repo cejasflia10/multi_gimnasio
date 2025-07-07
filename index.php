@@ -36,12 +36,18 @@ $vencimientos = $conexion->query("
     ORDER BY m.fecha_vencimiento ASC LIMIT 5
 ");
 $reservas = $conexion->query("
-    SELECT c.nombre, c.apellido, t.horario_inicio 
-    FROM reservas r 
-    JOIN turnos t ON r.turno_id = t.id 
-    JOIN clientes c ON r.cliente_id = c.id 
-    WHERE r.fecha = CURDATE() AND t.gimnasio_id = $gimnasio_id
+    SELECT r.dia_semana, r.hora_inicio, td.hora_fin,
+           c.nombre, c.apellido,
+           CONCAT(p.apellido, ' ', p.nombre) AS profesor
+    FROM reservas_clientes r
+    JOIN clientes c ON r.cliente_id = c.id
+    JOIN profesores p ON r.profesor_id = p.id
+    JOIN turnos_disponibles td ON r.turno_id = td.id
+    WHERE r.fecha_reserva = CURDATE()
+      AND r.gimnasio_id = $gimnasio_id
+    ORDER BY r.hora_inicio
 ");
+
 
 
 $ingresos_clientes = $conexion->query("
@@ -105,15 +111,20 @@ $ingresos_profesores = $conexion->query("
       <li><?= $v['apellido'] . ', ' . $v['nombre'] ?> (<?= date('d/m', strtotime($v['fecha_vencimiento'])) ?>)</li>
     <?php endwhile; ?>
   </ul></div>
-  <div class="box"><h2>📋 Reservas de Hoy</h2><ul>
-    <?php if ($reservas->num_rows > 0): ?>
-      <?php while($r = $reservas->fetch_assoc()): ?>
-        <li><?= $r['apellido'] . ', ' . $r['nombre'] ?> - <?= $r['horario_inicio'] ?></li>
-      <?php endwhile; ?>
-    <?php else: ?>
-        <li>Sin reservas para hoy.</li>
-    <?php endif; ?>
-  </ul></div>
+<div class="box"><h2>📋 Reservas de Hoy</h2><ul>
+<?php if ($reservas->num_rows > 0): ?>
+    <?php while ($r = $reservas->fetch_assoc()): ?>
+        <li>
+            🕒 <?= $r['hora_inicio'] ?> a <?= $r['hora_fin'] ?><br>
+            👤 <?= $r['apellido'] ?> <?= $r['nombre'] ?><br>
+            👨‍🏫 <?= $r['profesor'] ?>
+        </li>
+    <?php endwhile; ?>
+<?php else: ?>
+    <li>Sin reservas registradas para hoy.</li>
+<?php endif; ?>
+</ul></div>
+
 
 
   <div class="box"><h2>👤 Ingresos Clientes</h2><ul>
@@ -128,9 +139,7 @@ $ingresos_profesores = $conexion->query("
     <?php endwhile; ?>
   </ul></div>
 </div>
-<?php if ($r && isset($r['apellido'], $r['nombre'], $r['horario_inicio'])): ?>
-  <li><?= $r['apellido'] . ', ' . $r['nombre'] ?> - <?= $r['horario_inicio'] ?></li>
-<?php endif; ?>
+
 
 </body>
 </html>
