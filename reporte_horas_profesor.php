@@ -5,78 +5,124 @@ include 'menu_horizontal.php';
 
 $gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
 if (!$gimnasio_id) {
-    die('Acceso no autorizado.');
+    die("Acceso no autorizado.");
 }
 
 $mes = $_GET['mes'] ?? date('Y-m');
+$mes_inicio = $mes . '-01';
+$mes_fin = date('Y-m-t', strtotime($mes_inicio));
 
-$sql = "SELECT p.nombre, p.apellido, 
-               DATE(a.hora_entrada) as dia, 
-               SEC_TO_TIME(SUM(TIMESTAMPDIFF(SECOND, a.hora_entrada, a.hora_salida))) as horas_totales
+// Consulta asistencias de profesores
+$sql = "SELECT a.id, p.nombre, p.apellido, a.profesor_id, a.fecha, a.hora_ingreso, 
+               IFNULL(a.hora_egreso, ADDTIME(a.hora_ingreso, '01:00:00')) AS hora_egreso
         FROM asistencias_profesor a
         JOIN profesores p ON a.profesor_id = p.id
-        WHERE a.gimnasio_id = ? AND a.hora_salida IS NOT NULL AND DATE_FORMAT(a.hora_entrada, '%Y-%m') = ?
-        GROUP BY p.id, dia
-        ORDER BY p.apellido, dia";
-
+        WHERE a.gimnasio_id = ? AND DATE_FORMAT(a.fecha, '%Y-%m') = ?
+        ORDER BY p.apellido, a.fecha, a.hora_ingreso";
 $stmt = $conexion->prepare($sql);
 $stmt->bind_param("is", $gimnasio_id, $mes);
 $stmt->execute();
-$resultado = $stmt->get_result();
+$result = $stmt->get_result();
+
+$datos = [];
+
+while ($row = $result->fetch_assoc()) {
+    $profesor_id = $row['profesor_id'];
+    $fecha = $row['fecha'];
+    $hora_ini = $row['hora_ingreso'];
+    $hora_fin = $row['hora_egreso'];
+
+    // Buscar cuántos alumnos escanearon con QR en ese horario y ese profesor
+    $qr = $conexion->prepare("
+        SELECT COUNT(*) AS total
+        FROM asistencias_clientes ac
+        JOIN reservas r ON ac.cliente_id = r.cliente_id
+        JOIN turnos t ON r.turno_id = t.id
+        WHERE ac.fecha = ? AND t.id_profesor = ? 
+        AND t.horario_inicio BETWEEN ? AND ? 
+        AND r.fecha = ac.fecha AND t.gimnasio_id = ?
+    ");
+    $qr->bind_param("sisii", $fecha, $profesor_id, $hora_ini, $hora_fin, $gimnasio_id);
+    $qr->execute();
+    $qr_result = $qr->get_result()->fetch_assoc();
+    $alumnos = $qr_result['total'] ?? 0;
+
+    // Tabla de pago por hora
+    $pago = 0;
+    if ($alumnos >= 10) $pago = 1600;
+    elseif ($alumnos >= 5) $pago = 1200;
+    elseif ($alumnos >= 2) $pago = 800;
+
+    $row['alumnos'] = $alumnos;
+    $row['pago'] = $pago;
+
+    $datos[] = $row;
+}
 ?>
 
 <!DOCTYPE html>
 <html lang="es">
 <head>
-    <meta charset="UTF-8">
-    <title>Horas Trabajadas Profesores</title>
-    <link rel="stylesheet" href="estilo_unificado.css">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <style>
-        body { background-color: #000; color: gold; font-family: Arial, sans-serif; padding: 20px; }
-        h2 { color: gold; margin-bottom: 10px; }
-        table { width: 100%; border-collapse: collapse; background-color: #111; margin-top: 15px; }
-        th, td { border: 1px solid #333; padding: 10px; text-align: left; }
-        th { background-color: #222; color: gold; }
-        input[type="month"], input[type="submit"] {
-            padding: 8px; margin: 10px 0; font-size: 14px;
-            background-color: gold; border: none; color: black;
-        }
-        .no-data { margin-top: 20px; color: orange; }
-    </style>
+  <meta charset="UTF-8">
+  <title>Reporte Pago Profesores</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="estilo_unificado.css">
+  <style>
+    body { background: #000; color: gold; font-family: Arial, sans-serif; padding: 20px; }
+    h2 { margin-top: 0; }
+    table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+    th, td { border: 1px solid #333; padding: 8px; text-align: center; }
+    th { background: #222; color: gold; }
+    tr:nth-child(even) { background: #111; }
+    input[type="month"], input[type="submit"] {
+        padding: 6px 10px; font-size: 14px; background: gold; color: black; border: none; margin-top: 10px;
+    }
+    .contenedor { padding: 10px; }
+  </style>
 </head>
 <body>
-    <h2>📅 Reporte de Horas Trabajadas - <?= date('F Y', strtotime($mes . "-01")) ?></h2>
+<div class="contenedor">
+  <h2>🧾 Reporte de Pago por Horas Trabajadas - <?= date("F Y", strtotime($mes_inicio)) ?></h2>
+  <form method="get">
+      <label>Seleccionar mes:</label>
+      <input type="month" name="mes" value="<?= $mes ?>">
+      <input type="submit" value="Filtrar">
+  </form>
 
-    <form method="get">
-        <label for="mes">Seleccionar mes:</label>
-        <input type="month" name="mes" id="mes" value="<?= $mes ?>">
-        <input type="submit" value="Filtrar">
-    </form>
-
-    <?php if ($resultado->num_rows > 0): ?>
-    <table>
-        <thead>
-            <tr>
-                <th>Apellido</th>
-                <th>Nombre</th>
-                <th>Día</th>
-                <th>Horas trabajadas</th>
-            </tr>
-        </thead>
-        <tbody>
-            <?php while ($row = $resultado->fetch_assoc()): ?>
-            <tr>
-                <td><?= htmlspecialchars($row['apellido']) ?></td>
-                <td><?= htmlspecialchars($row['nombre']) ?></td>
-                <td><?= htmlspecialchars($row['dia']) ?></td>
-                <td><?= htmlspecialchars($row['horas_totales']) ?></td>
-            </tr>
-            <?php endwhile; ?>
-        </tbody>
-    </table>
-    <?php else: ?>
-        <p class="no-data">⚠️ No hay registros de asistencia para este mes.</p>
-    <?php endif; ?>
+  <table>
+    <thead>
+      <tr>
+        <th>Apellido</th>
+        <th>Nombre</th>
+        <th>Fecha</th>
+        <th>Ingreso</th>
+        <th>Egreso</th>
+        <th>Alumnos</th>
+        <th>Pago</th>
+      </tr>
+    </thead>
+    <tbody>
+      <?php
+      $total_general = 0;
+      foreach ($datos as $fila):
+          $total_general += $fila['pago'];
+      ?>
+      <tr>
+        <td><?= $fila['apellido'] ?></td>
+        <td><?= $fila['nombre'] ?></td>
+        <td><?= $fila['fecha'] ?></td>
+        <td><?= $fila['hora_ingreso'] ?></td>
+        <td><?= $fila['hora_egreso'] ?></td>
+        <td><?= $fila['alumnos'] ?></td>
+        <td>$<?= number_format($fila['pago'], 0) ?></td>
+      </tr>
+      <?php endforeach; ?>
+      <tr>
+        <td colspan="6" style="text-align:right;"><strong>Total a pagar:</strong></td>
+        <td><strong>$<?= number_format($total_general, 0) ?></strong></td>
+      </tr>
+    </tbody>
+  </table>
+</div>
 </body>
 </html>
