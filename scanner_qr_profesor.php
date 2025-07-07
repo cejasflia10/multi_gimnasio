@@ -39,15 +39,15 @@ if (empty($codigo_qr)) {
         if ($cli_q && $cli_q->num_rows > 0) {
             $cli = $cli_q->fetch_assoc();
             $cliente_id = $cli['id'];
+$membresia_q = $conexion->query("
+    SELECT id, clases_disponibles, fecha_vencimiento 
+    FROM membresias 
+    WHERE cliente_id = $cliente_id 
+      AND (fecha_vencimiento >= '$fecha' OR clases_disponibles > 0)
+    ORDER BY fecha_vencimiento DESC 
+    LIMIT 1
+");
 
-            $membresia_q = $conexion->query("
-                SELECT id, clases_disponibles, fecha_vencimiento 
-                FROM membresias 
-                WHERE cliente_id = $cliente_id 
-                AND fecha_vencimiento >= '$fecha' 
-                ORDER BY fecha_vencimiento DESC 
-                LIMIT 1
-            ");
 
             if ($membresia_q && $membresia_q->num_rows > 0) {
                 $membresia = $membresia_q->fetch_assoc();
