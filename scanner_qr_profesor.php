@@ -51,22 +51,26 @@ if (empty($codigo_qr)) {
 
             if ($membresia_q && $membresia_q->num_rows > 0) {
                 $membresia = $membresia_q->fetch_assoc();
+// Verificar si ya se registró ingreso hoy
+$ya_asistio = $conexion->query("SELECT id FROM asistencias_clientes WHERE cliente_id = $cliente_id AND fecha = '$fecha'");
 
-                if ($membresia['clases_disponibles'] > 0) {
-                    $conexion->query("INSERT INTO asistencias_clientes (cliente_id, fecha, hora_ingreso, gimnasio_id) VALUES ($cliente_id, '$fecha', '$hora', $gimnasio_id)");
-                    $conexion->query("UPDATE membresias SET clases_disponibles = clases_disponibles - 1 WHERE id = {$membresia['id']}");
-                    $clases_restantes = $membresia['clases_disponibles'] - 1;
+if ($ya_asistio && $ya_asistio->num_rows > 0) {
+    $mensaje = "⚠️ Cliente <b>{$cli['apellido']} {$cli['nombre']}</b> ya registró asistencia hoy.";
+    $tipo = 'warning';
+    $sonido = 'error';
+} else {
+    // Registrar asistencia y descontar clase
+    $conexion->query("INSERT INTO asistencias_clientes (cliente_id, fecha, hora_ingreso, gimnasio_id) VALUES ($cliente_id, '$fecha', '$hora', $gimnasio_id)");
+    $conexion->query("UPDATE membresias SET clases_disponibles = clases_disponibles - 1 WHERE id = {$membresia['id']}");
+    $clases_restantes = $membresia['clases_disponibles'] - 1;
 
-                    $mensaje = "✅ Ingreso del cliente <b>{$cli['apellido']} {$cli['nombre']}</b><br>
-                                🗓️ Vence: <b>{$membresia['fecha_vencimiento']}</b><br>
-                                🎟️ Clases restantes: <b>{$clases_restantes}</b>";
-                    $tipo = 'success';
-                    $sonido = 'ok';
-                } else {
-                    $mensaje = "⚠️ Cliente <b>{$cli['apellido']} {$cli['nombre']}</b> sin clases disponibles.";
-                    $tipo = 'warning';
-                    $sonido = 'error';
-                }
+    $mensaje = "✅ Ingreso del cliente <b>{$cli['apellido']} {$cli['nombre']}</b><br>
+                🗓️ Vence: <b>{$membresia['fecha_vencimiento']}</b><br>
+                🎟️ Clases restantes: <b>{$clases_restantes}</b>";
+    $tipo = 'success';
+    $sonido = 'ok';
+}
+
             } else {
                 $mensaje = "⚠️ Cliente <b>{$cli['apellido']} {$cli['nombre']}</b> sin membresía activa.";
                 $tipo = 'warning';
