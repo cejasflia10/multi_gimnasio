@@ -9,80 +9,113 @@ if ($profesor_id == 0 || $gimnasio_id == 0) {
     echo "Acceso denegado.";
     exit;
 }
-
-$mensaje = "";
-if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST['dni'])) {
-    $dni = trim($_POST['dni']);
-    $fecha = date('Y-m-d');
-    $hora = date('H:i:s');
-    $fecha_hora = date('Y-m-d H:i:s');
-
-    $buscar = $conexion->query("SELECT id, nombre, apellido FROM clientes WHERE dni = '$dni' AND gimnasio_id = $gimnasio_id");
-    if ($buscar->num_rows > 0) {
-        $cliente = $buscar->fetch_assoc();
-        $cliente_id = $cliente['id'];
-
-        // Registrar el ingreso del alumno al turno del profesor
-        $conexion->query("
-            INSERT INTO alumnos_turno_profesor 
-            (profesor_id, cliente_id, fecha, hora, fecha_hora, gimnasio_id) 
-            VALUES ($profesor_id, $cliente_id, '$fecha', '$hora', '$fecha_hora', $gimnasio_id)
-        ");
-
-        $mensaje = "✅ Ingreso registrado: " . $cliente['apellido'] . ", " . $cliente['nombre'];
-    } else {
-        $mensaje = "❌ Cliente no encontrado.";
-    }
-}
 ?>
 
 <!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>Escaneo Profesor</title>
+    <title>Escáner Profesor</title>
     <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
     <style>
-        body { background: #000; color: gold; text-align: center; font-family: Arial; padding: 20px; }
-        .msg { font-size: 18px; margin: 10px 0; }
-        #reader { width: 300px; margin: auto; }
+        body {
+            background-color: black;
+            color: gold;
+            text-align: center;
+            font-family: Arial, sans-serif;
+        }
+        #reader {
+            width: 90%;
+            margin: auto;
+        }
+        .info {
+            margin-top: 20px;
+        }
     </style>
 </head>
 <body>
+    <h2>📷 Escáner QR - Panel Profesor</h2>
+    <div id="reader"></div>
+    <div id="result" class="info"></div>
 
-<h2>📲 Escanear Cliente</h2>
+    <script>
+        function iniciarScanner() {
+            const scanner = new Html5Qrcode("reader");
+            scanner.start(
+                { facingMode: "environment" },
+                {
+                    fps: 10,
+                    qrbox: 250
+                },
+                (dni) => {
+                    scanner.stop();
+                    fetch("scanner_qr_profesor.php?dni=" + dni)
+                        .then(res => res.text())
+                        .then(data => {
+                            document.getElementById("result").innerHTML = data;
+                            setTimeout(() => {
+                                document.getElementById("result").innerHTML = '';
+                                iniciarScanner();
+                            }, 3000);
+                        });
+                },
+                (error) => {
+                    // silencioso
+                }
+            );
+        }
 
-<div class="msg"><?= $mensaje ?></div>
+        iniciarScanner();
+    </script>
 
-<div id="reader"></div>
+<?php
+if (isset($_GET['dni'])) {
+    $dni = $_GET['dni'];
 
-<form method="POST" id="formulario" style="display:none;">
-    <input type="hidden" name="dni" id="dni">
-</form>
+    // Buscar cliente
+    $sql = "SELECT id, nombre, apellido FROM clientes WHERE dni = ? AND gimnasio_id = ?";
+    $stmt = $conexion->prepare($sql);
+    $stmt->bind_param("si", $dni, $gimnasio_id);
+    $stmt->execute();
+    $res = $stmt->get_result();
 
-<script>
-function escanearQR() {
-    const scanner = new Html5Qrcode("reader");
-    scanner.start(
-        { facingMode: "environment" },
-        {
-            fps: 10,
-            qrbox: 250
-        },
-        (decodedText, decodedResult) => {
-            scanner.stop().then(() => {
-                document.getElementById('dni').value = decodedText;
-                document.getElementById('formulario').submit();
-            });
-        },
-        error => {}
-    ).catch(err => {
-        console.error("Error al iniciar escáner: ", err);
-    });
+    if ($cliente = $res->fetch_assoc()) {
+        $cliente_id = $cliente['id'];
+
+        // Buscar membresía activa
+        $sqlM = "SELECT id, clases_disponibles, fecha_vencimiento FROM membresias 
+                 WHERE cliente_id = ? AND gimnasio_id = ? 
+                 AND fecha_vencimiento >= CURDATE() 
+                 AND clases_disponibles > 0 ORDER BY fecha_vencimiento LIMIT 1";
+        $stmtM = $conexion->prepare($sqlM);
+        $stmtM->bind_param("ii", $cliente_id, $gimnasio_id);
+        $stmtM->execute();
+        $membresia = $stmtM->get_result()->fetch_assoc();
+
+        if ($membresia) {
+            // Descontar clase
+            $conexion->query("UPDATE membresias SET clases_disponibles = clases_disponibles - 1 WHERE id = {$membresia['id']}");
+
+            // Registrar asistencia
+            $conexion->query("INSERT INTO asistencias_clientes (cliente_id, gimnasio_id, fecha, hora) 
+                              VALUES ($cliente_id, $gimnasio_id, CURDATE(), CURTIME())");
+
+            // Registrar relación con profesor
+            $conexion->query("INSERT INTO alumnos_profesor (cliente_id, profesor_id, gimnasio_id, fecha_hora) 
+                              VALUES ($cliente_id, $profesor_id, $gimnasio_id, NOW())");
+
+            echo "<div class='info'>
+                    ✅ {$cliente['apellido']}, {$cliente['nombre']}<br>
+                    📅 Vence: " . date('d/m/Y', strtotime($membresia['fecha_vencimiento'])) . "<br>
+                    🎟️ Clases restantes: " . ($membresia['clases_disponibles'] - 1) . "
+                  </div>";
+        } else {
+            echo "<div class='info'>❌ No tiene membresía activa o sin clases disponibles.</div>";
+        }
+    } else {
+        echo "<div class='info'>❌ Cliente no encontrado.</div>";
+    }
 }
-
-window.onload = escanearQR;
-</script>
-
+?>
 </body>
 </html>
