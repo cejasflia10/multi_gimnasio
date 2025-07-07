@@ -1,52 +1,82 @@
 <?php
 session_start();
 include 'conexion.php';
+date_default_timezone_set('America/Argentina/Buenos_Aires');
 
-if (!isset($_SESSION['profesor_id']) || !isset($_SESSION['gimnasio_id'])) {
-    echo "<div style='color: red; font-size: 20px;'>Acceso denegado.</div>";
-    exit;
-}
+$codigo_qr = trim($_POST['codigo_qr'] ?? '');
+$gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
 
-$profesor_id = $_SESSION['profesor_id'];
-$gimnasio_id = $_SESSION['gimnasio_id'];
-$mensaje = "";
-$dni = "";
+$mensaje = '';
+$tipo = ''; // success | warning | error
+$sonido = '';
 
-if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST["dni"])) {
-    $dni = trim($_POST["dni"]);
-    $dni = $conexion->real_escape_string($dni);
+$fecha = date('Y-m-d');
+$hora = date('H:i:s');
 
-    $cliente = $conexion->query("SELECT * FROM clientes WHERE dni = '$dni' AND gimnasio_id = $gimnasio_id")->fetch_assoc();
+if (empty($codigo_qr)) {
+    $mensaje = "❌ Código QR vacío";
+    $tipo = 'error';
+} else {
+    // PROFESOR
+    $prof_q = $conexion->query("SELECT id, apellido, nombre FROM profesores WHERE dni = '$codigo_qr' AND gimnasio_id = $gimnasio_id");
+    if ($prof_q && $prof_q->num_rows > 0) {
+        $prof = $prof_q->fetch_assoc();
+        $prof_id = $prof['id'];
 
-    if ($cliente) {
-        $cliente_id = $cliente['id'];
-
-        // Registrar en alumnos_profesor con fecha_hora
-        $conexion->query("INSERT INTO alumnos_profesor (cliente_id, profesor_id, gimnasio_id, fecha_hora)
-                          VALUES ($cliente_id, $profesor_id, $gimnasio_id, NOW())");
-
-        // Buscar membresía activa
-        $membresia = $conexion->query("SELECT * FROM membresias 
-                                       WHERE cliente_id = $cliente_id 
-                                       AND fecha_vencimiento >= CURDATE() 
-                                       AND clases_disponibles > 0 
-                                       ORDER BY fecha_inicio DESC LIMIT 1")->fetch_assoc();
-
-        if ($membresia) {
-            // Descontar una clase
-            $conexion->query("UPDATE membresias 
-                              SET clases_disponibles = clases_disponibles - 1 
-                              WHERE id = {$membresia['id']}");
-
-            $mensaje = "✔️ {$cliente['apellido']}, {$cliente['nombre']}<br>
-                        🧾 Clases restantes: " . ($membresia['clases_disponibles'] - 1) . "<br>
-                        📅 Vencimiento: " . date('d/m/Y', strtotime($membresia['fecha_vencimiento'])) . "<br>
-                        🧑‍🏫 Ingreso registrado correctamente.";
+        $verificar = $conexion->query("SELECT id FROM asistencias_profesores WHERE profesor_id = $prof_id AND fecha = '$fecha' AND hora_salida IS NULL");
+        if ($verificar->num_rows > 0) {
+            $conexion->query("UPDATE asistencias_profesores SET hora_salida = '$hora' WHERE profesor_id = $prof_id AND fecha = '$fecha' AND hora_salida IS NULL");
+            $mensaje = "✅ Egreso del profesor <b>{$prof['apellido']} {$prof['nombre']}</b>";
         } else {
-            $mensaje = "❌ El cliente no tiene una membresía activa.";
+            $conexion->query("INSERT INTO asistencias_profesores (profesor_id, fecha, hora_ingreso, gimnasio_id) VALUES ($prof_id, '$fecha', '$hora', $gimnasio_id)");
+            $mensaje = "✅ Ingreso del profesor <b>{$prof['apellido']} {$prof['nombre']}</b>";
         }
+        $tipo = 'success';
+        $sonido = 'ok';
     } else {
-        $mensaje = "❌ Cliente no encontrado.";
+        // CLIENTE
+        $cli_q = $conexion->query("SELECT id, apellido, nombre FROM clientes WHERE dni = '$codigo_qr' AND gimnasio_id = $gimnasio_id");
+        if ($cli_q && $cli_q->num_rows > 0) {
+            $cli = $cli_q->fetch_assoc();
+            $cliente_id = $cli['id'];
+
+            $membresia_q = $conexion->query("
+                SELECT id, clases_disponibles, fecha_vencimiento 
+                FROM membresias 
+                WHERE cliente_id = $cliente_id 
+                AND fecha_vencimiento >= '$fecha' 
+                ORDER BY fecha_vencimiento DESC 
+                LIMIT 1
+            ");
+
+            if ($membresia_q && $membresia_q->num_rows > 0) {
+                $membresia = $membresia_q->fetch_assoc();
+
+                if ($membresia['clases_disponibles'] > 0) {
+                    $conexion->query("INSERT INTO asistencias_clientes (cliente_id, fecha, hora_ingreso, gimnasio_id) VALUES ($cliente_id, '$fecha', '$hora', $gimnasio_id)");
+                    $conexion->query("UPDATE membresias SET clases_disponibles = clases_disponibles - 1 WHERE id = {$membresia['id']}");
+                    $clases_restantes = $membresia['clases_disponibles'] - 1;
+
+                    $mensaje = "✅ Ingreso del cliente <b>{$cli['apellido']} {$cli['nombre']}</b><br>
+                                🗓️ Vence: <b>{$membresia['fecha_vencimiento']}</b><br>
+                                🎟️ Clases restantes: <b>{$clases_restantes}</b>";
+                    $tipo = 'success';
+                    $sonido = 'ok';
+                } else {
+                    $mensaje = "⚠️ Cliente <b>{$cli['apellido']} {$cli['nombre']}</b> sin clases disponibles.";
+                    $tipo = 'warning';
+                    $sonido = 'error';
+                }
+            } else {
+                $mensaje = "⚠️ Cliente <b>{$cli['apellido']} {$cli['nombre']}</b> sin membresía activa.";
+                $tipo = 'warning';
+                $sonido = 'error';
+            }
+        } else {
+            $mensaje = "❌ DNI no encontrado.";
+            $tipo = 'error';
+            $sonido = 'error';
+        }
     }
 }
 ?>
@@ -55,52 +85,42 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST["dni"])) {
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>Escáner QR - Panel Profesor</title>
-    <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+    <title>Registro de Asistencia</title>
+    <meta http-equiv="refresh" content="3;url=scanner_qr.php">
     <style>
-        body { background: #000; color: gold; text-align: center; font-family: Arial, sans-serif; padding: 20px; }
-        .scanner { width: 100%; max-width: 400px; margin: auto; }
-        .mensaje { margin-top: 20px; font-size: 18px; color: white; }
-        button { margin-top: 15px; padding: 10px 20px; font-size: 16px; background: gold; border: none; cursor: pointer; }
+        body {
+            background-color: #000;
+            color: gold;
+            font-family: Arial, sans-serif;
+            text-align: center;
+            padding-top: 100px;
+        }
+        .mensaje {
+            font-size: 22px;
+            padding: 30px;
+            margin: auto;
+            width: 90%;
+            border-radius: 10px;
+            background-color: #111;
+            border: 2px solid #555;
+        }
+        .success { border-color: lime; color: lime; }
+        .warning { border-color: orange; color: orange; }
+        .error { border-color: red; color: red; }
     </style>
 </head>
 <body>
 
-<h2>📷 Escáner QR - Panel Profesor</h2>
-
-<div class="scanner">
-    <div id="reader" style="width: 100%;"></div>
+<div class="mensaje <?= $tipo ?>">
+    <?= $mensaje ?>
+    <br><br><small>Redirigiendo en 3 segundos...</small>
 </div>
 
-<div class="mensaje"><?= $mensaje ?></div>
-
-<?php if ($mensaje): ?>
-<script>
-    setTimeout(() => { window.location.href = 'scanner_qr_profesor.php'; }, 4000);
-</script>
+<?php if ($sonido === 'ok'): ?>
+<audio autoplay><source src="success.mp3" type="audio/mpeg"></audio>
+<?php elseif ($sonido === 'error'): ?>
+<audio autoplay><source src="error.mp3" type="audio/mpeg"></audio>
 <?php endif; ?>
-
-<form method="POST" id="formulario" style="display:none;">
-    <input type="hidden" name="dni" id="dni">
-</form>
-
-<script>
-function onScanSuccess(decodedText) {
-    document.getElementById("dni").value = decodedText;
-    document.getElementById("formulario").submit();
-}
-
-const html5QrCode = new Html5Qrcode("reader");
-Html5Qrcode.getCameras().then(devices => {
-    if (devices && devices.length) {
-        html5QrCode.start(
-            { facingMode: "environment" },
-            { fps: 10, qrbox: 250 },
-            onScanSuccess
-        );
-    }
-});
-</script>
 
 </body>
 </html>
