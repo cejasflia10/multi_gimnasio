@@ -90,13 +90,57 @@ if (session_status() === PHP_SESSION_NONE) { session_start(); } ?>
         display: none !important;
     }
 }
+.menu-toggle {
+    display: none;
+    background-color: #a00;
+    color: gold;
+    font-size: 20px;
+    padding: 10px;
+    text-align: center;
+    cursor: pointer;
+}
+
+@media screen and (max-width: 768px) {
+    .menu-toggle {
+        display: block;
+    }
+
+    .menu-horizontal {
+        display: none;
+        flex-direction: column;
+        align-items: center;
+    }
+
+    .menu-horizontal.active {
+        display: flex !important;
+    }
+
+    .menu-lateral {
+        position: relative;
+        width: 100%;
+        top: 0;
+    }
+
+    /* Ocultar submenús en celulares */
+    #menu-clientes,
+    #menu-asistencias,
+    #menu-profesores,
+    #menu-qr,
+    #menu-ventas,
+    #menu-panel,
+    #menu-configuraciones {
+        display: none !important;
+    }
+}
 
     </style>
 </head>
 <body>
+<!-- BOTÓN PARA CELULARES -->
+<div class="menu-toggle" onclick="toggleMenu()">☰ Menú</div>
 
 <!-- MENÚ HORIZONTAL -->
-<div class="menu-horizontal">
+<div class="menu-horizontal" id="menu-principal">
     <a href="#" onclick="mostrarLateral('clientes')">👥 Clientes</a>
     <a href="#" onclick="mostrarLateral('asistencias')">🕘 Asistencias</a>
     <a href="#" onclick="mostrarLateral('profesores')">🧑‍🏫 Profesores</a>
@@ -234,6 +278,11 @@ document.addEventListener('click', function (e) {
         });
     }
 });
+// Toggle menú horizontal en celulares
+function toggleMenu() {
+    const menu = document.getElementById("menu-principal");
+    if (menu) menu.classList.toggle("active");
+}
 
 </script>
 
