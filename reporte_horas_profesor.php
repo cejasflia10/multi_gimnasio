@@ -1,17 +1,13 @@
 <?php
 session_start();
 include 'conexion.php';
-include 'permisos.php';
+include 'menu_horizontal.php';
 
-if (!tiene_permiso('profesores')) {
-    echo "<h2 style='color:red;'>⛔ Acceso denegado</h2>";
-    exit;
-}
-if (!isset($_SESSION['id_gimnasio'])) {
+$gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
+if (!$gimnasio_id) {
     die('Acceso no autorizado.');
 }
 
-$id_gimnasio = $_SESSION['id_gimnasio'];
 $mes = $_GET['mes'] ?? date('Y-m');
 
 $sql = "SELECT p.nombre, p.apellido, 
@@ -19,12 +15,12 @@ $sql = "SELECT p.nombre, p.apellido,
                SEC_TO_TIME(SUM(TIMESTAMPDIFF(SECOND, a.hora_entrada, a.hora_salida))) as horas_totales
         FROM asistencias_profesor a
         JOIN profesores p ON a.profesor_id = p.id
-        WHERE a.id_gimnasio = ? AND a.hora_salida IS NOT NULL AND DATE_FORMAT(a.hora_entrada, '%Y-%m') = ?
+        WHERE a.gimnasio_id = ? AND a.hora_salida IS NOT NULL AND DATE_FORMAT(a.hora_entrada, '%Y-%m') = ?
         GROUP BY p.id, dia
         ORDER BY p.apellido, dia";
 
 $stmt = $conexion->prepare($sql);
-$stmt->bind_param("is", $id_gimnasio, $mes);
+$stmt->bind_param("is", $gimnasio_id, $mes);
 $stmt->execute();
 $resultado = $stmt->get_result();
 ?>
@@ -34,26 +30,31 @@ $resultado = $stmt->get_result();
 <head>
     <meta charset="UTF-8">
     <title>Horas Trabajadas Profesores</title>
+    <link rel="stylesheet" href="estilo_unificado.css">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
-        body { background-color: #111; color: #fff; font-family: Arial, sans-serif; padding: 30px; }
-        table { width: 100%; border-collapse: collapse; background-color: #222; }
-        th, td { border: 1px solid #444; padding: 10px; text-align: left; }
-        th { background-color: #333; color: #ffc107; }
-        h2 { color: #ffc107; }
+        body { background-color: #000; color: gold; font-family: Arial, sans-serif; padding: 20px; }
+        h2 { color: gold; margin-bottom: 10px; }
+        table { width: 100%; border-collapse: collapse; background-color: #111; margin-top: 15px; }
+        th, td { border: 1px solid #333; padding: 10px; text-align: left; }
+        th { background-color: #222; color: gold; }
         input[type="month"], input[type="submit"] {
             padding: 8px; margin: 10px 0; font-size: 14px;
-            background-color: #ffc107; border: none; color: #000;
+            background-color: gold; border: none; color: black;
         }
+        .no-data { margin-top: 20px; color: orange; }
     </style>
 </head>
 <body>
-    <h2>Reporte de Horas Trabajadas por Profesor</h2>
+    <h2>📅 Reporte de Horas Trabajadas - <?= date('F Y', strtotime($mes . "-01")) ?></h2>
+
     <form method="get">
         <label for="mes">Seleccionar mes:</label>
-        <input type="month" name="mes" id="mes" value="<?php echo $mes; ?>">
+        <input type="month" name="mes" id="mes" value="<?= $mes ?>">
         <input type="submit" value="Filtrar">
     </form>
 
+    <?php if ($resultado->num_rows > 0): ?>
     <table>
         <thead>
             <tr>
@@ -64,15 +65,18 @@ $resultado = $stmt->get_result();
             </tr>
         </thead>
         <tbody>
-            <?php while ($row = $resultado->fetch_assoc()) { ?>
+            <?php while ($row = $resultado->fetch_assoc()): ?>
             <tr>
-                <td><?php echo htmlspecialchars($row['apellido']); ?></td>
-                <td><?php echo htmlspecialchars($row['nombre']); ?></td>
-                <td><?php echo htmlspecialchars($row['dia']); ?></td>
-                <td><?php echo htmlspecialchars($row['horas_totales']); ?></td>
+                <td><?= htmlspecialchars($row['apellido']) ?></td>
+                <td><?= htmlspecialchars($row['nombre']) ?></td>
+                <td><?= htmlspecialchars($row['dia']) ?></td>
+                <td><?= htmlspecialchars($row['horas_totales']) ?></td>
             </tr>
-            <?php } ?>
+            <?php endwhile; ?>
         </tbody>
     </table>
+    <?php else: ?>
+        <p class="no-data">⚠️ No hay registros de asistencia para este mes.</p>
+    <?php endif; ?>
 </body>
 </html>

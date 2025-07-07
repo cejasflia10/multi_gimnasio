@@ -1,5 +1,7 @@
 <?php
 include 'conexion.php';
+include 'menu_horizontal.php';
+
 session_start();
 
 date_default_timezone_set('America/Argentina/Buenos_Aires');
