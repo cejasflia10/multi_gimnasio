@@ -34,6 +34,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <meta charset="UTF-8">
     <title>Login Profesor</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
+
+    <!-- Estilos -->
     <style>
         body {
             margin: 0;
@@ -75,8 +77,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             margin-top: 10px;
         }
     </style>
+
+    <!-- Manifest e íconos PWA -->
+    <link rel="manifest" href="manifest_profesor.json">
+    <meta name="theme-color" content="#FFD700">
+    <link rel="icon" href="icono192.png" sizes="192x192" type="image/png">
 </head>
 <body>
+
 <div class="contenedor">
     <h2>Ingreso Profesor</h2>
     <form method="POST">
@@ -87,5 +95,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <div class="mensaje"><?= $mensaje ?></div>
     <?php endif; ?>
 </div>
+
+<!-- Registrar Service Worker -->
+<script>
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('service-worker.js')
+    .then(reg => console.log("✅ SW registrado:", reg.scope))
+    .catch(err => console.log("❌ Error al registrar SW:", err));
+}
+</script>
+
 </body>
 </html>

@@ -56,6 +56,14 @@ $ingresos = $conexion->query("
             border-radius: 8px;
         }
     </style>
+    <!-- PWA para Panel Profesor -->
+<link rel="manifest" href="manifest_profesor.json">
+<meta name="theme-color" content="#000000">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="icon" sizes="192x192" href="icono192.png">
+
 </head>
 <script>
 function actualizarContadorMensajes() {
@@ -77,6 +85,16 @@ function actualizarContadorMensajes() {
 
 setInterval(actualizarContadorMensajes, 30000); // cada 30 segundos
 actualizarContadorMensajes(); // al cargar
+</script>
+<script>
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('service-worker.js')
+    .then(function(reg) {
+      console.log("✅ SW Profesor registrado", reg.scope);
+    }).catch(function(err) {
+      console.log("❌ Error SW Profesor:", err);
+    });
+}
 </script>
 
 <body>
