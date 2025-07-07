@@ -2,12 +2,52 @@
 session_start();
 include 'conexion.php';
 
-$profesor_id = $_SESSION['profesor_id'] ?? 0;
-$gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
-
-if ($profesor_id == 0 || $gimnasio_id == 0) {
-    echo "Acceso denegado.";
+if (!isset($_SESSION['profesor_id']) || !isset($_SESSION['gimnasio_id'])) {
+    echo "<div style='color: red; font-size: 20px;'>Acceso denegado.</div>";
     exit;
+}
+
+$profesor_id = $_SESSION['profesor_id'];
+$gimnasio_id = $_SESSION['gimnasio_id'];
+$mensaje = "";
+$dni = "";
+
+if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST["dni"])) {
+    $dni = trim($_POST["dni"]);
+    $dni = $conexion->real_escape_string($dni);
+
+    $cliente = $conexion->query("SELECT * FROM clientes WHERE dni = '$dni' AND gimnasio_id = $gimnasio_id")->fetch_assoc();
+
+    if ($cliente) {
+        $cliente_id = $cliente['id'];
+
+        // Registrar en alumnos_profesor con fecha_hora
+        $conexion->query("INSERT INTO alumnos_profesor (cliente_id, profesor_id, gimnasio_id, fecha_hora)
+                          VALUES ($cliente_id, $profesor_id, $gimnasio_id, NOW())");
+
+        // Buscar membresía activa
+        $membresia = $conexion->query("SELECT * FROM membresias 
+                                       WHERE cliente_id = $cliente_id 
+                                       AND fecha_vencimiento >= CURDATE() 
+                                       AND clases_disponibles > 0 
+                                       ORDER BY fecha_inicio DESC LIMIT 1")->fetch_assoc();
+
+        if ($membresia) {
+            // Descontar una clase
+            $conexion->query("UPDATE membresias 
+                              SET clases_disponibles = clases_disponibles - 1 
+                              WHERE id = {$membresia['id']}");
+
+            $mensaje = "✔️ {$cliente['apellido']}, {$cliente['nombre']}<br>
+                        🧾 Clases restantes: " . ($membresia['clases_disponibles'] - 1) . "<br>
+                        📅 Vencimiento: " . date('d/m/Y', strtotime($membresia['fecha_vencimiento'])) . "<br>
+                        🧑‍🏫 Ingreso registrado correctamente.";
+        } else {
+            $mensaje = "❌ El cliente no tiene una membresía activa.";
+        }
+    } else {
+        $mensaje = "❌ Cliente no encontrado.";
+    }
 }
 ?>
 
@@ -16,82 +56,51 @@ if ($profesor_id == 0 || $gimnasio_id == 0) {
 <head>
     <meta charset="UTF-8">
     <title>Escáner QR - Panel Profesor</title>
-    <script src="https://unpkg.com/html5-qrcode"></script>
+    <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
     <style>
-        body { background: black; color: gold; font-family: Arial; text-align: center; }
-        #reader { width: 90%; margin: auto; }
-        .info { margin-top: 20px; }
+        body { background: #000; color: gold; text-align: center; font-family: Arial, sans-serif; padding: 20px; }
+        .scanner { width: 100%; max-width: 400px; margin: auto; }
+        .mensaje { margin-top: 20px; font-size: 18px; color: white; }
+        button { margin-top: 15px; padding: 10px 20px; font-size: 16px; background: gold; border: none; cursor: pointer; }
     </style>
 </head>
 <body>
-    <h2>📷 Escáner QR - Panel Profesor</h2>
-    <div id="reader"></div>
-    <div id="result" class="info"></div>
 
-    <script>
-        function startScanner() {
-            const scanner = new Html5Qrcode("reader");
-            scanner.start(
-                { facingMode: "environment" },
-                { fps: 10, qrbox: 250 },
-                (dni) => {
-                    scanner.stop();
-                    fetch("scanner_qr_profesor.php?dni=" + dni)
-                        .then(r => r.text())
-                        .then(data => {
-                            document.getElementById("result").innerHTML = data;
-                            setTimeout(() => {
-                                document.getElementById("result").innerHTML = '';
-                                startScanner();
-                            }, 3000);
-                        });
-                },
-                (err) => {}
-            );
-        }
+<h2>📷 Escáner QR - Panel Profesor</h2>
 
-        startScanner();
-    </script>
+<div class="scanner">
+    <div id="reader" style="width: 100%;"></div>
+</div>
 
-<?php
-if (isset($_GET['dni'])) {
-    $dni = $_GET['dni'];
+<div class="mensaje"><?= $mensaje ?></div>
 
-    $stmt = $conexion->prepare("SELECT id, nombre, apellido FROM clientes WHERE dni = ? AND gimnasio_id = ?");
-    $stmt->bind_param("si", $dni, $gimnasio_id);
-    $stmt->execute();
-    $cliente = $stmt->get_result()->fetch_assoc();
+<?php if ($mensaje): ?>
+<script>
+    setTimeout(() => { window.location.href = 'scanner_qr_profesor.php'; }, 4000);
+</script>
+<?php endif; ?>
 
-    if ($cliente) {
-        $cliente_id = $cliente['id'];
+<form method="POST" id="formulario" style="display:none;">
+    <input type="hidden" name="dni" id="dni">
+</form>
 
-        $stmt = $conexion->prepare("SELECT id, clases_disponibles, fecha_vencimiento 
-                                    FROM membresias 
-                                    WHERE cliente_id = ? AND gimnasio_id = ? 
-                                    AND fecha_vencimiento >= CURDATE() 
-                                    AND clases_disponibles > 0 
-                                    ORDER BY fecha_vencimiento LIMIT 1");
-        $stmt->bind_param("ii", $cliente_id, $gimnasio_id);
-        $stmt->execute();
-        $membresia = $stmt->get_result()->fetch_assoc();
-
-        if ($membresia) {
-            $conexion->query("UPDATE membresias SET clases_disponibles = clases_disponibles - 1 WHERE id = {$membresia['id']}");
-            $conexion->query("INSERT INTO asistencias_clientes (cliente_id, gimnasio_id, fecha, hora) VALUES ($cliente_id, $gimnasio_id, CURDATE(), CURTIME())");
-            $conexion->query("INSERT INTO alumnos_profesor (cliente_id, profesor_id, gimnasio_id, fecha_hora) VALUES ($cliente_id, $profesor_id, $gimnasio_id, NOW())");
-
-            echo "<div class='info'>
-                    ✅ {$cliente['apellido']}, {$cliente['nombre']}<br>
-                    🎟️ Clases restantes: " . ($membresia['clases_disponibles'] - 1) . "<br>
-                    📅 Vence: " . date('d/m/Y', strtotime($membresia['fecha_vencimiento'])) . "
-                  </div>";
-        } else {
-            echo "<div class='info'>❌ Sin membresía activa o sin clases.</div>";
-        }
-    } else {
-        echo "<div class='info'>❌ Cliente no encontrado.</div>";
-    }
+<script>
+function onScanSuccess(decodedText) {
+    document.getElementById("dni").value = decodedText;
+    document.getElementById("formulario").submit();
 }
-?>
+
+const html5QrCode = new Html5Qrcode("reader");
+Html5Qrcode.getCameras().then(devices => {
+    if (devices && devices.length) {
+        html5QrCode.start(
+            { facingMode: "environment" },
+            { fps: 10, qrbox: 250 },
+            onScanSuccess
+        );
+    }
+});
+</script>
+
 </body>
 </html>
