@@ -46,10 +46,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 ");
 
                 // Registrar relación con profesor
-                $conexion->query("
-                    INSERT INTO alumnos_turno_profesor (profesor_id, cliente_id, fecha, hora, gimnasio_id) 
-                    VALUES ($profesor_id, $cliente_id, '$fecha', '$hora', $gimnasio_id)
-                ");
+               $fecha_hora = date('Y-m-d H:i:s');
+               $conexion->query("
+               INSERT INTO alumnos_turno_profesor (profesor_id, cliente_id, fecha, hora, fecha_hora, gimnasio_id) 
+            VALUES ($profesor_id, $cliente_id, '$fecha', '$hora', '$fecha_hora', $gimnasio_id)
+            ");
+
 
                 $mensaje = "✅ $apellido $nombre<br>Clases disponibles: $clases";
             } else {
