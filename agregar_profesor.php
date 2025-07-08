@@ -1,77 +1,108 @@
 <?php
-if (session_status() === PHP_SESSION_NONE) session_start();
+session_start();
 include 'conexion.php';
-include 'menu_horizontal.php';
 
-// Función para generar QR en base64
-function generarQR($dni) {
-    include_once 'phpqrcode/qrlib.php';
-    $tempDir = 'qrs/';
-    if (!file_exists($tempDir)) mkdir($tempDir);
-    $filename = $tempDir . 'qr_' . $dni . '.png';
-    QRcode::png($dni, $filename, QR_ECLEVEL_H, 4);
-    return $filename;
-}
+$mensaje = '';
+$gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
+$es_admin = ($_SESSION['rol'] ?? '') === 'admin';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $apellido = $_POST['apellido'];
-    $nombre = $_POST['nombre'];
-    $domicilio = $_POST['domicilio'];
-    $telefono = $_POST['telefono'];
-    $dni = $_POST['dni'];
-    $gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
+    $apellido = trim($_POST['apellido'] ?? '');
+    $nombre = trim($_POST['nombre'] ?? '');
+    $dni = trim($_POST['dni'] ?? '');
+    $telefono = trim($_POST['telefono'] ?? '');
+    $email = trim($_POST['email'] ?? '');
+    $gimnasio_seleccionado = $es_admin ? intval($_POST['gimnasio_id']) : $gimnasio_id;
 
-    $qr_path = generarQR($dni);
-
-    $stmt = $conexion->prepare("INSERT INTO profesores (apellido, nombre, domicilio, telefono, dni, qr_codigo, gimnasio_id) VALUES (?, ?, ?, ?, ?, ?, ?)");
-    $stmt->bind_param("ssssssi", $apellido, $nombre, $domicilio, $telefono, $dni, $qr_path, $gimnasio_id);
-    $stmt->execute();
-
-    header("Location: ver_profesores.php");
-    exit;
+    if ($apellido && $nombre && $dni) {
+        $stmt = $conexion->prepare("INSERT INTO profesores (apellido, nombre, dni, telefono, email, gimnasio_id) VALUES (?, ?, ?, ?, ?, ?)");
+        $stmt->bind_param("sssssi", $apellido, $nombre, $dni, $telefono, $email, $gimnasio_seleccionado);
+        if ($stmt->execute()) {
+            $mensaje = "✅ Profesor registrado correctamente.";
+        } else {
+            $mensaje = "❌ Error al registrar: " . $stmt->error;
+        }
+    } else {
+        $mensaje = "⚠️ Completá todos los campos obligatorios.";
+    }
 }
 ?>
 
 <!DOCTYPE html>
 <html lang="es">
 <head>
-    <link rel="stylesheet" href="estilo_unificado.css">
-
     <meta charset="UTF-8">
-    <title>Agregar Profesor</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
+    <title>Registrar Profesor</title>
+    <style>
+        body {
+            background-color: #000;
+            color: gold;
+            font-family: Arial;
+            padding: 20px;
+        }
+        .formulario {
+            max-width: 500px;
+            margin: auto;
+            background-color: #111;
+            padding: 20px;
+            border-radius: 10px;
+            border: 1px solid #444;
+        }
+        input, select, button {
+            width: 100%;
+            padding: 10px;
+            margin-top: 10px;
+            font-size: 16px;
+            background-color: #222;
+            color: gold;
+            border: 1px solid #555;
+        }
+        button {
+            background-color: #333;
+            cursor: pointer;
+        }
+        .mensaje {
+            text-align: center;
+            margin-bottom: 15px;
+            color: lime;
+        }
+        h2 {
+            text-align: center;
+            color: white;
+        }
+    </style>
 </head>
-<script src="fullscreen.js"></script>
-
 <body>
-<div class="contenedor">
 
-<h1>➕ Agregar Profesor</h1>
+<div class="formulario">
+    <h2>➕ Registrar Profesor</h2>
 
-<form method="POST">
-    <label>Apellido:</label>
-    <input type="text" name="apellido" required>
+    <?php if ($mensaje): ?>
+        <div class="mensaje"><?= $mensaje ?></div>
+    <?php endif; ?>
 
-    <label>Nombre:</label>
-    <input type="text" name="nombre" required>
+    <form method="POST">
+        <input type="text" name="apellido" placeholder="Apellido" required>
+        <input type="text" name="nombre" placeholder="Nombre" required>
+        <input type="text" name="dni" placeholder="DNI" required>
+        <input type="text" name="telefono" placeholder="Teléfono">
+        <input type="email" name="email" placeholder="Email">
 
-    <label>Domicilio:</label>
-    <input type="text" name="domicilio">
+        <?php if ($es_admin): ?>
+            <select name="gimnasio_id" required>
+                <option value="">Seleccione gimnasio</option>
+                <?php
+                $gimnasios = $conexion->query("SELECT id, nombre FROM gimnasios");
+                while ($g = $gimnasios->fetch_assoc()):
+                ?>
+                    <option value="<?= $g['id'] ?>"><?= $g['nombre'] ?></option>
+                <?php endwhile; ?>
+            </select>
+        <?php endif; ?>
 
-    <label>Teléfono:</label>
-    <input type="text" name="telefono">
-
-    <label>DNI:</label>
-    <input type="text" name="dni" required>
-
-    <div class="botones">
-        <input type="submit" value="Guardar">
-        <a href="index.php">Volver al menú</a>
-    </div>
-
-    </div>
-</form>
+        <button type="submit">Guardar Profesor</button>
+    </form>
+</div>
 
 </body>
 </html>

@@ -1,39 +1,53 @@
 <?php
+session_start();
 include 'conexion.php';
-include 'menu_horizontal.php';
+date_default_timezone_set('America/Argentina/Buenos_Aires');
 
-if (session_status() === PHP_SESSION_NONE) session_start();
-
-if (!isset($_SESSION['usuario'])) {
-    header("Location: login.php");
-    exit();
+if (!isset($_SESSION['gimnasio_id'])) {
+    echo "Acceso denegado.";
+    exit;
 }
 
-$id = $_GET['id'] ?? 0;
+$gimnasio_id = $_SESSION['gimnasio_id'];
+$turno_id = intval($_GET['id'] ?? 0);
 
-// Obtener datos del turno
-$turno = $conexion->query("SELECT * FROM turnos_profesor WHERE id = $id")->fetch_assoc();
+if ($turno_id <= 0) {
+    echo "Turno no válido.";
+    exit;
+}
+
+$mensaje = "";
+
+// Obtener datos actuales del turno
+$turno = $conexion->query("SELECT * FROM asistencias_profesores WHERE id = $turno_id AND gimnasio_id = $gimnasio_id")->fetch_assoc();
+
 if (!$turno) {
-    die("Turno no encontrado.");
+    echo "Turno no encontrado.";
+    exit;
 }
 
-// Obtener listado de profesores
-$profesores = $conexion->query("SELECT id, apellido, nombre FROM profesores");
+// Si se envió el formulario
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $fecha = $_POST['fecha'];
+    $hora_ingreso = $_POST['hora_ingreso'];
+    $hora_salida = $_POST['hora_salida'];
+    $alumnos_manual = trim($_POST['alumnos_manual']) !== "" ? intval($_POST['alumnos_manual']) : null;
 
-// Procesar actualización
-if ($_SERVER["REQUEST_METHOD"] === "POST") {
-    $profesor_id = $_POST["profesor_id"];
-    $dia = $_POST["dia"];
-    $hora_inicio = $_POST["hora_inicio"];
-    $hora_fin = $_POST["hora_fin"];
+    $stmt = $conexion->prepare("UPDATE asistencias_profesores 
+        SET fecha = ?, hora_ingreso = ?, hora_salida = ?, alumnos_manual = ? 
+        WHERE id = ? AND gimnasio_id = ?");
+    $stmt->bind_param("sssiii", $fecha, $hora_ingreso, $hora_salida, $alumnos_manual, $turno_id, $gimnasio_id);
 
-    $stmt = $conexion->prepare("UPDATE turnos_profesor SET profesor_id=?, dia=?, hora_inicio=?, hora_fin=? WHERE id=?");
-    $stmt->bind_param("isssi", $profesor_id, $dia, $hora_inicio, $hora_fin, $id);
-    $stmt->execute();
-    $stmt->close();
-
-    header("Location: turnos_profesor.php");
-    exit();
+    if ($stmt->execute()) {
+        $mensaje = "✅ Turno actualizado correctamente.";
+        // Actualizar datos cargados
+        $turno['fecha'] = $fecha;
+        $turno['hora_ingreso'] = $hora_ingreso;
+        $turno['hora_salida'] = $hora_salida;
+        $turno['alumnos_manual'] = $alumnos_manual;
+    } else {
+        $mensaje = "❌ Error al actualizar turno.";
+    }
 }
 ?>
 
@@ -42,46 +56,88 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
 <head>
     <meta charset="UTF-8">
     <title>Editar Turno</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <link rel="stylesheet" href="estilo_unificado.css">
+    <style>
+        body {
+            background-color: #000;
+            color: gold;
+            font-family: Arial, sans-serif;
+            padding: 20px;
+        }
+        h2 {
+            text-align: center;
+            color: white;
+        }
+        form {
+            max-width: 500px;
+            margin: auto;
+            background: #111;
+            padding: 20px;
+            border-radius: 10px;
+        }
+        label {
+            display: block;
+            margin-top: 15px;
+            font-weight: bold;
+        }
+        input {
+            width: 100%;
+            padding: 8px;
+            background: #222;
+            color: white;
+            border: 1px solid #555;
+            border-radius: 5px;
+        }
+        button {
+            margin-top: 20px;
+            padding: 10px;
+            background: gold;
+            color: black;
+            font-weight: bold;
+            border: none;
+            width: 100%;
+            border-radius: 5px;
+        }
+        .mensaje {
+            text-align: center;
+            margin-top: 15px;
+            color: lime;
+        }
+        .volver {
+            text-align: center;
+            margin-top: 15px;
+        }
+        .volver a {
+            color: white;
+            text-decoration: underline;
+        }
+    </style>
 </head>
 <body>
 
-<div class="contenedor">
-    <h2>✏️ Editar Turno de Profesor</h2>
+<h2>✏️ Editar Turno</h2>
 
-    <form method="POST">
-        <label>Profesor:</label>
-        <select name="profesor_id" required>
-            <?php while ($p = $profesores->fetch_assoc()): ?>
-                <option value="<?= $p['id'] ?>" <?= $p['id'] == $turno['profesor_id'] ? 'selected' : '' ?>>
-                    <?= $p['apellido'] . ' ' . $p['nombre'] ?>
-                </option>
-            <?php endwhile; ?>
-        </select>
+<?php if ($mensaje): ?>
+    <div class="mensaje"><?= $mensaje ?></div>
+<?php endif; ?>
 
-        <label>Día:</label>
-        <select name="dia" required>
-            <?php
-            $dias = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
-            foreach ($dias as $d) {
-                $selected = ($d == $turno['dia']) ? "selected" : "";
-                echo "<option value='$d' $selected>$d</option>";
-            }
-            ?>
-        </select>
+<form method="POST">
+    <label>Fecha:</label>
+    <input type="date" name="fecha" value="<?= $turno['fecha'] ?>" required>
 
-        <label>Hora Inicio:</label>
-        <input type="time" name="hora_inicio" value="<?= $turno['hora_inicio'] ?>" required>
+    <label>Hora Ingreso:</label>
+    <input type="time" name="hora_ingreso" value="<?= $turno['hora_ingreso'] ?>" required>
 
-        <label>Hora Fin:</label>
-        <input type="time" name="hora_fin" value="<?= $turno['hora_fin'] ?>" required>
+    <label>Hora Salida:</label>
+    <input type="time" name="hora_salida" value="<?= $turno['hora_salida'] ?>" required>
 
-        <button type="submit">💾 Guardar Cambios</button>
-    </form>
+    <label>Alumnos (manual):</label>
+    <input type="number" name="alumnos_manual" value="<?= $turno['alumnos_manual'] ?>" min="0" placeholder="opcional">
 
-    <br>
-    <a href="turnos_profesor.php" style="color:#ffd600;">← Volver a Turnos</a>
+    <button type="submit">Guardar Cambios</button>
+</form>
+
+<div class="volver">
+    <a href="reporte_horas_profesor.php">⬅️ Volver al Reporte</a>
 </div>
 
 </body>
