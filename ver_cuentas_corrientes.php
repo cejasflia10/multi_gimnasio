@@ -1,6 +1,10 @@
 <?php
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
 include 'conexion.php';
-session_start();
+include 'menu_horizontal.php';
+
 $gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
 
 $resultado = $conexion->query("
@@ -17,9 +21,10 @@ $resultado = $conexion->query("
 <html>
 <head>
     <title>Cuentas Corrientes</title>
-    <style>body { background:#000; color:#FFD700; font-family:sans-serif; }</style>
+    <link rel="stylesheet" href="estilo_unificado.css">
 </head>
 <body>
+    <div class="contenedor">
     <h2>Clientes con Deuda (Cuenta Corriente)</h2>
     <table border="1" cellpadding="8">
         <tr><th>Cliente</th><th>Saldo</th><th>Acción</th></tr>
@@ -31,5 +36,6 @@ $resultado = $conexion->query("
         </tr>
         <?php endwhile; ?>
     </table>
+</div>
 </body>
 </html>

@@ -1,6 +1,7 @@
 <?php
 session_start();
 include 'conexion.php';
+include 'menu_horizontal.php';
 
 $mensaje = '';
 $gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;

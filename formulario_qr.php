@@ -1,7 +1,7 @@
 <?php
 session_start();
 include 'conexion.php';
-
+include 'menu_horizontal.php';
 $mensaje = '';
 $info = '';
 
@@ -60,41 +60,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <style>
     body {
-      background-color: #000;
+      background-color: black;
       color: gold;
       font-family: Arial, sans-serif;
       text-align: center;
-      padding: 30px;
+      padding-top: 20px;
     }
-    input {
-      font-size: 22px;
-      padding: 12px;
-      width: 80%;
-      background: #111;
-      color: white;
+    #reader {
+      width: 300px;
+      margin: auto;
       border: 2px solid gold;
-      border-radius: 8px;
     }
-    button {
-      padding: 12px 30px;
-      font-size: 20px;
-      background: gold;
-      color: black;
-      border: none;
-      border-radius: 8px;
-      margin-top: 10px;
-      cursor: pointer;
-    }
-    .mensaje {
+    #resultado {
       margin-top: 20px;
-      font-size: 20px;
-      font-weight: bold;
-      color: gold;
-    }
-    .info {
-      margin-top: 10px;
-      font-size: 16px;
-      color: #ccc;
+      font-size: 18px;
     }
   </style>
 </head>
