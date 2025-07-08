@@ -1,6 +1,9 @@
 <?php
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
 include 'conexion.php';
-session_start();
+include 'menu_horizontal.php';
 
 date_default_timezone_set('America/Argentina/Buenos_Aires');
 $gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
@@ -27,8 +30,8 @@ while ($fila = $query->fetch_assoc()) {
         ];
     }
 
-    $ingreso = strtotime($fila['hora_ingreso']);
-    $egreso = strtotime($fila['hora_egreso']);
+    $ingreso = !empty($fila['hora_ingreso']) ? strtotime($fila['hora_ingreso']) : false;
+    $egreso  = !empty($fila['hora_egreso']) ? strtotime($fila['hora_egreso']) : false;
     $horas_trabajadas = ($egreso && $ingreso) ? round(($egreso - $ingreso) / 3600, 2) : 0;
     $monto = floatval($fila['monto_pagado']);
 

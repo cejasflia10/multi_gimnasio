@@ -1,6 +1,7 @@
 <?php
 session_start();
 include 'conexion.php';
+include 'menu_horizontal.php';
 
 if (!isset($_SESSION['gimnasio_id'])) {
     echo "Acceso denegado.";
@@ -35,51 +36,10 @@ $profesores = $conexion->query("SELECT id, apellido, nombre FROM profesores WHER
 <head>
     <meta charset="UTF-8">
     <title>Editar Tarifas Profesores</title>
-    <style>
-        body {
-            background: #000;
-            color: gold;
-            font-family: Arial, sans-serif;
-            padding: 30px;
-        }
-        h2 {
-            color: white;
-            text-align: center;
-        }
-        form {
-            max-width: 500px;
-            margin: auto;
-            background: #111;
-            padding: 20px;
-            border: 2px solid #555;
-            border-radius: 10px;
-        }
-        label, select, input {
-            display: block;
-            width: 100%;
-            margin-bottom: 15px;
-            font-size: 16px;
-        }
-        input[type="number"] {
-            padding: 5px;
-        }
-        input[type="submit"] {
-            background: gold;
-            color: black;
-            padding: 10px;
-            font-weight: bold;
-            border: none;
-            border-radius: 6px;
-            cursor: pointer;
-        }
-        .mensaje {
-            text-align: center;
-            color: lime;
-            margin-top: 20px;
-        }
-    </style>
+    <link rel="stylesheet" href="estilo_unificado.css">
 </head>
 <body>
+<div class="contenedor">
 
 <h2>💰 Asignar Tarifa por Hora a Profesores</h2>
 
@@ -103,6 +63,7 @@ $profesores = $conexion->query("SELECT id, apellido, nombre FROM profesores WHER
 <?php if ($mensaje): ?>
     <div class="mensaje"><?= $mensaje ?></div>
 <?php endif; ?>
+</div>
 
 </body>
 </html>

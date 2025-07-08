@@ -89,39 +89,10 @@ $cantidad_alumnos = $alumnos_q->fetch_assoc()['cantidad'] ?? 0;
 <head>
     <meta charset="UTF-8">
     <title>Reporte de Horas</title>
-    <style>
-        body {
-            background: #000;
-            color: gold;
-            font-family: Arial;
-        }
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 10px;
-        }
-        th, td {
-            padding: 8px;
-            text-align: center;
-        }
-        th {
-            background: #111;
-        }
-        td {
-            border-bottom: 1px solid #333;
-        }
-        .verde { color: lime; }
-        a { color: lime; text-decoration: none; }
-        select {
-            background: #222;
-            color: white;
-            padding: 5px;
-            border: 1px solid #555;
-            margin-top: 10px;
-        }
-    </style>
+    <link rel="stylesheet" href="estilo_unificado.css">
 </head>
 <body>
+<div class="contenedor">
 
 <h2 style="text-align:center;">🕒 Reporte de Horas - <?= $nombre_profesor ?></h2>
 

@@ -1,6 +1,7 @@
 <?php
 session_start();
 include 'conexion.php';
+include 'menu_horizontal.php';
 
 $gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
 $es_admin = ($_SESSION['rol'] ?? '') === 'admin';
@@ -26,47 +27,11 @@ $resultado = $conexion->query($sql);
 <head>
     <meta charset="UTF-8">
     <title>Listado de Profesores</title>
-    <style>
-        body {
-            background-color: #000;
-            color: gold;
-            font-family: Arial;
-            padding: 20px;
-        }
-        h2 {
-            text-align: center;
-            color: white;
-        }
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            background-color: #111;
-            color: gold;
-            margin-top: 20px;
-        }
-        th, td {
-            padding: 10px;
-            border: 1px solid #444;
-            text-align: center;
-        }
-        th {
-            background-color: #222;
-        }
-        a.boton {
-            background-color: #333;
-            color: gold;
-            padding: 6px 12px;
-            text-decoration: none;
-            border-radius: 4px;
-            display: inline-block;
-        }
-        a.boton:hover {
-            background-color: gold;
-            color: black;
-        }
-    </style>
+    <link rel="stylesheet" href="estilo_unificado.css">
 </head>
+
 <body>
+<div class="contenedor">
 
 <h2>👨‍🏫 Listado de Profesores</h2>
 
@@ -95,6 +60,7 @@ $resultado = $conexion->query($sql);
         </tr>
     <?php endwhile; ?>
 </table>
+</div>
 
 </body>
 </html>
