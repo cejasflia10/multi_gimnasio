@@ -148,21 +148,25 @@ if ($turno_q && $turno_q->num_rows > 0) {
     $hora_ingreso = $turno['hora_ingreso'];
 
     // Contar los alumnos que ingresaron entre la hora de ingreso y ahora
-    $alumnos_q = $conexion->query("SELECT COUNT(*) AS total 
-        FROM asistencias 
-        WHERE fecha = '$fecha_hoy' 
-        AND hora BETWEEN '$hora_ingreso' AND '$hora_actual'
-        AND gimnasio_id = $gimnasio_id");
+$alumnos_q = $conexion->query("
+    SELECT COUNT(*) AS total 
+    FROM asistencias_clientes 
+    WHERE fecha = '$fecha_hoy' 
+      AND hora_ingreso BETWEEN '$hora_ingreso' AND '$hora_actual' 
+      AND gimnasio_id = $gimnasio_id
+");
 
-    if ($alumnos_q) {
-        $alumnos = intval($alumnos_q->fetch_assoc()['total']);
+if ($alumnos_q) {
+    $alumnos = intval($alumnos_q->fetch_assoc()['total']);
 
-        // Actualizar el campo alumnos_manual en la asistencia del profesor
-        $conexion->query("UPDATE asistencias_profesores 
-            SET alumnos_manual = $alumnos 
-            WHERE id = " . $turno['id']);
-    }
+    // Actualizar el campo alumnos_manual en la asistencia del profesor
+    $conexion->query("
+        UPDATE asistencias_profesores 
+        SET alumnos_manual = $alumnos 
+        WHERE id = " . $turno['id']
+    );
 }
+
 
 ?>
 
