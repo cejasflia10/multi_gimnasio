@@ -1,6 +1,8 @@
 <?php
 session_start();
 include 'conexion.php';
+include 'menu_horizontal.php';
+
 date_default_timezone_set('America/Argentina/Buenos_Aires');
 
 if (!isset($_SESSION['gimnasio_id'])) {
@@ -31,10 +33,55 @@ foreach ($profesores as $p) {
 }
 
 // Turnos
-$turnos_q = $conexion->query("SELECT * FROM asistencias_profesores WHERE profesor_id = $profesor_id AND gimnasio_id = $gimnasio_id ORDER BY fecha DESC, hora_ingreso DESC");
-
-$valor_hora = 500; // Fijo o podés traerlo de tarifas
+$turnos_q = $conexion->query("
+    SELECT fecha, MIN(hora_ingreso) AS hora_ingreso, MAX(hora_salida) AS hora_salida
+    FROM asistencias_profesores
+    WHERE profesor_id = $profesor_id AND gimnasio_id = $gimnasio_id
+    GROUP BY fecha
+    ORDER BY fecha DESC
+");
 $total_pago = 0;
+$filas = [];
+
+while ($fila = $turnos_q->fetch_assoc()) {
+    $fecha = $fila['fecha'];
+    $hora_ingreso = $fila['hora_ingreso'];
+    $hora_salida = $fila['hora_salida'];
+    $hora_salida_real = ($hora_salida && $hora_salida != '00:00:00')
+    ? $hora_salida
+    : date('H:i:s', strtotime($hora_ingreso . ' +2 hours'));
+
+    // Buscar cuántos alumnos escaneó ese día
+$alumnos_q = $conexion->query("
+    SELECT COUNT(DISTINCT a.cliente_id) AS cantidad
+    FROM asistencias a
+    JOIN clientes c ON a.cliente_id = c.id
+    WHERE a.fecha = '$fecha'
+    AND a.hora BETWEEN '$hora_ingreso' AND '$hora_salida_real'
+    AND c.gimnasio_id = $gimnasio_id
+");
+
+
+$cantidad_alumnos = $alumnos_q->fetch_assoc()['cantidad'] ?? 0;
+
+    // Buscar precio por cantidad
+    $precio_q = $conexion->query("SELECT precio 
+        FROM precio_hora 
+        WHERE gimnasio_id = $gimnasio_id 
+        AND $cantidad_alumnos BETWEEN rango_min AND rango_max 
+        LIMIT 1");
+    $precio = $precio_q->fetch_assoc()['precio'] ?? 0;
+
+    $total_pago += $precio;
+
+    $filas[] = [
+        'fecha' => $fecha,
+        'hora_ingreso' => $hora_ingreso,
+        'hora_salida' => $hora_salida,
+        'alumnos' => $cantidad_alumnos,
+        'pago' => $precio
+    ];
+}
 ?>
 
 <!DOCTYPE html>
@@ -90,61 +137,26 @@ $total_pago = 0;
     </select>
 </form>
 
-<table>
+<table border="1">
     <tr>
         <th>Fecha</th>
         <th>Ingreso</th>
         <th>Salida</th>
         <th>Alumnos</th>
-        <th>Horas</th>
-        <th>Pago</th>
-        <th>Nota</th>
-        <th>Editar</th>
+        <th>Pago ($)</th>
     </tr>
-
-<?php while ($t = $turnos_q->fetch_assoc()): 
-    $horas = 0;
-    $pago = 0;
-    $nota = '';
-
-    if (!empty($t['hora_ingreso']) && !empty($t['hora_salida'])) {
-        $ingreso = new DateTime($t['hora_ingreso']);
-        $salida = new DateTime($t['hora_salida']);
-        $horas = ($salida->getTimestamp() - $ingreso->getTimestamp()) / 3600;
-        $pago = $horas * $valor_hora;
-        $total_pago += $pago;
-
-        $alumnos = $t['alumnos_manual'] ?? 0;
-
-        if ($alumnos <= 3 && $alumnos > 0) {
-            $nota = "Hasta 3 alumnos - mínimo";
-        } elseif ($alumnos > 3 && $alumnos < 7) {
-            $nota = "4 a 6 alumnos - 50% extra";
-        } elseif ($alumnos >= 7) {
-            $nota = "7 o más - 100% extra";
-        }
-    } else {
-        $alumnos = 0;
-        $nota = "Turno incompleto (falta salida)";
-    }
-?>
-<tr>
-    <td><?= $t['fecha'] ?></td>
-    <td><?= $t['hora_ingreso'] ?></td>
-    <td><?= $t['hora_salida'] ?: '-' ?></td>
-    <td><?= $alumnos ?></td>
-    <td><?= number_format($horas, 2) ?></td>
-    <td>$<?= number_format($pago, 0) ?></td>
-    <td><?= $nota ?></td>
-    <td><a href="editar_turno_profesor.php?id=<?= $t['id'] ?>">✏️</a></td>
-</tr>
-<?php endwhile; ?>
-
-    <tr>
-        <td colspan="5" style="text-align:right;"><strong>TOTAL</strong></td>
-        <td colspan="3" class="verde">$<?= number_format($total_pago, 0) ?></td>
-    </tr>
+    <?php foreach ($filas as $f): ?>
+        <tr>
+            <td><?= $f['fecha'] ?></td>
+            <td><?= $f['hora_ingreso'] ?></td>
+            <td><?= $f['hora_salida'] ?: '-' ?></td>
+            <td><?= $f['alumnos'] ?></td>
+            <td>$<?= number_format($f['pago'], 0, ',', '.') ?></td>
+        </tr>
+    <?php endforeach; ?>
 </table>
+
+<h3 style="text-align:right; margin-top:20px;">💰 Total a pagar: $<?= number_format($total_pago, 0, ',', '.') ?></h3>
 
 <div style="text-align:center; margin-top:20px;">
     <a href="agregar_turno_profesor.php" style="color:lime; font-size:18px;">➕ Agregar Turno Manual</a>

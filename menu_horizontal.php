@@ -170,11 +170,10 @@ if (session_status() === PHP_SESSION_NONE) { session_start(); } ?>
 <!-- MENÚ LATERAL DE ASISTENCIAS -->
 <div id="menu-asistencias" class="menu-lateral">
     <h3>Asistencias</h3>
-    <a href="editar_turno.php?id=1">Editar Turno</a> <!-- ejemplo con ID=1 -->
     <a href="registrar_asistencia_qr.php">Registrar Asistencia QR</a>
     <a href="ver_asistencia_qr.php">Ver Asistencia QR</a>
     <a href="asistencia_qr.php">Asistencia QR</a>
-    <a href="formulario_qr.php">Formulario QR</a>
+    <a href="formulario_qr.php">Registro Manual</a>
     <a href="historial_asistencia_filtro.php">Historial con Filtro</a>
     <a href="ver_asistencia.php">Ver Asistencia</a>
     <a href="ver_asistencia_mes.php">Asistencia del Mes</a>
