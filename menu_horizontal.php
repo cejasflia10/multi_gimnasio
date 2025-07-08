@@ -165,7 +165,8 @@ if (session_status() === PHP_SESSION_NONE) { session_start(); } ?>
     <a href="adicionales.php">Adicionales</a>
     <a href="ver_pagos_pendientes.php">Aprobar Pagos</a> <!-- solo visible para admin -->
     <a href="config_alias.php">Alias Transferencia</a>
-</div>
+    <a href="ver_cuentas_corrientes.php">Cuenta Corriente</a>
+  </div>
 
 <!-- MENÚ LATERAL DE ASISTENCIAS -->
 <div id="menu-asistencias" class="menu-lateral">
