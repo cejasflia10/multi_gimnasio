@@ -7,7 +7,7 @@ $codigo_qr = trim($_POST['codigo_qr'] ?? '');
 $gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
 
 $mensaje = '';
-$tipo = ''; // success | warning | error
+$tipo = '';
 $sonido = '';
 
 $fecha = date('Y-m-d');
@@ -39,57 +39,49 @@ if (empty($codigo_qr)) {
         if ($cli_q && $cli_q->num_rows > 0) {
             $cli = $cli_q->fetch_assoc();
             $cliente_id = $cli['id'];
-$membresia_q = $conexion->query("
-    SELECT id, clases_disponibles, fecha_vencimiento 
-    FROM membresias 
-    WHERE cliente_id = $cliente_id 
-      AND (fecha_vencimiento >= '$fecha' OR clases_disponibles > 0)
-    ORDER BY fecha_vencimiento DESC 
-    LIMIT 1
-");
 
+            $membresia_q = $conexion->query("
+                SELECT id, clases_disponibles, fecha_vencimiento 
+                FROM membresias 
+                WHERE cliente_id = $cliente_id 
+                  AND (fecha_vencimiento >= '$fecha' OR clases_disponibles > 0)
+                ORDER BY fecha_vencimiento DESC 
+                LIMIT 1
+            ");
 
             if ($membresia_q && $membresia_q->num_rows > 0) {
                 $membresia = $membresia_q->fetch_assoc();
-// Verificar si ya se registró ingreso hoy
-$ya_asistio = $conexion->query("SELECT id FROM asistencias_clientes WHERE cliente_id = $cliente_id AND fecha = '$fecha'");
 
-if ($ya_asistio && $ya_asistio->num_rows > 0) {
-    $mensaje = "⚠️ Cliente <b>{$cli['apellido']} {$cli['nombre']}</b> ya registró asistencia hoy.";
-    $tipo = 'warning';
-    $sonido = 'error';
-} else {
-    // Registrar asistencia y descontar clase
-    $conexion->query("INSERT INTO asistencias_clientes (cliente_id, fecha, hora_ingreso, gimnasio_id) VALUES ($cliente_id, '$fecha', '$hora', $gimnasio_id)");
-       $conexion->query("UPDATE membresias SET clases_disponibles = clases_disponibles - 1 WHERE id = {$membresia['id']}");
-    $clases_restantes = $membresia['clases_disponibles'] - 1;
+                $ya_asistio = $conexion->query("SELECT id FROM asistencias_clientes WHERE cliente_id = $cliente_id AND fecha = '$fecha'");
+                if ($ya_asistio && $ya_asistio->num_rows > 0) {
+                    $mensaje = "⚠️ Cliente <b>{$cli['apellido']} {$cli['nombre']}</b> ya registró asistencia hoy.";
+                    $tipo = 'warning';
+                    $sonido = 'error';
+                } else {
+                    $conexion->query("INSERT INTO asistencias_clientes (cliente_id, fecha, hora_ingreso, gimnasio_id) VALUES ($cliente_id, '$fecha', '$hora', $gimnasio_id)");
+                    $conexion->query("UPDATE membresias SET clases_disponibles = clases_disponibles - 1 WHERE id = {$membresia['id']}");
+                    $clases_restantes = $membresia['clases_disponibles'] - 1;
 
-    // 🔁 Buscar último turno abierto del profesor en este gimnasio
-    $turno_activo = $conexion->query("
-        SELECT id FROM asistencias_profesores 
-        WHERE gimnasio_id = $gimnasio_id 
-        AND fecha = '$fecha' 
-        AND hora_ingreso IS NOT NULL 
-        AND hora_salida IS NULL 
-        ORDER BY id DESC 
-        LIMIT 1
-    ");
+                    $turno_activo = $conexion->query("
+                        SELECT id FROM asistencias_profesores 
+                        WHERE gimnasio_id = $gimnasio_id 
+                          AND fecha = '$fecha' 
+                          AND hora_ingreso IS NOT NULL 
+                          AND hora_salida IS NULL 
+                        ORDER BY id DESC 
+                        LIMIT 1
+                    ");
+                    if ($turno_activo && $turno_activo->num_rows > 0) {
+                        $turno_id = $turno_activo->fetch_assoc()['id'];
+                        $conexion->query("UPDATE asistencias_profesores SET alumnos_manual = alumnos_manual + 1 WHERE id = $turno_id");
+                    }
 
-    if ($turno_activo && $turno_activo->num_rows > 0) {
-        $turno_id = $turno_activo->fetch_assoc()['id'];
-        $conexion->query("UPDATE asistencias_profesores 
-                          SET alumnos_manual = alumnos_manual + 1 
-                          WHERE id = $turno_id");
-    }
-
-    $mensaje = "✅ Ingreso del cliente <b>{$cli['apellido']} {$cli['nombre']}</b><br>
-                🗓️ Vence: <b>{$membresia['fecha_vencimiento']}</b><br>
-                🎟️ Clases restantes: <b>{$clases_restantes}</b>";
-    $tipo = 'success';
-    $sonido = 'ok';
-
-}
-
+                    $mensaje = "✅ Ingreso del cliente <b>{$cli['apellido']} {$cli['nombre']}</b><br>
+                                🗓️ Vence: <b>{$membresia['fecha_vencimiento']}</b><br>
+                                🎟️ Clases restantes: <b>{$clases_restantes}</b>";
+                    $tipo = 'success';
+                    $sonido = 'ok';
+                }
             } else {
                 $mensaje = "⚠️ Cliente <b>{$cli['apellido']} {$cli['nombre']}</b> sin membresía activa.";
                 $tipo = 'warning';
@@ -102,74 +94,63 @@ if ($ya_asistio && $ya_asistio->num_rows > 0) {
         }
     }
 }
-// ▶️ Registrar asistencia del profesor (si está logueado)
+
+// 🧾 Registro manual si el profesor ya estaba logueado
 if (isset($_SESSION['profesor_id'])) {
     $profesor_id = $_SESSION['profesor_id'];
-    $gimnasio_id = $_SESSION['gimnasio_id'];
-    
+
     $verificar = $conexion->query("
-        SELECT id 
-        FROM asistencias_profesores 
+        SELECT id FROM asistencias_profesores 
         WHERE profesor_id = $profesor_id 
           AND fecha = '$fecha' 
           AND hora_salida IS NULL
     ");
-
     if ($verificar->num_rows > 0) {
-        // Ya tiene ingreso → registrar salida
-        $conexion->query("UPDATE asistencias_profesores 
-                          SET hora_salida = '$hora' 
+        $conexion->query("UPDATE asistencias_profesores SET hora_salida = '$hora' 
                           WHERE profesor_id = $profesor_id 
-                            AND fecha = '$fecha' 
-                            AND hora_salida IS NULL");
+                            AND fecha = '$fecha' AND hora_salida IS NULL");
     } else {
-        // No tiene ingreso → registrar nuevo ingreso
         $conexion->query("INSERT INTO asistencias_profesores 
                           (profesor_id, fecha, hora_ingreso, gimnasio_id) 
                           VALUES ($profesor_id, '$fecha', '$hora', $gimnasio_id)");
     }
+
+    // ▶️ Actualizar alumnos_manual del turno actual del profesor
+    $fecha_hoy = date('Y-m-d');
+    $hora_actual = date('H:i:s');
+
+    $turno_q = $conexion->query("
+        SELECT id, hora_ingreso 
+        FROM asistencias_profesores 
+        WHERE profesor_id = $profesor_id 
+          AND gimnasio_id = $gimnasio_id 
+          AND fecha = '$fecha_hoy' 
+          AND hora_salida IS NULL 
+        ORDER BY id DESC 
+        LIMIT 1
+    ");
+
+    if ($turno_q && $turno_q->num_rows > 0) {
+        $turno = $turno_q->fetch_assoc();
+        $hora_ingreso = $turno['hora_ingreso'];
+
+        $alumnos_q = $conexion->query("
+            SELECT COUNT(*) AS total 
+            FROM asistencias_clientes 
+            WHERE fecha = '$fecha_hoy' 
+              AND hora_ingreso BETWEEN '$hora_ingreso' AND '$hora_actual' 
+              AND gimnasio_id = $gimnasio_id
+        ");
+
+        if ($alumnos_q && $fila = $alumnos_q->fetch_assoc()) {
+            $alumnos = intval($fila['total']);
+            $conexion->query("UPDATE asistencias_profesores 
+                              SET alumnos_manual = $alumnos 
+                              WHERE id = {$turno['id']}");
+        }
+    }
 }
-// Actualizar alumnos_manual del turno actual del profesor
-$fecha_hoy = date('Y-m-d');
-$hora_actual = date('H:i:s');
-
-// Buscar el último turno abierto del profesor (sin hora de salida)
-$turno_q = $conexion->query("SELECT * FROM asistencias_profesores 
-    WHERE profesor_id = $profesor_id 
-    AND gimnasio_id = $gimnasio_id 
-    AND fecha = '$fecha_hoy'
-    AND hora_ingreso IS NOT NULL 
-    AND hora_salida IS NULL
-    ORDER BY id DESC 
-    LIMIT 1");
-
-if ($turno_q && $turno_q->num_rows > 0) {
-    $turno = $turno_q->fetch_assoc();
-    $hora_ingreso = $turno['hora_ingreso'];
-
-    // Contar los alumnos que ingresaron entre la hora de ingreso y ahora
-$alumnos_q = $conexion->query("
-    SELECT COUNT(*) AS total 
-    FROM asistencias_clientes 
-    WHERE fecha = '$fecha_hoy' 
-      AND hora_ingreso BETWEEN '$hora_ingreso' AND '$hora_actual' 
-      AND gimnasio_id = $gimnasio_id
-");
-
-if ($alumnos_q) {
-    $alumnos = intval($alumnos_q->fetch_assoc()['total']);
-
-    // Actualizar el campo alumnos_manual en la asistencia del profesor
-    $conexion->query("
-        UPDATE asistencias_profesores 
-        SET alumnos_manual = $alumnos 
-        WHERE id = " . $turno['id']
-    );
-}
-
-
 ?>
-
 <!DOCTYPE html>
 <html lang="es">
 <head>
@@ -199,10 +180,8 @@ if ($alumnos_q) {
     </style>
 </head>
 <body>
-
 <div class="mensaje <?= $tipo ?>">
-    <?= $mensaje ?>
-    <br><br><small>Redirigiendo en 3 segundos...</small>
+    <?= $mensaje ?><br><br><small>Redirigiendo en 3 segundos...</small>
 </div>
 
 <?php if ($sonido === 'ok'): ?>
