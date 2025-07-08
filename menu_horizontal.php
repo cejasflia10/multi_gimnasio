@@ -157,6 +157,7 @@ if (session_status() === PHP_SESSION_NONE) { session_start(); } ?>
     <h3>Clientes</h3>
     <a href="agregar_cliente.php">Agregar Cliente</a>
     <a href="ver_clientes.php">Ver Clientes</a>
+    <a href="membresias.php">Membresías</a>
     <a href="nueva_membresia.php">Nueva Membresía</a>
     <a href="ver_membresias.php">Ver Membresías</a>
     <a href="disciplinas.php">Disciplinas</a>
@@ -188,7 +189,7 @@ if (session_status() === PHP_SESSION_NONE) { session_start(); } ?>
     <a href="configurar_precios_hora.php">precio horas</a>
     <a href="ver_asistencias_profesor.php">Ver Asistencias</a>
     <a href="reporte_horas_profesor.php">Reporte de Horas</a>
-    <a href="reporte_horas_profesor.php">Reporte Horas Profesor</a>
+    <a href="editar_tarifa_profesor.php">editar tarifas profes</a>
     <a href="cargar_turno.php">Cargar Turno</a>
     <a href="turnos_profesor.php">Turnos Profesor</a>
     <a href="ver_pagos_profesor.php">Ver Pagos Profesor</a>
