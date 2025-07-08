@@ -58,10 +58,12 @@ if (empty($codigo_qr)) {
                     $tipo = 'warning';
                     $sonido = 'error';
                 } else {
+                    // Registrar asistencia y descontar clase
                     $conexion->query("INSERT INTO asistencias_clientes (cliente_id, fecha, hora_ingreso, gimnasio_id) VALUES ($cliente_id, '$fecha', '$hora', $gimnasio_id)");
                     $conexion->query("UPDATE membresias SET clases_disponibles = clases_disponibles - 1 WHERE id = {$membresia['id']}");
                     $clases_restantes = $membresia['clases_disponibles'] - 1;
 
+                    // Buscar último turno abierto del profesor
                     $turno_activo = $conexion->query("
                         SELECT id FROM asistencias_profesores 
                         WHERE gimnasio_id = $gimnasio_id 
@@ -189,6 +191,5 @@ if (isset($_SESSION['profesor_id'])) {
 <?php elseif ($sonido === 'error'): ?>
 <audio autoplay><source src="error.mp3" type="audio/mpeg"></audio>
 <?php endif; ?>
-
 </body>
 </html>
