@@ -7,7 +7,7 @@ $gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
 
 $query = "
     SELECT ap.id, p.nombre AS profesor, ap.fecha, ap.hora_ingreso, ap.hora_salida
-    FROM asistencias_profesor ap
+    FROM asistencias_profesores ap
     JOIN profesores p ON ap.profesor_id = p.id
     WHERE ap.gimnasio_id = $gimnasio_id
     ORDER BY ap.fecha DESC, ap.hora_ingreso DESC

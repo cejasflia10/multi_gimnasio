@@ -35,52 +35,59 @@ $precios = $conexion->query("SELECT * FROM precio_hora WHERE gimnasio_id = $gimn
 <!DOCTYPE html>
 <html lang="es">
 <head>
-        <link rel="stylesheet" href="estilo_unificado.css">
     <meta charset="UTF-8">
     <title>Configurar Precio por Hora</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    
+    <link rel="stylesheet" href="estilo_unificado.css">
+</head>
 <body>
     <div class="contenedor">
+        <h1>🧮 Configurar Precios por Hora</h1>
 
-    <h1>Configurar Precios por Hora</h1>
-    <form method="POST">
-        <table>
-            <tr>
-                <th>Desde</th>
-                <th>Hasta</th>
-                <th>Precio por Hora ($)</th>
-                <th>Eliminar</th>
-            </tr>
-            <?php while ($row = $precios->fetch_assoc()): ?>
+        <!-- FORM PRINCIPAL: EDITAR y GUARDAR -->
+        <form method="post">
+            <input type="hidden" name="accion" value="guardar">
+
+            <table border="1">
                 <tr>
-                    <td>
-                        <input type="hidden" name="id[]" value="<?= $row['id'] ?>">
-                        <input type="number" name="rango_min[]" value="<?= $row['rango_min'] ?>">
-                    </td>
-                    <td><input type="number" name="rango_max[]" value="<?= $row['rango_max'] ?>"></td>
-                    <td><input type="number" step="0.01" name="precio[]" value="<?= $row['precio'] ?>"></td>
-                    <td>
-                        <form method="POST" style="display:inline;">
-                            <input type="hidden" name="id" value="<?= $row['id'] ?>">
-                            <input type="hidden" name="accion" value="eliminar">
-                            <button type="submit" class="eliminar">🗑</button>
-                        </form>
-                    </td>
+                    <th>Mín. alumnos</th>
+                    <th>Máx. alumnos</th>
+                    <th>Precio por turno ($)</th>
+                    <th>Eliminar</th>
                 </tr>
-            <?php endwhile; ?>
-        </table>
-        <input type="submit" value="Guardar Cambios">
-    </form>
+                <?php if ($precios && $precios->num_rows > 0): ?>
+                    <?php while ($p = $precios->fetch_assoc()): ?>
+                        <tr>
+                            <td>
+                                <input type="number" name="rango_min[]" value="<?= $p['rango_min'] ?>" required>
+                                <input type="hidden" name="id[]" value="<?= $p['id'] ?>">
+                            </td>
+                            <td><input type="number" name="rango_max[]" value="<?= $p['rango_max'] ?>" required></td>
+                            <td><input type="number" step="0.01" name="precio[]" value="<?= $p['precio'] ?>" required></td>
+                            <td>
+                                <form method="post" onsubmit="return confirm('¿Eliminar este precio?');">
+                                    <input type="hidden" name="accion" value="eliminar">
+                                    <input type="hidden" name="id" value="<?= $p['id'] ?>">
+                                    <button type="submit">🗑️</button>
+                                </form>
+                            </td>
+                        </tr>
+                    <?php endwhile; ?>
+                <?php endif; ?>
+            </table>
 
-    <h2>Agregar Nuevo Rango</h2>
-    <form method="POST">
-        <input type="hidden" name="accion" value="agregar">
-        Desde: <input type="number" name="nuevo_min" required>
-        Hasta: <input type="number" name="nuevo_max" required>
-        Precio: <input type="number" step="0.01" name="nuevo_precio" required>
-        <button type="submit">Agregar</button>
-    </form>
+            <br>
+            <button type="submit">💾 Guardar Cambios</button>
+        </form>
+
+        <h2>➕ Agregar Nuevo Rango</h2>
+        <form method="POST">
+            <input type="hidden" name="accion" value="agregar">
+            Desde: <input type="number" name="nuevo_min" required>
+            Hasta: <input type="number" name="nuevo_max" required>
+            Precio: <input type="number" step="0.01" name="nuevo_precio" required>
+            <button type="submit">Agregar</button>
+        </form>
     </div>
 </body>
 </html>
