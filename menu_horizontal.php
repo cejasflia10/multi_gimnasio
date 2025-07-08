@@ -185,6 +185,7 @@ if (session_status() === PHP_SESSION_NONE) { session_start(); } ?>
     <a href="panel_profesor.php">Panel Profesor</a>
     <a href="agregar_profesor.php">Agregar Profesor</a>
     <a href="ver_profesores.php">Ver Profesores</a>
+    <a href="configurar_precios_hora.php">precio horas</a>
     <a href="ver_asistencias_profesor.php">Ver Asistencias</a>
     <a href="reporte_horas_profesor.php">Reporte de Horas</a>
     <a href="reporte_horas_profesor.php">Reporte Horas Profesor</a>
