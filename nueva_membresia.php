@@ -122,18 +122,73 @@ setInterval(actualizarTotalVisible, 500);
         <input type="text" name="total_pagar" id="total_pagar" readonly>
 <p style="margin-top:5px; color: gold;">Total actual: <span id="total_visible" style="font-weight: bold;"></span></p>
 
-        <label>Método de Pago:</label>
-        <select name="metodo_pago" required>
-            <option value="">Seleccionar método</option>
-            <option value="efectivo">Efectivo</option>
-            <option value="transferencia">Transferencia</option>
-            <option value="cuenta_corriente">Cuenta Corriente</option>
-            <option value="debito">Débito</option>
-            <option value="credito">Crédito</option>
-        </select>
+        
+<h3>💳 Formas de Pago</h3>
+<div>
+    <label>💵 Efectivo: </label>
+    <input type="number" step="0.01" min="0" name="pago_efectivo" value="0"><br>
+
+    <label>🏦 Transferencia: </label>
+    <input type="number" step="0.01" min="0" name="pago_transferencia" value="0"><br>
+
+    <label>💳 Débito: </label>
+    <input type="number" step="0.01" min="0" name="pago_debito" value="0"><br>
+
+    <label>💳 Crédito: </label>
+    <input type="number" step="0.01" min="0" name="pago_credito" value="0"><br>
+
+    <label>📒 Cuenta Corriente (Deuda): </label>
+    <input type="number" step="0.01" min="0" name="pago_cuenta_corriente" value="0"><br>
+</div>
+
+<h4>Total abonado: $<span id="total_abonado">0.00</span></h4>
+
+<script>
+function actualizarTotal() {
+    const efectivo = parseFloat(document.querySelector('[name=pago_efectivo]').value) || 0;
+    const transferencia = parseFloat(document.querySelector('[name=pago_transferencia]').value) || 0;
+    const debito = parseFloat(document.querySelector('[name=pago_debito]').value) || 0;
+    const credito = parseFloat(document.querySelector('[name=pago_credito]').value) || 0;
+    const cuenta_corriente = parseFloat(document.querySelector('[name=pago_cuenta_corriente]').value) || 0;
+
+    const total = efectivo + transferencia + debito + credito + cuenta_corriente;
+    document.getElementById('total_abonado').innerText = total.toFixed(2);
+}
+
+document.querySelectorAll('input[type=number]').forEach(input => {
+    input.addEventListener('input', actualizarTotal);
+});
+</script>
 
         <button type="submit">Guardar Membresía</button>
+   <script>
+function validarPagos() {
+    const total_plan = parseFloat(document.querySelector('[name=precio_plan]').value) || 0;
+
+    const efectivo = parseFloat(document.querySelector('[name=pago_efectivo]').value) || 0;
+    const transferencia = parseFloat(document.querySelector('[name=pago_transferencia]').value) || 0;
+    const debito = parseFloat(document.querySelector('[name=pago_debito]').value) || 0;
+    const credito = parseFloat(document.querySelector('[name=pago_credito]').value) || 0;
+    const cuenta_corriente = parseFloat(document.querySelector('[name=pago_cuenta_corriente]').value) || 0;
+
+    const total_pagado = efectivo + transferencia + debito + credito + cuenta_corriente;
+
+    if (total_pagado < total_plan) {
+        const diferencia = total_plan - total_pagado;
+        return confirm(`⚠️ Se pagaron $${total_pagado.toFixed(2)} de $${total_plan.toFixed(2)}.\nSe registrará una deuda de $${diferencia.toFixed(2)} en cuenta corriente. ¿Desea continuar?`);
+    }
+
+    if (total_pagado > total_plan) {
+        alert(`❌ El total abonado ($${total_pagado.toFixed(2)}) supera el precio del plan ($${total_plan.toFixed(2)}). Corrija los valores.`);
+        return false;
+    }
+
+    return true;
+}
+</script>
+
     </form>
+
 </div>
 
 <script>
