@@ -1,94 +1,144 @@
 <?php
-if (session_status() === PHP_SESSION_NONE) {
-    session_start();
-}
 include 'conexion.php';
-include 'menu_horizontal.php';
+include 'menu.php';
+session_start();
 
 date_default_timezone_set('America/Argentina/Buenos_Aires');
+
 $gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
 $mes_actual = date('m');
 $anio_actual = date('Y');
 
-$query = $conexion->query("SELECT p.id, p.apellido, p.nombre, a.fecha, a.hora_ingreso, a.hora_egreso, a.monto_pagado
+// Proceso de eliminación
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['eliminar_id'])) {
+    $id = intval($_POST['eliminar_id']);
+    $stmt = $conexion->prepare("DELETE FROM asistencias_profesores WHERE id = ? AND gimnasio_id = ?");
+    $stmt->bind_param('ii', $id, $gimnasio_id);
+    $stmt->execute();
+    echo "<p style='color:lime; text-align:center;'>✅ Turno eliminado correctamente.</p>";
+}
+
+// Obtener asistencias del mes actual
+$stmt = $conexion->prepare('
+    SELECT a.id, p.id AS profesor_id, p.apellido, p.nombre, a.fecha, a.hora_ingreso, a.hora_egreso,
+           TIMESTAMPDIFF(MINUTE, a.hora_ingreso, a.hora_egreso) AS minutos_trabajados
     FROM asistencias_profesores a
     JOIN profesores p ON a.profesor_id = p.id
-    WHERE MONTH(a.fecha) = $mes_actual
-      AND YEAR(a.fecha) = $anio_actual
-      AND a.gimnasio_id = $gimnasio_id
-    ORDER BY p.apellido, a.fecha");
+    WHERE MONTH(a.fecha) = ? AND YEAR(a.fecha) = ? AND a.gimnasio_id = ?
+    ORDER BY p.apellido, a.fecha
+');
+$stmt->bind_param('iii', $mes_actual, $anio_actual, $gimnasio_id);
+$stmt->execute();
+$query = $stmt->get_result();
 
 $datos = [];
 while ($fila = $query->fetch_assoc()) {
-    $id = $fila['id'];
+    $id = $fila['profesor_id'];
     if (!isset($datos[$id])) {
         $datos[$id] = [
             'nombre' => $fila['apellido'] . ' ' . $fila['nombre'],
-            'registros' => [],
-            'total_horas' => 0,
-            'total_monto' => 0
+            'total_minutos' => 0,
+            'asistencias' => []
         ];
     }
 
-    $ingreso = !empty($fila['hora_ingreso']) ? strtotime($fila['hora_ingreso']) : false;
-    $egreso  = !empty($fila['hora_egreso']) ? strtotime($fila['hora_egreso']) : false;
-    $horas_trabajadas = ($egreso && $ingreso) ? round(($egreso - $ingreso) / 3600, 2) : 0;
-    $monto = floatval($fila['monto_pagado']);
+    // Obtener cantidad de alumnos en el horario del turno
+    $alumnos_q = $conexion->prepare("
+        SELECT COUNT(*) AS cantidad
+        FROM asistencias
+        WHERE fecha = ? AND hora BETWEEN ? AND ? AND gimnasio_id = ?
+    ");
+    $alumnos_q->bind_param("sssi", $fila['fecha'], $fila['hora_ingreso'], $fila['hora_egreso'], $gimnasio_id);
+    $alumnos_q->execute();
+    $alumnos_res = $alumnos_q->get_result()->fetch_assoc();
+    $cantidad_alumnos = $alumnos_res['cantidad'] ?? 0;
 
-    $datos[$id]['registros'][] = [
+    $datos[$id]['total_minutos'] += intval($fila['minutos_trabajados']);
+    $datos[$id]['asistencias'][] = [
+        'id' => $fila['id'],
         'fecha' => $fila['fecha'],
-        'hora_ingreso' => $fila['hora_ingreso'],
-        'hora_egreso' => $fila['hora_egreso'],
-        'horas' => $horas_trabajadas,
-        'monto' => $monto
+        'ingreso' => $fila['hora_ingreso'],
+        'egreso' => $fila['hora_egreso'],
+        'minutos' => intval($fila['minutos_trabajados']),
+        'alumnos' => $cantidad_alumnos
     ];
-    $datos[$id]['total_horas'] += $horas_trabajadas;
-    $datos[$id]['total_monto'] += $monto;
 }
 ?>
-
 <!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>Horas Trabajadas Profesores</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <link rel="stylesheet" href="estilo_unificado.css">
+    <title>Reporte de Horas Trabajadas</title>
+    <style>
+        body { background-color: #111; color: gold; font-family: Arial, sans-serif; }
+        h2 { text-align: center; }
+        table { width: 95%; margin: 20px auto; border-collapse: collapse; background-color: #222; }
+        th, td { padding: 10px; border: 1px solid gold; color: white; text-align: center; }
+        .subtitulo { background-color: #333; font-weight: bold; }
+        .boton {
+            padding: 5px 10px; border: none; border-radius: 5px;
+            font-weight: bold; cursor: pointer; text-decoration: none;
+        }
+        .editar { background-color: gold; color: black; }
+        .eliminar { background-color: red; color: white; }
+        .agregar {
+            background-color: lime; color: black;
+            margin: 20px auto; display: block;
+            text-align: center; width: fit-content;
+        }
+        form.inline { display: inline; }
+    </style>
 </head>
 <body>
-   <div class="contenedor"> 
-    <h1>Horas Trabajadas por Profesores - <?= date('F Y') ?></h1>
+<h2>📋 Reporte de Horas Trabajadas - Mes Actual</h2>
+<a href="agregar_turno_profesor.php" class="boton agregar">➕ Agregar nuevo turno manual</a>
 
-    <?php if (empty($datos)): ?>
-        <div class="mensaje">No hay registros de horas trabajadas este mes.</div>
-    <?php endif; ?>
-
+<?php if (empty($datos)): ?>
+    <p style="text-align:center; color:white;">No hay asistencias registradas para este mes.</p>
+<?php else: ?>
     <?php foreach ($datos as $profesor): ?>
-        <h2><?= $profesor['nombre'] ?></h2>
         <table>
+            <tr class="subtitulo">
+                <td colspan="7"><?= $profesor['nombre'] ?></td>
+            </tr>
             <tr>
                 <th>Fecha</th>
                 <th>Ingreso</th>
                 <th>Egreso</th>
-                <th>Horas</th>
-                <th>Monto</th>
+                <th>Minutos</th>
+                <th>Alumnos</th>
+                <th colspan="2">Acciones</th>
             </tr>
-            <?php foreach ($profesor['registros'] as $r): ?>
-                <tr>
-                    <td><?= $r['fecha'] ?></td>
-                    <td><?= $r['hora_ingreso'] ?></td>
-                    <td><?= $r['hora_egreso'] ?></td>
-                    <td><?= $r['horas'] ?> hs</td>
-                    <td>$<?= number_format($r['monto'], 2) ?></td>
-                </tr>
-            <?php endforeach; ?>
+            <?php foreach ($profesor['asistencias'] as $a): ?>
             <tr>
-                <th colspan="3">Totales del Mes</th>
-                <th><?= $profesor['total_horas'] ?> hs</th>
-                <th>$<?= number_format($profesor['total_monto'], 2) ?></th>
+                <td><?= $a['fecha'] ?></td>
+                <td><?= $a['ingreso'] ?></td>
+                <td><?= $a['egreso'] ?></td>
+                <td><?= $a['minutos'] ?></td>
+                <td><?= $a['alumnos'] ?></td>
+                <td>
+                    <a href="editar_turno_profesor.php?id=<?= $a['id'] ?>" class="boton editar">✏️ Editar</a>
+                </td>
+                <td>
+                    <form method="POST" class="inline" onsubmit="return confirm('¿Eliminar este turno?');">
+                        <input type="hidden" name="eliminar_id" value="<?= $a['id'] ?>">
+                        <button type="submit" class="boton eliminar">🗑️ Eliminar</button>
+                    </form>
+                </td>
+            </tr>
+            <?php endforeach; ?>
+            <tr class="subtitulo">
+                <td colspan="4">⏱ Total trabajado</td>
+                <td colspan="3">
+                    <?php
+                        $horas = floor($profesor['total_minutos'] / 60);
+                        $min = $profesor['total_minutos'] % 60;
+                        echo "{$horas} h {$min} min";
+                    ?>
+                </td>
             </tr>
         </table>
     <?php endforeach; ?>
-</div>
+<?php endif; ?>
 </body>
 </html>
