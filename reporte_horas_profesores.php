@@ -42,7 +42,7 @@ while ($fila = $query->fetch_assoc()) {
         ];
     }
 
-    // Obtener cantidad de alumnos en el horario del turno
+    // Consultar alumnos durante el turno
     $alumnos_q = $conexion->prepare("
         SELECT COUNT(*) AS cantidad
         FROM asistencias
@@ -71,7 +71,7 @@ while ($fila = $query->fetch_assoc()) {
     <title>Reporte de Horas Trabajadas</title>
     <style>
         body { background-color: #111; color: gold; font-family: Arial, sans-serif; }
-        h2 { text-align: center; }
+        h2 { text-align: center; margin-top: 20px; }
         table { width: 95%; margin: 20px auto; border-collapse: collapse; background-color: #222; }
         th, td { padding: 10px; border: 1px solid gold; color: white; text-align: center; }
         .subtitulo { background-color: #333; font-weight: bold; }
