@@ -3,7 +3,10 @@ session_start();
 include 'conexion.php';
 date_default_timezone_set('America/Argentina/Buenos_Aires');
 
-// Verificar acceso válido
+error_reporting(E_ALL);
+ini_set('display_errors', 1);
+
+// Verificación de acceso
 if (!isset($_SESSION['gimnasio_id'])) {
     echo "Acceso denegado.";
     exit;
@@ -13,84 +16,69 @@ $gimnasio_id = $_SESSION['gimnasio_id'];
 $rol_usuario = $_SESSION['rol'] ?? '';
 $profesor_id_sesion = $_SESSION['profesor_id'] ?? 0;
 
-// Si se envió el formulario
+// Procesamiento del formulario
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $profesor_id = intval($_POST['profesor_id']);
-    $fecha = $_POST['fecha'];
-    $hora_ingreso = $_POST['hora_ingreso'];
-    $hora_salida = $_POST['hora_salida'];
+    $fecha = $_POST['fecha'] ?? '';
+    $hora_ingreso = $_POST['hora_ingreso'] ?? '';
+    $hora_egreso = $_POST['hora_egreso'] ?? '';
     $alumnos_manual = ($_POST['alumnos_manual'] !== '') ? intval($_POST['alumnos_manual']) : 'NULL';
 
-    if ($profesor_id && $fecha && $hora_ingreso && $hora_salida) {
-        $query = "INSERT INTO asistencias_profesores 
-                    (profesor_id, fecha, hora_ingreso, hora_salida, alumnos_manual, gimnasio_id) 
-                  VALUES 
-                    ($profesor_id, '$fecha', '$hora_ingreso', '$hora_salida', $alumnos_manual, $gimnasio_id)";
-        if ($conexion->query($query)) {
-            echo "<div style='color:lime; font-size:20px; text-align:center;'>✅ Turno agregado correctamente.</div>";
+    if ($profesor_id && $fecha && $hora_ingreso && $hora_egreso) {
+        $check = $conexion->query("SELECT id FROM asistencias_profesores 
+                                   WHERE profesor_id = $profesor_id 
+                                   AND fecha = '$fecha' 
+                                   AND gimnasio_id = $gimnasio_id");
+
+        if ($check && $check->num_rows > 0) {
+            // ACTUALIZAR turno existente
+            $id_existente = $check->fetch_assoc()['id'];
+            $query = "UPDATE asistencias_profesores 
+                      SET hora_ingreso = '$hora_ingreso', 
+                          hora_egreso = '$hora_egreso', 
+                          alumnos_manual = $alumnos_manual 
+                      WHERE id = $id_existente";
         } else {
-            echo "<div style='color:red;'>❌ Error al guardar: " . $conexion->error . "</div>";
+            // INSERTAR nuevo turno
+            $query = "INSERT INTO asistencias_profesores 
+                        (profesor_id, fecha, hora_ingreso, hora_egreso, alumnos_manual, gimnasio_id) 
+                      VALUES 
+                        ($profesor_id, '$fecha', '$hora_ingreso', '$hora_egreso', $alumnos_manual, $gimnasio_id)";
+        }
+
+        if ($conexion->query($query)) {
+            echo "<div style='color:lime; font-size:20px; text-align:center;'>✅ Turno guardado correctamente.</div>";
+        } else {
+            echo "<div style='color:red;'>❌ Error: " . $conexion->error . "</div>";
         }
     } else {
         echo "<div style='color:red;'>❌ Todos los campos son obligatorios.</div>";
     }
 }
 
-// Obtener lista de profesores del gimnasio actual
+// Listado de profesores
 $profesores = $conexion->query("SELECT id, apellido, nombre FROM profesores WHERE gimnasio_id = $gimnasio_id ORDER BY apellido, nombre");
 ?>
-
 <!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">
     <title>Agregar Turno Manual</title>
     <style>
-        body {
-            background-color: #000;
-            color: gold;
-            font-family: Arial, sans-serif;
-            padding: 20px;
-        }
-        h2 {
-            text-align: center;
-            color: white;
-        }
-        form {
-            max-width: 500px;
-            margin: auto;
-            background: #111;
-            padding: 20px;
-            border-radius: 10px;
-        }
-        label {
-            display: block;
-            margin-top: 15px;
-        }
+        body { background-color: #000; color: gold; font-family: Arial; padding: 20px; }
+        h2 { text-align: center; color: white; }
+        form { max-width: 500px; margin: auto; background: #111; padding: 20px; border-radius: 10px; }
+        label { display: block; margin-top: 15px; }
         input, select {
-            width: 100%;
-            padding: 8px;
-            margin-top: 5px;
-            border-radius: 5px;
-            border: none;
+            width: 100%; padding: 8px; margin-top: 5px;
+            border-radius: 5px; border: none;
         }
         button {
-            margin-top: 20px;
-            background: lime;
-            color: black;
-            padding: 10px;
-            font-size: 16px;
-            width: 100%;
-            border: none;
-            cursor: pointer;
-            border-radius: 5px;
+            margin-top: 20px; background: lime; color: black;
+            padding: 10px; font-size: 16px; width: 100%;
+            border: none; cursor: pointer; border-radius: 5px;
         }
-        a {
-            color: white;
-            display: block;
-            text-align: center;
-            margin-top: 15px;
-        }
+        a { color: white; display: block; text-align: center; margin-top: 15px; }
     </style>
 </head>
 <body>
@@ -122,8 +110,8 @@ $profesores = $conexion->query("SELECT id, apellido, nombre FROM profesores WHER
     <label>Hora de ingreso:</label>
     <input type="time" name="hora_ingreso" required>
 
-    <label>Hora de salida:</label>
-    <input type="time" name="hora_salida" required>
+    <label>Hora de egreso:</label>
+    <input type="time" name="hora_egreso" required>
 
     <label>Alumnos (opcional):</label>
     <input type="number" name="alumnos_manual" min="0">
