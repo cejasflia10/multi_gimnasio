@@ -12,13 +12,6 @@ if (!isset($_SESSION['gimnasio_id'])) {
 $gimnasio_id = $_SESSION['gimnasio_id'];
 $profesor_id = isset($_GET['profesor_id']) ? intval($_GET['profesor_id']) : 0;
 
-// Eliminar turno si se envió desde formulario
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['eliminar_id'])) {
-    $eliminar_id = intval($_POST['eliminar_id']);
-    $conexion->query("DELETE FROM asistencias_profesores WHERE id = $eliminar_id AND gimnasio_id = $gimnasio_id");
-    echo "<p style='color:lime; text-align:center;'>✅ Turno eliminado correctamente.</p>";
-}
-
 // Obtener listado de profesores del gimnasio
 $profesores_q = $conexion->query("SELECT id, apellido, nombre FROM profesores WHERE gimnasio_id = $gimnasio_id");
 $profesores = [];
@@ -38,39 +31,40 @@ foreach ($profesores as $p) {
     }
 }
 
-// Turnos
+// Buscar días con asistencias de alumnos asignados a turnos del profesor
 $turnos_q = $conexion->query("
-    SELECT id, fecha, hora_ingreso, hora_salida
-    FROM asistencias_profesores
-    WHERE profesor_id = $profesor_id AND gimnasio_id = $gimnasio_id
-    ORDER BY fecha DESC
+    SELECT a.fecha, MIN(a.hora) AS hora_ingreso
+    FROM asistencias a
+    JOIN turnos_reservas r ON a.cliente_id = r.cliente_id AND a.fecha = r.fecha
+    JOIN turnos_profesor t ON r.turno_id = t.id
+    WHERE t.profesor_id = $profesor_id
+      AND t.gimnasio_id = $gimnasio_id
+    GROUP BY a.fecha
+    ORDER BY a.fecha DESC
 ");
 
 $total_pago = 0;
 $filas = [];
 
 while ($fila = $turnos_q->fetch_assoc()) {
-    $id_turno = $fila['id'];
     $fecha = $fila['fecha'];
     $hora_ingreso = $fila['hora_ingreso'];
-    $hora_salida = $fila['hora_salida'];
+    $hora_salida = date('H:i:s', strtotime($hora_ingreso . ' +1 hour'));
 
-    $hora_salida_real = ($hora_salida && $hora_salida != '00:00:00')
-        ? $hora_salida
-        : date('H:i:s', strtotime($hora_ingreso . ' +2 hours'));
-
-    // Buscar cuántos alumnos escanearon ese día
+    // Contar alumnos entre el ingreso y la salida
     $alumnos_q = $conexion->query("
         SELECT COUNT(DISTINCT a.cliente_id) AS cantidad
         FROM asistencias a
-        JOIN clientes c ON a.cliente_id = c.id
-        WHERE a.fecha = '$fecha'
-        AND a.hora BETWEEN '$hora_ingreso' AND '$hora_salida_real'
-        AND c.gimnasio_id = $gimnasio_id
+        JOIN turnos_reservas r ON a.cliente_id = r.cliente_id AND a.fecha = r.fecha
+        JOIN turnos_profesor t ON r.turno_id = t.id
+        WHERE t.profesor_id = $profesor_id
+          AND t.gimnasio_id = $gimnasio_id
+          AND a.fecha = '$fecha'
+          AND a.hora BETWEEN '$hora_ingreso' AND '$hora_salida'
     ");
     $cantidad_alumnos = $alumnos_q->fetch_assoc()['cantidad'] ?? 0;
 
-    // Buscar precio por cantidad
+    // Buscar precio por cantidad de alumnos
     $precio_q = $conexion->query("SELECT precio 
         FROM precio_hora 
         WHERE gimnasio_id = $gimnasio_id 
@@ -81,7 +75,6 @@ while ($fila = $turnos_q->fetch_assoc()) {
     $total_pago += $precio;
 
     $filas[] = [
-        'id' => $id_turno,
         'fecha' => $fecha,
         'hora_ingreso' => $hora_ingreso,
         'hora_salida' => $hora_salida,
@@ -127,33 +120,19 @@ while ($fila = $turnos_q->fetch_assoc()) {
         <th>Salida</th>
         <th>Alumnos</th>
         <th>Pago ($)</th>
-        <th colspan="2">Acciones</th>
     </tr>
     <?php foreach ($filas as $f): ?>
         <tr>
             <td><?= $f['fecha'] ?></td>
             <td><?= $f['hora_ingreso'] ?></td>
-            <td><?= $f['hora_salida'] ?: '-' ?></td>
+            <td><?= $f['hora_salida'] ?></td>
             <td><?= $f['alumnos'] ?></td>
             <td>$<?= number_format($f['pago'], 0, ',', '.') ?></td>
-            <td>
-                <a href="editar_turno_profesor.php?id=<?= $f['id'] ?>" class="btn editar">✏️ Editar</a>
-            </td>
-            <td>
-                <form method="POST" class="inline" onsubmit="return confirm('¿Eliminar este turno?');">
-                    <input type="hidden" name="eliminar_id" value="<?= $f['id'] ?>">
-                    <button type="submit" class="btn eliminar">🗑️</button>
-                </form>
-            </td>
         </tr>
     <?php endforeach; ?>
 </table>
 
 <h3 style="text-align:right; margin-top:20px;">💰 Total a pagar: $<?= number_format($total_pago, 0, ',', '.') ?></h3>
-
-<div style="text-align:center; margin-top:20px;">
-    <a href="agregar_turno_profesor.php" style="color:lime; font-size:18px;">➕ Agregar Turno Manual</a>
-</div>
 
 </div>
 </body>
