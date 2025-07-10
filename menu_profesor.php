@@ -31,12 +31,9 @@
 </style>
 
 <div class="menu-horizontal">
-    <a href="chat_profesor.php">
-    Chat con alumnos <span id="contador-mensajes" class="badge-mensajes"></span>
-    </a>
+    
     <a href="panel_profesor.php">Inicio</a>
     <a href="scanner_qr_profesor.php">Escanear Alumnos (QR)</a>
-    <a href="turnos_profesor.php">Mis Turnos</a>
     <a href="ver_reservas_turno.php">👥 Alumnos por Turno</a>
     <a href="ver_alumnos_profesor.php">🧍‍♂️ Mis Alumnos</a>
     <a href="ver_alumnos.php">Alumnos</a>
@@ -50,6 +47,7 @@
     <a href="ver_competencias.php">Ver Competencias</a>
     <a href="registrar_datos_fisicos.php">Datos Físicos</a>
     <a href="ver_datos_fisicos_profesor.php">Ver Datos</a>
-    <a href="ver_saldo.php">Saldo</a>
+    <a href="registrar_competidor.php">Registrar Competidor</a>
+    <a href="ver_competidores.php">Ver Competidores</a>
     <a href="logout_profesor.php">Cerrar Sesión</a>
 </div>
