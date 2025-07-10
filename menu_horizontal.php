@@ -147,7 +147,6 @@ if (session_status() === PHP_SESSION_NONE) { session_start(); } ?>
     <a href="#" onclick="mostrarLateral('asistencias')">🕘 Asistencias</a>
     <a href="#" onclick="mostrarLateral('competencias')">competencias</a>
     <a href="#" onclick="mostrarLateral('profesores')">🧑‍🏫 Profesores</a>
-    <a href="#" onclick="mostrarLateral('qr')">📷 QR</a>
     <a href="#" onclick="mostrarLateral('ventas')">🛒 Ventas</a>
     <a href="#" onclick="mostrarLateral('panel')">👤 Panel Cliente</a>
     <a href="#" onclick="mostrarLateral('configuraciones')">⚙️ Configuraciones</a>
@@ -174,11 +173,8 @@ if (session_status() === PHP_SESSION_NONE) { session_start(); } ?>
 <!-- MENÚ LATERAL DE ASISTENCIAS -->
 <div id="menu-asistencias" class="menu-lateral">
     <h3>Asistencias</h3>
-    <a href="registrar_asistencia_qr.php">Registrar Asistencia QR</a>
-    <a href="ver_asistencia_qr.php">Ver Asistencia QR</a>
     <a href="asistencia_qr.php">Asistencia QR</a>
     <a href="formulario_qr.php">Registro Manual</a>
-    <a href="historial_asistencia_filtro.php">Historial con Filtro</a>
     <a href="ver_asistencia.php">Ver Asistencia</a>
     <a href="ver_asistencia_mes.php">Asistencia del Mes</a>
 </div>
@@ -247,18 +243,6 @@ if (session_status() === PHP_SESSION_NONE) { session_start(); } ?>
     <a href="gimnasios.php">Ver Gimnasios</a>
     <a href="registro_pagos_gimnasio.php">Registro de Pagos</a>
     <a href="historial_pagos_gym.php">Historial de Pagos</a>
-</div>
-
-<!-- MENÚ LATERAL DE QR -->
-<div id="menu-qr" class="menu-lateral">
-    <h3>QR</h3>
- <a href="ver_clientes.php">Ver Clientes</a>
-        <a href="ver_profesores.php">Ver Profesores</a>
-        <a href="registro_qr_multi.php">Escanear QR Ingreso/Egreso</a>
-        <a href="ver_asistencias_dia.php">Ver Asistencias del Día</a>
-        <a href="reporte_horas_profesores.php">Reporte Horas Profesores</a>
-        <a href="ver_qr_profesores.php">Códigos QR</a>
-        <a href="configurar_precios_hora.php">Configurar Precio Hora</a>    <a href="scanner_qr.php">Escanear QR</a>
 </div>
 
 <!-- SCRIPT -->
