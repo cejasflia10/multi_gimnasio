@@ -3,12 +3,8 @@ session_start();
 include 'conexion.php';
 include 'menu_horizontal.php';
 if (session_status() === PHP_SESSION_NONE) { session_start(); }
-include 'permisos.php';
 
-if (!tiene_permiso('profesores')) {
-    echo "<h2 style='color:red;'>⛔ Acceso denegado</h2>";
-    exit;
-}
+
 $resultado = $conexion->query("SELECT * FROM gimnasios");
 
 
