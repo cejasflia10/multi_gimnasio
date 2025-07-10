@@ -82,6 +82,7 @@ if (session_status() === PHP_SESSION_NONE) { session_start(); } ?>
     /* Ocultar los submenús en celulares */
     #menu-clientes,
     #menu-asistencias,
+    #menu-competencias,
     #menu-profesores,
     #menu-qr,
     #menu-ventas,
@@ -124,6 +125,7 @@ if (session_status() === PHP_SESSION_NONE) { session_start(); } ?>
     /* Ocultar submenús en celulares */
     #menu-clientes,
     #menu-asistencias,
+    #menu-competencias,
     #menu-profesores,
     #menu-qr,
     #menu-ventas,
@@ -143,6 +145,7 @@ if (session_status() === PHP_SESSION_NONE) { session_start(); } ?>
 <div class="menu-horizontal" id="menu-principal">
     <a href="#" onclick="mostrarLateral('clientes')">👥 Clientes</a>
     <a href="#" onclick="mostrarLateral('asistencias')">🕘 Asistencias</a>
+    <a href="#" onclick="mostrarLateral('competencias')">competencias</a>
     <a href="#" onclick="mostrarLateral('profesores')">🧑‍🏫 Profesores</a>
     <a href="#" onclick="mostrarLateral('qr')">📷 QR</a>
     <a href="#" onclick="mostrarLateral('ventas')">🛒 Ventas</a>
@@ -179,7 +182,13 @@ if (session_status() === PHP_SESSION_NONE) { session_start(); } ?>
     <a href="ver_asistencia.php">Ver Asistencia</a>
     <a href="ver_asistencia_mes.php">Asistencia del Mes</a>
 </div>
-
+<div id="menu-competencias" class="menu-lateral">
+    <h3>Competencias</h3>
+        <li><a href="ver_competidores.php">📋 Ver Competidores</a></li>
+        <li><a href="ver_disciplinas_competencia.php">🏷️ Disciplinas</a></li>
+        <li><a href="ver_divisiones_competencia.php">🧩 Divisiones</a></li>
+    </ul>
+</div>
 <!-- MENÚ LATERAL DE PROFESORES -->
 <div id="menu-profesores" class="menu-lateral">
     <h3>Profesores</h3>
