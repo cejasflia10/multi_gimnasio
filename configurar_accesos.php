@@ -3,10 +3,6 @@ if (session_status() === PHP_SESSION_NONE) session_start();
 include 'conexion.php';
 include 'permisos.php';
 
-if (!tiene_permiso('configuraciones')) {
-    echo "<h2 style='color:red;'>⛔ Acceso denegado</h2>";
-    exit;
-}
 
 $gimnasios = $conexion->query("SELECT * FROM gimnasios ORDER BY nombre ASC");
 ?>

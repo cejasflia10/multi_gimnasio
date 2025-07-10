@@ -16,20 +16,20 @@ $planes = $conexion->query("SELECT id, nombre FROM planes_acceso WHERE gimnasio_
 
 // Guardar nuevo usuario
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $nombre = trim($_POST['nombre_completo'] ?? '');
+    $nombre = trim($_POST['nombre'] ?? '');
+    $apellido = trim($_POST['apellido'] ?? '');
     $usuario = trim($_POST['usuario'] ?? '');
     $clave = trim($_POST['clave'] ?? '');
     $plan_id = intval($_POST['plan_id'] ?? 0);
 
-    if ($nombre && $usuario && $clave && $plan_id > 0) {
-        // Verificar usuario existente
+    if ($nombre && $apellido && $usuario && $clave && $plan_id > 0) {
         $existe = $conexion->query("SELECT id FROM usuarios_gimnasio WHERE usuario = '$usuario' AND gimnasio_id = $gimnasio_id")->num_rows;
         if ($existe > 0) {
             $mensaje = "<p style='color:red;'>❌ El nombre de usuario ya está en uso.</p>";
         } else {
             $hash = password_hash($clave, PASSWORD_DEFAULT);
-            $stmt = $conexion->prepare("INSERT INTO usuarios_gimnasio (nombre_completo, usuario, clave, plan_id, gimnasio_id) VALUES (?, ?, ?, ?, ?)");
-            $stmt->bind_param("sssii", $nombre, $usuario, $hash, $plan_id, $gimnasio_id);
+            $stmt = $conexion->prepare("INSERT INTO usuarios_gimnasio (nombre, apellido, usuario, clave, plan_id, gimnasio_id) VALUES (?, ?, ?, ?, ?, ?)");
+            $stmt->bind_param("ssssii", $nombre, $apellido, $usuario, $hash, $plan_id, $gimnasio_id);
             $stmt->execute();
             $mensaje = "<p style='color:lime;'>✅ Usuario registrado correctamente.</p>";
         }
@@ -59,8 +59,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <h2>➕ Agregar Usuario de Gimnasio</h2>
     <?= $mensaje ?>
     <form method="post">
-        <label>Nombre completo</label>
-        <input type="text" name="nombre_completo" required>
+        <label>Nombre</label>
+        <input type="text" name="nombre" required>
+
+        <label>Apellido</label>
+        <input type="text" name="apellido" required>
 
         <label>Usuario</label>
         <input type="text" name="usuario" required>

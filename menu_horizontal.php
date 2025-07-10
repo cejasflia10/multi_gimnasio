@@ -234,14 +234,14 @@ if (session_status() === PHP_SESSION_NONE) { session_start(); } ?>
 <!-- MENÚ LATERAL DE CONFIGURACIONES -->
 <div id="menu-configuraciones" class="menu-lateral">
     <h3>Configuraciones</h3>
-    <a href="agregar_usuario.php">Agregar Usuario</a>
+    <a href="agregar_usuario_gimnasio.php">Agregar Usuario</a>
     <a href="usuarios.php">Usuarios</a>
     <a href="usuarios_gimnasio.php">Usuarios por Gimnasio</a>
-    <a href="configurar_accesos.php">Configurar Accesos</a>
+    <a href="planes_acceso.php">Configurar Accesos</a>
     <a href="agregar_gimnasio.php">Agregar Gimnasio</a>
     <a href="crear_gimnasio.php">Crear Gimnasio</a>
     <a href="gimnasios.php">Ver Gimnasios</a>
-    <a href="registro_pagos_gimnasio.php">Registro de Pagos</a>
+    <a href="editar_usuario_gimnasio.php">editar usuarios</a>
     <a href="historial_pagos_gym.php">Historial de Pagos</a>
 </div>
 

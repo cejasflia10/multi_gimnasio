@@ -1,12 +1,7 @@
 <?php
 if (session_status() === PHP_SESSION_NONE) { session_start(); }
 include 'conexion.php';
-include 'permisos.php';
 
-if (!tiene_permiso('profesores')) {
-    echo "<h2 style='color:red;'>⛔ Acceso denegado</h2>";
-    exit;
-}
 if ($_SERVER["REQUEST_METHOD"] === "POST") {
     $nombre = trim($_POST["nombre"]);
     $direccion = trim($_POST["direccion"]);

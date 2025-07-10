@@ -1,12 +1,6 @@
 <?php
 if (session_status() === PHP_SESSION_NONE) session_start();
 include 'conexion.php';
-include 'permisos.php';
-
-if (!tiene_permiso('profesores')) {
-    echo "<h2 style='color:red;'>⛔ Acceso denegado</h2>";
-    exit;
-}
 
 $id = $_GET['id'] ?? 0;
 $id = intval($id);
@@ -25,6 +19,20 @@ $usuario = $result->fetch_assoc();
     <title>Editar Usuario</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="stylesheet" href="estilo_unificado.css">
+    <style>
+        .permisos-box {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 10px;
+            margin-top: 10px;
+            background: #222;
+            padding: 10px;
+            border-radius: 10px;
+        }
+        .permisos-box label {
+            color: gold;
+        }
+    </style>
 </head>
 <body>
 <div class="contenedor">
@@ -58,10 +66,19 @@ $usuario = $result->fetch_assoc();
                 'permiso_profesores' => 'Profesores',
                 'permiso_ventas' => 'Ventas',
                 'permiso_asistencias' => 'Asistencias',
-                'permiso_panel' => 'Panel'
+                'permiso_panel' => 'Panel General',
+                'permiso_qr' => 'QR',
+                'permiso_turnos' => 'Turnos',
+                'permiso_reservas' => 'Reservas',
+                'permiso_configuracion' => 'Configuración',
+                'permiso_usuarios' => 'Usuarios',
+                'permiso_gimnasios' => 'Gimnasios',
+                'permiso_pagos' => 'Pagos',
+                'permiso_reportes' => 'Reportes',
+                'permiso_accesos' => 'Accesos'
             ];
             foreach ($checks as $campo => $texto) {
-                $checked = $usuario[$campo] ? 'checked' : '';
+                $checked = !empty($usuario[$campo]) ? 'checked' : '';
                 echo "<label><input type='checkbox' name='$campo' value='1' $checked> $texto</label>";
             }
             ?>

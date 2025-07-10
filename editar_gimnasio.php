@@ -2,12 +2,8 @@
 include 'conexion.php';
 if (session_status() === PHP_SESSION_NONE) session_start();
 include 'menu_horizontal.php';
-include 'permisos.php';
 
-if (!tiene_permiso('profesores')) {
-    echo "<h2 style='color:red;'>⛔ Acceso denegado</h2>";
-    exit;
-}
+
 
 if (!isset($_GET['id'])) {
     die("ID de gimnasio no especificado.");

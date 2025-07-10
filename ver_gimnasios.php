@@ -1,13 +1,7 @@
 <?php
-include 'verificar_sesion.php';
 include 'conexion.php';
-include 'permisos.php';
 include 'menu_horizontal.php';
 
-if (!tiene_permiso('profesores')) {
-    echo "<h2 style='color:red;'>⛔ Acceso denegado</h2>";
-    exit;
-}
 
 $resultado = $conexion->query("SELECT * FROM gimnasios");
 ?>
