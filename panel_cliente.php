@@ -120,12 +120,6 @@ if ('serviceWorker' in navigator) {
         echo "<img src='fotos_clientes/default.png' alt='Sin foto' style='opacity:0.7;'>";
     }
     ?>
-</div>
-<?php include 'notificacion_mensajes.php'; ?>
-<?php include 'notificacion_mensajes.php'; ?>
-<?php include 'resumen_mensajes.php'; ?>
-<span id="contador-mensajes" class="badge-mensajes" style="margin-left: 8px;">0</span>
-<?php include 'notificacion_subasta_ganada.php'; ?>
 
 <div class="datos">
     <p><strong>DNI:</strong> <?= $cliente['dni'] ?></p>
