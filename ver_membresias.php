@@ -5,7 +5,7 @@ include 'menu_horizontal.php';
 
 $gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
 
-$query = "SELECT m.*, c.nombre, c.apellido, p.nombre AS nombre_plan, m.total AS total_pagado, m.id AS id_membresia, m.cliente_id
+$query = "SELECT m.*, c.nombre, c.apellido, p.nombre AS nombre_plan, m.total_pagado, m.id AS id_membresia, m.cliente_id
           FROM membresias m 
           JOIN clientes c ON m.cliente_id = c.id 
           JOIN planes p ON m.plan_id = p.id 
@@ -59,8 +59,17 @@ $resultado = $conexion->query($query);
                 <td><?= $fila['fecha_vencimiento'] ?></td>
                 <td><?= $fila['clases_disponibles'] ?></td>
                 <td class="<?= ($fila['total_pagado'] == 0 ? 'texto-rojo' : '') ?>">
-                    $<?= number_format($fila['total_pagado'], 2, ',', '.') ?>
+                    <?php 
+                        if ($fila['total_pagado'] > 0) {
+                            echo '$' . number_format($fila['total_pagado'], 2, ',', '.');
+                        } elseif (!empty($fila['saldo_cc']) && $fila['saldo_cc'] > 0) {
+                            echo 'Cuenta Corriente';
+                        } else {
+                            echo '$0,00';
+                        }
+                    ?>
                 </td>
+
                 <td class="acciones">
                     <a href="editar_membresia.php?id=<?= $fila['id_membresia'] ?>" class="boton-naranja">✏️</a>
                     <a href="eliminar_membresia.php?id=<?= $fila['id_membresia'] ?>" class="boton-rojo" onclick="return confirm('¿Eliminar esta membresía?')">❌</a>
@@ -89,3 +98,4 @@ document.getElementById("buscador").addEventListener("keyup", function() {
 </script>
 </body>
 </html>
+co

@@ -3,6 +3,8 @@ if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 include 'conexion.php';
+include 'menu_horizontal.php';
+
 date_default_timezone_set('America/Argentina/Buenos_Aires');
 $hoy = date('Y-m-d');
 

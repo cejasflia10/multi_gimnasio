@@ -42,14 +42,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $conexion->query("UPDATE membresias SET clases_disponibles = clases_disponibles + 1 WHERE id = $membresia_id");
         }
         $conexion->query("DELETE FROM reservas_clientes WHERE cliente_id = $cliente_id AND turno_id = $turno_id");
-    } elseif ($membresia_id && !isset($reservas[$turno_id])) {
+        } elseif ($membresia_id && !isset($reservas[$turno_id])) {
         // Reservar si no estaba reservado
         $conexion->query("INSERT INTO reservas_clientes 
             (cliente_id, turno_id, dia_semana, hora_inicio, gimnasio_id, profesor_id, fecha_reserva)
             VALUES ($cliente_id, $turno_id, '$dia_turno', '$hora_inicio', $gimnasio_id, $profesor_id, '$fecha_reserva')");
 
-        $conexion->query("UPDATE membresias SET clases_disponibles = clases_disponibles - 1 WHERE id = $membresia_id");
+        if ($membresia_id) {
+            $conexion->query("UPDATE membresias SET clases_disponibles = clases_disponibles - 1 WHERE id = $membresia_id");
+        }
     }
+
 
     header("Location: ver_turnos_cliente.php");
     exit;
