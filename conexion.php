@@ -10,11 +10,11 @@ error_reporting(E_ALL);
 $host = 'shuttle.proxy.rlwy.net';
 $puerto = 51676;
 $usuario = 'root';
-$contrasena = 'bZwtwptDJTaiWydjpfMWTBGwcwMzSKTt';
+$contrasena = 'bzkntwpED3TaihydJpFM7B6wcWtSKTf3'; // CONTRASEÑA CORRECTA de Railway
 $basedatos = 'railway';
 
 $conexion = new mysqli($host, $usuario, $contrasena, $basedatos, $puerto);
 if ($conexion->connect_error) {
-    die("Error de conexión: " . $conexion->connect_error);
+    die("❌ Error de conexión: " . $conexion->connect_error);
 }
 ?>

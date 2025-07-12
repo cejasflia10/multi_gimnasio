@@ -27,21 +27,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $pago_credito = floatval($_POST['pago_credito'] ?? 0);
     $pago_cuenta_corriente = floatval($_POST['pago_cuenta_corriente'] ?? 0);
 
-    // Total calculado
-    $total_pagar = $precio + $otros_pagos - $descuento;
-    $total_abonado = $pago_efectivo + $pago_transferencia + $pago_debito + $pago_credito;
+// Total calculado
+$total_pagar = $precio + $otros_pagos - $descuento;
+$total_abonado = $pago_efectivo + $pago_transferencia + $pago_debito + $pago_credito;
 
-    // Si no se paga completo, la diferencia va como deuda
-    $saldo_cc = $total_pagar - $total_abonado;
+// Si no se paga completo, la diferencia va como deuda
+$saldo_cc = $total_pagar - $total_abonado;
+if ($saldo_cc < 0) {
+    $saldo_cc = 0; // Prevenir saldo negativo por redondeos
+}
 
     // Guardar membresía
     $metodo_pago = 'varios';
-    $stmt = $conexion->prepare("INSERT INTO membresias 
-        (cliente_id, plan_id, fecha_inicio, fecha_vencimiento, clases_disponibles, precio, otros_pagos, descuento, total_pagado, metodo_pago, saldo_cc, gimnasio_id)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
-    $stmt->bind_param("iissiddddsdi",
-        $cliente_id, $plan_id, $fecha_inicio, $fecha_vencimiento, $clases_disponibles,
-        $precio, $otros_pagos, $descuento, $total_abonado, $metodo_pago, $saldo_cc, $gimnasio_id);
+$stmt = $conexion->prepare("INSERT INTO membresias 
+    (cliente_id, plan_id, fecha_inicio, fecha_vencimiento, clases_disponibles, precio, otros_pagos, descuento, total_pagado, metodo_pago, saldo_cc, gimnasio_id)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+
+$stmt->bind_param("iissiddddsdi",
+    $cliente_id, $plan_id, $fecha_inicio, $fecha_vencimiento, $clases_disponibles,
+    $precio, $otros_pagos, $descuento, $total_abonado, $metodo_pago, $saldo_cc, $gimnasio_id);
     $stmt->execute();
     $membresia_id = $conexion->insert_id;
 
