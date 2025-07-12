@@ -1,16 +1,17 @@
 <?php
-// Mostrar errores
+if (session_status() === PHP_SESSION_NONE) session_start();
+
 ini_set('display_errors', 1);
-ini_set('display_startup_errors', 1);
 error_reporting(E_ALL);
 
-// Datos reales desde Railway (verificados con tus capturas)
+// Datos de conexión iguales a los que usás en Tape
 $host = 'shuttle.proxy.rlwy.net';
 $puerto = 51676;
 $usuario = 'root';
-$contrasena = 'bzkntwpED3TaihydJpFM7B6wcWtSKTf3'; // Copialo exactamente desde Railway
+$contrasena = 'bZwtwptDJTaiWydjpfMWTBGwcwMzSKTt';
 $basedatos = 'railway';
 
+// Conexión
 $conexion = new mysqli($host, $usuario, $contrasena, $basedatos, $puerto);
 if ($conexion->connect_error) {
     die("❌ Error de conexión: " . $conexion->connect_error);
