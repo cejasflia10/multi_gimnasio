@@ -1,86 +1,67 @@
 <?php
-session_start();
+if (session_status() === PHP_SESSION_NONE) session_start();
 include 'conexion.php';
-include 'menu_horizontal.php';
-date_default_timezone_set('America/Argentina/Buenos_Aires');
 
-if (!isset($_SESSION['gimnasio_id'])) {
-    echo "Acceso denegado.";
-    exit;
-}
+$gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
+$mes = $_GET['mes'] ?? date('m');
+$anio = $_GET['anio'] ?? date('Y');
+$profesor_id = $_GET['profesor_id'] ?? '';
 
-$gimnasio_id = $_SESSION['gimnasio_id'];
-$profesor_id = isset($_GET['profesor_id']) ? intval($_GET['profesor_id']) : 0;
+$where_profesor = $profesor_id ? "AND p.id = $profesor_id" : '';
 
-// Obtener listado de profesores del gimnasio
-$profesores_q = $conexion->query("SELECT id, apellido, nombre FROM profesores WHERE gimnasio_id = $gimnasio_id");
+$query = "
+    SELECT 
+        p.id AS profesor_id,
+        CONCAT(p.apellido, ' ', p.nombre) AS profesor,
+        a.fecha,
+        a.hora_ingreso,
+        a.hora_egreso,
+        TIMESTAMPDIFF(MINUTE, a.hora_ingreso, a.hora_egreso)/60 AS horas_trabajadas
+    FROM asistencias_profesores a
+    INNER JOIN profesores p ON a.profesor_id = p.id
+    WHERE a.gimnasio_id = $gimnasio_id
+      AND MONTH(a.fecha) = $mes
+      AND YEAR(a.fecha) = $anio
+      $where_profesor
+    ORDER BY p.apellido, a.fecha
+";
+
+$resultado = $conexion->query($query);
+
 $profesores = [];
-while ($row = $profesores_q->fetch_assoc()) {
-    $profesores[] = $row;
-}
-if ($profesor_id == 0 && count($profesores) > 0) {
-    $profesor_id = $profesores[0]['id'];
-}
-
-// Obtener nombre del profesor actual
-$nombre_profesor = '';
-foreach ($profesores as $p) {
-    if ($p['id'] == $profesor_id) {
-        $nombre_profesor = $p['apellido'] . ' ' . $p['nombre'];
-        break;
+while ($row = $resultado->fetch_assoc()) {
+    $id = $row['profesor_id'];
+    $horas = round(floatval($row['horas_trabajadas']), 2);
+    if (!isset($profesores[$id])) {
+        $profesores[$id] = [
+            'nombre' => $row['profesor'],
+            'total_horas' => 0,
+            'detalle' => []
+        ];
     }
+    $profesores[$id]['total_horas'] += $horas;
+    $profesores[$id]['detalle'][] = [
+        'fecha' => $row['fecha'],
+        'ingreso' => $row['hora_ingreso'],
+        'egreso' => $row['hora_egreso'],
+        'horas' => $horas
+    ];
 }
 
-// Buscar días con asistencias de alumnos asignados a turnos del profesor
-$turnos_q = $conexion->query("
-    SELECT a.fecha, MIN(a.hora) AS hora_ingreso
-    FROM asistencias a
-    JOIN turnos_reservas r ON a.cliente_id = r.cliente_id AND a.fecha = r.fecha
-    JOIN turnos_profesor t ON r.turno_id = t.id
-    WHERE t.profesor_id = $profesor_id
-      AND t.gimnasio_id = $gimnasio_id
-    GROUP BY a.fecha
-    ORDER BY a.fecha DESC
-");
+// Obtener tarifas por rango de alumnos (precio_hora)
+$tarifas = [];
+$tarifa_q = $conexion->query("SELECT * FROM precio_hora WHERE gimnasio_id = $gimnasio_id");
+while ($t = $tarifa_q->fetch_assoc()) {
+    $tarifas[] = $t;
+}
 
-$total_pago = 0;
-$filas = [];
-
-while ($fila = $turnos_q->fetch_assoc()) {
-    $fecha = $fila['fecha'];
-    $hora_ingreso = $fila['hora_ingreso'];
-    $hora_salida = date('H:i:s', strtotime($hora_ingreso . ' +1 hour'));
-
-    // Contar alumnos entre el ingreso y la salida
-    $alumnos_q = $conexion->query("
-        SELECT COUNT(DISTINCT a.cliente_id) AS cantidad
-        FROM asistencias a
-        JOIN turnos_reservas r ON a.cliente_id = r.cliente_id AND a.fecha = r.fecha
-        JOIN turnos_profesor t ON r.turno_id = t.id
-        WHERE t.profesor_id = $profesor_id
-          AND t.gimnasio_id = $gimnasio_id
-          AND a.fecha = '$fecha'
-          AND a.hora BETWEEN '$hora_ingreso' AND '$hora_salida'
-    ");
-    $cantidad_alumnos = $alumnos_q->fetch_assoc()['cantidad'] ?? 0;
-
-    // Buscar precio por cantidad de alumnos
-    $precio_q = $conexion->query("SELECT precio 
-        FROM precio_hora 
-        WHERE gimnasio_id = $gimnasio_id 
-        AND $cantidad_alumnos BETWEEN rango_min AND rango_max 
-        LIMIT 1");
-    $precio = $precio_q->fetch_assoc()['precio'] ?? 0;
-
-    $total_pago += $precio;
-
-    $filas[] = [
-        'fecha' => $fecha,
-        'hora_ingreso' => $hora_ingreso,
-        'hora_salida' => $hora_salida,
-        'alumnos' => $cantidad_alumnos,
-        'pago' => $precio
-    ];
+function calcular_monto($horas, $cantidad_alumnos, $tarifas) {
+    foreach ($tarifas as $t) {
+        if ($cantidad_alumnos >= $t['rango_min'] && $cantidad_alumnos <= $t['rango_max']) {
+            return $horas * floatval($t['precio']);
+        }
+    }
+    return 0;
 }
 ?>
 
@@ -88,52 +69,86 @@ while ($fila = $turnos_q->fetch_assoc()) {
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>Reporte de Horas</title>
-    <link rel="stylesheet" href="estilo_unificado.css">
+    <title>Reporte de Horas Trabajadas</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
-        form.inline { display: inline; }
-        .btn { padding: 4px 10px; font-weight: bold; border-radius: 4px; text-decoration: none; }
-        .editar { background: gold; color: black; }
-        .eliminar { background: red; color: white; border: none; }
+        body { background-color: #000; color: gold; font-family: Arial; padding: 20px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        th, td { border: 1px solid gold; padding: 8px; text-align: center; }
+        select, input[type="submit"] { padding: 6px; margin-right: 10px; }
     </style>
 </head>
 <body>
-<div class="contenedor">
+<h1>🕘 Reporte de Horas Trabajadas por Profesores</h1>
 
-<h2 style="text-align:center;">🕒 Reporte de Horas - <?= $nombre_profesor ?></h2>
-
-<form method="get" style="text-align:center;">
-    <label>Seleccionar Profesor:</label>
-    <select name="profesor_id" onchange="this.form.submit()">
-        <?php foreach ($profesores as $p): ?>
-            <option value="<?= $p['id'] ?>" <?= $p['id'] == $profesor_id ? 'selected' : '' ?>>
-                <?= $p['apellido'] . ' ' . $p['nombre'] ?>
-            </option>
-        <?php endforeach; ?>
-    </select>
+<form method="get">
+    <label>Mes:
+        <select name="mes">
+            <?php for ($i = 1; $i <= 12; $i++): ?>
+                <option value="<?= $i ?>" <?= $mes == $i ? 'selected' : '' ?>><?= $i ?></option>
+            <?php endfor; ?>
+        </select>
+    </label>
+    <label>Año:
+        <select name="anio">
+            <?php for ($a = 2024; $a <= date('Y'); $a++): ?>
+                <option value="<?= $a ?>" <?= $anio == $a ? 'selected' : '' ?>><?= $a ?></option>
+            <?php endfor; ?>
+        </select>
+    </label>
+    <label>Profesor:
+        <select name="profesor_id">
+            <option value="">Todos</option>
+            <?php
+            $profs = $conexion->query("SELECT id, CONCAT(apellido, ' ', nombre) AS nombre FROM profesores WHERE gimnasio_id = $gimnasio_id");
+            while ($p = $profs->fetch_assoc()): ?>
+                <option value="<?= $p['id'] ?>" <?= $profesor_id == $p['id'] ? 'selected' : '' ?>><?= $p['nombre'] ?></option>
+            <?php endwhile; ?>
+        </select>
+    </label>
+    <input type="submit" value="Filtrar">
 </form>
 
-<table border="1">
-    <tr>
-        <th>Fecha</th>
-        <th>Ingreso</th>
-        <th>Salida</th>
-        <th>Alumnos</th>
-        <th>Pago ($)</th>
-    </tr>
-    <?php foreach ($filas as $f): ?>
-        <tr>
-            <td><?= $f['fecha'] ?></td>
-            <td><?= $f['hora_ingreso'] ?></td>
-            <td><?= $f['hora_salida'] ?></td>
-            <td><?= $f['alumnos'] ?></td>
-            <td>$<?= number_format($f['pago'], 0, ',', '.') ?></td>
+<?php foreach ($profesores as $id => $datos): ?>
+    <h2><?= $datos['nombre'] ?> - Total Horas: <?= number_format($datos['total_horas'], 2) ?> hs</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>Fecha</th>
+                <th>Ingreso</th>
+                <th>Egreso</th>
+                <th>Horas</th>
+                <th>Cantidad Alumnos</th>
+                <th>Monto</th>
+            </tr>
+        </thead>
+        <tbody>
+        <?php
+        $total_monto = 0;
+        foreach ($datos['detalle'] as $dia):
+            $fecha = $dia['fecha'];
+            // Consultar alumnos registrados ese día para ese profesor
+            $alumnos_q = $conexion->query("SELECT COUNT(*) AS cantidad FROM reservas r JOIN turnos t ON r.turno_id = t.id WHERE t.id_profesor = $id AND r.fecha = '$fecha'");
+            $alumnos = $alumnos_q->fetch_assoc()['cantidad'] ?? 0;
+            $monto = calcular_monto($dia['horas'], $alumnos, $tarifas);
+            $total_monto += $monto;
+        ?>
+            <tr>
+                <td><?= $fecha ?></td>
+                <td><?= $dia['ingreso'] ?></td>
+                <td><?= $dia['egreso'] ?></td>
+                <td><?= number_format($dia['horas'], 2) ?></td>
+                <td><?= $alumnos ?></td>
+                <td>$<?= number_format($monto, 2) ?></td>
+            </tr>
+        <?php endforeach; ?>
+        <tr style="font-weight: bold; background: #111;">
+            <td colspan="5">TOTAL A PAGAR</td>
+            <td>$<?= number_format($total_monto, 2) ?></td>
         </tr>
-    <?php endforeach; ?>
-</table>
+        </tbody>
+    </table>
+<?php endforeach; ?>
 
-<h3 style="text-align:right; margin-top:20px;">💰 Total a pagar: $<?= number_format($total_pago, 0, ',', '.') ?></h3>
-
-</div>
 </body>
 </html>

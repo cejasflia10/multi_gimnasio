@@ -1,60 +1,58 @@
 <?php
+if (session_status() === PHP_SESSION_NONE) session_start();
 include 'conexion.php';
 include 'menu_horizontal.php';
-if (session_status() === PHP_SESSION_NONE) {
-    session_start();
-}
 
 $gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
 
-// Unificar productos de distintas tablas con categoría
-$productos = $conexion->query("
-    SELECT id, nombre, categoria AS tipo, compra AS precio_compra, venta AS precio_venta, stock
-    FROM productos
-    WHERE gimnasio_id = $gimnasio_id
+$resultado = $conexion->query("
+    SELECT * FROM productos 
+    WHERE gimnasio_id = $gimnasio_id 
+    ORDER BY categoria, nombre
 ");
 ?>
 
 <!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Ver Productos</title>
-  <link rel="stylesheet" href="estilo_unificado.css">
+    <meta charset="UTF-8">
+    <title>Listado de Productos</title>
+    <link rel="stylesheet" href="estilo_unificado.css">
 </head>
 <body>
-
 <div class="contenedor">
-  <h2>📦 Listado General de Productos</h2>
-
-  <table>
-    <thead>
-      <tr>
-        <th>Nombre</th>
-        <th>Tipo</th>
-        <th>Compra</th>
-        <th>Venta</th>
-        <th>Stock</th>
-        <th>Acción</th>
-      </tr>
-    </thead>
-    <tbody>
-      <?php while ($p = $productos->fetch_assoc()): ?>
-        <tr>
-          <td data-label="Nombre"><?= $p['nombre'] ?></td>
-          <td data-label="Tipo"><?= $p['tipo'] ?></td>
-          <td data-label="Compra">$<?= number_format($p['precio_compra'], 2) ?></td>
-          <td data-label="Venta">$<?= number_format($p['precio_venta'], 2) ?></td>
-          <td data-label="Stock"><?= $p['stock'] ?></td>
-          <td data-label="Acción">
-            <a href="editar_producto.php?id=<?= $p['id'] ?>&tipo=<?= strtolower($p['tipo']) ?>" class="btn">Editar</a>
-          </td>
-        </tr>
-      <?php endwhile; ?>
-    </tbody>
-  </table>
+    <h2>📦 Productos</h2>
+    <a href="agregar_producto.php" class="boton-verde">➕ Nuevo Producto</a>
+    <br><br>
+    <table class="tabla">
+        <thead>
+            <tr>
+                <th>Nombre</th>
+                <th>Categoría</th>
+                <th>Talle/Oz</th>
+                <th>Compra</th>
+                <th>Venta</th>
+                <th>Stock</th>
+                <th>Acciones</th>
+            </tr>
+        </thead>
+        <tbody>
+        <?php while($row = $resultado->fetch_assoc()): ?>
+            <tr>
+                <td><?= htmlspecialchars($row['nombre']) ?></td>
+                <td><?= ucfirst($row['categoria']) ?></td>
+                <td><?= $row['talle_oz'] ?></td>
+                <td>$<?= number_format($row['precio_compra'], 2) ?></td>
+                <td>$<?= number_format($row['precio_venta'], 2) ?></td>
+                <td><?= $row['stock'] ?></td>
+                <td>
+                    <a href="editar_producto.php?id=<?= $row['id'] ?>" class="boton-naranja">✏️</a>
+                    <a href="eliminar_producto.php?id=<?= $row['id'] ?>" class="boton-rojo" onclick="return confirm('¿Eliminar este producto?')">❌</a>
+                </td>
+            </tr>
+        <?php endwhile; ?>
+        </tbody>
+    </table>
 </div>
-
 </body>
 </html>

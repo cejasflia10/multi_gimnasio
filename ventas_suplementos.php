@@ -1,12 +1,18 @@
 <?php
+if (session_status() === PHP_SESSION_NONE) session_start();
 include 'conexion.php';
 include 'menu_horizontal.php';
 
-if (session_status() === PHP_SESSION_NONE) session_start();
 $gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
 
+// Obtener clientes
+$clientes = $conexion->query("SELECT id, apellido, nombre, dni FROM clientes WHERE gimnasio_id = $gimnasio_id");
+
+// Obtener suplementos
 $suplementos = $conexion->query("
-    SELECT id, nombre, precio_venta AS venta, stock FROM suplementos WHERE gimnasio_id = $gimnasio_id
+    SELECT id, nombre, precio_venta AS venta, stock 
+    FROM suplementos 
+    WHERE gimnasio_id = $gimnasio_id
 ");
 ?>
 
@@ -22,9 +28,19 @@ $suplementos = $conexion->query("
 <h2>🥤 Venta de Suplementos</h2>
 
 <form method="POST" action="formas_pago.php" onsubmit="return prepararTotal()">
-    <label>Cliente:</label>
-    <input type="text" id="cliente_nombre" name="cliente_nombre" list="sugerencias" placeholder="Apellido o DNI" autocomplete="off" required>
-    <datalist id="sugerencias"></datalist>
+
+    <label>Buscar Cliente:</label>
+    <input type="text" id="filtro_cliente" placeholder="Filtrar por apellido o DNI" onkeyup="filtrarClientes()">
+
+    <label>Seleccionar Cliente:</label>
+    <select name="cliente_id" id="selector_cliente" required>
+        <option value="">-- Seleccionar cliente --</option>
+        <?php while ($c = $clientes->fetch_assoc()): ?>
+            <option value="<?= $c['id'] ?>">
+                <?= $c['apellido'] . ' ' . $c['nombre'] ?> (<?= $c['dni'] ?>)
+            </option>
+        <?php endwhile; ?>
+    </select>
 
     <label><input type="checkbox" name="cliente_temporal" value="1"> Cliente temporal</label>
     <br><br>
@@ -62,20 +78,14 @@ $suplementos = $conexion->query("
 </div>
 
 <script>
-document.getElementById("cliente_nombre").addEventListener("input", function() {
-    let valor = this.value;
-    fetch("buscar_clientes.php?q=" + encodeURIComponent(valor))
-        .then(res => res.json())
-        .then(data => {
-            const lista = document.getElementById("sugerencias");
-            lista.innerHTML = "";
-            data.forEach(c => {
-                let opt = document.createElement("option");
-                opt.value = c;
-                lista.appendChild(opt);
-            });
-        });
-});
+function filtrarClientes() {
+    let filtro = document.getElementById("filtro_cliente").value.toLowerCase();
+    let opciones = document.getElementById("selector_cliente").options;
+    for (let i = 0; i < opciones.length; i++) {
+        let texto = opciones[i].text.toLowerCase();
+        opciones[i].style.display = texto.includes(filtro) ? '' : 'none';
+    }
+}
 
 function agregarProducto() {
     const selector = document.getElementById("selector-producto");

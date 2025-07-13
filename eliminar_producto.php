@@ -1,21 +1,20 @@
 <?php
-session_start();
+if (session_status() === PHP_SESSION_NONE) session_start();
 include 'conexion.php';
 
-if (!isset($_SESSION['id_gimnasio'])) die('Acceso denegado.');
-
-$id_gimnasio = $_SESSION['id_gimnasio'];
-$tipo = $_GET['tipo'] ?? '';
+$gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
 $id = intval($_GET['id'] ?? 0);
-$tabla = "productos_" . $tipo;
 
-$stmt = $conexion->prepare("DELETE FROM $tabla WHERE id = ? AND id_gimnasio = ?");
-$stmt->bind_param("ii", $id, $id_gimnasio);
-
-if ($stmt->execute()) {
-    echo "✅ Producto eliminado.";
-} else {
-    echo "❌ Error: " . $stmt->error;
+// Validar que el producto pertenezca al gimnasio
+$check = $conexion->query("SELECT id FROM productos WHERE id = $id AND gimnasio_id = $gimnasio_id");
+if ($check->num_rows === 0) {
+    echo "<div class='contenedor'><p>❌ Producto no válido o no pertenece a este gimnasio.</p><a href='ver_productos.php'>Volver</a></div>";
+    exit;
 }
+
+// Eliminar producto
+$conexion->query("DELETE FROM productos WHERE id = $id AND gimnasio_id = $gimnasio_id");
+
+header("Location: ver_productos.php");
+exit;
 ?>
-<a href="ver_productos.php?tipo=<?php echo $tipo; ?>" style="color:#ffc107;">← Volver</a>

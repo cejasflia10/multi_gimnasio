@@ -161,14 +161,19 @@ if (session_status() === PHP_SESSION_NONE) { session_start(); }
     <div class="dropdown">
         <a href="#">🛒 Ventas</a>
         <div class="dropdown-content">
+            <a href="agregar_producto.php">Agregar Productos</a>
             <a href="ventas_proteccion.php">Ventas Protecciones</a>
+            <a href="ventas_suplementos.php">Ventas Suplementos</a>
             <a href="ventas_indumentaria.php">Ventas Indumentaria</a>
+            <a href="ver_productos.php"> Ver Productos</a>
+
         </div>
     </div>
     <div class="dropdown">
         <a href="#">👨‍🏫 Profesores</a>
         <div class="dropdown-content">
             <a href="ver_profesores.php">Ver Profesores</a>
+            <a href="registro_ingreso_profesor.php">Registro Profesores</a>
             <a href="reporte_horas_profesor.php">Reporte de Horas</a>
         </div>
     </div>

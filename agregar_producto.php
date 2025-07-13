@@ -3,24 +3,27 @@ if (session_status() === PHP_SESSION_NONE) session_start();
 include 'conexion.php';
 include 'menu_horizontal.php';
 
-$mensaje = "";
-if ($_SERVER["REQUEST_METHOD"] == "POST") {
-    $nombre = $_POST['nombre'];
-    $detalle = $_POST['detalle'];
-    $compra = $_POST['compra'];
-    $venta = $_POST['venta'];
+$gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
+$mensaje = '';
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $nombre = trim($_POST['nombre']);
     $categoria = $_POST['categoria'];
-    $stock = $_POST['stock'];
-    $gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
+    $talle_oz = trim($_POST['talle_oz']);
+    $precio_compra = floatval($_POST['precio_compra']);
+    $precio_venta = floatval($_POST['precio_venta']);
+    $stock = intval($_POST['stock']);
 
-    $stmt = $conexion->prepare("INSERT INTO productos (nombre, detalle, compra, venta, categoria, stock, gimnasio_id) VALUES (?, ?, ?, ?, ?, ?, ?)");
-    $stmt->bind_param("ssddssi", $nombre, $detalle, $compra, $venta, $categoria, $stock, $gimnasio_id);
-    $stmt->execute();
-
-    if ($stmt->affected_rows > 0) {
-        $mensaje = "✅ Producto registrado correctamente.";
+    if ($nombre && $categoria && $precio_venta >= 0) {
+        $stmt = $conexion->prepare("INSERT INTO productos (nombre, categoria, talle_oz, precio_compra, precio_venta, stock, gimnasio_id) VALUES (?, ?, ?, ?, ?, ?, ?)");
+        $stmt->bind_param("sssddii", $nombre, $categoria, $talle_oz, $precio_compra, $precio_venta, $stock, $gimnasio_id);
+        if ($stmt->execute()) {
+            $mensaje = "✅ Producto agregado correctamente.";
+        } else {
+            $mensaje = "❌ Error al guardar.";
+        }
     } else {
-        $mensaje = "❌ Error al registrar producto.";
+        $mensaje = "❌ Campos incompletos.";
     }
 }
 ?>
@@ -28,50 +31,44 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 <!DOCTYPE html>
 <html lang="es">
 <head>
-    <link rel="stylesheet" href="estilo_unificado.css">
-
     <meta charset="UTF-8">
     <title>Agregar Producto</title>
-    <style>
-        body { background-color: #000; color: gold; font-family: Arial, sans-serif; padding: 20px; }
-        input, select, button { padding: 8px; margin: 6px 0; width: 100%; }
-        label { font-weight: bold; display: block; margin-top: 10px; }
-        .container { max-width: 500px; margin: auto; }
-    </style>
+    <link rel="stylesheet" href="estilo_unificado.css">
 </head>
 <body>
 <div class="contenedor">
-    <h2>📦 Agregar Producto</h2>
-
+    <h2>➕ Agregar Producto</h2>
     <?php if ($mensaje): ?>
-        <p><?= $mensaje ?></p>
+        <p class="mensaje"><?= $mensaje ?></p>
     <?php endif; ?>
 
     <form method="POST">
-        <label for="nombre">Nombre del producto:</label>
+        <label>Nombre del producto:</label>
         <input type="text" name="nombre" required>
 
-        <label for="detalle">Detalle:</label>
-        <input type="text" name="detalle">
-
-        <label for="compra">Precio de Compra:</label>
-        <input type="number" name="compra" step="0.01" required>
-
-        <label for="venta">Precio de Venta:</label>
-        <input type="number" name="venta" step="0.01" required>
-
-        <label for="stock">Stock inicial:</label>
-        <input type="number" name="stock" min="0" required>
-
-        <label for="categoria">Categoría:</label>
+        <label>Categoría:</label>
         <select name="categoria" required>
-            <option value="Protección">Protección</option>
-            <option value="Indumentaria">Indumentaria</option>
-            <option value="Suplemento">Suplemento</option>
+            <option value="">-- Seleccionar --</option>
+            <option value="proteccion">🥊 Protección</option>
+            <option value="indumentaria">👕 Indumentaria</option>
+            <option value="suplemento">🧃 Suplemento</option>
         </select>
 
+        <label>Talle / OZ (opcional):</label>
+        <input type="text" name="talle_oz">
+
+        <label>Precio de compra:</label>
+        <input type="number" step="0.01" name="precio_compra">
+
+        <label>Precio de venta:</label>
+        <input type="number" step="0.01" name="precio_venta" required>
+
+        <label>Stock inicial:</label>
+        <input type="number" name="stock" value="0" min="0">
+
         <br><br>
-        <button type="submit">Registrar Producto</button>
+        <button type="submit">Guardar Producto</button>
+        <a href="index.php" class="boton-volver">Volver al menú</a>
     </form>
 </div>
 </body>
