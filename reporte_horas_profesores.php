@@ -1,6 +1,7 @@
 <?php
 if (session_status() === PHP_SESSION_NONE) session_start();
 include 'conexion.php';
+include 'menu_horizontal.php';
 
 $gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
 
@@ -34,16 +35,10 @@ $resultado = $conexion->query($query);
 <head>
     <meta charset="UTF-8">
     <title>Reporte Horas Profesores</title>
-    <style>
-        body { background-color: #000; color: gold; font-family: Arial; padding: 20px; }
-        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-        th, td { border: 1px solid #444; padding: 8px; text-align: center; }
-        th { background-color: #111; }
-        select, input { background-color: #111; color: gold; border: 1px solid #555; padding: 5px; }
-        .btn { background: gold; color: black; font-weight: bold; padding: 5px 10px; border: none; cursor: pointer; }
-    </style>
+    <link rel="stylesheet" href="estilo_unificado.css">
 </head>
 <body>
+    <div class="contenedor">
     <h2>📊 Reporte de Horas Trabajadas por Profesores</h2>
     <form method="get">
         <label>Mes:</label>
@@ -82,5 +77,7 @@ $resultado = $conexion->query($query);
         </tr>
         <?php endwhile; ?>
     </table>
+    </div>
+
 </body>
 </html>

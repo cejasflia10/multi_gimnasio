@@ -172,7 +172,9 @@ if (session_status() === PHP_SESSION_NONE) { session_start(); }
     <div class="dropdown">
         <a href="#">👨‍🏫 Profesores</a>
         <div class="dropdown-content">
+            <a href="panel_profesor.php"> Panel</a>
             <a href="ver_profesores.php">Ver Profesores</a>
+            <a href="turnos_profesor.php">Turnos Profesores</a>
             <a href="registro_ingreso_profesor.php">Registro Profesores</a>
             <a href="reporte_horas_profesor.php">Reporte de Horas</a>
         </div>
