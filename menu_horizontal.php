@@ -146,6 +146,7 @@ if (session_status() === PHP_SESSION_NONE) { session_start(); }
             <a href="ver_pagos_pendientes.php">Pagos Pendientes</a>
             <a href="config_alias.php">Alias</a>
             <a href="ver_pagos_mes.php">Pagos del Mes</a>
+            <a href="ver_cuentas_corrientes.php">Pagos Cuenta Corrientes</a>
 
         </div>
 

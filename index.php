@@ -35,6 +35,7 @@ $vencimientos = $conexion->query("
     WHERE m.gimnasio_id = $gimnasio_id AND m.fecha_vencimiento >= CURDATE() 
     ORDER BY m.fecha_vencimiento ASC LIMIT 5
 ");
+
 $reservas = $conexion->query("
     SELECT r.dia_semana, r.hora_inicio, td.hora_fin,
            c.nombre, c.apellido,
@@ -47,8 +48,6 @@ $reservas = $conexion->query("
       AND r.gimnasio_id = $gimnasio_id
     ORDER BY r.hora_inicio
 ");
-
-
 
 $ingresos_clientes = $conexion->query("
     SELECT c.nombre, c.apellido, a.hora 
@@ -65,6 +64,24 @@ $ingresos_profesores = $conexion->query("
     WHERE a.fecha = CURDATE() AND a.gimnasio_id = $gimnasio_id 
     ORDER BY a.hora_ingreso DESC LIMIT 5
 ");
+
+$asistencias_hoy = $conexion->query("
+    SELECT a.hora_ingreso, a.hora_salida, p.apellido, p.nombre
+    FROM asistencias_profesor a
+    JOIN profesores p ON a.profesor_id = p.id
+    WHERE a.fecha = CURDATE() AND a.gimnasio_id = $gimnasio_id
+    ORDER BY a.hora_ingreso DESC
+");
+
+// Alumnos que ingresaron hoy
+$alumnos_hoy = $conexion->query("
+    SELECT c.apellido, c.nombre, a.hora 
+    FROM asistencias a
+    JOIN clientes c ON a.cliente_id = c.id
+    WHERE a.fecha = CURDATE()
+      AND c.gimnasio_id = $gimnasio_id
+    ORDER BY a.hora
+");
 ?>
 
 <!DOCTYPE html>
@@ -76,8 +93,8 @@ $ingresos_profesores = $conexion->query("
   <style>
     body { background: #000; color: gold; font-family: Arial, sans-serif; padding: 20px; }
     .grid { display: flex; flex-wrap: wrap; gap: 20px; }
-    .box { background: #111; padding: 15px; border-radius: 10px; flex: 1 1 300px; }
-    h1, h2 { color: gold; margin-top: 0; }
+    .box, .cuadro { background: #111; padding: 15px; border-radius: 10px; flex: 1 1 300px; }
+    h1, h2, h3 { color: gold; margin-top: 0; }
     ul { padding-left: 20px; }
     .monto { font-size: 24px; color: lime; }
     .encabezado { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
@@ -111,34 +128,32 @@ $ingresos_profesores = $conexion->query("
       <li><?= $v['apellido'] . ', ' . $v['nombre'] ?> (<?= date('d/m', strtotime($v['fecha_vencimiento'])) ?>)</li>
     <?php endwhile; ?>
   </ul></div>
-<div class="box"><h2>📋 Reservas de Hoy</h2><ul>
-<?php if ($reservas->num_rows > 0): ?>
-    <?php while ($r = $reservas->fetch_assoc()): ?>
+
+  <div class="box"><h2>📋 Reservas de Hoy</h2><ul>
+    <?php if ($reservas->num_rows > 0): ?>
+      <?php while ($r = $reservas->fetch_assoc()): ?>
         <li>
-            🕒 <?= $r['hora_inicio'] ?> a <?= $r['hora_fin'] ?><br>
-            👤 <?= $r['apellido'] ?> <?= $r['nombre'] ?><br>
-            👨‍🏫 <?= $r['profesor'] ?>
+          🕒 <?= $r['hora_inicio'] ?> a <?= $r['hora_fin'] ?><br>
+          👤 <?= $r['apellido'] ?> <?= $r['nombre'] ?><br>
+          👨‍🏫 <?= $r['profesor'] ?>
         </li>
-    <?php endwhile; ?>
-<?php else: ?>
-    <li>Sin reservas registradas para hoy.</li>
-<?php endif; ?>
-</ul></div>
-
-
-
-  <div class="box"><h2>👤 Ingresos Clientes</h2><ul>
-    <?php while($i = $ingresos_clientes->fetch_assoc()): ?>
-      <li><?= $i['apellido'] . ', ' . $i['nombre'] ?> - <?= $i['hora'] ?></li>
-    <?php endwhile; ?>
+      <?php endwhile; ?>
+    <?php else: ?>
+      <li>Sin reservas registradas para hoy.</li>
+    <?php endif; ?>
   </ul></div>
-
-  <div class="box"><h2>👨‍🏫 Ingresos Profesores</h2><ul>
-    <?php while($p = $ingresos_profesores->fetch_assoc()): ?>
-      <li><?= $p['apellido'] . ', ' . $p['nombre'] ?> - <?= $p['hora_ingreso'] ?></li>
-    <?php endwhile; ?>
-  </ul></div>
-</div>
+<div class="cuadro">
+        <h3>🧍 Alumnos que ingresaron Hoy</h3>
+        <?php if ($alumnos_hoy->num_rows > 0): ?>
+            <ul>
+                <?php while ($al = $alumnos_hoy->fetch_assoc()): ?>
+                    <li><?= $al['apellido'] . ' ' . $al['nombre'] ?> - ⏰ <?= $al['hora'] ?></li>
+                <?php endwhile; ?>
+            </ul>
+        <?php else: ?>
+            <p style="color:gray;">No se registraron ingresos de alumnos hoy.</p>
+        <?php endif; ?>
+    </div>
 
 
 </body>

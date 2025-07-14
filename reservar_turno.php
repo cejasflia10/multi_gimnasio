@@ -104,4 +104,4 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     header("Location: ver_turnos_cliente.php?ok=1");
     exit;
 }
-?>
+?>mk
