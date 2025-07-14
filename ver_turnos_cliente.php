@@ -12,9 +12,9 @@ $dia_hoy = $nombres_dias[$dia_hoy];
 $hora_actual = date('H:i:s');
 $fecha_hoy = date('Y-m-d');
 
-// Obtener membresía activa
+// Obtener membresía activa (solo informativa)
 $membresia = $conexion->query("SELECT * FROM membresias 
-    WHERE cliente_id = $cliente_id AND clases_disponibles > 0 AND fecha_vencimiento >= CURDATE()
+    WHERE cliente_id = $cliente_id AND fecha_vencimiento >= CURDATE()
     ORDER BY fecha_inicio DESC LIMIT 1")->fetch_assoc();
 $membresia_id = $membresia['id'] ?? null;
 
@@ -35,24 +35,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $fecha_reserva = date('Y-m-d');
 
     if (isset($_POST['cancelar'])) {
-        // Si cancela con más de 1h de anticipación → devolver clase
-        $hora_turno_ts = strtotime($hora_inicio);
-        $ahora_ts = strtotime($hora_actual);
-        if (($hora_turno_ts - $ahora_ts) >= 3600) {
-            $conexion->query("UPDATE membresias SET clases_disponibles = clases_disponibles + 1 WHERE id = $membresia_id");
-        }
         $conexion->query("DELETE FROM reservas_clientes WHERE cliente_id = $cliente_id AND turno_id = $turno_id");
-        } elseif ($membresia_id && !isset($reservas[$turno_id])) {
-        // Reservar si no estaba reservado
+
+    } elseif (!isset($reservas[$turno_id])) {
+        // Registrar reserva
         $conexion->query("INSERT INTO reservas_clientes 
             (cliente_id, turno_id, dia_semana, hora_inicio, gimnasio_id, profesor_id, fecha_reserva)
             VALUES ($cliente_id, $turno_id, '$dia_turno', '$hora_inicio', $gimnasio_id, $profesor_id, '$fecha_reserva')");
 
-        if ($membresia_id) {
-            $conexion->query("UPDATE membresias SET clases_disponibles = clases_disponibles - 1 WHERE id = $membresia_id");
+        // Si no tiene membresía o clases, registrar deuda
+        if (!$membresia_id || ($membresia['clases_disponibles'] ?? 0) <= 0) {
+            $monto = -1000;
+            $fecha = date('Y-m-d');
+            $conexion->query("
+                INSERT INTO pagos (cliente_id, metodo_pago, monto, fecha, fecha_pago, gimnasio_id)
+                VALUES ($cliente_id, 'Cuenta Corriente', $monto, '$fecha', '$fecha', $gimnasio_id)
+            ");
+            $_SESSION['aviso_deuda'] = true;
         }
     }
-
 
     header("Location: ver_turnos_cliente.php");
     exit;
@@ -79,8 +80,16 @@ $turnos = $conexion->query("
 <div class="contenedor">
 
 <h2>📅 Turnos de Hoy: <?= $dia_hoy ?></h2>
-<p>⚠️ Cada clase reservada se descuenta automáticamente. Si cancelás con al menos 1h de anticipación, se devuelve la clase.</p>
-<p>🎫 Clases disponibles: <strong><?= $membresia['clases_disponibles'] ?? 0 ?></strong></p>
+
+<?php if (!empty($_SESSION['aviso_deuda'])): ?>
+    <div style="color: red; font-weight: bold; text-align: center; margin-bottom: 10px;">
+        ⚠️ No tenés clases activas. Se generó una deuda de $1000 en cuenta corriente por esta reserva.
+    </div>
+    <?php unset($_SESSION['aviso_deuda']); ?>
+<?php endif; ?>
+
+<p>📝 Podés reservar aunque no tengas clases. Si no tenés membresía activa, se genera una deuda automática de $1000.</p>
+<p>🎫 Clases disponibles (solo informativo): <strong><?= $membresia['clases_disponibles'] ?? 0 ?></strong></p>
 
 <?php if ($turnos->num_rows > 0): ?>
 <table>
@@ -92,9 +101,6 @@ $turnos = $conexion->query("
     <?php while ($t = $turnos->fetch_assoc()):
         $tid = $t['id'];
         $reservado = isset($reservas[$tid]);
-        $hora_inicio = $t['hora_inicio'];
-        $hora_ts = strtotime($hora_inicio);
-        $ahora_ts = strtotime($hora_actual);
     ?>
     <tr>
         <td><?= substr($t['hora_inicio'], 0, 5) ?> - <?= substr($t['hora_fin'], 0, 5) ?></td>
@@ -104,10 +110,8 @@ $turnos = $conexion->query("
                 <input type="hidden" name="turno_id" value="<?= $tid ?>">
                 <?php if ($reservado): ?>
                     <button name="cancelar" class="cancelar">Cancelar</button>
-                <?php elseif ($membresia && $membresia['clases_disponibles'] > 0): ?>
-                    <button name="reservar" class="reservar">Reservar</button>
                 <?php else: ?>
-                    <span>Sin clases disponibles</span>
+                    <button name="reservar" class="reservar">Reservar</button>
                 <?php endif; ?>
             </form>
         </td>
