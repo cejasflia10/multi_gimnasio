@@ -167,6 +167,7 @@ if (session_status() === PHP_SESSION_NONE) { session_start(); }
             <a href="ventas_suplementos.php">Ventas Suplementos</a>
             <a href="ventas_indumentaria.php">Ventas Indumentaria</a>
             <a href="ver_productos.php"> Ver Productos</a>
+            <a href="ver_facturas.php"> Ver Fracturas</a>
 
         </div>
     </div>
@@ -186,7 +187,7 @@ if (session_status() === PHP_SESSION_NONE) { session_start(); }
             <a href="panel_cliente.php">Panel</a>
             <a href="ver_reservas_cliente.php">Reservas</a>
             <a href="ver_asistencias_cliente.php">Asistencias</a>
-            <a href="subir_logo.php">Subir Logo Gym</a>
+            <a href="panel_configuracion.php">Panel Configuracion</a>
 
         </div>
 

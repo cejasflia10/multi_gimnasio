@@ -1,138 +1,95 @@
 <?php
+session_start();
 include 'conexion.php';
-if (session_status() === PHP_SESSION_NONE) session_start();
-include 'menu_horizontal.php';
 
-
-
-if (!isset($_GET['id'])) {
-    die("ID de gimnasio no especificado.");
+$gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
+if ($gimnasio_id == 0) {
+    exit("❌ Acceso denegado.");
 }
-$id = $_GET['id'];
-$resultado = $conexion->query("SELECT * FROM gimnasios WHERE id = $id");
-if ($resultado->num_rows === 0) {
-    die("Gimnasio no encontrado.");
-}
-$gimnasio = $resultado->fetch_assoc();
 
-$error = '';
+$mensaje = '';
 
-if ($_SERVER["REQUEST_METHOD"] === "POST") {
-    $nombre = $_POST["nombre"];
-    $direccion = $_POST["direccion"];
-    $telefono = $_POST["telefono"];
-    $email = $_POST["email"];
-    $plan = substr($_POST["plan"], 0, 100);
-    $fecha_vencimiento = !empty($_POST["fecha_vencimiento"]) ? $_POST["fecha_vencimiento"] : null;
-    $duracion = $_POST["duracion_plan"];
-    $limite = $_POST["limite_clientes"];
-    $panel = isset($_POST["acceso_panel"]) ? 1 : 0;
-    $ventas = isset($_POST["acceso_ventas"]) ? 1 : 0;
-    $asistencias = isset($_POST["acceso_asistencias"]) ? 1 : 0;
+// Guardar cambios
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $nombre = trim($_POST['nombre'] ?? '');
+    $direccion = trim($_POST['direccion'] ?? '');
+    $cuit = trim($_POST['cuit'] ?? '');
+    $telefono = trim($_POST['telefono'] ?? '');
+    $email = trim($_POST['email'] ?? '');
 
-    $stmt = $conexion->prepare("
-        UPDATE gimnasios 
-        SET nombre=?, direccion=?, telefono=?, email=?, plan=?, fecha_vencimiento=?, 
-            duracion_plan=?, limite_clientes=?, acceso_panel=?, acceso_ventas=?, acceso_asistencias=? 
-        WHERE id=?
-    ");
+    // Actualizar datos
+    $stmt = $conexion->prepare("UPDATE gimnasios SET nombre=?, direccion=?, cuit=?, telefono=?, email=? WHERE id=?");
+    $stmt->bind_param("sssssi", $nombre, $direccion, $cuit, $telefono, $email, $gimnasio_id);
+    $stmt->execute();
 
-    if (!$stmt) {
-        die("Error en prepare(): " . $conexion->error);
+    // Subir logo si corresponde
+    if (isset($_FILES['logo']) && $_FILES['logo']['error'] === UPLOAD_ERR_OK) {
+        $tmp = $_FILES['logo']['tmp_name'];
+        $nombre_archivo = 'logos/logo_gimnasio_' . $gimnasio_id . '_' . basename($_FILES['logo']['name']);
+        if (!is_dir('logos')) mkdir('logos', 0777, true);
+        move_uploaded_file($tmp, $nombre_archivo);
+        $conexion->query("UPDATE gimnasios SET logo = '$nombre_archivo' WHERE id = $gimnasio_id");
     }
 
-    $stmt->bind_param(
-        "ssssssiiiiii",
-        $nombre, $direccion, $telefono, $email, $plan, $fecha_vencimiento,
-        $duracion, $limite, $panel, $ventas, $asistencias, $id
-    );
-
-    if ($stmt->execute()) {
-        if (!empty($_POST["usuario"]) && !empty($_POST["clave"])) {
-            $usuario = $_POST["usuario"];
-            $verificar = $conexion->prepare("SELECT id FROM usuarios WHERE usuario = ?");
-            $verificar->bind_param("s", $usuario);
-            $verificar->execute();
-            $verificar->store_result();
-
-            if ($verificar->num_rows === 0) {
-                $clave = password_hash($_POST["clave"], PASSWORD_BCRYPT);
-                $rol = "admin";
-                $stmt_user = $conexion->prepare("INSERT INTO usuarios (usuario, contrasena, rol, id_gimnasio) VALUES (?, ?, ?, ?)");
-                $stmt_user->bind_param("sssi", $usuario, $clave, $rol, $id);
-                $stmt_user->execute();
-            }
-            $verificar->close();
-        }
-        header("Location: gimnasios.php");
-        exit;
-    } else {
-        $error = "Error al guardar los cambios: " . $stmt->error;
-    }
+    $mensaje = "✅ Cambios guardados correctamente.";
 }
+
+// Obtener datos actuales
+$gimnasio = $conexion->query("SELECT * FROM gimnasios WHERE id = $gimnasio_id")->fetch_assoc();
 ?>
 
 <!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>Editar Gimnasio</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Editar Datos del Gimnasio</title>
     <link rel="stylesheet" href="estilo_unificado.css">
+    <style>
+        body { background-color: #000; color: gold; font-family: Arial; padding: 30px; }
+        form { max-width: 600px; margin: auto; background: #111; padding: 20px; border-radius: 10px; }
+        label { display: block; margin-top: 15px; }
+        input[type="text"], input[type="email"], input[type="file"] {
+            width: 100%; padding: 8px; margin-top: 5px; border-radius: 6px; border: 1px solid #555; background: #222; color: gold;
+        }
+        .boton { margin-top: 20px; background: gold; color: black; padding: 10px 20px; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; }
+        .mensaje { color: lightgreen; font-weight: bold; margin-top: 20px; text-align: center; }
+        .logo-prev { margin-top: 10px; max-height: 80px; background: white; border-radius: 6px; padding: 4px; }
+    </style>
 </head>
 <body>
 
-<div class="contenedor">
-    <h2>🏋️ Editar Gimnasio</h2>
+<h2 style="text-align:center;">✏️ Editar Datos del Gimnasio</h2>
 
-    <?php if (!empty($gimnasio['logo'])): ?>
-    <div style="text-align:center; margin-bottom:20px;">
-        <img src="logos/<?= htmlspecialchars($gimnasio['logo']) ?>" alt="Logo del gimnasio" style="max-height:80px; border-radius:10px; border:2px solid gold;">
-    </div>
+<?php if ($mensaje): ?>
+    <div class="mensaje"><?= $mensaje ?></div>
+<?php endif; ?>
+
+<form method="POST" enctype="multipart/form-data">
+    <label>Nombre:</label>
+    <input type="text" name="nombre" value="<?= htmlspecialchars($gimnasio['nombre'] ?? '') ?>" required>
+
+    <label>Dirección:</label>
+    <input type="text" name="direccion" value="<?= htmlspecialchars($gimnasio['direccion'] ?? '') ?>" required>
+
+    <label>CUIT:</label>
+    <input type="text" name="cuit" value="<?= htmlspecialchars($gimnasio['cuit'] ?? '') ?>">
+
+    <label>Teléfono:</label>
+    <input type="text" name="telefono" value="<?= htmlspecialchars($gimnasio['telefono'] ?? '') ?>">
+
+    <label>Email:</label>
+    <input type="email" name="email" value="<?= htmlspecialchars($gimnasio['email'] ?? '') ?>">
+
+    <label id="logo">Logo (opcional):</label>
+    <input type="file" name="logo" accept="image/*">
+    <?php if (!empty($gimnasio['logo']) && file_exists($gimnasio['logo'])): ?>
+        <img src="<?= $gimnasio['logo'] ?>" class="logo-prev">
     <?php endif; ?>
 
-    <?php if (!empty($error)): ?>
-        <div class="error"><?= htmlspecialchars($error, ENT_QUOTES) ?></div>
-    <?php endif; ?>
-
-    <form method="POST">
-        <label>Nombre:</label>
-        <input type="text" name="nombre" value="<?= htmlspecialchars($gimnasio['nombre'] ?? '', ENT_QUOTES) ?>" required>
-
-        <label>Dirección:</label>
-        <input type="text" name="direccion" value="<?= htmlspecialchars($gimnasio['direccion'] ?? '', ENT_QUOTES) ?>">
-
-        <label>Teléfono:</label>
-        <input type="text" name="telefono" value="<?= htmlspecialchars($gimnasio['telefono'] ?? '', ENT_QUOTES) ?>">
-
-        <label>Email:</label>
-        <input type="email" name="email" value="<?= htmlspecialchars($gimnasio['email'] ?? '', ENT_QUOTES) ?>">
-
-        <label>Plan:</label>
-        <input type="text" name="plan" maxlength="100" value="<?= htmlspecialchars($gimnasio['plan'] ?? '', ENT_QUOTES) ?>">
-
-        <label>Fecha de vencimiento:</label>
-        <input type="date" name="fecha_vencimiento" value="<?= htmlspecialchars($gimnasio['fecha_vencimiento'] ?? '', ENT_QUOTES) ?>">
-
-        <label>Duración del plan (en meses):</label>
-        <input type="number" name="duracion_plan" value="<?= htmlspecialchars($gimnasio['duracion_plan'] ?? '', ENT_QUOTES) ?>" min="1">
-
-        <label>Límite de clientes:</label>
-        <input type="number" name="limite_clientes" value="<?= htmlspecialchars($gimnasio['limite_clientes'] ?? '', ENT_QUOTES) ?>" min="0">
-
-        <label><input type="checkbox" name="acceso_panel" <?= !empty($gimnasio['acceso_panel']) ? 'checked' : '' ?>> Acceso al panel</label>
-        <label><input type="checkbox" name="acceso_ventas" <?= !empty($gimnasio['acceso_ventas']) ? 'checked' : '' ?>> Acceso a ventas</label>
-        <label><input type="checkbox" name="acceso_asistencias" <?= !empty($gimnasio['acceso_asistencias']) ? 'checked' : '' ?>> Acceso a asistencias</label>
-
-        <label>Crear nuevo usuario (opcional):</label>
-        <input type="text" name="usuario" placeholder="Usuario">
-        <input type="password" name="clave" placeholder="Clave (mínimo 6 caracteres)">
-
-        <button type="submit">Guardar cambios</button>
-        <br><br>
-        <a href="gimnasios.php" style="color:#ffd600;">⬅ Volver</a>
-    </form>
-</div>
+    <button type="submit" class="boton">💾 Guardar Cambios</button>
+    <br><br>
+    <a href="panel_configuracion.php" class="boton">↩️ Volver al Panel</a>
+</form>
 
 </body>
 </html>
