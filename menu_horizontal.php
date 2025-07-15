@@ -186,7 +186,10 @@ if (session_status() === PHP_SESSION_NONE) { session_start(); }
             <a href="panel_cliente.php">Panel</a>
             <a href="ver_reservas_cliente.php">Reservas</a>
             <a href="ver_asistencias_cliente.php">Asistencias</a>
+            <a href="subir_logo.php">Subir Logo Gym</a>
+
         </div>
+
     </div>
     <a href="index.php">🔙 Volver</a>
     <a href="logout.php">🔒 Cerrar Sesión</a>

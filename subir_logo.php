@@ -1,72 +1,40 @@
 <?php
-if (session_status() === PHP_SESSION_NONE) {
-    session_start();
-}
+if (session_status() === PHP_SESSION_NONE) session_start();
 include 'conexion.php';
 
-// Validar usuario logueado
-$id_usuario = $_SESSION['id'] ?? 0;
-if ($id_usuario === 0) {
-    die("Acceso no autorizado.");
+// ✅ Solo validamos que haya un gimnasio logueado
+$gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
+if ($gimnasio_id == 0) {
+    echo "❌ Acceso denegado. Gimnasio no identificado.";
+    exit;
 }
 
-$mensaje = '';
-
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['logo'])) {
-    $archivo = $_FILES['logo'];
-
-    if ($archivo['error'] === UPLOAD_ERR_OK) {
-        $nombre_temporal = $archivo['tmp_name'];
-        $nombre_archivo = 'logos/' . uniqid('logo_') . '_' . basename($archivo['name']);
-
-        // Crear carpeta si no existe
-        if (!is_dir('logos')) {
-            mkdir('logos', 0777, true);
-        }
-
-        if (move_uploaded_file($nombre_temporal, $nombre_archivo)) {
-            $conexion->query("UPDATE usuarios SET logo = '$nombre_archivo' WHERE id = $id_usuario");
-            $mensaje = "Logo actualizado correctamente.";
-        } else {
-            $mensaje = "Error al subir el archivo.";
-        }
-    } else {
-        $mensaje = "Error en la subida del archivo.";
-    }
+// DEPURACIÓN: mostramos lo que llega
+if (empty($_FILES)) {
+    echo "❌ No se recibió ningún archivo.";
+    echo "<pre>"; print_r($_FILES); echo "</pre>";
+    exit;
 }
-?>
 
-<!DOCTYPE html>
-<html lang="es">
-<head>
-    <meta charset="UTF-8">
-    <title>Subir Logo</title>
-    <style>
-        body {
-            background-color: #000;
-            color: gold;
-            font-family: Arial, sans-serif;
-            padding: 30px;
-            text-align: center;
-        }
-        input[type="file"], input[type="submit"] {
-            margin: 15px;
-            padding: 10px;
-        }
-    </style>
-</head>
-<body>
-    <h2>Subir Logo del Usuario</h2>
+// ✅ Procesar archivo
+$archivo = $_FILES['logo'];
+$ext = strtolower(pathinfo($archivo['name'], PATHINFO_EXTENSION));
+$permitidos = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
 
-    <?php if ($mensaje): ?>
-        <p><?= htmlspecialchars($mensaje) ?></p>
-    <?php endif; ?>
+if (!in_array($ext, $permitidos)) {
+    die("❌ Formato no permitido ($ext).");
+}
 
-    <form method="POST" enctype="multipart/form-data">
-        <input type="file" name="logo" accept="image/*" required><br>
-        <input type="submit" value="Subir Logo">
-    </form>
+if (!is_dir('logos')) {
+    mkdir('logos', 0777, true);
+}
 
-    <a href="index.php" style="color: gold;">Volver al panel</a>
-</body>
-</html>
+$nombre_archivo = 'logos/logo_' . $gimnasio_id . '.' . $ext;
+
+if (move_uploaded_file($archivo['tmp_name'], $nombre_archivo)) {
+    $conexion->query("UPDATE gimnasios SET logo = '$nombre_archivo' WHERE id = $gimnasio_id");
+    echo "<script>window.location.href = 'index.php?logo=ok';</script>";
+    exit;
+} else {
+    echo "❌ Error al guardar el archivo.";
+}

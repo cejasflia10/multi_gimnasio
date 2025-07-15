@@ -4,8 +4,8 @@ include 'conexion.php';
 include 'menu_horizontal.php';
 
 $gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
+$rol = $_SESSION['rol'] ?? '';
 
-// Buscar datos del gimnasio
 $gimnasio = $conexion->query("SELECT nombre, logo, fecha_vencimiento FROM gimnasios WHERE id = $gimnasio_id")->fetch_assoc();
 $nombre_gym = $gimnasio['nombre'] ?? 'Gimnasio';
 $logo = $gimnasio['logo'] ?? '';
@@ -49,37 +49,11 @@ $reservas = $conexion->query("
     ORDER BY r.hora_inicio
 ");
 
-$ingresos_clientes = $conexion->query("
-    SELECT c.nombre, c.apellido, a.hora 
-    FROM asistencias_clientes a 
-    JOIN clientes c ON a.cliente_id = c.id 
-    WHERE a.fecha = CURDATE() AND a.gimnasio_id = $gimnasio_id 
-    ORDER BY a.hora DESC LIMIT 5
-");
-
-$ingresos_profesores = $conexion->query("
-    SELECT p.nombre, p.apellido, a.hora_ingreso 
-    FROM asistencias_profesor a 
-    JOIN profesores p ON a.profesor_id = p.id 
-    WHERE a.fecha = CURDATE() AND a.gimnasio_id = $gimnasio_id 
-    ORDER BY a.hora_ingreso DESC LIMIT 5
-");
-
-$asistencias_hoy = $conexion->query("
-    SELECT a.hora_ingreso, a.hora_salida, p.apellido, p.nombre
-    FROM asistencias_profesor a
-    JOIN profesores p ON a.profesor_id = p.id
-    WHERE a.fecha = CURDATE() AND a.gimnasio_id = $gimnasio_id
-    ORDER BY a.hora_ingreso DESC
-");
-
-// Alumnos que ingresaron hoy
 $alumnos_hoy = $conexion->query("
     SELECT c.apellido, c.nombre, a.hora 
     FROM asistencias a
     JOIN clientes c ON a.cliente_id = c.id
-    WHERE a.fecha = CURDATE()
-      AND c.gimnasio_id = $gimnasio_id
+    WHERE a.fecha = CURDATE() AND c.gimnasio_id = $gimnasio_id
     ORDER BY a.hora
 ");
 ?>
@@ -98,20 +72,50 @@ $alumnos_hoy = $conexion->query("
     ul { padding-left: 20px; }
     .monto { font-size: 24px; color: lime; }
     .encabezado { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
-    .logo-gym { max-height: 60px; border-radius: 8px; background: white; padding: 5px; }
+    .logo-gym {
+        max-height: 60px;
+        max-width: 180px;
+        border-radius: 8px;
+        background: white;
+        padding: 5px;
+        object-fit: contain;
+    }
+    .btn-logo {
+        margin-top: 8px;
+        padding: 5px 10px;
+        background: gold;
+        color: black;
+        font-weight: bold;
+        border: none;
+        border-radius: 5px;
+        cursor: pointer;
+    }
   </style>
 </head>
 <body>
 
 <div class="encabezado">
-    <div>
-        <h1>🏋️ <?= htmlspecialchars($nombre_gym) ?></h1>
-        <p>📅 Vencimiento del sistema: <strong style="color:orange;"><?= date('d/m/Y', strtotime($fecha_venc)) ?></strong></p>
+    <div style="display:flex; align-items:center; gap:15px;">
+        <?php if ($logo): ?>
+            <div style="position:relative; display:flex; flex-direction:column; align-items:flex-start;">
+                <img src="<?= htmlspecialchars($logo) ?>?v=<?= time() ?>" alt="Logo" class="logo-gym" id="logoGym">
+
+                <?php if ($gimnasio_id > 0): ?>
+                    <button onclick="document.getElementById('formLogo').style.display='block'" class="btn-logo-mini">🖋</button>
+                    <form method="POST" action="subir_logo.php" enctype="multipart/form-data" id="formLogo" style="display:none; margin-top:3px;">
+                        <input type="file" name="logo" accept="image/*" required onchange="this.form.submit()">
+                    </form>
+                <?php endif; ?>
+            </div>
+        <?php endif; ?>
+
+        <div>
+            <h1>🏋️ <?= htmlspecialchars($nombre_gym) ?></h1>
+            <p>📅 Vencimiento del sistema: <strong style="color:orange;"><?= date('d/m/Y', strtotime($fecha_venc)) ?></strong></p>
+        </div>
     </div>
-    <?php if ($logo): ?>
-        <img src="<?= htmlspecialchars($logo) ?>" alt="Logo" class="logo-gym">
-    <?php endif; ?>
 </div>
+
 
 <div class="grid">
   <div class="box"><h2>💰 Ingresos del Día</h2><div class="monto">$<?= number_format($pagos_dia + $ventas_dia, 2) ?></div></div>
@@ -142,7 +146,8 @@ $alumnos_hoy = $conexion->query("
       <li>Sin reservas registradas para hoy.</li>
     <?php endif; ?>
   </ul></div>
-<div class="cuadro">
+
+  <div class="cuadro">
         <h3>🧍 Alumnos que ingresaron Hoy</h3>
         <?php if ($alumnos_hoy->num_rows > 0): ?>
             <ul>
@@ -154,7 +159,22 @@ $alumnos_hoy = $conexion->query("
             <p style="color:gray;">No se registraron ingresos de alumnos hoy.</p>
         <?php endif; ?>
     </div>
+</div>
 
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const form = document.querySelector('form[action="subir_logo.php"]');
+    if (form) {
+        form.addEventListener('submit', function() {
+            const btn = form.querySelector('button');
+            btn.textContent = "Subiendo...";
+            btn.disabled = true;
+        });
+    }
+});
+
+
+</script>
 
 </body>
 </html>
