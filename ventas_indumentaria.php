@@ -8,7 +8,7 @@ $gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
 // Obtener clientes del gimnasio
 $clientes = $conexion->query("SELECT id, apellido, nombre, dni FROM clientes WHERE gimnasio_id = $gimnasio_id");
 
-// Obtener productos de indumentaria
+// Obtener productos de indumentaria desde tabla separada
 $productos = $conexion->query("
     SELECT id, nombre, precio_venta AS venta, stock 
     FROM productos_indumentaria 

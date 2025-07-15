@@ -8,11 +8,11 @@ $gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
 // Obtener clientes
 $clientes = $conexion->query("SELECT id, apellido, nombre, dni FROM clientes WHERE gimnasio_id = $gimnasio_id");
 
-// Obtener suplementos
-$suplementos = $conexion->query("
+// Obtener productos SOLO de suplementos
+$productos = $conexion->query("
     SELECT id, nombre, precio_venta AS venta, stock 
-    FROM suplementos 
-    WHERE gimnasio_id = $gimnasio_id
+    FROM productos 
+    WHERE gimnasio_id = $gimnasio_id AND categoria = 'suplemento'
 ");
 ?>
 
@@ -47,7 +47,7 @@ $suplementos = $conexion->query("
 
     <label>Suplemento:</label>
     <select id="selector-producto">
-        <?php while($p = $suplementos->fetch_assoc()): ?>
+        <?php while($p = $productos->fetch_assoc()): ?>
             <option value="<?= $p['id'] ?>" data-nombre="<?= $p['nombre'] ?>" data-precio="<?= $p['venta'] ?>" data-stock="<?= $p['stock'] ?>">
                 <?= $p['nombre'] ?> ($<?= $p['venta'] ?> | Stock: <?= $p['stock'] ?>)
             </option>
