@@ -8,11 +8,11 @@ $gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
 // Obtener clientes
 $clientes = $conexion->query("SELECT id, apellido, nombre, dni FROM clientes WHERE gimnasio_id = $gimnasio_id");
 
-// Obtener productos de protección
+// Obtener productos SOLO de protecciones
 $productos = $conexion->query("
     SELECT id, nombre, precio_venta AS venta, stock 
-    FROM productos_proteccion 
-    WHERE gimnasio_id = $gimnasio_id
+    FROM productos 
+    WHERE gimnasio_id = $gimnasio_id AND categoria = 'proteccion'
 ");
 ?>
 

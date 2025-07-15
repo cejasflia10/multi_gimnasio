@@ -6,8 +6,15 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 }
 
 $total = floatval($_POST['total'] ?? 0);
-$cliente_nombre = $_POST['cliente_nombre'] ?? '';
+$cliente_id = $_POST['cliente_id'] ?? 0;
 $cliente_temporal = isset($_POST['cliente_temporal']) ? 1 : 0;
+$tipo_venta = $_POST['tipo_venta'] ?? '';
+$gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
+
+// Productos enviados como arrays
+$productos = $_POST['producto_nombre'] ?? [];
+$precios = $_POST['precio'] ?? [];
+$cantidades = $_POST['cantidad'] ?? [];
 ?>
 <!DOCTYPE html>
 <html lang="es">
@@ -24,9 +31,20 @@ $cliente_temporal = isset($_POST['cliente_temporal']) ? 1 : 0;
     <p><strong>Total original:</strong> $<span id="total_original"><?= number_format($total, 2) ?></span></p>
 
     <form method="POST" action="guardar_venta_productos.php" onsubmit="return validarPago();">
-        <input type="hidden" name="cliente_nombre" value="<?= htmlspecialchars($cliente_nombre) ?>">
+        <!-- Datos ocultos -->
+        <input type="hidden" name="cliente_id" value="<?= $cliente_id ?>">
         <input type="hidden" name="cliente_temporal" value="<?= $cliente_temporal ?>">
         <input type="hidden" name="total_original" id="total_original_val" value="<?= $total ?>">
+        <input type="hidden" name="tipo_venta" value="<?= htmlspecialchars($tipo_venta) ?>">
+        <input type="hidden" name="gimnasio_id" value="<?= $gimnasio_id ?>">
+
+        <?php
+        for ($i = 0; $i < count($productos); $i++) {
+            echo '<input type="hidden" name="producto_nombre[]" value="' . htmlspecialchars($productos[$i]) . '">';
+            echo '<input type="hidden" name="precio[]" value="' . htmlspecialchars($precios[$i]) . '">';
+            echo '<input type="hidden" name="cantidad[]" value="' . htmlspecialchars($cantidades[$i]) . '">';
+        }
+        ?>
 
         <label for="descuento">Descuento:</label>
         <select id="descuento" name="descuento" onchange="recalcularTotal()" required>
@@ -46,6 +64,7 @@ $cliente_temporal = isset($_POST['cliente_temporal']) ? 1 : 0;
         <p><strong>Total con descuento:</strong> $<span id="total_descuento"><?= number_format($total, 2) ?></span></p>
         <input type="hidden" name="total_con_descuento" id="total_con_descuento" value="<?= $total ?>">
 
+        <br><br>
         <button type="submit">✅ Finalizar y Generar Factura</button>
     </form>
 </div>

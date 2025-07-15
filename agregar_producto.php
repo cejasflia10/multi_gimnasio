@@ -15,12 +15,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $stock = intval($_POST['stock']);
 
     if ($nombre && $categoria && $precio_venta >= 0) {
-        $stmt = $conexion->prepare("INSERT INTO productos (nombre, categoria, talle_oz, precio_compra, precio_venta, stock, gimnasio_id) VALUES (?, ?, ?, ?, ?, ?, ?)");
-        $stmt->bind_param("sssddii", $nombre, $categoria, $talle_oz, $precio_compra, $precio_venta, $stock, $gimnasio_id);
+        // Verificar si la columna talle_oz existe antes de intentar insertarla
+        $columnas = $conexion->query("SHOW COLUMNS FROM productos LIKE 'talle_oz'");
+        $talle_oz_valido = ($columnas->num_rows > 0) ? $talle_oz : null;
+
+        if ($talle_oz_valido !== null) {
+            $stmt = $conexion->prepare("INSERT INTO productos (nombre, categoria, talle_oz, precio_compra, precio_venta, stock, gimnasio_id) VALUES (?, ?, ?, ?, ?, ?, ?)");
+            $stmt->bind_param("sssddii", $nombre, $categoria, $talle_oz_valido, $precio_compra, $precio_venta, $stock, $gimnasio_id);
+        } else {
+            $stmt = $conexion->prepare("INSERT INTO productos (nombre, categoria, precio_compra, precio_venta, stock, gimnasio_id) VALUES (?, ?, ?, ?, ?, ?)");
+            $stmt->bind_param("ssddii", $nombre, $categoria, $precio_compra, $precio_venta, $stock, $gimnasio_id);
+        }
+
         if ($stmt->execute()) {
             $mensaje = "✅ Producto agregado correctamente.";
         } else {
-            $mensaje = "❌ Error al guardar.";
+            $mensaje = "❌ Error al guardar: " . $stmt->error;
         }
     } else {
         $mensaje = "❌ Campos incompletos.";
