@@ -13,20 +13,14 @@ $id = intval($_GET['id']);
 $gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
 
 $membresia = $conexion->query("SELECT * FROM membresias WHERE id = $id AND gimnasio_id = $gimnasio_id LIMIT 1");
-
-if (!$membresia || $membresia->num_rows === 0) {
-    die("Membresía no encontrada.");
-}
-
+if (!$membresia || $membresia->num_rows === 0) die("Membresía no encontrada.");
 $membresia = $membresia->fetch_assoc();
+
 $cliente_id = intval($membresia['cliente_id']);
 $cliente = $conexion->query("SELECT id, nombre, apellido, dni FROM clientes WHERE id = $cliente_id LIMIT 1");
-
-if (!$cliente || $cliente->num_rows === 0) {
-    die("Cliente no encontrado.");
-}
-
+if (!$cliente || $cliente->num_rows === 0) die("Cliente no encontrado.");
 $cliente = $cliente->fetch_assoc();
+
 $planes = $conexion->query("SELECT * FROM planes WHERE gimnasio_id = $gimnasio_id");
 ?>
 
@@ -37,7 +31,6 @@ $planes = $conexion->query("SELECT * FROM planes WHERE gimnasio_id = $gimnasio_i
   <title>Renovar Membresía</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="stylesheet" href="estilo_unificado.css">
-
 </head>
 
 <body>
@@ -50,15 +43,20 @@ $planes = $conexion->query("SELECT * FROM planes WHERE gimnasio_id = $gimnasio_i
   <input type="text" value="<?= $cliente['apellido'] . ', ' . $cliente['nombre'] . ' (' . $cliente['dni'] . ')' ?>" readonly>
 
   <label>Nuevo Plan:</label>
-  <select name="plan_id" id="plan_id" onchange="cargarDatosPlan(this.value)" required>
+  <select name="plan_id" id="plan_id" onchange="cargarDatosPlan()" required>
     <option value="">-- Seleccionar --</option>
     <?php while ($p = $planes->fetch_assoc()): ?>
-      <option value="<?= $p['id'] ?>"><?= $p['nombre'] ?></option>
+      <option value="<?= $p['id'] ?>" 
+              data-precio="<?= $p['precio'] ?>" 
+              data-clases="<?= $p['clases_disponibles'] ?>" 
+              data-duracion="<?= $p['duracion_meses'] ?>">
+        <?= $p['nombre'] ?>
+      </option>
     <?php endwhile; ?>
   </select>
 
   <label>Precio:</label>
-  <input type="number" name="precio" id="precio" required>
+  <input type="number" name="precio" id="precio" required readonly>
 
   <div class="descuentos">
     <label>Aplicar Descuento:</label>
@@ -69,13 +67,13 @@ $planes = $conexion->query("SELECT * FROM planes WHERE gimnasio_id = $gimnasio_i
   </div>
 
   <label>Clases Disponibles:</label>
-  <input type="number" name="clases_disponibles" id="clases_disponibles" required>
+  <input type="number" name="clases_disponibles" id="clases_disponibles" required readonly>
 
   <label>Fecha de Inicio:</label>
   <input type="date" name="fecha_inicio" id="fecha_inicio" required>
 
   <label>Fecha de Vencimiento:</label>
-  <input type="date" name="fecha_vencimiento" id="fecha_vencimiento" required>
+  <input type="date" name="fecha_vencimiento" id="fecha_vencimiento" required readonly>
 
   <label>Otros Pagos:</label>
   <input type="number" name="otros_pagos" id="otros_pagos" value="0" oninput="calcularTotal()">
@@ -99,37 +97,38 @@ $planes = $conexion->query("SELECT * FROM planes WHERE gimnasio_id = $gimnasio_i
   <a href="ver_membresias.php"><button type="button">Cancelar</button></a>
 </form>
 </div>
-</div>
 
 <script>
-function cargarDatosPlan(planId) {
-  fetch('obtener_datos_plan.php?plan_id=' + planId)
-    .then(res => res.json())
-    .then(data => {
-      document.getElementById('precio').value = data.precio;
-      document.getElementById('clases_disponibles').value = data.clases_disponibles;
-      document.getElementById('duracion_meses').value = data.duracion_meses;
+function cargarDatosPlan() {
+  const plan = document.getElementById('plan_id');
+  const selected = plan.options[plan.selectedIndex];
+  const precio = selected.getAttribute('data-precio');
+  const clases = selected.getAttribute('data-clases');
+  const duracion = selected.getAttribute('data-duracion');
 
-      const inicio = document.getElementById('fecha_inicio').value;
-      if (inicio && data.duracion_meses > 0) {
-        const fecha = new Date(inicio);
-        fecha.setMonth(fecha.getMonth() + parseInt(data.duracion_meses));
-        document.getElementById('fecha_vencimiento').value = fecha.toISOString().split('T')[0];
-      }
+  document.getElementById('precio').value = precio;
+  document.getElementById('clases_disponibles').value = clases;
+  document.getElementById('duracion_meses').value = duracion;
 
-      calcularTotal();
-    });
+  const inicio = document.getElementById('fecha_inicio').value;
+  if (inicio && duracion) {
+    const fecha = new Date(inicio);
+    fecha.setMonth(fecha.getMonth() + parseInt(duracion));
+    document.getElementById('fecha_vencimiento').value = fecha.toISOString().split('T')[0];
+  }
+
+  calcularTotal();
 }
 
 function calcularTotal() {
-  let precio = parseFloat(document.getElementById('precio').value || 0);
-  let otros = parseFloat(document.getElementById('otros_pagos').value || 0);
+  const precio = parseFloat(document.getElementById('precio').value) || 0;
+  const otros = parseFloat(document.getElementById('otros_pagos').value) || 0;
   document.getElementById('total').value = (precio + otros).toFixed(2);
 }
 
 function aplicarDescuento(porcentaje) {
-  let precio = parseFloat(document.getElementById('precio').value || 0);
-  let descuento = precio * (porcentaje / 100);
+  const precio = parseFloat(document.getElementById('precio').value) || 0;
+  const descuento = precio * (porcentaje / 100);
   document.getElementById('precio').value = (precio - descuento).toFixed(2);
   calcularTotal();
 }
@@ -145,6 +144,6 @@ document.getElementById('fecha_inicio').addEventListener('change', () => {
   }
 });
 </script>
-</div>
+
 </body>
 </html>
