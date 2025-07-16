@@ -174,7 +174,8 @@ if (session_status() === PHP_SESSION_NONE) { session_start(); }
     <div class="dropdown">
         <a href="#">👨‍🏫 Profesores</a>
         <div class="dropdown-content">
-            <a href="panel_profesor.php"> Panel</a>
+            <a href="agregar_profesor.php"> Agregar Profesor</a>
+            <a href="login_profesor.php"> Panel</a>
             <a href="ver_profesores.php">Ver Profesores</a>
             <a href="turnos_profesor.php">Turnos Profesores</a>
             <a href="registro_ingreso_profesor.php">Registro Profesores</a>
@@ -184,7 +185,7 @@ if (session_status() === PHP_SESSION_NONE) { session_start(); }
     <div class="dropdown">
         <a href="#">📲 Panel Cliente</a>
         <div class="dropdown-content">
-            <a href="panel_cliente.php">Panel</a>
+            <a href="login_cliente.php">Panel</a>
             <a href="ver_reservas_cliente.php">Reservas</a>
             <a href="ver_asistencias_cliente.php">Asistencias</a>
             <a href="panel_configuracion.php">Panel Configuracion</a>
