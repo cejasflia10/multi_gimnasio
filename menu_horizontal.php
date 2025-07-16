@@ -187,7 +187,7 @@ if (session_status() === PHP_SESSION_NONE) { session_start(); }
         <div class="dropdown-content">
             <a href="login_cliente.php">Panel</a>
             <a href="ver_reservas_cliente.php">Reservas</a>
-            <a href="ver_asistencias_cliente.php">Asistencias</a>
+            <a href="ver_asistencias_clientes.php">Asistencias</a>
             <a href="panel_configuracion.php">Panel Configuracion</a>
 
         </div>
