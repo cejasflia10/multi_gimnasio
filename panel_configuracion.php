@@ -157,8 +157,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <div class="item">
         <h3>🔗 Enlaces Directos del Gimnasio</h3>
         <div style="text-align: center;">
-            <a href="panel_cliente.php?id=<?= $gimnasio_id ?>" class="boton" target="_blank">👤 Panel del Cliente</a>
-            <a href="panel_profesor.php?id=<?= $gimnasio_id ?>" class="boton" target="_blank">👨‍🏫 Panel del Profesor</a>
+            <a href="cliente_acceso.php?id=<?= $gimnasio_id ?>" class="boton" target="_blank">👤 Panel del Cliente</a>
+            <a href="login_profesor.php?id=<?= $gimnasio_id ?>" class="boton" target="_blank">👨‍🏫 Panel del Profesor</a>
             <a href="registrar_cliente_online.php?id=<?= $gimnasio_id ?>" class="boton" target="_blank">📝 Registro Online</a>
         </div>
     </div>
