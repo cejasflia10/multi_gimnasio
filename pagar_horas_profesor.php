@@ -2,59 +2,135 @@
 session_start();
 include 'conexion.php';
 include 'menu_horizontal.php';
+date_default_timezone_set('America/Argentina/Buenos_Aires');
+
+// Habilitar la visualización de errores para depuración (QUITAR EN PRODUCCIÓN)
+error_reporting(E_ALL);
+ini_set('display_errors', 1);
 
 $gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
-if (!$gimnasio_id) {
-    die("Acceso denegado.");
+$mes_actual = date('m');
+$anio_actual = date('Y');
+
+// --- DEBUGGING TEMPORAL CRUCIAL ---
+echo "<h2>DEBUG: Variables de Configuración</h2>";
+echo "Gimnasio ID de Sesión (pagar_horas_profesor): <b>" . $gimnasio_id . "</b><br>";
+echo "Mes Actual (MM): <b>" . $mes_actual . "</b><br>";
+echo "Año Actual (YYYY): <b>" . $anio_actual . "</b><br>";
+echo "Fecha Actual del Servidor: <b>" . date('Y-m-d H:i:s') . "</b><br>";
+echo "<hr>";
+// --- FIN DEBUGGING TEMPORAL CRUCIAL ---
+
+// Función para calcular el monto según la cantidad de alumnos
+function calcular_monto($conexion, $gimnasio_id, $alumnos) {
+    $stmt = $conexion->prepare("
+        SELECT precio FROM precio_hora
+        WHERE gimnasio_id = ?
+          AND ? BETWEEN rango_min AND rango_max
+        LIMIT 1
+    ");
+    $stmt->bind_param("ii", $gimnasio_id, $alumnos);
+    $stmt->execute();
+    $res = $stmt->get_result();
+    if ($f = $res->fetch_assoc()) {
+        $stmt->close();
+        return floatval($f['precio']);
+    }
+    $stmt->close();
+    return 0;
 }
 
-$mes = $_GET['mes'] ?? date('Y-m');
-$mes_inicio = $mes . '-01';
+$datos = []; // Array para almacenar los datos finales por profesor
 
-$sql = "SELECT a.id, p.nombre, p.apellido, a.profesor_id, a.fecha, a.hora_ingreso,
-               IFNULL(a.hora_egreso, ADDTIME(a.hora_ingreso, '01:00:00')) AS hora_egreso,
-               a.alumnos, a.pago
-        FROM asistencias_profesor a
-        JOIN profesores p ON a.profesor_id = p.id
-        WHERE a.gimnasio_id = ? AND DATE_FORMAT(a.fecha, '%Y-%m') = ?
-        ORDER BY p.apellido, a.fecha, a.hora_ingreso";
-$stmt = $conexion->prepare($sql);
-$stmt->bind_param("is", $gimnasio_id, $mes);
-$stmt->execute();
-$result = $stmt->get_result();
+// Consulta principal para obtener TODAS las asistencias de profesores en el mes/año
+$sql_profesores_query = "
+    SELECT a.id, p.id AS profesor_id, p.apellido, p.nombre, a.fecha, a.hora_ingreso, a.hora_salida AS hora_egreso
+    FROM asistencias_profesores a
+    JOIN profesores p ON a.profesor_id = p.id
+    WHERE MONTH(a.fecha) = $mes_actual
+      AND YEAR(a.fecha) = $anio_actual
+      AND a.gimnasio_id = $gimnasio_id
+    ORDER BY p.apellido, a.fecha, a.hora_ingreso
+";
 
-$datos = [];
+// --- DEBUGGING TEMPORAL CRUCIAL ---
+echo "<h2>DEBUG: Consulta SQL de Profesores</h2>";
+echo "Consulta a ejecutar: <pre>" . htmlspecialchars($sql_profesores_query) . "</pre><br>";
+// --- FIN DEBUGGING TEMPORAL CRUCIAL ---
 
-while ($row = $result->fetch_assoc()) {
+$query = $conexion->query($sql_profesores_query);
+
+// Si la consulta falla, imprime el error para depuración
+if (!$query) {
+    die("Error en la consulta de asistencias de profesores: " . $conexion->error);
+}
+
+// --- DEBUGGING TEMPORAL CRUCIAL ---
+$num_profesores_encontrados = $query->num_rows;
+echo "Número de turnos de profesores encontrados: <b>" . $num_profesores_encontrados . "</b><br>";
+echo "<hr>";
+// --- FIN DEBUGGING TEMPORAL CRUCIAL ---
+
+while ($row = $query->fetch_assoc()) {
     $profesor_id = $row['profesor_id'];
     $fecha = $row['fecha'];
-    $hora_ini = $row['hora_ingreso'];
-    $hora_fin = $row['hora_egreso'];
+    $id_asistencia = $row['id'];
+    $hora_ini = !empty($row['hora_ingreso']) ? $row['hora_ingreso'] : '00:00:00';
+    $hora_fin = !empty($row['hora_egreso']) ? $row['hora_egreso'] : '23:59:59'; // Si no hay hora de egreso, se asume hasta fin del día
 
-    $qr = $conexion->prepare("
-        SELECT COUNT(*) AS total
-        FROM asistencias_clientes ac
-        JOIN reservas r ON ac.cliente_id = r.cliente_id
-        JOIN turnos t ON r.turno_id = t.id
-        WHERE ac.fecha = ? AND t.id_profesor = ? 
-        AND t.horario_inicio BETWEEN ? AND ? 
-        AND r.fecha = ac.fecha AND t.gimnasio_id = ?
+    // Inicializar el array del profesor si aún no existe
+    if (!isset($datos[$profesor_id])) {
+        $datos[$profesor_id] = [
+            'nombre' => $row['apellido'] . ' ' . $row['nombre'],
+            'fechas' => []
+        ];
+    }
+
+    // Buscar alumnos que ingresaron en el mismo horario Y CON EL MISMO PROFESOR
+    // ¡¡¡CAMBIO CLAVE AQUÍ: FILTRAMOS por profesor_id en la tabla 'asistencias'!!!
+    $stmt = $conexion->prepare("
+        SELECT COUNT(DISTINCT cliente_id) AS total
+        FROM asistencias
+        WHERE fecha = ?
+          AND hora BETWEEN ? AND ?
+          AND gimnasio_id = ?
+          AND profesor_id = ? -- ¡¡¡NUEVA CONDICIÓN CRUCIAL!!!
     ");
-    $qr->bind_param("sisii", $fecha, $profesor_id, $hora_ini, $hora_fin, $gimnasio_id);
-    $qr->execute();
-    $qr_result = $qr->get_result()->fetch_assoc();
-    $alumnos = $qr_result['total'] ?? 0;
+    if (false === $stmt) {
+        die("Error al preparar la consulta de alumnos: " . $conexion->error);
+    }
 
-    $pago = 0;
-    if ($alumnos >= 10) $pago = 1600;
-    elseif ($alumnos >= 5) $pago = 1200;
-    elseif ($alumnos >= 2) $pago = 800;
+    $stmt->bind_param("sssii", $fecha, $hora_ini, $hora_fin, $gimnasio_id, $profesor_id); // Añadimos 'i' para el nuevo profesor_id
+    $stmt->execute();
+    $res = $stmt->get_result();
+    $alumnos = $res->fetch_assoc()['total'] ?? 0;
+    $stmt->close();
 
-// Si ya tiene valores manuales, no recalcular
-$row['alumnos'] = ($row['alumnos'] ?? 0) > 0 ? $row['alumnos'] : $alumnos;
-$row['pago'] = ($row['pago'] ?? 0) > 0 ? $row['pago'] : $pago;
+    $monto_unitario = calcular_monto($conexion, $gimnasio_id, $alumnos);
+    $monto_total = $alumnos * $monto_unitario;
 
-    $datos[] = $row;
+    $horas = 0;
+    if (!empty($row['hora_ingreso']) && !empty($row['hora_egreso'])) {
+        $timestamp_ingreso = strtotime($row['hora_ingreso']);
+        $timestamp_egreso = strtotime($row['hora_egreso']);
+        if ($timestamp_ingreso !== false && $timestamp_egreso !== false) {
+             if ($timestamp_egreso > $timestamp_ingreso) {
+                $horas = round(($timestamp_egreso - $timestamp_ingreso) / 3600, 2);
+            }
+        }
+    }
+
+    // Añadir cada bloque de asistencia del profesor como una entrada separada
+    $datos[$profesor_id]['fechas'][] = [
+        'id_asistencia' => $id_asistencia,
+        'fecha' => $fecha,
+        'ingreso' => $row['hora_ingreso'] ?? '-',
+        'egreso' => $row['hora_egreso'] ?? '-',
+        'horas' => $horas,
+        'alumnos' => $alumnos,
+        'monto_unitario' => $monto_unitario,
+        'monto_total' => $monto_total
+    ];
 }
 ?>
 
@@ -62,76 +138,62 @@ $row['pago'] = ($row['pago'] ?? 0) > 0 ? $row['pago'] : $pago;
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>Pago a Profesores</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pagar Horas Profesor</title>
     <link rel="stylesheet" href="estilo_unificado.css">
-    <style>
-        body { background: #000; color: gold; font-family: Arial, sans-serif; padding: 20px; }
-        h2 { margin-top: 0; }
-        table { width: 100%; border-collapse: collapse; margin-top: 15px; }
-        th, td { border: 1px solid #333; padding: 8px; text-align: center; }
-        th { background: #222; color: gold; }
-        tr:nth-child(even) { background: #111; }
-        input[type="month"], input[type="submit"] {
-            padding: 6px 10px; font-size: 14px; background: gold; color: black; border: none; margin-top: 10px;
-        }
-        .boton {
-            padding: 5px 10px; background: gold; color: black;
-            border: none; border-radius: 4px; cursor: pointer;
-            text-decoration: none;
-        }
-        .boton:hover { background: orange; }
-        .contenedor { padding: 10px; }
-    </style>
 </head>
 <body>
 <div class="contenedor">
-  <h2>💵 Pago por Horas Trabajadas - <?= date("F Y", strtotime($mes_inicio)) ?></h2>
-  <form method="get">
-      <label>Seleccionar mes:</label>
-      <input type="month" name="mes" value="<?= $mes ?>">
-      <input type="submit" value="Filtrar">
-  </form>
+    <h2>💰 Pago de Horas a Profesores</h2>
 
-  <table>
-    <thead>
-      <tr>
-        <th>Apellido</th>
-        <th>Nombre</th>
-        <th>Fecha</th>
-        <th>Ingreso</th>
-        <th>Egreso</th>
-        <th>Alumnos</th>
-        <th>Pago</th>
-        <th>Acciones</th>
-      </tr>
-    </thead>
-    <tbody>
-      <?php
-      $total_general = 0;
-      foreach ($datos as $fila):
-          $total_general += $fila['pago'];
-      ?>
-      <tr>
-        <td><?= $fila['apellido'] ?></td>
-        <td><?= $fila['nombre'] ?></td>
-        <td><?= $fila['fecha'] ?></td>
-        <td><?= $fila['hora_ingreso'] ?></td>
-        <td><?= $fila['hora_egreso'] ?></td>
-        <td><?= $fila['alumnos'] ?></td>
-        <td>$<?= number_format($fila['pago'], 0) ?></td>
-        <td>
-          <a href="editar_pago.php?id=<?= $fila['id'] ?>" class="boton">Editar</a>
-          <a href="eliminar_pago.php?id=<?= $fila['id'] ?>" class="boton" onclick="return confirm('¿Eliminar este pago?')">Eliminar</a>
-        </td>
-      </tr>
-      <?php endforeach; ?>
-      <tr>
-        <td colspan="6" style="text-align:right;"><strong>Total a pagar:</strong></td>
-        <td colspan="2"><strong>$<?= number_format($total_general, 0) ?></strong></td>
-      </tr>
-    </tbody>
-  </table>
+    <?php if (empty($datos)): ?>
+        <p>No se encontraron asistencias de profesores para este mes (<?= $mes_actual ?>/<?= $anio_actual ?>) en el gimnasio ID <?= $gimnasio_id ?>.</p>
+    <?php endif; ?>
+
+    <?php foreach ($datos as $prof): ?>
+        <div class="tarjeta">
+            <h3><?= $prof['nombre'] ?></h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Fecha</th>
+                        <th>Ingreso</th>
+                        <th>Egreso</th>
+                        <th>Horas</th>
+                        <th>Alumnos</th>
+                        <th>Unitario ($)</th>
+                        <th>Total ($)</th>
+                        <th>✏️</th>
+                        <th>🗑️</th>
+                    </tr>
+                </thead>
+                <tbody>
+                <?php $total_general_profesor = 0; ?>
+                <?php foreach ($prof['fechas'] as $f): ?>
+                    <?php $total_general_profesor += $f['monto_total']; ?>
+                    <tr>
+                        <td><?= $f['fecha'] ?></td>
+                        <td><?= $f['ingreso'] ?></td>
+                        <td><?= $f['egreso'] ?></td>
+                        <td><?= $f['horas'] ?></td>
+                        <td><?= $f['alumnos'] ?></td>
+                        <td>$<?= number_format($f['monto_unitario'], 2, ',', '.') ?></td>
+                        <td>$<?= number_format($f['monto_total'], 2, ',', '.') ?></td>
+                        <td><a href="editar_asistencia_profesor.php?id=<?= $f['id_asistencia'] ?>" class="boton-mini">✏️</a></td>
+                        <td><a href="eliminar_asistencia_profesor.php?id=<?= $f['id_asistencia'] ?>" class="boton-mini rojo" onclick="return confirm('¿Eliminar este registro?');">🗑️</a></td>
+                    </tr>
+                <?php endforeach; ?>
+                </tbody>
+                <tfoot>
+                    <tr>
+                        <th colspan="6">Total a pagar a este profesor</th>
+                        <th colspan="3">$<?= number_format($total_general_profesor, 2, ',', '.') ?></th>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+    <?php endforeach; ?>
+
+    <a href="index.php" class="boton">Volver al menú</a>
 </div>
 </body>
 </html>
