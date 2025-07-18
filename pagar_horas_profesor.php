@@ -26,7 +26,7 @@ function calcular_monto($conexion, $gimnasio_id, $alumnos) {
 $datos = [];
 
 $sql = "
-    SELECT a.id, p.id AS profesor_id, p.apellido, p.nombre, a.fecha, a.hora_ingreso, a.hora_salida AS hora_egreso
+    SELECT a.id, p.id AS profesor_id, p.apellido, p.nombre, a.fecha, a.hora_ingreso, a.hora_salida AS hora_egreso, a.alumnos
     FROM asistencias_profesores a
     JOIN profesores p ON a.profesor_id = p.id
     WHERE MONTH(a.fecha) = $mes_actual
@@ -54,25 +54,29 @@ while ($row = $query->fetch_assoc()) {
         ];
     }
 
-    $stmt = $conexion->prepare("
-        SELECT COUNT(DISTINCT cliente_id) AS total
-        FROM asistencias
-        WHERE fecha = ?
-          AND hora BETWEEN ? AND ?
-          AND gimnasio_id = ?
-          AND profesor_id = ?
-    ");
-    $stmt->bind_param("sssii", $fecha, $hora_ini, $hora_fin, $gimnasio_id, $profesor_id);
-    $stmt->execute();
-    $res = $stmt->get_result();
-    $alumnos = $res->fetch_assoc()['total'] ?? 0;
-    $stmt->close();
+    // ✅ PRIORIDAD: usar el valor manual si fue editado
+    $alumnos = intval($row['alumnos'] ?? 0);
+
+    if ($alumnos === 0) {
+        $stmt = $conexion->prepare("
+            SELECT COUNT(DISTINCT cliente_id) AS total
+            FROM asistencias
+            WHERE fecha = ?
+              AND hora BETWEEN ? AND ?
+              AND gimnasio_id = ?
+              AND profesor_id = ?
+        ");
+        $stmt->bind_param("sssii", $fecha, $hora_ini, $hora_fin, $gimnasio_id, $profesor_id);
+        $stmt->execute();
+        $res = $stmt->get_result();
+        $alumnos = $res->fetch_assoc()['total'] ?? 0;
+        $stmt->close();
+    }
 
     $monto_unitario = calcular_monto($conexion, $gimnasio_id, $alumnos);
-$monto_total = $monto_unitario;
+    $monto_total = $monto_unitario;
 
-    // Calcular horas
-    $horas = 1; // por defecto 1 hora si no hay salida
+    $horas = 1;
     if (!empty($row['hora_ingreso']) && !empty($row['hora_egreso'])) {
         $t1 = strtotime($row['hora_ingreso']);
         $t2 = strtotime($row['hora_egreso']);
