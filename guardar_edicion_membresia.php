@@ -1,58 +1,36 @@
 <?php
-if (session_status() === PHP_SESSION_NONE) {
-    session_start();
-}
+if (session_status() === PHP_SESSION_NONE) session_start();
 include 'conexion.php';
 
-if ($_SERVER["REQUEST_METHOD"] === "POST") {
-    $id = intval($_POST['id']);
-    $gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
+$id = intval($_POST['id'] ?? 0);
+$cliente_id = intval($_POST['cliente_id'] ?? 0);
+$plan_id = intval($_POST['plan_id'] ?? 0);
+$precio = floatval($_POST['precio'] ?? 0);
+$clases = intval($_POST['clases_disponibles'] ?? 0);
+$fecha_inicio = $_POST['fecha_inicio'] ?? '';
+$fecha_vencimiento = $_POST['fecha_vencimiento'] ?? '';
+$otros_pagos = floatval($_POST['otros_pagos'] ?? 0);
+$total = floatval($_POST['total'] ?? 0);
+$gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
 
-    $plan_id = $_POST['plan_id'];
-    $fecha_inicio = $_POST['fecha_inicio'];
-    $fecha_vencimiento = $_POST['fecha_vencimiento'];
-    $clases_disponibles = $_POST['clases_disponibles'];
-    $otros_pagos = $_POST['otros_pagos'] ?? 0;
-    $forma_pago = $_POST['forma_pago'];
-    $total = $_POST['total'];
+// Nuevos campos de forma de pago
+$pago_efectivo = floatval($_POST['pago_efectivo'] ?? 0);
+$pago_transferencia = floatval($_POST['pago_transferencia'] ?? 0);
+$pago_debito = floatval($_POST['pago_debito'] ?? 0);
+$pago_credito = floatval($_POST['pago_credito'] ?? 0);
+$pago_cuenta_corriente = floatval($_POST['pago_cuenta_corriente'] ?? 0);
 
-    if (!$id || !$plan_id || !$fecha_inicio || !$fecha_vencimiento || !$forma_pago || !$total) {
-        echo "<script>alert('Faltan datos obligatorios.'); history.back();</script>";
-        exit;
-    }
-
-    // Validar que la membresía existe en el gimnasio actual
-    $ver = $conexion->prepare("SELECT id FROM membresias WHERE id = ? AND gimnasio_id = ?");
-    $ver->bind_param("ii", $id, $gimnasio_id);
-    $ver->execute();
-    $ver->store_result();
-    if ($ver->num_rows === 0) {
-        echo "<script>alert('No se encontró la membresía o no pertenece a este gimnasio.'); history.back();</script>";
-        exit;
-    }
-    $ver->close();
-
-    // Actualizar membresía
-    $stmt = $conexion->prepare("UPDATE membresias SET 
-        plan_id = ?, fecha_inicio = ?, fecha_vencimiento = ?,
-        clases_disponibles = ?, forma_pago = ?, otros_pagos = ?, total_pagado = ?
-        WHERE id = ?");
-
-    $stmt->bind_param("ississdi",
-        $plan_id, $fecha_inicio, $fecha_vencimiento,
-        $clases_disponibles, $forma_pago, $otros_pagos, $total,
-        $id
+if ($id > 0 && $cliente_id > 0 && $plan_id > 0 && $fecha_inicio && $fecha_vencimiento) {
+    $stmt = $conexion->prepare("UPDATE membresias SET cliente_id=?, plan_id=?, precio=?, clases_restantes=?, fecha_inicio=?, fecha_vencimiento=?, otros_pagos=?, total=?, 
+        pago_efectivo=?, pago_transferencia=?, pago_debito=?, pago_credito=?, pago_cuenta_corriente=?
+        WHERE id=? AND gimnasio_id=?");
+    $stmt->bind_param("iidissddddddii", 
+        $cliente_id, $plan_id, $precio, $clases, $fecha_inicio, $fecha_vencimiento, $otros_pagos, $total,
+        $pago_efectivo, $pago_transferencia, $pago_debito, $pago_credito, $pago_cuenta_corriente,
+        $id, $gimnasio_id
     );
-
-    if ($stmt->execute()) {
-        echo "<script>alert('Membresía actualizada correctamente'); window.location.href='ver_membresias.php';</script>";
-    } else {
-        echo "<script>alert('Error al actualizar: " . $stmt->error . "'); history.back();</script>";
-    }
-
-    $stmt->close();
-    $conexion->close();
-} else {
-    echo "<script>alert('Acceso inválido.'); history.back();</script>";
+    $stmt->execute();
 }
-?>
+
+header("Location: ver_membresias.php");
+exit;

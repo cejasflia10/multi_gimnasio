@@ -5,8 +5,10 @@ include 'menu_horizontal.php';
 date_default_timezone_set('America/Argentina/Buenos_Aires');
 
 $gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
-$mes_actual = date('m');
-$anio_actual = date('Y');
+
+$mes_actual = $_GET['mes'] ?? date('m');
+$anio_actual = $_GET['anio'] ?? date('Y');
+$profesor_filtro = $_GET['profesor_id'] ?? '';
 
 function calcular_monto($conexion, $gimnasio_id, $alumnos) {
     $stmt = $conexion->prepare("
@@ -32,6 +34,7 @@ $sql = "
     WHERE MONTH(a.fecha) = $mes_actual
       AND YEAR(a.fecha) = $anio_actual
       AND a.gimnasio_id = $gimnasio_id
+      " . ($profesor_filtro ? "AND p.id = " . intval($profesor_filtro) : "") . "
     ORDER BY p.apellido, a.fecha, a.hora_ingreso
 ";
 
@@ -54,7 +57,6 @@ while ($row = $query->fetch_assoc()) {
         ];
     }
 
-    // ✅ PRIORIDAD: usar el valor manual si fue editado
     $alumnos = intval($row['alumnos'] ?? 0);
 
     if ($alumnos === 0) {
@@ -109,6 +111,38 @@ while ($row = $query->fetch_assoc()) {
 <div class="contenedor">
     <h2>💰 Pago de Horas a Profesores</h2>
 
+    <!-- Filtro por mes, año y profesor -->
+    <form method="GET" style="margin-bottom: 20px;">
+        <label>Mes:</label>
+        <select name="mes">
+            <?php for ($m = 1; $m <= 12; $m++): ?>
+                <option value="<?= $m ?>" <?= ($m == $mes_actual ? 'selected' : '') ?>><?= str_pad($m, 2, '0', STR_PAD_LEFT) ?></option>
+            <?php endfor; ?>
+        </select>
+
+        <label>Año:</label>
+        <select name="anio">
+            <?php for ($a = 2024; $a <= date('Y') + 1; $a++): ?>
+                <option value="<?= $a ?>" <?= ($a == $anio_actual ? 'selected' : '') ?>><?= $a ?></option>
+            <?php endfor; ?>
+        </select>
+
+        <label>Profesor:</label>
+        <select name="profesor_id">
+            <option value="">-- Todos --</option>
+            <?php
+            $profesores = $conexion->query("SELECT id, apellido, nombre FROM profesores WHERE gimnasio_id = $gimnasio_id ORDER BY apellido");
+            while ($p = $profesores->fetch_assoc()):
+            ?>
+                <option value="<?= $p['id'] ?>" <?= ($p['id'] == $profesor_filtro ? 'selected' : '') ?>>
+                    <?= $p['apellido'] . ' ' . $p['nombre'] ?>
+                </option>
+            <?php endwhile; ?>
+        </select>
+
+        <button type="submit">🔍 Filtrar</button>
+    </form>
+
     <?php if (empty($datos)): ?>
         <p>No se encontraron asistencias para este mes (<?= $mes_actual ?>/<?= $anio_actual ?>).</p>
     <?php endif; ?>
@@ -118,17 +152,17 @@ while ($row = $query->fetch_assoc()) {
             <h3><?= $prof['nombre'] ?></h3>
             <table>
                 <thead>
-                    <tr>
-                        <th>Fecha</th>
-                        <th>Ingreso</th>
-                        <th>Egreso</th>
-                        <th>Horas</th>
-                        <th>Alumnos</th>
-                        <th>Unitario ($)</th>
-                        <th>Total ($)</th>
-                        <th>✏️</th>
-                        <th>🗑️</th>
-                    </tr>
+                <tr>
+                    <th>Fecha</th>
+                    <th>Ingreso</th>
+                    <th>Egreso</th>
+                    <th>Horas</th>
+                    <th>Alumnos</th>
+                    <th>Unitario ($)</th>
+                    <th>Total ($)</th>
+                    <th>✏️</th>
+                    <th>🗑️</th>
+                </tr>
                 </thead>
                 <tbody>
                 <?php $total_general = 0; ?>
@@ -148,10 +182,10 @@ while ($row = $query->fetch_assoc()) {
                 <?php endforeach; ?>
                 </tbody>
                 <tfoot>
-                    <tr>
-                        <th colspan="6">Total a pagar</th>
-                        <th colspan="3">$<?= number_format($total_general, 2, ',', '.') ?></th>
-                    </tr>
+                <tr>
+                    <th colspan="6">Total a pagar</th>
+                    <th colspan="3">$<?= number_format($total_general, 2, ',', '.') ?></th>
+                </tr>
                 </tfoot>
             </table>
         </div>

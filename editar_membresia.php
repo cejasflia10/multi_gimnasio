@@ -67,16 +67,22 @@ $clientes = $conexion->query("SELECT id, nombre, apellido, dni FROM clientes WHE
     <label>Otros Pagos:</label>
     <input type="number" step="0.01" name="otros_pagos" value="<?= $membresia['otros_pagos'] ?>">
 
-    <label>Forma de Pago:</label>
-    <select name="forma_pago" required>
-        <option value="efectivo" <?= $membresia['forma_pago'] == 'efectivo' ? 'selected' : '' ?>>Efectivo</option>
-        <option value="transferencia" <?= $membresia['forma_pago'] == 'transferencia' ? 'selected' : '' ?>>Transferencia</option>
-        <option value="debito" <?= $membresia['forma_pago'] == 'debito' ? 'selected' : '' ?>>Débito</option>
-        <option value="credito" <?= $membresia['forma_pago'] == 'credito' ? 'selected' : '' ?>>Crédito</option>
-        <option value="cuenta_corriente" <?= $membresia['forma_pago'] == 'cuenta_corriente' ? 'selected' : '' ?>>Cuenta Corriente</option>
-    </select>
+    <label>💵 Pago en Efectivo:</label>
+    <input type="number" step="0.01" name="pago_efectivo" id="pago_efectivo" value="<?= $membresia['pago_efectivo'] ?? 0 ?>">
 
-    <label>Total:</label>
+    <label>🏦 Transferencia:</label>
+    <input type="number" step="0.01" name="pago_transferencia" id="pago_transferencia" value="<?= $membresia['pago_transferencia'] ?? 0 ?>">
+
+    <label>💳 Débito:</label>
+    <input type="number" step="0.01" name="pago_debito" id="pago_debito" value="<?= $membresia['pago_debito'] ?? 0 ?>">
+
+    <label>💳 Crédito:</label>
+    <input type="number" step="0.01" name="pago_credito" id="pago_credito" value="<?= $membresia['pago_credito'] ?? 0 ?>">
+
+    <label>📂 Cuenta Corriente:</label>
+    <input type="number" step="0.01" name="pago_cuenta_corriente" id="pago_cuenta_corriente" value="<?= $membresia['pago_cuenta_corriente'] ?? 0 ?>">
+
+    <label>💰 Total:</label>
     <input type="number" step="0.01" name="total" id="total" value="<?= $membresia['total'] ?>" required>
 
     <button type="submit">💾 Guardar Cambios</button>
@@ -99,7 +105,6 @@ function actualizarCampos() {
     if (datos) {
         precio.value = datos.precio;
         clases.value = datos.clases;
-
         const inicio = new Date(fechaInicio.value);
         if (!isNaN(inicio)) {
             inicio.setMonth(inicio.getMonth() + parseInt(datos.duracion_meses));
@@ -108,8 +113,21 @@ function actualizarCampos() {
         }
     }
 }
-
 selectPlan.addEventListener('change', actualizarCampos);
+
+function recalcularTotal() {
+    const efectivo = parseFloat(document.getElementById('pago_efectivo').value) || 0;
+    const trans = parseFloat(document.getElementById('pago_transferencia').value) || 0;
+    const debito = parseFloat(document.getElementById('pago_debito').value) || 0;
+    const credito = parseFloat(document.getElementById('pago_credito').value) || 0;
+    const cuenta = parseFloat(document.getElementById('pago_cuenta_corriente').value) || 0;
+    const total = efectivo + trans + debito + credito + cuenta;
+    document.getElementById('total').value = total.toFixed(2);
+}
+
+document.querySelectorAll('#pago_efectivo, #pago_transferencia, #pago_debito, #pago_credito, #pago_cuenta_corriente').forEach(input => {
+    input.addEventListener('input', recalcularTotal);
+});
 </script>
 </div>
 </body>
