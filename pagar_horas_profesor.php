@@ -4,24 +4,10 @@ include 'conexion.php';
 include 'menu_horizontal.php';
 date_default_timezone_set('America/Argentina/Buenos_Aires');
 
-// Habilitar la visualización de errores para depuración (QUITAR EN PRODUCCIÓN)
-error_reporting(E_ALL);
-ini_set('display_errors', 1);
-
 $gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
 $mes_actual = date('m');
 $anio_actual = date('Y');
 
-// --- DEBUGGING TEMPORAL CRUCIAL ---
-echo "<h2>DEBUG: Variables de Configuración</h2>";
-echo "Gimnasio ID de Sesión (pagar_horas_profesor): <b>" . $gimnasio_id . "</b><br>";
-echo "Mes Actual (MM): <b>" . $mes_actual . "</b><br>";
-echo "Año Actual (YYYY): <b>" . $anio_actual . "</b><br>";
-echo "Fecha Actual del Servidor: <b>" . date('Y-m-d H:i:s') . "</b><br>";
-echo "<hr>";
-// --- FIN DEBUGGING TEMPORAL CRUCIAL ---
-
-// Función para calcular el monto según la cantidad de alumnos
 function calcular_monto($conexion, $gimnasio_id, $alumnos) {
     $stmt = $conexion->prepare("
         SELECT precio FROM precio_hora
@@ -32,18 +18,14 @@ function calcular_monto($conexion, $gimnasio_id, $alumnos) {
     $stmt->bind_param("ii", $gimnasio_id, $alumnos);
     $stmt->execute();
     $res = $stmt->get_result();
-    if ($f = $res->fetch_assoc()) {
-        $stmt->close();
-        return floatval($f['precio']);
-    }
+    $precio = $res->fetch_assoc()['precio'] ?? 0;
     $stmt->close();
-    return 0;
+    return floatval($precio);
 }
 
-$datos = []; // Array para almacenar los datos finales por profesor
+$datos = [];
 
-// Consulta principal para obtener TODAS las asistencias de profesores en el mes/año
-$sql_profesores_query = "
+$sql = "
     SELECT a.id, p.id AS profesor_id, p.apellido, p.nombre, a.fecha, a.hora_ingreso, a.hora_salida AS hora_egreso
     FROM asistencias_profesores a
     JOIN profesores p ON a.profesor_id = p.id
@@ -53,32 +35,18 @@ $sql_profesores_query = "
     ORDER BY p.apellido, a.fecha, a.hora_ingreso
 ";
 
-// --- DEBUGGING TEMPORAL CRUCIAL ---
-echo "<h2>DEBUG: Consulta SQL de Profesores</h2>";
-echo "Consulta a ejecutar: <pre>" . htmlspecialchars($sql_profesores_query) . "</pre><br>";
-// --- FIN DEBUGGING TEMPORAL CRUCIAL ---
-
-$query = $conexion->query($sql_profesores_query);
-
-// Si la consulta falla, imprime el error para depuración
+$query = $conexion->query($sql);
 if (!$query) {
-    die("Error en la consulta de asistencias de profesores: " . $conexion->error);
+    die("Error en la consulta: " . $conexion->error);
 }
-
-// --- DEBUGGING TEMPORAL CRUCIAL ---
-$num_profesores_encontrados = $query->num_rows;
-echo "Número de turnos de profesores encontrados: <b>" . $num_profesores_encontrados . "</b><br>";
-echo "<hr>";
-// --- FIN DEBUGGING TEMPORAL CRUCIAL ---
 
 while ($row = $query->fetch_assoc()) {
     $profesor_id = $row['profesor_id'];
     $fecha = $row['fecha'];
     $id_asistencia = $row['id'];
     $hora_ini = !empty($row['hora_ingreso']) ? $row['hora_ingreso'] : '00:00:00';
-    $hora_fin = !empty($row['hora_egreso']) ? $row['hora_egreso'] : '23:59:59'; // Si no hay hora de egreso, se asume hasta fin del día
+    $hora_fin = !empty($row['hora_egreso']) ? $row['hora_egreso'] : '23:59:59';
 
-    // Inicializar el array del profesor si aún no existe
     if (!isset($datos[$profesor_id])) {
         $datos[$profesor_id] = [
             'nombre' => $row['apellido'] . ' ' . $row['nombre'],
@@ -86,41 +54,33 @@ while ($row = $query->fetch_assoc()) {
         ];
     }
 
-    // Buscar alumnos que ingresaron en el mismo horario Y CON EL MISMO PROFESOR
-    // ¡¡¡CAMBIO CLAVE AQUÍ: FILTRAMOS por profesor_id en la tabla 'asistencias'!!!
     $stmt = $conexion->prepare("
         SELECT COUNT(DISTINCT cliente_id) AS total
         FROM asistencias
         WHERE fecha = ?
           AND hora BETWEEN ? AND ?
           AND gimnasio_id = ?
-          AND profesor_id = ? -- ¡¡¡NUEVA CONDICIÓN CRUCIAL!!!
+          AND profesor_id = ?
     ");
-    if (false === $stmt) {
-        die("Error al preparar la consulta de alumnos: " . $conexion->error);
-    }
-
-    $stmt->bind_param("sssii", $fecha, $hora_ini, $hora_fin, $gimnasio_id, $profesor_id); // Añadimos 'i' para el nuevo profesor_id
+    $stmt->bind_param("sssii", $fecha, $hora_ini, $hora_fin, $gimnasio_id, $profesor_id);
     $stmt->execute();
     $res = $stmt->get_result();
     $alumnos = $res->fetch_assoc()['total'] ?? 0;
     $stmt->close();
 
     $monto_unitario = calcular_monto($conexion, $gimnasio_id, $alumnos);
-    $monto_total = $alumnos * $monto_unitario;
+$monto_total = $monto_unitario;
 
-    $horas = 0;
+    // Calcular horas
+    $horas = 1; // por defecto 1 hora si no hay salida
     if (!empty($row['hora_ingreso']) && !empty($row['hora_egreso'])) {
-        $timestamp_ingreso = strtotime($row['hora_ingreso']);
-        $timestamp_egreso = strtotime($row['hora_egreso']);
-        if ($timestamp_ingreso !== false && $timestamp_egreso !== false) {
-             if ($timestamp_egreso > $timestamp_ingreso) {
-                $horas = round(($timestamp_egreso - $timestamp_ingreso) / 3600, 2);
-            }
+        $t1 = strtotime($row['hora_ingreso']);
+        $t2 = strtotime($row['hora_egreso']);
+        if ($t1 !== false && $t2 !== false && $t2 > $t1) {
+            $horas = round(($t2 - $t1) / 3600, 2);
         }
     }
 
-    // Añadir cada bloque de asistencia del profesor como una entrada separada
     $datos[$profesor_id]['fechas'][] = [
         'id_asistencia' => $id_asistencia,
         'fecha' => $fecha,
@@ -146,7 +106,7 @@ while ($row = $query->fetch_assoc()) {
     <h2>💰 Pago de Horas a Profesores</h2>
 
     <?php if (empty($datos)): ?>
-        <p>No se encontraron asistencias de profesores para este mes (<?= $mes_actual ?>/<?= $anio_actual ?>) en el gimnasio ID <?= $gimnasio_id ?>.</p>
+        <p>No se encontraron asistencias para este mes (<?= $mes_actual ?>/<?= $anio_actual ?>).</p>
     <?php endif; ?>
 
     <?php foreach ($datos as $prof): ?>
@@ -167,9 +127,9 @@ while ($row = $query->fetch_assoc()) {
                     </tr>
                 </thead>
                 <tbody>
-                <?php $total_general_profesor = 0; ?>
+                <?php $total_general = 0; ?>
                 <?php foreach ($prof['fechas'] as $f): ?>
-                    <?php $total_general_profesor += $f['monto_total']; ?>
+                    <?php $total_general += $f['monto_total']; ?>
                     <tr>
                         <td><?= $f['fecha'] ?></td>
                         <td><?= $f['ingreso'] ?></td>
@@ -185,8 +145,8 @@ while ($row = $query->fetch_assoc()) {
                 </tbody>
                 <tfoot>
                     <tr>
-                        <th colspan="6">Total a pagar a este profesor</th>
-                        <th colspan="3">$<?= number_format($total_general_profesor, 2, ',', '.') ?></th>
+                        <th colspan="6">Total a pagar</th>
+                        <th colspan="3">$<?= number_format($total_general, 2, ',', '.') ?></th>
                     </tr>
                 </tfoot>
             </table>
