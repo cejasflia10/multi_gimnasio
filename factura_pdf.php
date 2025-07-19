@@ -1,93 +1,123 @@
 <?php
-require('fpdf/fpdf.php');
+session_start();
 include 'conexion.php';
+include 'menu_horizontal.php';
 
-if (session_status() === PHP_SESSION_NONE) session_start();
-
-function limpiar($texto) {
-    return iconv('UTF-8', 'ISO-8859-1//TRANSLIT', $texto);
-}
-
-$id = intval($_GET['id'] ?? 0);
-$imprimir = isset($_GET['imprimir']);
 $gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
+$filtro_mes = $_GET['mes'] ?? date('m');
+$filtro_tipo = $_GET['tipo'] ?? 'todos';
+$filtro_anio = date('Y');
 
-if ($id <= 0 || $gimnasio_id <= 0) {
-    exit("Factura inválida.");
+$consultas = [];
+
+if ($filtro_tipo == 'todos' || $filtro_tipo == 'productos') {
+    $consultas[] = "
+        SELECT f.id, f.fecha_pago, f.cliente_id,
+            CONCAT(c.apellido, ' ', c.nombre) AS cliente,
+            f.total,
+            CASE 
+                WHEN f.pago_efectivo > 0 THEN CONCAT('Efectivo: $', FORMAT(f.pago_efectivo, 2))
+                WHEN f.pago_transferencia > 0 THEN CONCAT('Transferencia: $', FORMAT(f.pago_transferencia, 2))
+                WHEN f.pago_debito > 0 THEN CONCAT('Débito: $', FORMAT(f.pago_debito, 2))
+                WHEN f.pago_credito > 0 THEN CONCAT('Crédito: $', FORMAT(f.pago_credito, 2))
+                WHEN f.pago_cuenta_corriente > 0 THEN CONCAT('Cuenta Corriente: $', FORMAT(f.pago_cuenta_corriente, 2))
+                ELSE 'Sin datos'
+            END AS metodo_pago,
+            f.detalle,
+            'productos' AS tipo
+        FROM facturas f
+        LEFT JOIN clientes c ON f.cliente_id = c.id
+        WHERE MONTH(f.fecha_pago) = $filtro_mes AND YEAR(f.fecha_pago) = $filtro_anio AND f.gimnasio_id = $gimnasio_id
+    ";
 }
 
-// Obtener datos de la factura
-$res = $conexion->query("SELECT * FROM facturas WHERE id = $id AND gimnasio_id = $gimnasio_id");
-$factura = $res->fetch_assoc();
-
-// Obtener productos de la factura
-$detalle = $conexion->query("SELECT * FROM ventas_productos WHERE factura_id = $id");
-
-// Datos del gimnasio
-$gimnasio = $conexion->query("SELECT nombre, direccion FROM gimnasios WHERE id = $gimnasio_id")->fetch_assoc();
-
-// Datos del cliente
-$cliente = $conexion->query("SELECT nombre, apellido FROM clientes WHERE id = {$factura['cliente_id']}")->fetch_assoc();
-$cliente_nombre = $cliente ? $cliente['apellido'] . ' ' . $cliente['nombre'] : 'Cliente eliminado';
-
-// Procesar forma de pago
-$metodo = $factura['metodo_pago'];
-$formapago = 'Desconocido';
-if (strpos($metodo, 'Efectivo:') !== false && strpos($metodo, 'Efectivo: 0') === false) {
-    $formapago = 'Efectivo';
-} elseif (strpos($metodo, 'Transf:') !== false && strpos($metodo, 'Transf: 0') === false) {
-    $formapago = 'Transferencia';
-} elseif (strpos($metodo, 'Débito:') !== false && strpos($metodo, 'Débito: 0') === false) {
-    $formapago = 'Débito';
-} elseif (strpos($metodo, 'Crédito:') !== false && strpos($metodo, 'Crédito: 0') === false) {
-    $formapago = 'Crédito';
-} elseif (strpos($metodo, 'Cuenta Corriente:') !== false && strpos($metodo, 'Cuenta Corriente: 0') === false) {
-    $formapago = 'Cuenta Corriente';
+if ($filtro_tipo == 'todos' || $filtro_tipo == 'membresias') {
+    $consultas[] = "
+        SELECT m.id, m.fecha_inicio AS fecha_pago, m.cliente_id,
+            CONCAT(c.apellido, ' ', c.nombre) AS cliente,
+            (m.pago_efectivo + m.pago_transferencia + m.pago_debito + m.pago_credito + m.pago_cuenta_corriente) AS total,
+            CASE 
+                WHEN m.pago_efectivo > 0 THEN CONCAT('Efectivo: $', FORMAT(m.pago_efectivo, 2))
+                WHEN m.pago_transferencia > 0 THEN CONCAT('Transferencia: $', FORMAT(m.pago_transferencia, 2))
+                WHEN m.pago_debito > 0 THEN CONCAT('Débito: $', FORMAT(m.pago_debito, 2))
+                WHEN m.pago_credito > 0 THEN CONCAT('Crédito: $', FORMAT(m.pago_credito, 2))
+                WHEN m.pago_cuenta_corriente > 0 THEN CONCAT('Cuenta Corriente: $', FORMAT(m.pago_cuenta_corriente, 2))
+                ELSE 'Sin datos'
+            END AS metodo_pago,
+            'Membresía' AS detalle,
+            'membresia' AS tipo
+        FROM membresias m
+        LEFT JOIN clientes c ON m.cliente_id = c.id
+        WHERE MONTH(m.fecha_inicio) = $filtro_mes AND YEAR(m.fecha_inicio) = $filtro_anio AND m.gimnasio_id = $gimnasio_id
+    ";
 }
 
-// Iniciar PDF
-$pdf = new FPDF();
-$pdf->AddPage();
-$pdf->SetFont('Arial', 'B', 16);
+$sql = implode(" UNION ALL ", $consultas) . " ORDER BY fecha_pago DESC";
+$facturas = $conexion->query($sql);
+?>
 
-// Encabezado
-$pdf->Cell(0, 10, limpiar($gimnasio['nombre']), 0, 1, 'C');
-$pdf->SetFont('Arial', '', 12);
-$pdf->Cell(0, 8, limpiar("Dirección: " . $gimnasio['direccion']), 0, 1, 'C');
-$pdf->Ln(5);
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Facturas</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="estilo_unificado.css">
+</head>
+<body>
+<div class="contenedor">
+    <h2>📄 Facturas Generadas</h2>
 
-$pdf->SetFont('Arial', 'B', 14);
-$pdf->Cell(0, 10, 'Factura de Venta', 0, 1, 'C');
-$pdf->SetFont('Arial', '', 12);
-$pdf->Cell(0, 8, "Fecha: " . $factura['fecha_pago'], 0, 1);
-$pdf->Cell(0, 8, "Cliente: " . limpiar($cliente_nombre), 0, 1);
-$pdf->Cell(0, 8, "Método de Pago: " . limpiar($formapago), 0, 1);
-$pdf->Ln(5);
+    <form method="GET" style="margin-bottom: 20px;">
+        <label>Mes:</label>
+        <select name="mes">
+            <?php
+            for ($m = 1; $m <= 12; $m++) {
+                $selected = ($filtro_mes == $m) ? 'selected' : '';
+                printf("<option value='%02d' %s>%s</option>", $m, $selected, date("F", mktime(0, 0, 0, $m, 1)));
+            }
+            ?>
+        </select>
 
-// Tabla de productos
-$pdf->SetFont('Arial', 'B', 12);
-$pdf->Cell(80, 10, 'Producto', 1);
-$pdf->Cell(30, 10, 'Precio', 1);
-$pdf->Cell(30, 10, 'Cantidad', 1);
-$pdf->Cell(40, 10, 'Subtotal', 1);
-$pdf->Ln();
+        <label>Tipo:</label>
+        <select name="tipo">
+            <option value="todos" <?= $filtro_tipo === 'todos' ? 'selected' : '' ?>>Todos</option>
+            <option value="productos" <?= $filtro_tipo === 'productos' ? 'selected' : '' ?>>Productos</option>
+            <option value="membresias" <?= $filtro_tipo === 'membresias' ? 'selected' : '' ?>>Membresías</option>
+        </select>
 
-$pdf->SetFont('Arial', '', 12);
-while ($row = $detalle->fetch_assoc()) {
-    $pdf->Cell(80, 10, limpiar($row['producto_nombre']), 1);
-    $pdf->Cell(30, 10, '$' . number_format($row['precio'], 2), 1);
-    $pdf->Cell(30, 10, $row['cantidad'], 1);
-    $pdf->Cell(40, 10, '$' . number_format($row['subtotal'], 2), 1);
-    $pdf->Ln();
-}
+        <button type="submit">🔍 Filtrar</button>
+    </form>
 
-$pdf->Ln(5);
-$pdf->SetFont('Arial', 'B', 14);
-$pdf->Cell(0, 10, 'Total: $' . number_format($factura['total'], 2), 0, 1, 'R');
-
-// Salida
-if ($imprimir) {
-    $pdf->Output(); // vista previa
-} else {
-    $pdf->Output('D', 'Factura_' . $id . '.pdf'); // descarga
-}
+    <table>
+        <thead>
+            <tr>
+                <th>Fecha</th>
+                <th>Cliente</th>
+                <th>Total ($)</th>
+                <th>Método de Pago</th>
+                <th>Detalle</th>
+                <th>Tipo</th>
+                <th>Opciones</th>
+            </tr>
+        </thead>
+        <tbody>
+        <?php while ($f = $facturas->fetch_assoc()): ?>
+            <tr>
+                <td><?= $f['fecha_pago'] ?></td>
+                <td><?= $f['cliente'] ?></td>
+                <td>$<?= number_format($f['total'], 2) ?></td>
+                <td><?= $f['metodo_pago'] ?></td>
+                <td><?= $f['detalle'] ?></td>
+                <td><?= ucfirst($f['tipo']) ?></td>
+                <td>
+                    <a href="factura_pdf.php?id=<?= $f['id'] ?>&tipo=<?= $f['tipo'] ?>" target="_blank">📄 Descargar</a> |
+                    <a href="factura_pdf.php?id=<?= $f['id'] ?>&tipo=<?= $f['tipo'] ?>&imprimir=1" target="_blank">🖨️ Imprimir</a>
+                </td>
+            </tr>
+        <?php endwhile; ?>
+        </tbody>
+    </table>
+</div>
+</body>
+</html>

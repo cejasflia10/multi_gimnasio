@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Activar licencia</title>
+  <style>
+    body { background-color: black; color: gold; font-family: sans-serif; text-align: center; padding-top: 80px; }
+    input, button { font-size: 18px; padding: 8px; width: 300px; }
+  </style>
+</head>
+<body>
+  <h2>🔐 ACTIVACIÓN DE LICENCIA</h2>
+  <p>Ingrese el código proporcionado por el proveedor:</p>
+  <input id="codigo" placeholder="ABC123-XYZ" />
+  <br><br>
+  <button onclick="activar()">Activar</button>
+  <p id="mensaje" style="margin-top: 20px;"></p>
+
+  <script>
+    const fs = require('fs');
+    const path = require('path');
+    const axios = require('axios');
+
+    function activar() {
+      const codigo = document.getElementById('codigo').value.trim();
+      document.getElementById('mensaje').textContent = 'Verificando...';
+
+      axios.post('https://tuservidor.com/verificar_licencia.php', { codigo })
+        .then(res => {
+          if (res.data.estado === 'activo') {
+            const licencia = {
+              codigo: codigo,
+              fecha_activacion: new Date().toISOString().split('T')[0],
+              fecha_vencimiento: res.data.vencimiento
+            };
+            fs.writeFileSync(path.join(__dirname, 'php/licencia.json'), JSON.stringify(licencia));
+            location.reload();
+          } else {
+            document.getElementById('mensaje').textContent = '❌ Código inválido o vencido.';
+          }
+        }).catch(() => {
+          document.getElementById('mensaje').textContent = '❌ No se pudo conectar con el servidor.';
+        });
+    }
+  </script>
+</body>
+</html>

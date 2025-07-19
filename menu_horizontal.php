@@ -31,6 +31,9 @@ if (session_status() === PHP_SESSION_NONE) { session_start(); }
             display: flex;
             flex-wrap: wrap;
             justify-content: flex-start;
+            padding: 6px 10px;
+            position: relative;
+            z-index: 1000;
         }
 
         .menu-horizontal .dropdown {
@@ -51,7 +54,7 @@ if (session_status() === PHP_SESSION_NONE) { session_start(); }
             position: absolute;
             background-color: #111;
             min-width: 160px;
-            z-index: 100;
+            z-index: 1100;
             border: 1px solid #700;
         }
 
@@ -73,7 +76,6 @@ if (session_status() === PHP_SESSION_NONE) { session_start(); }
             border-radius: 5px;
         }
 
-        /* Responsive */
         @media screen and (max-width: 768px) {
             .menu-toggle {
                 display: block;
@@ -136,8 +138,6 @@ if (session_status() === PHP_SESSION_NONE) { session_start(); }
             <a href="disciplinas.php">Disicplinas</a>
             <a href="planes.php">Planes</a>
             <a href="adicionales.php">Adicionales</a>
-
-
         </div>
     </div>
     <div class="dropdown">
@@ -147,9 +147,7 @@ if (session_status() === PHP_SESSION_NONE) { session_start(); }
             <a href="config_alias.php">Alias</a>
             <a href="ver_pagos_mes.php">Pagos del Mes</a>
             <a href="ver_cuentas_corrientes.php">Pagos Cuenta Corrientes</a>
-
         </div>
-
     </div>
     <div class="dropdown">
         <a href="#">🧍‍♂️ Asistencias</a>
@@ -166,37 +164,50 @@ if (session_status() === PHP_SESSION_NONE) { session_start(); }
             <a href="ventas_proteccion.php">Ventas Protecciones</a>
             <a href="ventas_suplementos.php">Ventas Suplementos</a>
             <a href="ventas_indumentaria.php">Ventas Indumentaria</a>
-            <a href="ver_productos.php"> Ver Productos</a>
-            <a href="ver_facturas.php"> Ver Fracturas</a>
-
+            <a href="ver_productos.php">Ver Productos</a>
+            <a href="ver_facturas.php">Ver Facturas</a>
         </div>
     </div>
     <div class="dropdown">
         <a href="#">👨‍🏫 Profesores</a>
         <div class="dropdown-content">
-            <a href="agregar_profesor.php"> Agregar Profesor</a>
-            <a href="login_profesor.php"> Panel</a>
+            <a href="agregar_profesor.php">Agregar Profesor</a>
+            <a href="login_profesor.php">Panel</a>
             <a href="ver_profesores.php">Ver Profesores</a>
             <a href="turnos_profesor.php">Turnos Profesores</a>
             <a href="registro_ingreso_profesor.php">Registro Profesores</a>
             <a href="configurar_precios_hora.php">Precio de Horas</a>
-            <a href="ver_profesores.php">Ver Profesor</a>
             <a href="reporte_horas_profesor.php">Reporte de Horas</a>
-                    <a href="pagar_horas_profesor.php">Total Horas</a>
+            <a href="pagar_horas_profesor.php">Total Horas</a>
         </div>
     </div>
     <div class="dropdown">
         <a href="#">📲 Panel Cliente</a>
         <div class="dropdown-content">
             <a href="cliente_acceso.php">Panel</a>
-            <a href="panel_configuracion.php">Panel Configuracion</a>
-
+            <a href="panel_configuracion.php">Panel Configuración</a>
         </div>
-
     </div>
-    <a href="index.php">🔙 Volver</a>
-    <a href="logout.php">🔒 Cerrar Sesión</a>
+    <div class="dropdown">
+        <a href="#">❌ Cerrar</a>
+        <div class="dropdown-content">
+            <a href="logout.php">🔒 Cerrar Sesión</a>
+            <a href="#" onclick="cerrarApp()">❌ Cerrar Programa</a>
+        </div>
+    </div>
 </div>
+
+<script>
+function cerrarApp() {
+    if (confirm("¿Seguro que deseas cerrar la aplicación?")) {
+        if (window.electronAPI) {
+            window.electronAPI.cerrarVentana();
+        } else {
+            window.close();
+        }
+    }
+}
+</script>
 
 </body>
 </html>
