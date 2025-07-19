@@ -191,7 +191,7 @@ if (session_status() === PHP_SESSION_NONE) { session_start(); }
     <div class="dropdown">
         <a href="#">❌ Cerrar</a>
         <div class="dropdown-content">
-            <a href="logout.php">🔒 Cerrar Sesión</a>
+            <a href="logout.php"> Cerrar Sesión</a>
             <a href="#" onclick="cerrarApp()">❌ Cerrar Programa</a>
         </div>
     </div>
