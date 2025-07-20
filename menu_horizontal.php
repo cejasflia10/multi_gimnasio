@@ -128,6 +128,15 @@ if (session_status() === PHP_SESSION_NONE) { session_start(); }
         <div class="dropdown-content">
             <a href="ver_clientes.php">Ver Clientes</a>
             <a href="agregar_cliente.php">Agregar Cliente</a>
+<?php if (false) : ?>
+    <a href="panel_eventos.php">Eventos</a>
+<?php endif; ?>
+<?php if (false) : ?>
+            <a href="login_evento.php"class="oculto">Acceso a Panel de Eventos</a>
+          <?php endif; ?>  
+          <?php if (false) : ?>
+            <a href="eventos_publicos.php"class="oculto">Ver Eventos Públicos</a>
+          <?php endif; ?>  
         </div>
     </div>
     <div class="dropdown">

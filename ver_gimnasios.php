@@ -2,7 +2,6 @@
 include 'conexion.php';
 include 'menu_horizontal.php';
 
-
 $resultado = $conexion->query("SELECT * FROM gimnasios");
 ?>
 
@@ -34,14 +33,15 @@ $resultado = $conexion->query("SELECT * FROM gimnasios");
       <tbody>
         <?php while ($row = $resultado->fetch_assoc()): ?>
         <tr>
-          <td><?= htmlspecialchars($row['nombre']) ?></td>
-          <td><?= htmlspecialchars($row['email']) ?></td>
-          <td><?= htmlspecialchars($row['cantidad_clientes']) ?></td>
-          <td><?= htmlspecialchars($row['plan']) ?></td>
-          <td><?= htmlspecialchars($row['fecha_vencimiento']) ?></td>
+<td><?= htmlspecialchars((string)($row['nombre'] ?? '')) ?></td>
+<td><?= htmlspecialchars((string)($row['email'] ?? '')) ?></td>
+<td><?= htmlspecialchars((string)($row['cantidad_clientes'] ?? '0')) ?></td>
+<td><?= htmlspecialchars((string)($row['plan'] ?? '')) ?></td>
+<td><?= htmlspecialchars((string)($row['fecha_vencimiento'] ?? '')) ?></td>
           <td>
             <a class="btn-editar" href="editar_gimnasio.php?id=<?= $row['id'] ?>">✏️ Editar</a>
             <a class="btn-eliminar" href="eliminar_gimnasio.php?id=<?= $row['id'] ?>" onclick="return confirm('¿Estás seguro de que deseas eliminar este gimnasio?')">🗑️ Eliminar</a>
+            <a class="btn-renovar" href="renovar_gimnasio.php?id=<?= $row['id'] ?>">🔄 Renovar</a>
           </td>
         </tr>
         <?php endwhile; ?>

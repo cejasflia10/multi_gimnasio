@@ -1,27 +1,69 @@
 <?php
 session_start();
 include 'conexion.php';
-date_default_timezone_set('America/Argentina/Buenos_Aires');
 
-$cliente_id = intval($_POST['cliente_id'] ?? 0);
-$profesor_id = intval($_POST['profesor_id'] ?? 0);
-$gimnasio_id = intval($_POST['gimnasio_id'] ?? 0);
-$disciplina = trim($_POST['disciplina'] ?? '');
-$categoria = trim($_POST['categoria'] ?? '');
-$observaciones = trim($_POST['observaciones'] ?? '');
+function calcularEdad($fecha_nacimiento) {
+    $hoy = new DateTime();
+    $nacimiento = new DateTime($fecha_nacimiento);
+    $edad = $hoy->diff($nacimiento)->y;
+    return $edad;
+}
 
-if ($cliente_id && $profesor_id && $gimnasio_id && $disciplina !== '') {
-    $stmt = $conexion->prepare("INSERT INTO competidores (cliente_id, profesor_id, gimnasio_id, disciplina, categoria, observaciones, fecha_registro)
-                                VALUES (?, ?, ?, ?, ?, ?, CURDATE())");
-    $stmt->bind_param("iiisss", $cliente_id, $profesor_id, $gimnasio_id, $disciplina, $categoria, $observaciones);
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $nombre = trim($_POST['nombre'] ?? '');
+    $apellido = trim($_POST['apellido'] ?? '');
+    $dni = trim($_POST['dni'] ?? '');
+    $fecha_nac = $_POST['fecha_nacimiento'] ?? '';
+    $disciplina = $_POST['disciplina'] ?? '';
+    $modalidad = $_POST['modalidad'] ?? [];
+    $categoria = $_POST['categoria'] ?? '';
+    $peso = $_POST['peso'] ?? '';
+    $division = $_POST['division'] ?? '';
+    $domicilio = $_POST['domicilio'] ?? '';
+    $localidad = $_POST['localidad'] ?? '';
+    $escuela = $_POST['escuela_nombre'] ?? '';
+    $pago = floatval($_POST['pago_inscripcion'] ?? 0);
+
+    // Validación básica
+    if (!$nombre || !$apellido || !$dni || !$fecha_nac || !$disciplina) {
+        echo "❌ Datos incompletos.";
+        exit;
+    }
+
+    $edad = calcularEdad($fecha_nac);
+    $modalidad_json = json_encode(array_slice($modalidad, 0, 3));
+
+    // Carga de imágenes
+    $foto_competidor = '';
+    $logo_escuela = '';
+
+    if (isset($_FILES['foto_competidor']) && $_FILES['foto_competidor']['error'] == 0) {
+        $ext = pathinfo($_FILES['foto_competidor']['name'], PATHINFO_EXTENSION);
+        $foto_competidor = 'fotos/' . uniqid() . '.' . $ext;
+        move_uploaded_file($_FILES['foto_competidor']['tmp_name'], $foto_competidor);
+    }
+
+    if (isset($_FILES['escuela_logo']) && $_FILES['escuela_logo']['error'] == 0) {
+        $ext = pathinfo($_FILES['escuela_logo']['name'], PATHINFO_EXTENSION);
+        $logo_escuela = 'logos/' . uniqid() . '.' . $ext;
+        move_uploaded_file($_FILES['escuela_logo']['tmp_name'], $logo_escuela);
+    }
+
+    // Guardar en BD
+    $stmt = $conexion->prepare("INSERT INTO competidores_evento 
+        (nombre, apellido, dni, fecha_nacimiento, edad, disciplina, modalidad, categoria, peso, division,
+         domicilio, localidad, escuela_nombre, escuela_logo, foto_competidor, pago_inscripcion)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+    $stmt->bind_param("ssssisssssssssds", 
+        $nombre, $apellido, $dni, $fecha_nac, $edad, $disciplina, $modalidad_json, $categoria, $peso,
+        $division, $domicilio, $localidad, $escuela, $logo_escuela, $foto_competidor, $pago
+    );
 
     if ($stmt->execute()) {
-        echo "<p style='color:lime; text-align:center;'>✅ Competidor registrado correctamente.</p>";
+        echo "<h3>✅ Competidor registrado correctamente</h3>";
+        echo "<a href='registro_competidor.php'>Volver</a>";
     } else {
-        echo "<p style='color:red; text-align:center;'>❌ Error al registrar competidor.</p>";
+        echo "❌ Error al guardar.";
     }
-} else {
-    echo "<p style='color:red; text-align:center;'>❌ Datos incompletos.</p>";
 }
-echo '<div style="text-align:center; margin-top:20px;"><a href="registrar_competidor.php" style="color:gold;">🔙 Volver</a></div>';
 ?>

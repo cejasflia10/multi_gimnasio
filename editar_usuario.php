@@ -10,6 +10,9 @@ if ($result->num_rows === 0) {
     die("Usuario no encontrado.");
 }
 $usuario = $result->fetch_assoc();
+
+// Obtener gimnasios disponibles
+$gimnasios = $conexion->query("SELECT id, nombre FROM gimnasios ORDER BY nombre ASC");
 ?>
 
 <!DOCTYPE html>
@@ -42,10 +45,10 @@ $usuario = $result->fetch_assoc();
         <input type="hidden" name="id" value="<?= $usuario['id'] ?>">
 
         <label>Usuario</label>
-        <input type="text" name="usuario" value="<?= htmlspecialchars($usuario['usuario'] ?? '') ?>" required>
+        <input type="text" name="usuario" value="<?= htmlspecialchars((string)($usuario['usuario'] ?? '')) ?>" required>
 
         <label>Email</label>
-        <input type="email" name="email" value="<?= htmlspecialchars($usuario['email'] ?? '') ?>">
+        <input type="email" name="email" value="<?= htmlspecialchars((string)($usuario['email'] ?? '')) ?>">
 
         <label>Contraseña nueva (opcional)</label>
         <input type="password" name="nueva_contrasena">
@@ -55,6 +58,16 @@ $usuario = $result->fetch_assoc();
             <option value="admin" <?= $usuario['rol'] === 'admin' ? 'selected' : '' ?>>Admin</option>
             <option value="usuario" <?= $usuario['rol'] === 'usuario' ? 'selected' : '' ?>>Usuario</option>
             <option value="profesor" <?= $usuario['rol'] === 'profesor' ? 'selected' : '' ?>>Profesor</option>
+        </select>
+
+        <label>Gimnasio asignado</label>
+        <select name="gimnasio_id" required>
+            <option value="">-- Seleccionar Gimnasio --</option>
+            <?php while ($gim = $gimnasios->fetch_assoc()): ?>
+                <option value="<?= $gim['id'] ?>" <?= $gim['id'] == $usuario['gimnasio_id'] ? 'selected' : '' ?>>
+                    <?= htmlspecialchars($gim['nombre']) ?>
+                </option>
+            <?php endwhile; ?>
         </select>
 
         <label>Permisos habilitados:</label>

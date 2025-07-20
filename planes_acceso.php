@@ -16,6 +16,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $nombre = trim($_POST['nombre'] ?? '');
     $precio = floatval($_POST['precio'] ?? 0);
     $duracion = intval($_POST['duracion'] ?? 1);
+    $max_clientes = intval($_POST['max_clientes'] ?? 0);
 
     // Accesos según menú horizontal
     $clientes = isset($_POST['clientes']) ? 1 : 0;
@@ -31,10 +32,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $mensaje = "<p style='color:red;'>❌ Ya existe un plan con ese nombre.</p>";
     } else {
         $stmt = $conexion->prepare("INSERT INTO planes_acceso 
-            (gimnasio_id, nombre, precio, duracion_meses, clientes, asistencias, competencias, profesores, ventas, panel, configuraciones)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+            (gimnasio_id, nombre, precio, duracion_meses, clientes, asistencias, competencias, profesores, ventas, panel, configuraciones, max_clientes)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
 
-        $stmt->bind_param("isdiiiiiiii", $gimnasio_id, $nombre, $precio, $duracion, $clientes, $asistencias, $competencias, $profesores, $ventas, $panel, $configuraciones);
+        $stmt->bind_param("isdiiiiiiiii", $gimnasio_id, $nombre, $precio, $duracion, $clientes, $asistencias, $competencias, $profesores, $ventas, $panel, $configuraciones, $max_clientes);
         $stmt->execute();
         $mensaje = "<p style='color:lime;'>✅ Plan guardado correctamente.</p>";
     }
@@ -60,6 +61,7 @@ $planes = $conexion->query("SELECT * FROM planes_acceso WHERE gimnasio_id = $gim
         button { background: gold; color: black; padding: 10px 20px; font-weight: bold; margin-top: 20px; cursor: pointer; border: none; }
         table { width: 100%; border-collapse: collapse; background: #222; color: white; margin-top: 30px; }
         th, td { border: 1px solid gold; padding: 10px; text-align: center; }
+        a.editar { color: gold; text-decoration: none; font-weight: bold; }
     </style>
 </head>
 <body>
@@ -76,6 +78,9 @@ $planes = $conexion->query("SELECT * FROM planes_acceso WHERE gimnasio_id = $gim
 
         <label>Duración del plan (meses)</label>
         <input type="number" name="duracion" min="1" value="1" required>
+
+        <label>Máximo de clientes permitidos</label>
+        <input type="number" name="max_clientes" min="0" value="0" required>
 
         <label>Permisos visibles:</label>
         <label><input type="checkbox" name="clientes"> Clientes</label>
@@ -97,6 +102,7 @@ $planes = $conexion->query("SELECT * FROM planes_acceso WHERE gimnasio_id = $gim
             <th>Nombre</th>
             <th>Precio</th>
             <th>Duración</th>
+            <th>Máx. Clientes</th>
             <th>Clientes</th>
             <th>Asistencias</th>
             <th>Competencias</th>
@@ -104,12 +110,14 @@ $planes = $conexion->query("SELECT * FROM planes_acceso WHERE gimnasio_id = $gim
             <th>Ventas</th>
             <th>Panel</th>
             <th>Configuraciones</th>
+            <th>Editar</th>
         </tr>
         <?php while ($plan = $planes->fetch_assoc()): ?>
         <tr>
             <td><?= htmlspecialchars($plan['nombre']) ?></td>
             <td>$<?= number_format($plan['precio'], 2, ',', '.') ?></td>
             <td><?= $plan['duracion_meses'] ?> mes(es)</td>
+            <td><?= $plan['max_clientes'] ?></td>
             <td><?= $plan['clientes'] ? '✔️' : '❌' ?></td>
             <td><?= $plan['asistencias'] ? '✔️' : '❌' ?></td>
             <td><?= $plan['competencias'] ? '✔️' : '❌' ?></td>
@@ -117,6 +125,7 @@ $planes = $conexion->query("SELECT * FROM planes_acceso WHERE gimnasio_id = $gim
             <td><?= $plan['ventas'] ? '✔️' : '❌' ?></td>
             <td><?= $plan['panel'] ? '✔️' : '❌' ?></td>
             <td><?= $plan['configuraciones'] ? '✔️' : '❌' ?></td>
+            <td><a class="editar" href="editar_plan_usuario.php?id=<?= $plan['id'] ?>">✏️ Editar</a></td>
         </tr>
         <?php endwhile; ?>
     </table>
