@@ -1,6 +1,8 @@
 <?php
 session_start();
 include 'conexion.php';
+include 'menu_horizontal.php';
+
 date_default_timezone_set('America/Argentina/Buenos_Aires');
 
 $gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
