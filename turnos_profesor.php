@@ -17,22 +17,31 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST['profesor_id'])) {
     $dia = $_POST["dia"];
     $hora_inicio = $_POST["hora_inicio"];
     $hora_fin = $_POST["hora_fin"];
+    $cupo_maximo = 10;
 
-    $stmt = $conexion->prepare("INSERT INTO turnos_profesor (profesor_id, dia, hora_inicio, hora_fin) VALUES (?, ?, ?, ?)");
-    $stmt->bind_param("isss", $profesor_id, $dia, $hora_inicio, $hora_fin);
-    $stmt->execute();
-    $stmt->close();
+    // Insertar en turnos_profesor
+    $stmt1 = $conexion->prepare("INSERT INTO turnos_profesor (profesor_id, dia, hora_inicio, hora_fin) VALUES (?, ?, ?, ?)");
+    $stmt1->bind_param("isss", $profesor_id, $dia, $hora_inicio, $hora_fin);
+    $stmt1->execute();
+    $stmt1->close();
+
+    // Insertar en turnos_disponibles
+    $stmt2 = $conexion->prepare("INSERT INTO turnos_disponibles (profesor_id, dia, hora_inicio, hora_fin, gimnasio_id, cupo_maximo) VALUES (?, ?, ?, ?, ?, ?)");
+    $stmt2->bind_param("isssii", $profesor_id, $dia, $hora_inicio, $hora_fin, $gimnasio_id, $cupo_maximo);
+    $stmt2->execute();
+    $stmt2->close();
 }
 
 // Eliminar turno
 if (isset($_GET['eliminar'])) {
     $id_turno = intval($_GET['eliminar']);
     $conexion->query("DELETE FROM turnos_profesor WHERE id = $id_turno");
+    $conexion->query("DELETE FROM turnos_disponibles WHERE profesor_id IN (SELECT profesor_id FROM turnos_profesor WHERE id = $id_turno)");
     header("Location: turnos_profesor.php");
     exit();
 }
 
-// Solo profesores del gimnasio actual
+// Obtener profesores del gimnasio actual
 $result = $conexion->query("SELECT id, apellido, nombre FROM profesores WHERE gimnasio_id = $gimnasio_id");
 
 $turnos = $conexion->query("
