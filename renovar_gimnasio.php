@@ -1,32 +1,36 @@
 <?php
 session_start();
 include 'conexion.php';
+date_default_timezone_set('America/Argentina/Buenos_Aires');
 
-$id = intval($_GET['id'] ?? 0);
-if ($id <= 0) {
-    exit("❌ Gimnasio no válido.");
+$gimnasio_id = intval($_GET['id'] ?? 0);
+if ($gimnasio_id === 0) {
+    exit("❌ Acceso denegado.");
 }
 
 $mensaje = '';
+$fecha_actual = date('Y-m-d');
 
-// Obtener gimnasio y planes disponibles
-$gimnasio = $conexion->query("SELECT * FROM gimnasios WHERE id = $id")->fetch_assoc();
-$planes = $conexion->query("SELECT * FROM planes_acceso");
+// Guardar renovación
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $nueva_fecha = $_POST['fecha_vencimiento'] ?? '';
+    $monto = floatval($_POST['monto'] ?? 0);
+    $observacion = trim($_POST['observacion'] ?? '');
 
-if ($_SERVER["REQUEST_METHOD"] == "POST") {
-    $fecha_vencimiento = $_POST["fecha_vencimiento"];
-    $monto_plan = floatval($_POST["monto_plan"]);
-    $forma_pago = $_POST["forma_pago"];
-    $plan_id = intval($_POST["plan_id"]);
+    // Actualizar en la tabla principal
+    $conexion->query("UPDATE gimnasios SET fecha_vencimiento = '$nueva_fecha' WHERE id = $gimnasio_id");
 
-    $stmt = $conexion->prepare("UPDATE gimnasios SET fecha_vencimiento=?, monto_plan=?, forma_pago=?, plan_id=? WHERE id=?");
-    $stmt->bind_param("sdsii", $fecha_vencimiento, $monto_plan, $forma_pago, $plan_id, $id);
+    // Registrar en historial de pagos
+    $stmt = $conexion->prepare("INSERT INTO pagos_gimnasios (gimnasio_id, fecha_pago, fecha_vencimiento, monto, observacion) VALUES (?, ?, ?, ?, ?)");
+    $stmt->bind_param("issds", $gimnasio_id, $fecha_actual, $nueva_fecha, $monto, $observacion);
     $stmt->execute();
     $stmt->close();
 
-    $mensaje = "✅ Datos actualizados correctamente.";
-    $gimnasio = $conexion->query("SELECT * FROM gimnasios WHERE id = $id")->fetch_assoc(); // refrescar datos
+    $mensaje = "✅ Renovación guardada correctamente.";
 }
+
+// Obtener datos del gimnasio
+$gimnasio = $conexion->query("SELECT nombre, fecha_vencimiento FROM gimnasios WHERE id = $gimnasio_id")->fetch_assoc();
 ?>
 
 <!DOCTYPE html>
@@ -36,107 +40,41 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     <title>Renovar Gimnasio</title>
     <link rel="stylesheet" href="estilo_unificado.css">
     <style>
-        body {
-            background-color: #111;
-            color: gold;
-            font-family: Arial, sans-serif;
-            padding: 40px;
-        }
-        form {
-            max-width: 600px;
-            margin: auto;
-            background-color: #222;
-            padding: 20px;
-            border-radius: 10px;
-        }
-        label {
-            display: block;
-            margin-top: 15px;
-        }
-        input, select {
-            width: 100%;
-            padding: 8px;
-            background: #333;
-            border: 1px solid #555;
-            border-radius: 6px;
-            color: gold;
-            margin-top: 5px;
-        }
-        .boton {
-            margin-top: 20px;
-            background: gold;
-            color: black;
-            font-weight: bold;
-            padding: 10px;
-            border: none;
-            border-radius: 6px;
-            cursor: pointer;
-        }
-        .mensaje {
-            color: lightgreen;
-            font-weight: bold;
-            text-align: center;
-        }
+        body { background: #000; color: gold; padding: 30px; font-family: Arial; }
+        form { max-width: 600px; margin: auto; background: #111; padding: 20px; border-radius: 10px; }
+        label { display: block; margin-top: 15px; }
+        input, textarea { width: 100%; padding: 10px; margin-top: 5px; background: #222; color: gold; border: 1px solid #444; border-radius: 6px; }
+        .boton { margin-top: 20px; background: gold; color: black; padding: 10px 20px; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; }
+        .mensaje { text-align: center; color: lightgreen; margin-top: 20px; font-weight: bold; }
     </style>
-    <script>
-        const planes = {};
-        <?php
-        $planes->data_seek(0);
-        while($p = $planes->fetch_assoc()) {
-            echo "planes[{$p['id']}] = " . json_encode($p) . ";\n";
-        }
-        ?>
-        function actualizarPrecio() {
-            const planId = document.querySelector('select[name="plan_id"]').value;
-            const precio = planId && planes[planId] ? planes[planId].precio : '';
-            document.querySelector('input[name="monto_plan"]').value = precio;
-        }
-    </script>
 </head>
 <body>
 
-<h2 style="text-align:center;">♻️ Renovar Gimnasio</h2>
+<h2 style="text-align:center;">🔁 Renovar Plan - <?= htmlspecialchars($gimnasio['nombre']) ?></h2>
 
 <?php if ($mensaje): ?>
-    <p class="mensaje"><?= $mensaje ?></p>
+    <div class="mensaje"><?= $mensaje ?></div>
 <?php endif; ?>
 
 <form method="POST">
-    <label>Fecha de Vencimiento:</label>
-    <input type="date" name="fecha_vencimiento" required value="<?= $gimnasio['fecha_vencimiento'] ?? '' ?>">
+    <label>Fecha de vencimiento actual:</label>
+    <input type="text" value="<?= htmlspecialchars($gimnasio['fecha_vencimiento']) ?>" readonly>
 
-    <label>Seleccionar Plan:</label>
-    <select name="plan_id" onchange="actualizarPrecio()" required>
-        <option value="">-- Seleccione un plan --</option>
-        <?php
-        $planes->data_seek(0);
-        while($plan = $planes->fetch_assoc()):
-        ?>
-            <option value="<?= $plan['id'] ?>" <?= ($plan['id'] == ($gimnasio['plan_id'] ?? 0)) ? 'selected' : '' ?>>
-                <?= htmlspecialchars($plan['nombre']) ?>
-            </option>
-        <?php endwhile; ?>
-    </select>
+    <label>Nueva fecha de vencimiento:</label>
+    <input type="date" name="fecha_vencimiento" required>
 
-    <label>Monto del Plan ($):</label>
-    <input type="number" name="monto_plan" step="0.01" required value="<?= $gimnasio['monto_plan'] ?? '' ?>">
+    <label>Monto abonado ($):</label>
+    <input type="number" name="monto" step="0.01" required>
 
-    <label>Forma de Pago:</label>
-    <select name="forma_pago" required>
-        <option value="">Seleccione una opción</option>
-        <option value="Efectivo" <?= ($gimnasio['forma_pago'] ?? '') == 'Efectivo' ? 'selected' : '' ?>>Efectivo</option>
-        <option value="Transferencia" <?= ($gimnasio['forma_pago'] ?? '') == 'Transferencia' ? 'selected' : '' ?>>Transferencia</option>
-        <option value="Débito" <?= ($gimnasio['forma_pago'] ?? '') == 'Débito' ? 'selected' : '' ?>>Débito</option>
-        <option value="Crédito" <?= ($gimnasio['forma_pago'] ?? '') == 'Crédito' ? 'selected' : '' ?>>Crédito</option>
-    </select>
+    <label>Observación (opcional):</label>
+    <textarea name="observacion" rows="3"></textarea>
 
-    <button type="submit" class="boton">💾 Guardar Cambios</button>
-    <a href="agregar_gimnasio.php" class="boton">⬅️ Volver</a>
+    <button type="submit" class="boton">💾 Guardar Renovación</button>
 </form>
 
-<script>
-    actualizarPrecio();
-</script>
+<div style="text-align:center; margin-top: 20px;">
+    <a href="ver_gimnasios.php" class="boton">↩️ Volver</a>
+</div>
 
 </body>
 </html>

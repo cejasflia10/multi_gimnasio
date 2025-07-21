@@ -2,7 +2,14 @@
 include 'conexion.php';
 include 'menu_horizontal.php';
 
-$resultado = $conexion->query("SELECT * FROM gimnasios");
+// Consulta actualizada: incluye cantidad de clientes y nombre del plan
+$resultado = $conexion->query("
+    SELECT g.*, 
+           (SELECT COUNT(*) FROM clientes c WHERE c.gimnasio_id = g.id) AS cantidad_clientes,
+           p.nombre AS nombre_plan
+    FROM gimnasios g
+    LEFT JOIN planes_gimnasio p ON g.plan_id = p.id
+");
 ?>
 
 <!DOCTYPE html>
@@ -33,11 +40,11 @@ $resultado = $conexion->query("SELECT * FROM gimnasios");
       <tbody>
         <?php while ($row = $resultado->fetch_assoc()): ?>
         <tr>
-<td><?= htmlspecialchars((string)($row['nombre'] ?? '')) ?></td>
-<td><?= htmlspecialchars((string)($row['email'] ?? '')) ?></td>
-<td><?= htmlspecialchars((string)($row['cantidad_clientes'] ?? '0')) ?></td>
-<td><?= htmlspecialchars((string)($row['plan'] ?? '')) ?></td>
-<td><?= htmlspecialchars((string)($row['fecha_vencimiento'] ?? '')) ?></td>
+          <td><?= htmlspecialchars((string)($row['nombre'] ?? '')) ?></td>
+          <td><?= htmlspecialchars((string)($row['email'] ?? '')) ?></td>
+          <td><?= $row['cantidad_clientes'] ?></td>
+          <td><?= htmlspecialchars((string)($row['nombre_plan'] ?? 'Sin plan')) ?></td>
+          <td><?= htmlspecialchars((string)($row['fecha_vencimiento'] ?? '')) ?></td>
           <td>
             <a class="btn-editar" href="editar_gimnasio.php?id=<?= $row['id'] ?>">✏️ Editar</a>
             <a class="btn-eliminar" href="eliminar_gimnasio.php?id=<?= $row['id'] ?>" onclick="return confirm('¿Estás seguro de que deseas eliminar este gimnasio?')">🗑️ Eliminar</a>

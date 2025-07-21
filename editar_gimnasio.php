@@ -9,6 +9,9 @@ if ($gimnasio_id == 0) {
 
 $mensaje = '';
 
+// Obtener todos los planes disponibles
+$planes = $conexion->query("SELECT id, nombre FROM planes_gimnasio");
+
 // Guardar cambios
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $nombre = trim($_POST['nombre'] ?? '');
@@ -19,10 +22,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $fecha_vencimiento = trim($_POST['fecha_vencimiento'] ?? '');
     $usuario = trim($_POST['usuario'] ?? '');
     $clave = trim($_POST['clave'] ?? '');
+    $plan_id = intval($_POST['plan_id'] ?? 0);
 
-    $stmt = $conexion->prepare("UPDATE gimnasios SET nombre=?, direccion=?, cuit=?, telefono=?, email=?, fecha_vencimiento=?, usuario=?, clave=? WHERE id=?");
-    $stmt->bind_param("ssssssssi", $nombre, $direccion, $cuit, $telefono, $email, $fecha_vencimiento, $usuario, $clave, $gimnasio_id);
+    if (!empty($clave)) {
+        $clave_hashed = password_hash($clave, PASSWORD_DEFAULT);
+        $stmt = $conexion->prepare("UPDATE gimnasios SET nombre=?, direccion=?, cuit=?, telefono=?, email=?, fecha_vencimiento=?, usuario=?, clave=?, plan_id=? WHERE id=?");
+        $stmt->bind_param("ssssssssii", $nombre, $direccion, $cuit, $telefono, $email, $fecha_vencimiento, $usuario, $clave_hashed, $plan_id, $gimnasio_id);
+    } else {
+        $stmt = $conexion->prepare("UPDATE gimnasios SET nombre=?, direccion=?, cuit=?, telefono=?, email=?, fecha_vencimiento=?, usuario=?, plan_id=? WHERE id=?");
+        $stmt->bind_param("sssssssii", $nombre, $direccion, $cuit, $telefono, $email, $fecha_vencimiento, $usuario, $plan_id, $gimnasio_id);
+    }
+
     $stmt->execute();
+    $stmt->close();
 
     // Subir logo si corresponde
     if (isset($_FILES['logo']) && $_FILES['logo']['error'] === UPLOAD_ERR_OK) {
@@ -50,12 +62,13 @@ $gimnasio = $conexion->query("SELECT * FROM gimnasios WHERE id = $gimnasio_id")-
         body { background-color: #000; color: gold; font-family: Arial; padding: 30px; }
         form { max-width: 600px; margin: auto; background: #111; padding: 20px; border-radius: 10px; }
         label { display: block; margin-top: 15px; }
-        input[type="text"], input[type="email"], input[type="file"], input[type="date"], input[type="password"] {
+        input[type="text"], input[type="email"], input[type="file"], input[type="date"], input[type="password"], select {
             width: 100%; padding: 8px; margin-top: 5px; border-radius: 6px; border: 1px solid #555; background: #222; color: gold;
         }
-        .boton { margin-top: 20px; background: gold; color: black; padding: 10px 20px; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; }
+        .boton { margin-top: 20px; background: gold; color: black; padding: 10px 20px; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; display: inline-block; text-decoration: none; }
         .mensaje { color: lightgreen; font-weight: bold; margin-top: 20px; text-align: center; }
         .logo-prev { margin-top: 10px; max-height: 80px; background: white; border-radius: 6px; padding: 4px; }
+        .acciones { margin-top: 30px; text-align: center; }
     </style>
 </head>
 <body>
@@ -88,8 +101,18 @@ $gimnasio = $conexion->query("SELECT * FROM gimnasios WHERE id = $gimnasio_id")-
     <label>Usuario:</label>
     <input type="text" name="usuario" value="<?= htmlspecialchars($gimnasio['usuario'] ?? '') ?>">
 
-    <label>Contraseña:</label>
-    <input type="password" name="clave" value="<?= htmlspecialchars($gimnasio['clave'] ?? '') ?>">
+    <label>Contraseña (solo si desea cambiarla):</label>
+    <input type="password" name="clave" placeholder="Nueva clave (opcional)">
+
+    <label>Plan del gimnasio:</label>
+    <select name="plan_id" required>
+        <option value="">Seleccione un plan</option>
+        <?php while ($p = $planes->fetch_assoc()): ?>
+            <option value="<?= $p['id'] ?>" <?= ($p['id'] == $gimnasio['plan_id']) ? 'selected' : '' ?>>
+                <?= htmlspecialchars($p['nombre']) ?>
+            </option>
+        <?php endwhile; ?>
+    </select>
 
     <label>Logo (opcional):</label>
     <input type="file" name="logo" accept="image/*">
@@ -98,8 +121,12 @@ $gimnasio = $conexion->query("SELECT * FROM gimnasios WHERE id = $gimnasio_id")-
     <?php endif; ?>
 
     <button type="submit" class="boton">💾 Guardar Cambios</button>
-    <br><br>
-    <a href="<?= isset($_GET['id']) ? 'ver_gimnasios.php' : 'panel_configuracion.php' ?>" class="boton">↩️ Volver</a>
+
+    <div class="acciones">
+        <a href="renovar_gimnasio.php?id=<?= $gimnasio_id ?>" class="boton">🔁 Renovar Plan</a>
+        <a href="editar_gimnasio.php?eliminar=<?= $gimnasio_id ?>" onclick="return confirm('¿Seguro que deseas eliminar este gimnasio?')" class="boton" style="background:red; color:white;">🗑️ Eliminar Gimnasio</a>
+        <a href="ver_gimnasios.php" class="boton">↩️ Volver</a>
+    </div>
 </form>
 
 </body>

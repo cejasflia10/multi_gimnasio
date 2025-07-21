@@ -1,15 +1,16 @@
 <?php
 if (session_status() === PHP_SESSION_NONE) {
-    session_start(); // La sesión dura hasta que se cierre el navegador
+    session_start();
 }
 
 include("conexion.php");
+date_default_timezone_set('America/Argentina/Buenos_Aires');
 
 if ($_SERVER["REQUEST_METHOD"] === "POST") {
     $usuario = trim($_POST["usuario"]);
     $clave = trim($_POST["clave"]);
 
-    $stmt = $conexion->prepare("SELECT id, contrasena, rol, id_gimnasio FROM usuarios WHERE usuario = ?");
+    $stmt = $conexion->prepare("SELECT id, contrasena, rol, gimnasio_id FROM usuarios WHERE usuario = ?");
     $stmt->bind_param("s", $usuario);
     $stmt->execute();
     $resultado = $stmt->get_result();
@@ -18,16 +19,32 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
         $usuario_data = $resultado->fetch_assoc();
 
         if (password_verify($clave, $usuario_data["contrasena"]) || $clave === $usuario_data["contrasena"]) {
-            $_SESSION["usuario"] = $usuario;
-            $_SESSION["rol"] = $usuario_data["rol"];
-            $_SESSION["gimnasio_id"] = $usuario_data["id_gimnasio"];
-            header("Location: index.php");
-            exit();
+            $gimnasio_id = $usuario_data["gimnasio_id"];
+
+            // Verificar fecha de vencimiento del gimnasio
+            $fecha_actual = date('Y-m-d');
+            $consulta_gym = $conexion->query("SELECT fecha_vencimiento FROM gimnasios WHERE id = $gimnasio_id");
+
+            if ($consulta_gym && $consulta_gym->num_rows === 1) {
+                $datos_gym = $consulta_gym->fetch_assoc();
+
+                if ($datos_gym["fecha_vencimiento"] < $fecha_actual) {
+                    $error = "⚠️ El gimnasio tiene el plan vencido. Contactá al administrador.";
+                } else {
+                    $_SESSION["usuario"] = $usuario;
+                    $_SESSION["rol"] = $usuario_data["rol"];
+                    $_SESSION["gimnasio_id"] = $gimnasio_id;
+                    header("Location: index.php");
+                    exit();
+                }
+            } else {
+                $error = "❌ Error al verificar el estado del gimnasio.";
+            }
         } else {
-            $error = "Contraseña incorrecta.";
+            $error = "❌ Contraseña incorrecta.";
         }
     } else {
-        $error = "Usuario no encontrado.";
+        $error = "❌ Usuario no encontrado.";
     }
 
     $stmt->close();
