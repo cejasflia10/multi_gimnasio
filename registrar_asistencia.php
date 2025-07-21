@@ -1,13 +1,10 @@
 <?php
-if (session_status() === PHP_SESSION_NONE) {
-    session_start();
-}
+if (session_status() === PHP_SESSION_NONE) session_start();
 include 'conexion.php';
 include 'menu_horizontal.php';
 
 date_default_timezone_set('America/Argentina/Buenos_Aires');
 $hoy = date('Y-m-d');
-
 $advertencia = "";
 $activar_sonido = false;
 
@@ -18,12 +15,11 @@ $info = $conexion->query("SELECT nombre, logo FROM gimnasios WHERE id = $gimnasi
 $nombre_gimnasio = $info['nombre'] ?? 'Gimnasio';
 $logo_gimnasio = $info['logo'] ?? 'logo.png';
 
-// PROCESAR ingreso automático
+// Procesar ingreso
 if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST["codigo"])) {
     $codigo = trim($_POST["codigo"]);
 
-    // Buscar cliente por DNI
-    $stmt = $conexion->prepare("SELECT id, apellido FROM clientes WHERE dni = ? AND gimnasio_id = ?");
+    $stmt = $conexion->prepare("SELECT id FROM clientes WHERE dni = ? AND gimnasio_id = ?");
     $stmt->bind_param("si", $codigo, $gimnasio_id);
     $stmt->execute();
     $resultado = $stmt->get_result();
@@ -31,7 +27,6 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST["codigo"])) {
     if ($cliente = $resultado->fetch_assoc()) {
         $id_cliente = $cliente['id'];
 
-        // Buscar membresía activa del gimnasio correspondiente
         $stmt2 = $conexion->prepare("SELECT clases_disponibles, fecha_vencimiento FROM membresias WHERE cliente_id = ? AND gimnasio_id = ? ORDER BY fecha_vencimiento DESC LIMIT 1");
         $stmt2->bind_param("ii", $id_cliente, $gimnasio_id);
         $stmt2->execute();
@@ -42,12 +37,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST["codigo"])) {
             $vencimiento = $membresia['fecha_vencimiento'];
 
             if ($clases > 0 && $vencimiento >= $hoy) {
-                // Registrar asistencia
-                $stmt3 = $conexion->prepare("INSERT INTO asistencias (cliente_id, fecha_hora, id_gimnasio) VALUES (?, NOW(), ?)");
-                $stmt3->bind_param("ii", $id_cliente, $gimnasio_id);
-                $stmt3->execute();
-
-                // Descontar clase
+                $conexion->query("INSERT INTO asistencias (cliente_id, fecha, hora, gimnasio_id) VALUES ($id_cliente, CURDATE(), CURTIME(), $gimnasio_id)");
                 $conexion->query("UPDATE membresias SET clases_disponibles = clases_disponibles - 1 WHERE cliente_id = $id_cliente AND fecha_vencimiento = '$vencimiento' AND gimnasio_id = $gimnasio_id");
             } else {
                 $advertencia = "¡Membresía vencida o sin clases disponibles!";
@@ -63,21 +53,40 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST["codigo"])) {
     }
 }
 
-// CONSULTAS para mostrar los registros del día
+// Obtener última asistencia de profesores por día
 $profesores = $conexion->query("
-    SELECT p.apellido, ap.hora_entrada, ap.hora_salida
-    FROM asistencias_profesor ap
+    SELECT p.apellido,
+           MAX(CASE WHEN ap.hora_entrada IS NOT NULL THEN ap.hora_entrada END) AS hora_entrada,
+           MAX(CASE WHEN ap.hora_salida IS NOT NULL THEN ap.hora_salida END) AS hora_salida
+    FROM asistencias_profesores ap
     JOIN profesores p ON ap.profesor_id = p.id
     WHERE ap.fecha = '$hoy' AND ap.gimnasio_id = $gimnasio_id
+    GROUP BY p.apellido
 ");
 
-$clientes = $conexion->query("
+
+// Mostrar clientes ingresados hoy
+$consulta_clientes = "
     SELECT c.apellido, m.clases_disponibles, m.fecha_vencimiento
     FROM asistencias a
     JOIN clientes c ON a.cliente_id = c.id
-    JOIN membresias m ON m.cliente_id = c.id AND m.gimnasio_id = $gimnasio_id
-    WHERE DATE(a.fecha_hora) = '$hoy' AND a.id_gimnasio = $gimnasio_id
-");
+    LEFT JOIN membresias m ON m.cliente_id = c.id
+        AND m.gimnasio_id = $gimnasio_id
+        AND m.fecha_vencimiento = (
+            SELECT MAX(fecha_vencimiento)
+            FROM membresias
+            WHERE cliente_id = c.id AND gimnasio_id = $gimnasio_id
+        )
+    WHERE DATE(a.fecha_hora) = '$hoy' AND a.gimnasio_id = $gimnasio_id
+    ORDER BY a.fecha_hora DESC
+";
+
+$clientes = $conexion->query($consulta_clientes);
+
+if (!$clientes) {
+    echo "<p style='color:red;'>Error en consulta de clientes: " . $conexion->error . "</p>";
+}
+
 ?>
 
 <!DOCTYPE html>
@@ -107,8 +116,6 @@ $clientes = $conexion->query("
 </head>
 <body>
     <div class="contenedor">
-
-        <!-- Encabezado -->
         <div class="encabezado">
             <img src="<?= $logo_gimnasio ?>" alt="Logo" height="80">
             <h1><?= strtoupper($nombre_gimnasio) ?></h1>
@@ -136,7 +143,7 @@ $clientes = $conexion->query("
                     <tr>
                         <td><?= $row['apellido'] ?></td>
                         <td><?= $row['hora_entrada'] ?></td>
-                        <td><?= $row['hora_salida'] ?></td>
+                        <td><?= $row['hora_salida'] ?: '-' ?></td>
                     </tr>
                     <?php endwhile; ?>
                 </table>

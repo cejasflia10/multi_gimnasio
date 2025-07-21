@@ -1,11 +1,10 @@
-<?php if (session_status() === PHP_SESSION_NONE) session_start();
+<?php
+if (session_status() === PHP_SESSION_NONE) session_start();
 $gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
 ?>
 <?php
 include 'conexion.php';
 include 'menu_horizontal.php';
-
-if (session_status() === PHP_SESSION_NONE) session_start();
 
 if (!isset($_SESSION['usuario'])) {
     header("Location: login.php");
@@ -33,8 +32,16 @@ if (isset($_GET['eliminar'])) {
     exit();
 }
 
+// Solo profesores del gimnasio actual
 $result = $conexion->query("SELECT id, apellido, nombre FROM profesores WHERE gimnasio_id = $gimnasio_id");
-$turnos = $conexion->query("SELECT t.*, p.apellido, p.nombre FROM turnos_profesor t JOIN profesores p ON t.profesor_id = p.id");
+
+// ✅ CORREGIDO: solo turnos de profesores del gimnasio actual
+$turnos = $conexion->query("
+    SELECT t.*, p.apellido, p.nombre 
+    FROM turnos_profesor t 
+    JOIN profesores p ON t.profesor_id = p.id 
+    WHERE p.gimnasio_id = $gimnasio_id
+");
 ?>
 
 <!DOCTYPE html>

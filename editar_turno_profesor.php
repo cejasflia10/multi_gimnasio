@@ -6,6 +6,12 @@ date_default_timezone_set('America/Argentina/Buenos_Aires');
 $gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
 $id = intval($_GET['id'] ?? 0);
 
+// Validar sesión
+if (!isset($_SESSION['usuario'])) {
+    header("Location: login.php");
+    exit;
+}
+
 // Guardar cambios
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $id = intval($_POST['id']);
@@ -22,8 +28,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-// Obtener turno
-$turno = $conexion->query("SELECT * FROM asistencias_profesores WHERE id = $id AND gimnasio_id = $gimnasio_id")->fetch_assoc();
+// Obtener turno del gimnasio actual
+$consulta = $conexion->prepare("SELECT * FROM asistencias_profesores WHERE id = ? AND gimnasio_id = ?");
+$consulta->bind_param("ii", $id, $gimnasio_id);
+$consulta->execute();
+$resultado = $consulta->get_result();
+$turno = $resultado->fetch_assoc();
+
 if (!$turno) {
     echo "❌ Turno no encontrado.";
     exit;
