@@ -1,15 +1,15 @@
 <?php
 if (session_status() === PHP_SESSION_NONE) session_start();
 $gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
-?>
-<?php
+
 include 'conexion.php';
-include 'menu_horizontal.php';
 
 if (!isset($_SESSION['usuario'])) {
     header("Location: login.php");
     exit();
 }
+
+include 'menu_horizontal.php';
 
 // Insertar turno si se envió el formulario
 if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST['profesor_id'])) {
@@ -35,7 +35,6 @@ if (isset($_GET['eliminar'])) {
 // Solo profesores del gimnasio actual
 $result = $conexion->query("SELECT id, apellido, nombre FROM profesores WHERE gimnasio_id = $gimnasio_id");
 
-// ✅ CORREGIDO: solo turnos de profesores del gimnasio actual
 $turnos = $conexion->query("
     SELECT t.*, p.apellido, p.nombre 
     FROM turnos_profesor t 
