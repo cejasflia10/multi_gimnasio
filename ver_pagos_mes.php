@@ -9,7 +9,14 @@ $gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
 $mes = $_GET['mes'] ?? date('m');
 $anio = $_GET['anio'] ?? date('Y');
 
-// Consulta de membresías con métodos de pago registrados
+$meses = [
+    '01' => 'Enero', '02' => 'Febrero', '03' => 'Marzo',
+    '04' => 'Abril', '05' => 'Mayo', '06' => 'Junio',
+    '07' => 'Julio', '08' => 'Agosto', '09' => 'Septiembre',
+    '10' => 'Octubre', '11' => 'Noviembre', '12' => 'Diciembre'
+];
+
+// Consulta de pagos
 $query = $conexion->query("
     SELECT m.fecha_inicio, m.fecha_vencimiento,
            m.pago_efectivo, m.pago_transferencia, m.pago_debito, m.pago_credito, m.pago_cuenta_corriente,
@@ -26,7 +33,6 @@ $query = $conexion->query("
 $pagos = [];
 $total_mes = 0;
 
-// Función para obtener método de pago en texto
 function obtenerMetodoPago($fila) {
     $metodos = [];
     if ($fila['pago_efectivo'] > 0) $metodos[] = 'Efectivo';
@@ -69,29 +75,28 @@ while ($fila = $query->fetch_assoc()) {
             background-color: #111;
             color: white;
         }
+        .boton-descarga {
+            margin-top: 10px;
+            display: inline-block;
+            padding: 8px 15px;
+            background-color: gold;
+            color: black;
+            text-decoration: none;
+            border-radius: 5px;
+        }
     </style>
 </head>
 <body>
 <div class="contenedor">
-    <h2 style="text-align:center;">💳 Pagos del Mes</h2>
-<?php
-$meses = [
-    '01' => 'Enero', '02' => 'Febrero', '03' => 'Marzo',
-    '04' => 'Abril', '05' => 'Mayo', '06' => 'Junio',
-    '07' => 'Julio', '08' => 'Agosto', '09' => 'Septiembre',
-    '10' => 'Octubre', '11' => 'Noviembre', '12' => 'Diciembre'
-];
-?>
-<form method="get" style="text-align:center; margin-bottom:20px;">
-    <label>Mes:</label>
-    <select name="mes">
-        <?php foreach ($meses as $numero => $nombre): ?>
-            <option value="<?= $numero ?>" <?= $mes == $numero ? 'selected' : '' ?>>
-                <?= $nombre ?>
-            </option>
-        <?php endforeach; ?>
-    </select>
+    <h2 style="text-align:center;">💳 Pagos de <?= $meses[$mes] ?> <?= $anio ?></h2>
 
+    <form method="get" style="text-align:center; margin-bottom:20px;">
+        <label>Mes:</label>
+        <select name="mes">
+            <?php foreach ($meses as $num => $nombre): ?>
+                <option value="<?= $num ?>" <?= $mes == $num ? 'selected' : '' ?>><?= $nombre ?></option>
+            <?php endforeach; ?>
+        </select>
 
         <label>Año:</label>
         <select name="anio">
@@ -101,6 +106,7 @@ $meses = [
         </select>
 
         <button type="submit">Filtrar</button>
+        <a class="boton-descarga" href="exportar_pagos_pdf.php?mes=<?= $mes ?>&anio=<?= $anio ?>">📄 Descargar PDF</a>
     </form>
 
     <table>
