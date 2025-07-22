@@ -76,11 +76,16 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
             box-shadow: 0 0 15px rgba(255, 215, 0, 0.2);
             width: 90%;
             max-width: 400px;
+            text-align: center;
+        }
+
+        .login-container img {
+            max-width: 150px;
+            margin-bottom: 15px;
         }
 
         h2 {
-            text-align: center;
-            margin-bottom: 25px;
+            margin-bottom: 20px;
             color: #f1c40f;
         }
 
@@ -121,7 +126,6 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
             margin-top: 25px;
             font-size: 0.9rem;
             color: #bbb;
-            text-align: center;
         }
 
         .soporte strong {
@@ -139,6 +143,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
 </head>
 <body>
     <div class="login-container">
+        <img src="logo_app.png" alt="Logo App">
         <h2>Login</h2>
         <form action="login.php" method="POST">
             <input type="text" name="usuario" placeholder="Usuario" required>
@@ -149,7 +154,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
 
         <div class="soporte">
             <p>📞 Soporte técnico: <strong>+54 9 266 461 1574</strong></p>
-            <p>🛠️ Servicio técnico oficial de la app MultiGym CJS</p>
+            <p>🛠️ Servicio oficial MultiGym CJS</p>
         </div>
     </div>
 </body>
