@@ -2,7 +2,8 @@
 if (session_status() === PHP_SESSION_NONE) session_start();
 include 'conexion.php';
 
-$gimnasio_id = $_POST['gimnasio_id'] ?? 0;
+$gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
+
 $nombre = trim($_POST['nombre'] ?? '');
 $precio = floatval($_POST['precio'] ?? 0);
 $clases = intval($_POST['clases_disponibles'] ?? 0);
@@ -26,9 +27,10 @@ if ($id) {
 }
 
 if ($stmt->execute()) {
-    echo "<script>alert('Plan guardado correctamente'); window.location.href='planes.php';</script>";
+    echo "<script>alert('✅ Plan guardado correctamente'); window.location.href='planes.php';</script>";
 } else {
-    echo "<script>alert('Error al guardar: " . $stmt->error . "'); history.back();</script>";
+    echo "<script>alert('❌ Error al guardar: " . $stmt->error . "'); history.back();</script>";
 }
 $stmt->close();
 $conexion->close();
+?>

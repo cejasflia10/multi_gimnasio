@@ -4,18 +4,17 @@ include 'conexion.php';
 include 'menu_horizontal.php';
 
 date_default_timezone_set('America/Argentina/Buenos_Aires');
-
 $gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
 
-// Filtro por mes y año
 $mes = $_GET['mes'] ?? date('m');
 $anio = $_GET['anio'] ?? date('Y');
 
-// Obtener pagos del mes
+// Consulta de membresías con métodos de pago registrados
 $query = $conexion->query("
-    SELECT m.fecha_inicio, m.fecha_vencimiento, m.metodo_pago,
+    SELECT m.fecha_inicio, m.fecha_vencimiento,
+           m.pago_efectivo, m.pago_transferencia, m.pago_debito, m.pago_credito, m.pago_cuenta_corriente,
            IFNULL(m.otros_pagos, 0) AS otros_pagos,
-           IFNULL(m.total, 0) AS total,
+           IFNULL(m.total_pagado, 0) AS total,
            c.apellido, c.nombre
     FROM membresias m
     INNER JOIN clientes c ON m.cliente_id = c.id
@@ -26,7 +25,20 @@ $query = $conexion->query("
 
 $pagos = [];
 $total_mes = 0;
+
+// Función para obtener método de pago en texto
+function obtenerMetodoPago($fila) {
+    $metodos = [];
+    if ($fila['pago_efectivo'] > 0) $metodos[] = 'Efectivo';
+    if ($fila['pago_transferencia'] > 0) $metodos[] = 'Transferencia';
+    if ($fila['pago_debito'] > 0) $metodos[] = 'Débito';
+    if ($fila['pago_credito'] > 0) $metodos[] = 'Crédito';
+    if ($fila['pago_cuenta_corriente'] > 0) $metodos[] = 'Cuenta Corriente';
+    return implode(' + ', $metodos);
+}
+
 while ($fila = $query->fetch_assoc()) {
+    $fila['metodo_pago'] = obtenerMetodoPago($fila);
     $pagos[] = $fila;
     $total_mes += floatval($fila['total'] ?? 0);
 }
@@ -38,20 +50,48 @@ while ($fila = $query->fetch_assoc()) {
     <meta charset="UTF-8">
     <title>Pagos del Mes</title>
     <link rel="stylesheet" href="estilo_unificado.css">
+    <style>
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        th, td {
+            padding: 8px;
+            border: 1px solid #666;
+            text-align: center;
+        }
+        th {
+            background-color: #222;
+            color: gold;
+        }
+        td {
+            background-color: #111;
+            color: white;
+        }
+    </style>
 </head>
 <body>
 <div class="contenedor">
     <h2 style="text-align:center;">💳 Pagos del Mes</h2>
+<?php
+$meses = [
+    '01' => 'Enero', '02' => 'Febrero', '03' => 'Marzo',
+    '04' => 'Abril', '05' => 'Mayo', '06' => 'Junio',
+    '07' => 'Julio', '08' => 'Agosto', '09' => 'Septiembre',
+    '10' => 'Octubre', '11' => 'Noviembre', '12' => 'Diciembre'
+];
+?>
+<form method="get" style="text-align:center; margin-bottom:20px;">
+    <label>Mes:</label>
+    <select name="mes">
+        <?php foreach ($meses as $numero => $nombre): ?>
+            <option value="<?= $numero ?>" <?= $mes == $numero ? 'selected' : '' ?>>
+                <?= $nombre ?>
+            </option>
+        <?php endforeach; ?>
+    </select>
 
-    <form method="get" style="text-align:center; margin-bottom:20px;">
-        <label>Mes:</label>
-        <select name="mes">
-            <?php for ($i = 1; $i <= 12; $i++): ?>
-                <option value="<?= str_pad($i, 2, '0', STR_PAD_LEFT) ?>" <?= $mes == str_pad($i, 2, '0', STR_PAD_LEFT) ? 'selected' : '' ?>>
-                    <?= date('F', mktime(0, 0, 0, $i, 10)) ?>
-                </option>
-            <?php endfor; ?>
-        </select>
 
         <label>Año:</label>
         <select name="anio">
@@ -63,7 +103,7 @@ while ($fila = $query->fetch_assoc()) {
         <button type="submit">Filtrar</button>
     </form>
 
-    <table border="1">
+    <table>
         <tr>
             <th>Cliente</th>
             <th>Fecha Inicio</th>
@@ -74,17 +114,19 @@ while ($fila = $query->fetch_assoc()) {
         </tr>
         <?php foreach ($pagos as $fila): ?>
             <tr>
-                <td><?= $fila['apellido'] . ' ' . $fila['nombre'] ?></td>
+                <td><?= htmlspecialchars($fila['apellido'] . ' ' . $fila['nombre']) ?></td>
                 <td><?= $fila['fecha_inicio'] ?></td>
                 <td><?= $fila['fecha_vencimiento'] ?></td>
-                <td><?= ucfirst($fila['metodo_pago'] ?? '') ?></td>
+                <td><?= $fila['metodo_pago'] ?: '<span style="color:red;">Sin especificar</span>' ?></td>
                 <td>$<?= number_format($fila['otros_pagos'], 0, ',', '.') ?></td>
-                <td>$<?= number_format($fila['total'], 0, ',', '.') ?></td>
+                <td><strong style="color:lime;">$<?= number_format($fila['total'], 0, ',', '.') ?></strong></td>
             </tr>
         <?php endforeach; ?>
     </table>
 
-    <h3 style="text-align:right; margin-top:20px;">💰 Total del mes: $<?= number_format($total_mes, 0, ',', '.') ?></h3>
+    <h3 style="text-align:right; margin-top:20px;">💰 Total del mes: 
+        <span style="color:gold;">$<?= number_format($total_mes, 0, ',', '.') ?></span>
+    </h3>
 </div>
 </body>
 </html>
