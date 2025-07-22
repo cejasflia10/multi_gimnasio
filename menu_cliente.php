@@ -1,3 +1,4 @@
+<?php if (session_status() === PHP_SESSION_NONE) session_start(); ?>
 <style>
 .menu-horizontal {
     background-color: #111;
@@ -31,7 +32,6 @@
 </style>
 
 <div class="menu-horizontal">
-    
     <a href="panel_cliente.php">Inicio</a>
     <a href="ver_mis_pagos.php">Mis Pagos</a>
     <a href="pago_online.php">Pago Online</a>
