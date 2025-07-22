@@ -1,109 +1,82 @@
 <?php
+if (session_status() === PHP_SESSION_NONE) session_start();
 include 'conexion.php';
-session_start();
 date_default_timezone_set('America/Argentina/Buenos_Aires');
 
-// POST tras escaneo QR
-if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST["dni"])) {
-    $dni = trim($_POST["dni"]);
-    $fecha_hoy = date('Y-m-d');
-    $hora_actual = date('H:i:s');
+$dni = trim($_POST['dni'] ?? '');
+$gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
 
-    // Buscar cliente por DNI
-    $queryCliente = $conexion->prepare("SELECT id, nombre, apellido, disciplina, gimnasio_id FROM clientes WHERE dni = ?");
-    $queryCliente->bind_param("s", $dni);
-    $queryCliente->execute();
-    $resultadoCliente = $queryCliente->get_result();
+$fecha = date('Y-m-d');
+$hora = date('H:i:s');
 
-    if ($resultadoCliente->num_rows > 0) {
-        $cliente = $resultadoCliente->fetch_assoc();
-        $cliente_id = $cliente['id'];
-        $gimnasio_id = $cliente['gimnasio_id'];
-
-        // Buscar membresía activa con clases disponibles
-        $queryMembresia = $conexion->prepare("SELECT id, clases_disponibles, fecha_vencimiento FROM membresias WHERE cliente_id = ? AND fecha_vencimiento >= ? AND clases_disponibles > 0 ORDER BY fecha_vencimiento DESC LIMIT 1");
-        $queryMembresia->bind_param("is", $cliente_id, $fecha_hoy);
-        $queryMembresia->execute();
-        $resultadoMembresia = $queryMembresia->get_result();
-
-        if ($resultadoMembresia->num_rows > 0) {
-            $membresia = $resultadoMembresia->fetch_assoc();
-            $membresia_id = $membresia['id'];
-            $clases_restantes = $membresia['clases_disponibles'] - 1;
-
-            // Registrar asistencia
-            $insertAsistencia = $conexion->prepare("INSERT INTO asistencias (cliente_id, fecha, hora) VALUES (?, ?, ?)");
-            $insertAsistencia->bind_param("iss", $cliente_id, $fecha_hoy, $hora_actual);
-            $insertAsistencia->execute();
-
-            // Descontar clase
-            $updateClases = $conexion->prepare("UPDATE membresias SET clases_disponibles = ? WHERE id = ?");
-            $updateClases->bind_param("ii", $clases_restantes, $membresia_id);
-            $updateClases->execute();
-
-            echo "<div style='color:lime;font-size:22px;font-family:sans-serif;background:black;padding:20px;text-align:center'>";
-            echo "<h2>✅ Ingreso registrado</h2>";
-            echo "<p><strong>{$cliente['apellido']}, {$cliente['nombre']}</strong></p>";
-            echo "<p>Disciplina: <strong>{$cliente['disciplina']}</strong></p>";
-            echo "<p>Clases restantes: <strong>{$clases_restantes}</strong></p>";
-            echo "<p>Vence: <strong>{$membresia['fecha_vencimiento']}</strong></p>";
-            echo "<p>Hora: <strong>{$hora_actual}</strong></p>";
-            echo "</div>";
-        } else {
-            echo "<div style='color:orange;font-size:20px;text-align:center;padding:20px;'>⚠️ Sin membresía activa o sin clases.</div>";
-        }
-    } else {
-        echo "<div style='color:red;font-size:20px;text-align:center;padding:20px;'>❌ Cliente no encontrado.</div>";
-    }
+// Validación
+if ($dni === '' || !is_numeric($dni)) {
+    echo "<span style='color:red;'>❌ DNI inválido</span>";
     exit;
 }
-?>
 
-<!DOCTYPE html>
-<html lang="es">
-<head>
-    <meta charset="UTF-8">
-    <title>Escaneo QR</title>
-    <style>
-        body {
-            background-color: black;
-            color: yellow;
-            font-family: Arial, sans-serif;
-            text-align: center;
-            margin: 0;
-        }
-        video {
-            width: 90%;
-            max-width: 400px;
-            margin-top: 20px;
-            border: 2px solid yellow;
-        }
-    </style>
-</head>
-<body>
-    <h2>Escaneo QR para Ingreso</h2>
-    <div id="reader" style="width:100%; display: flex; justify-content: center;"></div>
+// 1. Buscar Cliente
+$cliente_q = $conexion->query("SELECT id, apellido, nombre FROM clientes WHERE dni = '$dni' AND gimnasio_id = $gimnasio_id");
+if ($cliente_q && $cliente_q->num_rows > 0) {
+    $cliente = $cliente_q->fetch_assoc();
+    $cliente_id = $cliente['id'];
 
-    <form id="formulario" method="POST" style="display: none;">
-        <input type="hidden" name="dni" id="dni_input">
-    </form>
+    // Verificar membresía activa
+    $membresia_q = $conexion->query("SELECT * FROM membresias 
+        WHERE cliente_id = $cliente_id AND gimnasio_id = $gimnasio_id 
+        AND fecha_vencimiento >= '$fecha' AND clases_disponibles > 0 
+        ORDER BY fecha_inicio DESC LIMIT 1");
 
-    <script src="https://unpkg.com/html5-qrcode"></script>
-    <script>
-        const qrScanner = new Html5Qrcode("reader");
-        const config = { fps: 10, qrbox: 250 };
+    if ($membresia_q && $membresia_q->num_rows > 0) {
+        $membresia = $membresia_q->fetch_assoc();
+        $nuevas_clases = $membresia['clases_disponibles'] - 1;
+        $membresia_id = $membresia['id'];
 
-        qrScanner.start(
-            { facingMode: "environment" }, config,
-            (decodedText) => {
-                qrScanner.stop();
-                document.getElementById("dni_input").value = decodedText.trim();
-                document.getElementById("formulario").submit();
-            },
-            (errorMessage) => {}
-        ).catch((err) => {
-            alert("Error al acceder a la cámara: " + err);
-        });
-    </script>
-</body>
-</html>
+        // Descontar clase
+        $conexion->query("UPDATE membresias SET clases_disponibles = $nuevas_clases WHERE id = $membresia_id");
+
+        // Registrar asistencia
+        $conexion->query("INSERT INTO asistencias_clientes (cliente_id, gimnasio_id, fecha, hora_ingreso) 
+            VALUES ($cliente_id, $gimnasio_id, '$fecha', '$hora')");
+
+        echo "<span style='color:lightgreen;'>✅ Ingreso registrado: {$cliente['apellido']} {$cliente['nombre']}<br>Clases restantes: $nuevas_clases</span>";
+    } else {
+        echo "<span style='color:orange;'>⚠️ Membresía vencida o sin clases disponibles</span>";
+    }
+
+    exit;
+}
+
+// 2. Buscar Profesor
+$prof_q = $conexion->query("SELECT id, apellido, nombre FROM profesores WHERE dni = '$dni' AND gimnasio_id = $gimnasio_id");
+if ($prof_q && $prof_q->num_rows > 0) {
+    $prof = $prof_q->fetch_assoc();
+    $prof_id = $prof['id'];
+
+    // Verificar si ya tiene ingreso hoy sin egreso
+    $check = $conexion->query("SELECT id FROM asistencias_profesores 
+        WHERE profesor_id = $prof_id AND fecha = '$fecha' AND hora_egreso IS NULL 
+        LIMIT 1");
+
+    if ($check && $check->num_rows > 0) {
+        // Registrar salida
+        $asistencia = $check->fetch_assoc();
+        $asistencia_id = $asistencia['id'];
+
+        $conexion->query("UPDATE asistencias_profesores 
+            SET hora_egreso = '$hora' WHERE id = $asistencia_id");
+
+        echo "<span style='color:lightblue;'>📤 Salida registrada: {$prof['apellido']} {$prof['nombre']}</span>";
+    } else {
+        // Registrar ingreso
+        $conexion->query("INSERT INTO asistencias_profesores (profesor_id, gimnasio_id, fecha, hora_ingreso) 
+            VALUES ($prof_id, $gimnasio_id, '$fecha', '$hora')");
+
+        echo "<span style='color:lightgreen;'>📥 Ingreso registrado: {$prof['apellido']} {$prof['nombre']}</span>";
+    }
+
+    exit;
+}
+
+// 3. No encontrado
+echo "<span style='color:red;'>❌ DNI no registrado como cliente ni profesor</span>";

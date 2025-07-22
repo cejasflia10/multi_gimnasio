@@ -22,19 +22,29 @@ if (isset($_GET['id'])) {
         exit;
     }
 
-    // 🔄 1. Eliminar asistencias primero
-    $conexion->query("DELETE FROM asistencias WHERE cliente_id = $cliente_id");
+    // Función para intentar eliminar si la tabla existe
+    function eliminarSiExiste($conexion, $query) {
+        try {
+            $conexion->query($query);
+        } catch (mysqli_sql_exception $e) {
+            // Ignorar error si tabla no existe o falla
+        }
+    }
 
-    // 🔄 2. Eliminar membresías
-    $conexion->query("DELETE FROM membresias WHERE cliente_id = $cliente_id AND gimnasio_id = $gimnasio_id");
+    // 🔄 Eliminar registros relacionados
+    eliminarSiExiste($conexion, "DELETE FROM asistencias WHERE cliente_id = $cliente_id");
+    eliminarSiExiste($conexion, "DELETE FROM membresias WHERE cliente_id = $cliente_id AND gimnasio_id = $gimnasio_id");
+    eliminarSiExiste($conexion, "DELETE FROM pagos WHERE cliente_id = $cliente_id AND gimnasio_id = $gimnasio_id");
+    eliminarSiExiste($conexion, "DELETE FROM progreso_alumno WHERE cliente_id = $cliente_id");
+    eliminarSiExiste($conexion, "DELETE FROM rutinas WHERE cliente_id = $cliente_id");
+    eliminarSiExiste($conexion, "DELETE FROM archivos_clientes WHERE cliente_id = $cliente_id");
+    eliminarSiExiste($conexion, "DELETE FROM reservas WHERE cliente_id = $cliente_id");
+    eliminarSiExiste($conexion, "DELETE FROM competencias WHERE cliente_id = $cliente_id");
+    eliminarSiExiste($conexion, "DELETE FROM graduaciones WHERE cliente_id = $cliente_id");
+    eliminarSiExiste($conexion, "DELETE FROM mensajes_chat WHERE cliente_id = $cliente_id");
+    eliminarSiExiste($conexion, "DELETE FROM pagos_pendientes WHERE cliente_id = $cliente_id");
 
-    // 🔄 3. Eliminar pagos
-    $conexion->query("DELETE FROM pagos WHERE cliente_id = $cliente_id AND gimnasio_id = $gimnasio_id");
-
-    // 🔄 4. Eliminar reservas (si la tabla existe y no tiene gimnasio_id)
-    @$conexion->query("DELETE FROM reservas WHERE cliente_id = $cliente_id");
-
-    // 🔄 5. Finalmente eliminar el cliente
+    // 🔄 Finalmente eliminar el cliente
     $stmt = $conexion->prepare("DELETE FROM clientes WHERE id = ? AND gimnasio_id = ?");
     $stmt->bind_param("ii", $cliente_id, $gimnasio_id);
 
