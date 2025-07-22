@@ -143,7 +143,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
 </head>
 <body>
     <div class="login-container">
-        <img src="logo_app.png" alt="Logo App">
+        <img src="img/logo_app.png" alt="Logo App" style="width: 150px;">
         <h2>Login</h2>
         <form action="login.php" method="POST">
             <input type="text" name="usuario" placeholder="Usuario" required>
