@@ -1,7 +1,6 @@
 <?php
 if (session_status() === PHP_SESSION_NONE) session_start();
 include 'conexion.php';
-include 'menu_cliente.php';
 
 $gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
 $cliente_id = $_SESSION['cliente_id'] ?? 0;
@@ -25,7 +24,7 @@ while ($r = $res_q->fetch_assoc()) {
     $reservas[$r['turno_id']] = true;
 }
 
-// Procesar acción
+// Procesar acción antes de enviar cualquier contenido
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $turno_id = intval($_POST['turno_id']);
     $turno = $conexion->query("SELECT * FROM turnos_disponibles WHERE id = $turno_id")->fetch_assoc();
@@ -36,7 +35,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if (isset($_POST['cancelar'])) {
         $conexion->query("DELETE FROM reservas_clientes WHERE cliente_id = $cliente_id AND turno_id = $turno_id");
-
     } elseif (!isset($reservas[$turno_id])) {
         // Registrar reserva
         $conexion->query("INSERT INTO reservas_clientes 
@@ -47,10 +45,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (!$membresia_id || ($membresia['clases_disponibles'] ?? 0) <= 0) {
             $monto = -1000;
             $fecha = date('Y-m-d');
-            $conexion->query("
-                INSERT INTO pagos (cliente_id, metodo_pago, monto, fecha, fecha_pago, gimnasio_id)
-                VALUES ($cliente_id, 'Cuenta Corriente', $monto, '$fecha', '$fecha', $gimnasio_id)
-            ");
+            $conexion->query("INSERT INTO pagos (cliente_id, metodo_pago, monto, fecha, fecha_pago, gimnasio_id)
+                VALUES ($cliente_id, 'Cuenta Corriente', $monto, '$fecha', '$fecha', $gimnasio_id)");
             $_SESSION['aviso_deuda'] = true;
         }
     }
@@ -58,6 +54,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     header("Location: ver_turnos_cliente.php");
     exit;
 }
+
+// Después de haber procesado el POST, ahora sí se puede incluir contenido
+include 'menu_cliente.php';
 
 // Turnos del día
 $turnos = $conexion->query("
