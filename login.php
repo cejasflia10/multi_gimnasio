@@ -21,7 +21,6 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
         if (password_verify($clave, $usuario_data["contrasena"]) || $clave === $usuario_data["contrasena"]) {
             $gimnasio_id = $usuario_data["gimnasio_id"];
 
-            // Verificar fecha de vencimiento del gimnasio
             $fecha_actual = date('Y-m-d');
             $consulta_gym = $conexion->query("SELECT fecha_vencimiento FROM gimnasios WHERE id = $gimnasio_id");
 
@@ -118,6 +117,17 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
             margin-top: 15px;
         }
 
+        .soporte {
+            margin-top: 25px;
+            font-size: 0.9rem;
+            color: #bbb;
+            text-align: center;
+        }
+
+        .soporte strong {
+            color: #f1c40f;
+        }
+
         @media (max-width: 600px) {
             .login-container {
                 padding: 20px;
@@ -136,6 +146,11 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
             <input type="submit" value="Ingresar">
         </form>
         <?php if (isset($error)) echo "<div class='error'>$error</div>"; ?>
+
+        <div class="soporte">
+            <p>📞 Soporte técnico: <strong>+54 9 266 461 1574</strong></p>
+            <p>🛠️ Servicio técnico oficial de la app MultiGym CJS</p>
+        </div>
     </div>
 </body>
 </html>
