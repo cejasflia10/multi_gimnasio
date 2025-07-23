@@ -57,7 +57,6 @@ $alumnos_hoy = $conexion->query("
     ORDER BY a.hora
 ");
 ?>
-
 <!DOCTYPE html>
 <html lang="es">
 <head>
@@ -80,7 +79,7 @@ $alumnos_hoy = $conexion->query("
         padding: 5px;
         object-fit: contain;
     }
-    .btn-logo {
+    .btn-logo-mini {
         margin-top: 8px;
         padding: 5px 10px;
         background: gold;
@@ -91,35 +90,51 @@ $alumnos_hoy = $conexion->query("
         cursor: pointer;
     }
   </style>
+  <script>
+    function toggleMontos() {
+      const montos = document.querySelectorAll('.bloque-monto');
+      const icono = document.getElementById('icono-ojo');
+      let visible = montos[0].style.display !== 'none';
+
+      montos.forEach(div => {
+        div.style.display = visible ? 'none' : 'block';
+      });
+
+      icono.textContent = visible ? '👁️' : '👁️‍🗨️';
+    }
+  </script>
 </head>
 <body>
 
 <div class="encabezado">
-    <div style="display:flex; align-items:center; gap:15px;">
-        <?php if ($logo): ?>
-            <div style="position:relative; display:flex; flex-direction:column; align-items:flex-start;">
-                <img src="<?= htmlspecialchars($logo) ?>?v=<?= time() ?>" alt="Logo" class="logo-gym" id="logoGym">
-
-                <?php if ($gimnasio_id > 0): ?>
-                    <button onclick="document.getElementById('formLogo').style.display='block'" class="btn-logo-mini">🖋</button>
-                    <form method="POST" action="subir_logo.php" enctype="multipart/form-data" id="formLogo" style="display:none; margin-top:3px;">
-                        <input type="file" name="logo" accept="image/*" required onchange="this.form.submit()">
-                    </form>
-                <?php endif; ?>
-            </div>
+  <div style="display:flex; align-items:center; gap:15px;">
+    <?php if ($logo): ?>
+      <div style="position:relative; display:flex; flex-direction:column; align-items:flex-start;">
+        <img src="<?= htmlspecialchars($logo) ?>?v=<?= time() ?>" alt="Logo" class="logo-gym" id="logoGym">
+        <?php if ($gimnasio_id > 0): ?>
+          <button onclick="document.getElementById('formLogo').style.display='block'" class="btn-logo-mini">🖋</button>
+          <form method="POST" action="subir_logo.php" enctype="multipart/form-data" id="formLogo" style="display:none; margin-top:3px;">
+            <input type="file" name="logo" accept="image/*" required onchange="this.form.submit()">
+          </form>
         <?php endif; ?>
+      </div>
+    <?php endif; ?>
 
-        <div>
-            <h1>🏋️ <?= htmlspecialchars($nombre_gym) ?></h1>
-            <p>📅 Vencimiento del sistema: <strong style="color:orange;"><?= date('d/m/Y', strtotime($fecha_venc)) ?></strong></p>
-        </div>
+    <div>
+      <h1>🏋️ <?= htmlspecialchars($nombre_gym) ?></h1>
+      <p>📅 Vencimiento del sistema: <strong style="color:orange;"><?= date('d/m/Y', strtotime($fecha_venc)) ?></strong></p>
     </div>
+  </div>
 </div>
 
+<!-- Botón mostrar/ocultar montos -->
+<div style="text-align:right; margin-bottom:10px;">
+  <span id="icono-ojo" class="toggle-icon" onclick="toggleMontos()" style="cursor:pointer; font-size:22px;">👁️‍🗨️</span>
+</div>
 
 <div class="grid">
-  <div class="box"><h2>💰 Ingresos del Día</h2><div class="monto">$<?= number_format($pagos_dia + $ventas_dia, 2) ?></div></div>
-  <div class="box"><h2>📆 Ingresos del Mes</h2><div class="monto">$<?= number_format($pagos_mes + $ventas_mes, 2) ?></div></div>
+  <div class="box bloque-monto"><h2>💰 Ingresos del Día</h2><div class="monto">$<?= number_format($pagos_dia + $ventas_dia, 2) ?></div></div>
+  <div class="box bloque-monto"><h2>📆 Ingresos del Mes</h2><div class="monto">$<?= number_format($pagos_mes + $ventas_mes, 2) ?></div></div>
 
   <div class="box"><h2>🎂 Próximos Cumpleaños</h2><ul>
     <?php while($c = $cumples->fetch_assoc()): ?>
@@ -148,33 +163,18 @@ $alumnos_hoy = $conexion->query("
   </ul></div>
 
   <div class="cuadro">
-        <h3>🧍 Alumnos que ingresaron Hoy</h3>
-        <?php if ($alumnos_hoy->num_rows > 0): ?>
-            <ul>
-                <?php while ($al = $alumnos_hoy->fetch_assoc()): ?>
-                    <li><?= $al['apellido'] . ' ' . $al['nombre'] ?> - ⏰ <?= $al['hora'] ?></li>
-                <?php endwhile; ?>
-            </ul>
-        <?php else: ?>
-            <p style="color:gray;">No se registraron ingresos de alumnos hoy.</p>
-        <?php endif; ?>
-    </div>
+    <h3>🧍 Alumnos que ingresaron Hoy</h3>
+    <?php if ($alumnos_hoy->num_rows > 0): ?>
+      <ul>
+        <?php while ($al = $alumnos_hoy->fetch_assoc()): ?>
+          <li><?= $al['apellido'] . ' ' . $al['nombre'] ?> - ⏰ <?= $al['hora'] ?></li>
+        <?php endwhile; ?>
+      </ul>
+    <?php else: ?>
+      <p style="color:gray;">No se registraron ingresos de alumnos hoy.</p>
+    <?php endif; ?>
+  </div>
 </div>
-
-<script>
-document.addEventListener('DOMContentLoaded', function() {
-    const form = document.querySelector('form[action="subir_logo.php"]');
-    if (form) {
-        form.addEventListener('submit', function() {
-            const btn = form.querySelector('button');
-            btn.textContent = "Subiendo...";
-            btn.disabled = true;
-        });
-    }
-});
-
-
-</script>
 
 </body>
 </html>

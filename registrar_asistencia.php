@@ -31,19 +31,26 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST["codigo"])) {
         $prof_id = $prof['id'];
         $nombre_prof = $prof['apellido'] . ' ' . $prof['nombre'];
 
-        $check_asistencia = $conexion->query("SELECT id, hora_entrada, hora_salida FROM asistencias_profesores WHERE profesor_id = $prof_id AND fecha = '$hoy' AND gimnasio_id = $gimnasio_id");
+        $check_asistencia = $conexion->query("
+            SELECT id, hora_entrada, hora_salida 
+            FROM asistencias_profesores 
+            WHERE profesor_id = $prof_id AND fecha = '$hoy' AND gimnasio_id = $gimnasio_id 
+            ORDER BY id DESC 
+            LIMIT 1
+        ");
 
-        if ($check_asistencia->num_rows > 0) {
+        $hora_actual = date('H:i:s');
+
+        if ($check_asistencia && $check_asistencia->num_rows > 0) {
             $registro = $check_asistencia->fetch_assoc();
             if (empty($registro['hora_salida'])) {
-                $hora_actual = date('H:i:s');
                 $conexion->query("UPDATE asistencias_profesores SET hora_salida = '$hora_actual' WHERE id = {$registro['id']}");
                 $advertencia = "✅ Salida registrada para $nombre_prof a las $hora_actual.";
             } else {
-                $advertencia = "✅ $nombre_prof ya registró entrada y salida hoy.";
+                $conexion->query("INSERT INTO asistencias_profesores (profesor_id, fecha, hora_entrada, gimnasio_id, hora) VALUES ($prof_id, '$hoy', '$hora_actual', $gimnasio_id, '$hora_actual')");
+                $advertencia = "✅ Nuevo ingreso registrado para $nombre_prof a las $hora_actual.";
             }
         } else {
-            $hora_actual = date('H:i:s');
             $conexion->query("INSERT INTO asistencias_profesores (profesor_id, fecha, hora_entrada, gimnasio_id, hora) VALUES ($prof_id, '$hoy', '$hora_actual', $gimnasio_id, '$hora_actual')");
             $advertencia = "✅ Ingreso registrado para $nombre_prof a las $hora_actual.";
         }
@@ -116,6 +123,8 @@ $clientes = $conexion->query("
     ORDER BY a.hora DESC
 ");
 ?>
+
+<!-- HTML permanece igual -->
 
 <!DOCTYPE html>
 <html lang="es">

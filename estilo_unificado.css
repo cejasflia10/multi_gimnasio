@@ -197,3 +197,10 @@ a:hover {
 .oculto {
   display: none !important;
 }
+.toggle-icon {
+    font-size: 22px;
+    cursor: pointer;
+    float: right;
+    margin-right: 10px;
+    color: gold;
+}
