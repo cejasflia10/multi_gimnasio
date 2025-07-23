@@ -31,22 +31,20 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST["codigo"])) {
         $prof_id = $prof['id'];
         $nombre_prof = $prof['apellido'] . ' ' . $prof['nombre'];
 
-        // ¿Ya tiene asistencia hoy?
         $check_asistencia = $conexion->query("SELECT id, hora_entrada, hora_salida FROM asistencias_profesores WHERE profesor_id = $prof_id AND fecha = '$hoy' AND gimnasio_id = $gimnasio_id");
 
         if ($check_asistencia->num_rows > 0) {
             $registro = $check_asistencia->fetch_assoc();
-
             if (empty($registro['hora_salida'])) {
-                // Registrar salida
+                $hora_actual = date('H:i:s');
                 $conexion->query("UPDATE asistencias_profesores SET hora_salida = '$hora_actual' WHERE id = {$registro['id']}");
                 $advertencia = "✅ Salida registrada para $nombre_prof a las $hora_actual.";
             } else {
                 $advertencia = "✅ $nombre_prof ya registró entrada y salida hoy.";
             }
         } else {
-            // Registrar ingreso
-            $conexion->query("INSERT INTO asistencias_profesores (profesor_id, fecha, hora_entrada, gimnasio_id) VALUES ($prof_id, '$hoy', '$hora_actual', $gimnasio_id)");
+            $hora_actual = date('H:i:s');
+            $conexion->query("INSERT INTO asistencias_profesores (profesor_id, fecha, hora_entrada, gimnasio_id, hora) VALUES ($prof_id, '$hoy', '$hora_actual', $gimnasio_id, '$hora_actual')");
             $advertencia = "✅ Ingreso registrado para $nombre_prof a las $hora_actual.";
         }
 
@@ -70,8 +68,14 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST["codigo"])) {
                 $vencimiento = $membresia['fecha_vencimiento'];
 
                 if ($clases > 0 && $vencimiento >= $hoy) {
-                    $conexion->query("INSERT INTO asistencias (cliente_id, fecha, hora, gimnasio_id) VALUES ($id_cliente, '$hoy', '$hora_actual', $gimnasio_id)");
+                    $hora_actual = date('H:i:s');
+                    $query = "INSERT INTO asistencias (cliente_id, fecha, hora, gimnasio_id) VALUES ($id_cliente, '$hoy', '$hora_actual', $gimnasio_id)";
+                    if (!$conexion->query($query)) {
+                        die("❌ Error al registrar asistencia: " . $conexion->error);
+                    }
+
                     $conexion->query("UPDATE membresias SET clases_disponibles = clases_disponibles - 1 WHERE cliente_id = $id_cliente AND fecha_vencimiento = '$vencimiento' AND gimnasio_id = $gimnasio_id");
+
                     $advertencia = "✅ Asistencia registrada para cliente a las $hora_actual.";
                 } else {
                     $advertencia = "❌ ¡Membresía vencida o sin clases disponibles!";
@@ -88,7 +92,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST["codigo"])) {
     }
 }
 
-// --- Consultar profesores que asistieron hoy ---
+// --- Profesores que asistieron hoy ---
 $profesores = $conexion->query("
     SELECT p.apellido, ap.hora_entrada, ap.hora_salida
     FROM asistencias_profesores ap
@@ -96,7 +100,7 @@ $profesores = $conexion->query("
     WHERE ap.fecha = '$hoy' AND ap.gimnasio_id = $gimnasio_id
 ");
 
-// --- Consultar clientes que asistieron hoy ---
+// --- Clientes que asistieron hoy ---
 $clientes = $conexion->query("
     SELECT c.apellido, m.clases_disponibles, m.fecha_vencimiento, a.hora
     FROM asistencias a

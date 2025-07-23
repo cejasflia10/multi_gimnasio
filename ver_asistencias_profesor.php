@@ -13,14 +13,15 @@ $filtro_fecha = $_GET['fecha'] ?? date('Y-m-d');
 
 // Obtener profesores con asistencias en la fecha
 $sql = "
-    SELECT a.id, a.fecha, a.hora_ingreso, a.hora_egreso,
+    SELECT a.id, a.fecha, a.hora_entrada, a.hora_salida,
            a.profesor_id,
            p.apellido, p.nombre,
-           IF(a.hora_egreso IS NOT NULL, TIMESTAMPDIFF(MINUTE, a.hora_ingreso, a.hora_egreso), NULL) AS minutos
+           IF(a.hora_entrada IS NOT NULL AND a.hora_salida IS NOT NULL, TIMESTAMPDIFF(MINUTE, a.hora_entrada, a.hora_salida), NULL) AS minutos,
+           COALESCE(a.hora_entrada, a.hora_salida) AS orden_hora
     FROM asistencias_profesores a
     INNER JOIN profesores p ON a.profesor_id = p.id
     WHERE a.fecha = '$filtro_fecha' AND a.gimnasio_id = $gimnasio_id
-    ORDER BY a.fecha DESC, a.hora_ingreso DESC
+    ORDER BY a.fecha DESC, orden_hora DESC
 ";
 
 $resultado = $conexion->query($sql);
@@ -114,11 +115,11 @@ $resultado = $conexion->query($sql);
                 <tr>
                     <td><?= $fila['apellido'] . ' ' . $fila['nombre'] ?></td>
                     <td><?= $fila['fecha'] ?></td>
-                    <td><?= $fila['hora_ingreso'] ?? '-' ?></td>
-                    <td><?= $fila['hora_egreso'] ?? '-' ?></td>
+                    <td><?= $fila['hora_entrada'] ?? '-' ?></td>
+                    <td><?= $fila['hora_salida'] ?? '-' ?></td>
                     <td>
                         <?php
-                        if ($fila['hora_egreso']) {
+                        if ($fila['hora_entrada'] && $fila['hora_salida']) {
                             $horas = floor($fila['minutos'] / 60);
                             $min = $fila['minutos'] % 60;
                             echo "{$horas}h {$min}m";
@@ -131,8 +132,8 @@ $resultado = $conexion->query($sql);
 
                 <!-- Buscar alumnos que ingresaron durante el turno del profesor -->
                 <?php
-                $hora_ini = $fila['hora_ingreso'];
-                $hora_fin = $fila['hora_egreso'] ?: '23:59:59';
+                $hora_ini = $fila['hora_entrada'];
+                $hora_fin = $fila['hora_salida'] ?: '23:59:59';
                 $fecha = $fila['fecha'];
 
                 $alumnos = $conexion->query("
