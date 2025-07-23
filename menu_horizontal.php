@@ -188,7 +188,7 @@ if (session_status() === PHP_SESSION_NONE) { session_start(); }
             <a href="turnos_profesor.php">Turnos Profesores</a>
             <a href="editar_tarifa_profesor.php">Precio de Horas</a>
             <a href="reporte_horas_profesor.php">Reporte de Horas</a>
-            <a href="reporte_pagos_profesor.php">Total Horas</a>
+
         </div>
     </div>
     <div class="dropdown">
