@@ -16,12 +16,13 @@ $sql = "
     SELECT a.id, a.fecha, a.hora_ingreso, a.hora_egreso,
            a.profesor_id,
            p.apellido, p.nombre,
-           TIMESTAMPDIFF(MINUTE, a.hora_ingreso, a.hora_egreso) AS minutos
+           IF(a.hora_egreso IS NOT NULL, TIMESTAMPDIFF(MINUTE, a.hora_ingreso, a.hora_egreso), NULL) AS minutos
     FROM asistencias_profesores a
     INNER JOIN profesores p ON a.profesor_id = p.id
     WHERE a.fecha = '$filtro_fecha' AND a.gimnasio_id = $gimnasio_id
     ORDER BY a.fecha DESC, a.hora_ingreso DESC
 ";
+
 $resultado = $conexion->query($sql);
 ?>
 
@@ -99,71 +100,71 @@ $resultado = $conexion->query($sql);
 
     <table>
         <thead>
-            <tr>
-                <th>Profesor</th>
-                <th>Fecha</th>
-                <th>Hora Ingreso</th>
-                <th>Hora Egreso</th>
-                <th>Tiempo Trabajado</th>
-            </tr>
+        <tr>
+            <th>Profesor</th>
+            <th>Fecha</th>
+            <th>Hora Ingreso</th>
+            <th>Hora Egreso</th>
+            <th>Tiempo Trabajado</th>
+        </tr>
         </thead>
         <tbody>
-            <?php if ($resultado && $resultado->num_rows > 0): ?>
-                <?php while ($fila = $resultado->fetch_assoc()): ?>
-                    <tr>
-                        <td><?= $fila['apellido'] . ' ' . $fila['nombre'] ?></td>
-                        <td><?= $fila['fecha'] ?></td>
-                        <td><?= $fila['hora_ingreso'] ?? '-' ?></td>
-                        <td><?= $fila['hora_egreso'] ?? '-' ?></td>
-                        <td>
-                            <?php
-                            if ($fila['hora_egreso']) {
-                                $horas = floor($fila['minutos'] / 60);
-                                $min = $fila['minutos'] % 60;
-                                echo "{$horas}h {$min}m";
-                            } else {
-                                echo "-";
-                            }
-                            ?>
-                        </td>
-                    </tr>
+        <?php if ($resultado && $resultado->num_rows > 0): ?>
+            <?php while ($fila = $resultado->fetch_assoc()): ?>
+                <tr>
+                    <td><?= $fila['apellido'] . ' ' . $fila['nombre'] ?></td>
+                    <td><?= $fila['fecha'] ?></td>
+                    <td><?= $fila['hora_ingreso'] ?? '-' ?></td>
+                    <td><?= $fila['hora_egreso'] ?? '-' ?></td>
+                    <td>
+                        <?php
+                        if ($fila['hora_egreso']) {
+                            $horas = floor($fila['minutos'] / 60);
+                            $min = $fila['minutos'] % 60;
+                            echo "{$horas}h {$min}m";
+                        } else {
+                            echo "-";
+                        }
+                        ?>
+                    </td>
+                </tr>
 
-                    <!-- Buscar alumnos que ingresaron durante el turno del profesor -->
-                    <?php
-                    $hora_ini = $fila['hora_ingreso'];
-                    $hora_fin = $fila['hora_egreso'];
-                    $fecha = $fila['fecha'];
+                <!-- Buscar alumnos que ingresaron durante el turno del profesor -->
+                <?php
+                $hora_ini = $fila['hora_ingreso'];
+                $hora_fin = $fila['hora_egreso'] ?: '23:59:59';
+                $fecha = $fila['fecha'];
 
-                    $alumnos = $conexion->query("
-                        SELECT c.apellido, c.nombre, c.dni, a.hora
-                        FROM asistencias a
-                        INNER JOIN clientes c ON c.id = a.cliente_id
-                        WHERE a.gimnasio_id = $gimnasio_id
-                          AND a.fecha = '$fecha'
-                          AND a.hora BETWEEN '$hora_ini' AND '$hora_fin'
-                        ORDER BY a.hora ASC
-                    ");
-                    ?>
+                $alumnos = $conexion->query("
+                    SELECT c.apellido, c.nombre, c.dni, a.hora
+                    FROM asistencias a
+                    INNER JOIN clientes c ON c.id = a.cliente_id
+                    WHERE a.gimnasio_id = $gimnasio_id
+                      AND a.fecha = '$fecha'
+                      AND a.hora BETWEEN '$hora_ini' AND '$hora_fin'
+                    ORDER BY a.hora ASC
+                ");
+                ?>
 
-                    <tr>
-                        <td colspan="5" class="alumnos-turno">
-                            <strong>👥 Alumnos presentes durante el turno:</strong><br>
-                            <?php if ($alumnos && $alumnos->num_rows > 0): ?>
-                                <ul style="list-style: none; padding-left: 0;">
-                                    <?php while ($alumno = $alumnos->fetch_assoc()): ?>
-                                        <li>🕒 <?= $alumno['hora'] ?> - <?= $alumno['apellido'] ?> <?= $alumno['nombre'] ?> (DNI: <?= $alumno['dni'] ?>)</li>
-                                    <?php endwhile; ?>
-                                </ul>
-                            <?php else: ?>
-                                <span>Sin alumnos registrados en este turno.</span>
-                            <?php endif; ?>
-                        </td>
-                    </tr>
+                <tr>
+                    <td colspan="5" class="alumnos-turno">
+                        <strong>👥 Alumnos presentes durante el turno:</strong><br>
+                        <?php if ($alumnos && $alumnos->num_rows > 0): ?>
+                            <ul style="list-style: none; padding-left: 0;">
+                                <?php while ($alumno = $alumnos->fetch_assoc()): ?>
+                                    <li>🕒 <?= $alumno['hora'] ?> - <?= $alumno['apellido'] ?> <?= $alumno['nombre'] ?> (DNI: <?= $alumno['dni'] ?>)</li>
+                                <?php endwhile; ?>
+                            </ul>
+                        <?php else: ?>
+                            <span>Sin alumnos registrados en este turno.</span>
+                        <?php endif; ?>
+                    </td>
+                </tr>
 
-                <?php endwhile; ?>
-            <?php else: ?>
-                <tr><td colspan="5">Sin registros para la fecha seleccionada.</td></tr>
-            <?php endif; ?>
+            <?php endwhile; ?>
+        <?php else: ?>
+            <tr><td colspan="5">Sin registros para la fecha seleccionada.</td></tr>
+        <?php endif; ?>
         </tbody>
     </table>
 </div>
