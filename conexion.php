@@ -16,4 +16,8 @@ $conexion = new mysqli($host, $usuario, $contrasena, $basedatos, $puerto);
 if ($conexion->connect_error) {
     die("❌ Error de conexión: " . $conexion->connect_error);
 }
+
+// ✅ Zona horaria para PHP y MySQL
+date_default_timezone_set('America/Argentina/Buenos_Aires');
+$conexion->query("SET time_zone = '-03:00'");
 ?>
