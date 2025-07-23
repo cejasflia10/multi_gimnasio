@@ -164,6 +164,8 @@ if (session_status() === PHP_SESSION_NONE) { session_start(); }
             <a href="ver_asistencia.php">Ver Asistencias</a>
             <a href="registrar_asistencia.php">Registrar Asistencia</a>
             <a href="scanner_qr.php">Escaneo QR</a>
+            <a href="ver_asistencias_profesor.php">Asistencia Profesores</a>
+
         </div>
     </div>
     <div class="dropdown">
@@ -184,7 +186,6 @@ if (session_status() === PHP_SESSION_NONE) { session_start(); }
             <a href="login_profesor.php">Panel</a>
             <a href="ver_profesores.php">Ver Profesores</a>
             <a href="turnos_profesor.php">Turnos Profesores</a>
-            <a href="registro_ingreso_profesor.php">Registro Profesores</a>
             <a href="configurar_precios_hora.php">Precio de Horas</a>
             <a href="reporte_horas_profesor.php">Reporte de Horas</a>
             <a href="pagar_horas_profesor.php">Total Horas</a>
