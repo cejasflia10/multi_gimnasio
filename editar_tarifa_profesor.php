@@ -1,142 +1,131 @@
 <?php
-session_start();
+if (session_status() === PHP_SESSION_NONE) session_start();
 include 'conexion.php';
 include 'menu_horizontal.php';
 
-if (!isset($_SESSION['gimnasio_id'])) {
-    echo "Acceso denegado.";
-    exit;
-}
-
-$gimnasio_id = $_SESSION['gimnasio_id'];
+$gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
 $mensaje = '';
 
-// Guardar tarifa
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $profesor_id = intval($_POST['profesor_id']);
     $valor_hora = floatval($_POST['valor_hora']);
     $modo_pago = $_POST['modo_pago'] ?? 'fijo';
-    $porcentaje1 = floatval($_POST['porcentaje_1'] ?? 0);
-    $porcentaje2 = floatval($_POST['porcentaje_2'] ?? 0);
-    $porcentaje3 = floatval($_POST['porcentaje_3'] ?? 100);
+    $porcentaje1 = intval($_POST['porcentaje_1'] ?? 50);
+    $porcentaje2 = intval($_POST['porcentaje_2'] ?? 75);
+    $porcentaje3 = intval($_POST['porcentaje_3'] ?? 100);
 
-    $check = $conexion->query("SELECT id FROM tarifas_profesor WHERE profesor_id = $profesor_id");
-    if ($check->num_rows > 0) {
-        $conexion->query("UPDATE tarifas_profesor SET valor_hora = $valor_hora, modo_pago = '$modo_pago', porcentaje_1 = $porcentaje1, porcentaje_2 = $porcentaje2, porcentaje_3 = $porcentaje3 WHERE profesor_id = $profesor_id");
+    $existe = $conexion->query("SELECT id FROM tarifas_profesor WHERE profesor_id = $profesor_id AND gimnasio_id = $gimnasio_id")->fetch_assoc();
+
+    if ($existe) {
+        $sql = "UPDATE tarifas_profesor SET 
+            valor_hora = $valor_hora, 
+            modo_pago = '$modo_pago', 
+            porcentaje_1 = $porcentaje1, 
+            porcentaje_2 = $porcentaje2, 
+            porcentaje_3 = $porcentaje3";
+
+        if ($modo_pago === 'fijo') {
+            $sql .= ", monto_por_hora = $valor_hora";
+        }
+
+        $sql .= " WHERE profesor_id = $profesor_id AND gimnasio_id = $gimnasio_id";
+        $conexion->query($sql);
     } else {
-        $conexion->query("INSERT INTO tarifas_profesor (profesor_id, valor_hora, modo_pago, porcentaje_1, porcentaje_2, porcentaje_3) VALUES ($profesor_id, $valor_hora, '$modo_pago', $porcentaje1, $porcentaje2, $porcentaje3)");
+        $monto = ($modo_pago === 'fijo') ? $valor_hora : 0;
+        $conexion->query("INSERT INTO tarifas_profesor (
+            profesor_id, valor_hora, monto_por_hora, modo_pago, porcentaje_1, porcentaje_2, porcentaje_3, gimnasio_id
+        ) VALUES (
+            $profesor_id, $valor_hora, $monto, '$modo_pago', $porcentaje1, $porcentaje2, $porcentaje3, $gimnasio_id
+        )");
     }
 
-    $mensaje = "✅ Tarifa y porcentajes actualizados correctamente.";
+    $mensaje = "<div style='color: lime; text-align:center;'>✅ Tarifa actualizada correctamente</div>";
 }
 
 // Obtener profesores
-$profesores = $conexion->query("SELECT id, apellido, nombre FROM profesores WHERE gimnasio_id = $gimnasio_id ORDER BY apellido");
+$profesores = $conexion->query("SELECT id, CONCAT(apellido, ' ', nombre) AS nombre FROM profesores WHERE gimnasio_id = $gimnasio_id ORDER BY apellido");
 ?>
 
 <!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>Editar Tarifas Profesores</title>
-    <link rel="stylesheet" href="estilo_unificado.css">
+    <title>Editar Tarifa Profesor</title>
     <style>
-        body { background-color: #111; color: gold; font-family: Arial; }
-        .contenedor {
-            max-width: 700px;
-            margin: auto;
-            padding: 20px;
-            background: #222;
-            border-radius: 10px;
-        }
-        label { display: block; margin-top: 10px; }
-        select, input[type="number"], input[type="submit"] {
-            width: 100%;
-            padding: 8px;
-            margin-top: 5px;
+        body {
             background: #000;
             color: gold;
-            border: 1px solid #555;
-            border-radius: 5px;
+            font-family: Arial, sans-serif;
+            padding: 20px;
         }
-        table {
-            width: 100%;
-            margin-top: 15px;
-            border-collapse: collapse;
-        }
-        table th, table td {
-            padding: 8px;
-            border: 1px solid #444;
+        h2 {
             text-align: center;
+            color: gold;
         }
-        .mensaje {
+        form {
+            max-width: 500px;
+            margin: auto;
+            background: #111;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 0 10px gold;
+        }
+        label {
+            display: block;
+            margin-top: 10px;
+        }
+        input, select {
+            width: 100%;
+            padding: 8px;
+            margin-top: 4px;
+            background: #222;
+            color: gold;
+            border: 1px solid gold;
+            border-radius: 4px;
+        }
+        button {
             margin-top: 15px;
+            width: 100%;
             padding: 10px;
-            background-color: #003300;
-            color: #0f0;
+            background-color: gold;
+            color: black;
+            font-weight: bold;
+            border: none;
             border-radius: 5px;
         }
     </style>
-    <script>
-        function mostrarTabla() {
-            const modo = document.getElementById('modo_pago').value;
-            document.getElementById('tabla_porcentajes').style.display = (modo === 'asistencia') ? 'block' : 'none';
-        }
-    </script>
 </head>
 <body>
-
-<div class="contenedor">
-    <h2>💰 Asignar Tarifa por Hora a Profesores</h2>
-
+    <h2>💰 Editar Tarifa del Profesor</h2>
+    <?= $mensaje ?>
     <form method="POST">
-        <label>Profesor:</label>
+        <label for="profesor_id">Profesor:</label>
         <select name="profesor_id" required>
-            <option value="">-- Seleccionar --</option>
-            <?php while ($p = $profesores->fetch_assoc()): ?>
-                <option value="<?= $p['id'] ?>">
-                    <?= $p['apellido'] . ' ' . $p['nombre'] ?>
-                </option>
+            <option value="">Seleccione un profesor</option>
+            <?php while ($row = $profesores->fetch_assoc()): ?>
+                <option value="<?= $row['id'] ?>"><?= $row['nombre'] ?></option>
             <?php endwhile; ?>
         </select>
 
-        <label>Valor por hora ($):</label>
-        <input type="number" name="valor_hora" step="0.01" min="0" required>
+        <label for="valor_hora">Valor por hora o por asistencia:</label>
+        <input type="number" name="valor_hora" step="0.01" required>
 
-        <label>Modo de pago:</label>
-        <select name="modo_pago" id="modo_pago" onchange="mostrarTabla()">
-            <option value="fijo">💵 Fijo (por hora)</option>
-            <option value="asistencia">📊 Según alumnos por turno</option>
+        <label for="modo_pago">Modo de pago:</label>
+        <select name="modo_pago">
+            <option value="fijo">Fijo por hora</option>
+            <option value="asistencia">Por asistencia</option>
         </select>
 
-        <div id="tabla_porcentajes" style="display: none;">
-            <h3>📐 Porcentajes por cantidad de alumnos</h3>
-            <table>
-                <tr>
-                    <th>1 Alumno</th>
-                    <th>2 Alumnos</th>
-                    <th>3 o más</th>
-                </tr>
-                <tr>
-                    <td><input type="number" name="porcentaje_1" min="0" max="100" step="1" value="50" required> %</td>
-                    <td><input type="number" name="porcentaje_2" min="0" max="100" step="1" value="75" required> %</td>
-                    <td><input type="number" name="porcentaje_3" min="0" max="100" step="1" value="100" required> %</td>
-                </tr>
-            </table>
-        </div>
+        <label for="porcentaje_1">Porcentaje 1 alumno (por defecto 50):</label>
+        <input type="number" name="porcentaje_1" value="50">
 
-        <input type="submit" value="Guardar Tarifa">
+        <label for="porcentaje_2">Porcentaje 2 alumnos (por defecto 75):</label>
+        <input type="number" name="porcentaje_2" value="75">
+
+        <label for="porcentaje_3">Porcentaje 3+ alumnos (por defecto 100):</label>
+        <input type="number" name="porcentaje_3" value="100">
+
+        <button type="submit">Guardar Tarifa</button>
     </form>
-
-    <?php if ($mensaje): ?>
-        <div class="mensaje"><?= $mensaje ?></div>
-    <?php endif; ?>
-</div>
-
-<script>
-    // Ejecutar al cargar
-    mostrarTabla();
-</script>
-
 </body>
 </html>
