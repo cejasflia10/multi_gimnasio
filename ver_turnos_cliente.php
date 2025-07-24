@@ -8,17 +8,12 @@ $cliente_id = $_SESSION['cliente_id'] ?? 0;
 $dia_hoy_en = date('l');
 $nombres_dias = ['Monday'=>'Lunes','Tuesday'=>'Martes','Wednesday'=>'Miércoles','Thursday'=>'Jueves','Friday'=>'Viernes','Saturday'=>'Sábado','Sunday'=>'Domingo'];
 $dia_hoy = $nombres_dias[$dia_hoy_en];
-$hora_actual = date('H:i:s');
-$fecha_hoy = date('Y-m-d');
-
-// Día seleccionado por el usuario
 $dia_seleccionado = $_GET['dia'] ?? $dia_hoy;
 
 // Obtener membresía activa
 $membresia = $conexion->query("SELECT * FROM membresias 
     WHERE cliente_id = $cliente_id AND fecha_vencimiento >= CURDATE()
     ORDER BY fecha_inicio DESC LIMIT 1")->fetch_assoc();
-$membresia_id = $membresia['id'] ?? null;
 
 // Obtener reservas actuales
 $reservas = [];
@@ -27,41 +22,14 @@ while ($r = $res_q->fetch_assoc()) {
     $reservas[$r['turno_id']] = true;
 }
 
-// Procesar acción
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $turno_id = intval($_POST['turno_id']);
-    $turno = $conexion->query("SELECT * FROM turnos_disponibles WHERE id = $turno_id")->fetch_assoc();
-    $profesor_id = $turno['profesor_id'];
-    $hora_inicio = $turno['hora_inicio'];
-    $dia_turno = $turno['dia'];
-    $fecha_reserva = date('Y-m-d');
-
-    if (isset($_POST['cancelar'])) {
-        $conexion->query("DELETE FROM reservas_clientes WHERE cliente_id = $cliente_id AND turno_id = $turno_id");
-    } elseif (!isset($reservas[$turno_id])) {
-        $conexion->query("INSERT INTO reservas_clientes 
-            (cliente_id, turno_id, dia_semana, hora_inicio, gimnasio_id, profesor_id, fecha_reserva)
-            VALUES ($cliente_id, $turno_id, '$dia_turno', '$hora_inicio', $gimnasio_id, $profesor_id, '$fecha_reserva')");
-
-        if (!$membresia_id || ($membresia['clases_disponibles'] ?? 0) <= 0) {
-            $monto = -1000;
-            $fecha = date('Y-m-d');
-            $conexion->query("INSERT INTO pagos (cliente_id, metodo_pago, monto, fecha, fecha_pago, gimnasio_id)
-                VALUES ($cliente_id, 'Cuenta Corriente', $monto, '$fecha', '$fecha', $gimnasio_id)");
-            $_SESSION['aviso_deuda'] = true;
-        }
-    }
-
-    header("Location: ver_turnos_cliente.php?dia=" . urlencode($dia_seleccionado));
-    exit;
-}
-
 include 'menu_cliente.php';
 
 $turnos = $conexion->query("
-    SELECT td.*, p.nombre, p.apellido FROM turnos_disponibles td
+    SELECT td.*, p.nombre, p.apellido 
+    FROM turnos_disponibles td
     JOIN profesores p ON td.profesor_id = p.id
-    WHERE td.gimnasio_id = $gimnasio_id AND LOWER(TRIM(td.dia)) = LOWER('$dia_seleccionado')
+    WHERE td.gimnasio_id = $gimnasio_id 
+    AND LOWER(TRIM(td.dia)) = LOWER('$dia_seleccionado')
     ORDER BY td.hora_inicio
 ");
 ?>
@@ -77,14 +45,14 @@ $turnos = $conexion->query("
 <body>
 <div class="contenedor">
 
-    <h2>📅 Turnos de: <?= $dia_seleccionado ?></h2>
+    <h2>📅 Turnos de: <?= htmlspecialchars($dia_seleccionado) ?></h2>
 
     <!-- Filtro de día -->
     <form method="GET" style="margin-bottom: 20px;">
         <label for="dia">Seleccionar día:</label>
         <select name="dia" id="dia" onchange="this.form.submit()">
             <?php
-            $dias_mostrar = ['Lunes','Martes','Miércoles','Jueves','Viernes','Sabado'];
+            $dias_mostrar = ['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'];
             foreach ($dias_mostrar as $dia_opcion) {
                 $sel = $dia_opcion == $dia_seleccionado ? 'selected' : '';
                 echo "<option value='$dia_opcion' $sel>$dia_opcion</option>";
@@ -116,22 +84,25 @@ $turnos = $conexion->query("
         ?>
         <tr>
             <td><?= substr($t['hora_inicio'], 0, 5) ?> - <?= substr($t['hora_fin'], 0, 5) ?></td>
-            <td><?= $t['apellido'] . ' ' . $t['nombre'] ?></td>
+            <td><?= htmlspecialchars($t['apellido'] . ' ' . $t['nombre']) ?></td>
             <td>
-                <form method="POST">
-                    <input type="hidden" name="turno_id" value="<?= $tid ?>">
-                    <?php if ($reservado): ?>
-                        <button name="cancelar" class="cancelar">Cancelar</button>
-                    <?php else: ?>
-                        <button name="reservar" class="reservar">Reservar</button>
-                    <?php endif; ?>
-                </form>
+                <?php if ($reservado): ?>
+                    <form method="POST" action="cancelar_reserva.php">
+                        <input type="hidden" name="turno_id" value="<?= $tid ?>">
+                        <button type="submit" class="cancelar">Cancelar</button>
+                    </form>
+                <?php else: ?>
+                    <form method="POST" action="reservar_turno.php">
+                        <input type="hidden" name="turno_id" value="<?= $tid ?>">
+                        <button type="submit" class="reservar">Reservar</button>
+                    </form>
+                <?php endif; ?>
             </td>
         </tr>
         <?php endwhile; ?>
     </table>
     <?php else: ?>
-        <p style="text-align:center;">No hay turnos disponibles para <?= $dia_seleccionado ?>.</p>
+        <p style="text-align:center;">No hay turnos disponibles para <?= htmlspecialchars($dia_seleccionado) ?>.</p>
     <?php endif; ?>
 
 </div>

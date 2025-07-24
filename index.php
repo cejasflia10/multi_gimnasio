@@ -36,17 +36,19 @@ $vencimientos = $conexion->query("
     ORDER BY m.fecha_vencimiento ASC LIMIT 5
 ");
 
+// Filtro de fecha para ver reservas de otros días
+$fecha_filtro = $_GET['fecha'] ?? date('Y-m-d');
+
 $reservas = $conexion->query("
-    SELECT r.dia_semana, r.hora_inicio, td.hora_fin,
+    SELECT rc.dia_semana, rc.hora_inicio, rc.fecha_reserva,
            c.nombre, c.apellido,
            CONCAT(p.apellido, ' ', p.nombre) AS profesor
-    FROM reservas_clientes r
-    JOIN clientes c ON r.cliente_id = c.id
-    JOIN profesores p ON r.profesor_id = p.id
-    JOIN turnos_disponibles td ON r.turno_id = td.id
-    WHERE r.fecha_reserva = CURDATE()
-      AND r.gimnasio_id = $gimnasio_id
-    ORDER BY r.hora_inicio
+    FROM reservas_clientes rc
+    JOIN clientes c ON rc.cliente_id = c.id
+    JOIN profesores p ON rc.profesor_id = p.id
+    WHERE rc.fecha_reserva = '$fecha_filtro'
+      AND rc.gimnasio_id = $gimnasio_id
+    ORDER BY rc.hora_inicio
 ");
 
 $alumnos_hoy = $conexion->query("
@@ -148,19 +150,27 @@ $alumnos_hoy = $conexion->query("
     <?php endwhile; ?>
   </ul></div>
 
-  <div class="box"><h2>📋 Reservas de Hoy</h2><ul>
-    <?php if ($reservas->num_rows > 0): ?>
+<div class="box">
+  <form method="GET" style="margin-bottom: 10px;">
+    <label for="fecha" style="color: gold;">📅 Ver reservas del día: </label>
+    <input type="date" id="fecha" name="fecha" value="<?= $fecha_filtro ?>" onchange="this.form.submit()">
+  </form>
+
+  <h2>📋 Reservas del <?= date('d/m/Y', strtotime($fecha_filtro)) ?></h2>
+  <ul>
+    <?php if ($reservas && $reservas->num_rows > 0): ?>
       <?php while ($r = $reservas->fetch_assoc()): ?>
         <li>
-          🕒 <?= $r['hora_inicio'] ?> a <?= $r['hora_fin'] ?><br>
-          👤 <?= $r['apellido'] ?> <?= $r['nombre'] ?><br>
-          👨‍🏫 <?= $r['profesor'] ?>
+          📅 <?= $r['dia_semana'] ?> - 🕒 <?= $r['hora_inicio'] ?><br>
+          👤 <?= htmlspecialchars($r['apellido']) ?> <?= htmlspecialchars($r['nombre']) ?><br>
+          👨‍🏫 <?= htmlspecialchars($r['profesor']) ?>
         </li>
       <?php endwhile; ?>
     <?php else: ?>
-      <li>Sin reservas registradas para hoy.</li>
+      <li style="color:gray;">No hay reservas registradas para este día.</li>
     <?php endif; ?>
-  </ul></div>
+  </ul>
+</div>
 
   <div class="cuadro">
     <h3>🧍 Alumnos que ingresaron Hoy</h3>
