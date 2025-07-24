@@ -19,7 +19,6 @@ $logo_gimnasio = $info['logo'] ?? 'logo.png';
 if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST["codigo"])) {
     $codigo = trim($_POST["codigo"]);
 
-    // --- Verificar si es profesor ---
     $prof_stmt = $conexion->prepare("SELECT id, apellido, nombre FROM profesores WHERE dni = ? AND gimnasio_id = ?");
     $prof_stmt->bind_param("si", $codigo, $gimnasio_id);
     $prof_stmt->execute();
@@ -38,8 +37,6 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST["codigo"])) {
             LIMIT 1
         ");
 
-        $hora_actual = date('H:i:s');
-
         if ($check_asistencia && $check_asistencia->num_rows > 0) {
             $registro = $check_asistencia->fetch_assoc();
             if (empty($registro['hora_salida'])) {
@@ -55,7 +52,6 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST["codigo"])) {
         }
 
     } else {
-        // --- Si no es profesor, es cliente ---
         $stmt = $conexion->prepare("SELECT id FROM clientes WHERE dni = ? AND gimnasio_id = ?");
         $stmt->bind_param("si", $codigo, $gimnasio_id);
         $stmt->execute();
@@ -74,14 +70,8 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST["codigo"])) {
                 $vencimiento = $membresia['fecha_vencimiento'];
 
                 if ($clases > 0 && $vencimiento >= $hoy) {
-                    $hora_actual = date('H:i:s');
-                    $query = "INSERT INTO asistencias (cliente_id, fecha, hora, gimnasio_id) VALUES ($id_cliente, '$hoy', '$hora_actual', $gimnasio_id)";
-                    if (!$conexion->query($query)) {
-                        die("❌ Error al registrar asistencia: " . $conexion->error);
-                    }
-
+                    $conexion->query("INSERT INTO asistencias (cliente_id, fecha, hora, gimnasio_id) VALUES ($id_cliente, '$hoy', '$hora_actual', $gimnasio_id)");
                     $conexion->query("UPDATE membresias SET clases_disponibles = clases_disponibles - 1 WHERE cliente_id = $id_cliente AND fecha_vencimiento = '$vencimiento' AND gimnasio_id = $gimnasio_id");
-
                     $advertencia = "✅ Asistencia registrada para cliente a las $hora_actual.";
                 } else {
                     $advertencia = "❌ ¡Membresía vencida o sin clases disponibles!";
@@ -97,33 +87,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST["codigo"])) {
         }
     }
 }
-
-// --- Profesores que asistieron hoy ---
-$profesores = $conexion->query("
-    SELECT p.apellido, ap.hora_entrada, ap.hora_salida
-    FROM asistencias_profesores ap
-    INNER JOIN profesores p ON ap.profesor_id = p.id
-    WHERE ap.fecha = '$hoy' AND ap.gimnasio_id = $gimnasio_id
-");
-
-// --- Clientes que asistieron hoy ---
-$clientes = $conexion->query("
-    SELECT c.apellido, m.clases_disponibles, m.fecha_vencimiento, a.hora
-    FROM asistencias a
-    INNER JOIN clientes c ON a.cliente_id = c.id
-    LEFT JOIN membresias m ON m.cliente_id = c.id
-        AND m.gimnasio_id = $gimnasio_id
-        AND m.fecha_vencimiento = (
-            SELECT MAX(fecha_vencimiento)
-            FROM membresias
-            WHERE cliente_id = c.id AND gimnasio_id = $gimnasio_id
-        )
-    WHERE a.fecha = '$hoy' AND a.gimnasio_id = $gimnasio_id
-    ORDER BY a.hora DESC
-");
 ?>
-
-<!-- HTML permanece igual -->
 
 <!DOCTYPE html>
 <html lang="es">
@@ -134,24 +98,30 @@ $clientes = $conexion->query("
     <style>
         body { background-color: #111; color: gold; }
         .contenedor { padding: 20px; }
-        .encabezado {
-            display: flex; justify-content: space-between; align-items: center;
-        }
+        .encabezado { display: flex; justify-content: space-between; align-items: center; }
         .encabezado h1 { font-size: 28px; margin: 0; }
-        input[type="text"] {
-            font-size: 20px; padding: 10px; width: 100%; margin: 10px 0;
-        }
-        table {
-            width: 100%; border-collapse: collapse; margin-top: 10px;
-        }
-        table th, table td {
-            border: 1px solid #444; padding: 8px; text-align: center;
-        }
+        input[type="text"] { font-size: 20px; padding: 10px; width: 100%; margin: 10px 0; }
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+        table th, table td { border: 1px solid #444; padding: 8px; text-align: center; }
         .advertencia {
             font-size: 18px; margin: 15px 0;
             color: <?= $activar_sonido ? 'red' : 'lime' ?>;
         }
     </style>
+    <script>
+        function actualizarListados() {
+            fetch('ajax_ingresos_profesores.php')
+                .then(res => res.text())
+                .then(html => document.getElementById('tabla_profesores').innerHTML = html);
+
+            fetch('ajax_ingresos_clientes.php')
+                .then(res => res.text())
+                .then(html => document.getElementById('tabla_clientes').innerHTML = html);
+        }
+
+        setInterval(actualizarListados, 10000);
+        window.onload = actualizarListados;
+    </script>
 </head>
 <body>
     <div class="contenedor">
@@ -174,27 +144,14 @@ $clientes = $conexion->query("
 
         <h2>👨‍🏫 Profesores Hoy</h2>
         <table>
-            <tr><th>Apellido</th><th>Ingreso</th><th>Salida</th></tr>
-            <?php while ($row = $profesores->fetch_assoc()): ?>
-            <tr>
-                <td><?= $row['apellido'] ?></td>
-                <td><?= $row['hora_entrada'] ?: '-' ?></td>
-                <td><?= $row['hora_salida'] ?: '-' ?></td>
-            </tr>
-            <?php endwhile; ?>
+            <thead><tr><th>Apellido</th><th>Ingreso</th><th>Salida</th></tr></thead>
+            <tbody id="tabla_profesores"></tbody>
         </table>
 
         <h2>🏋️ Clientes Hoy</h2>
         <table>
-            <tr><th>Apellido</th><th>Hora</th><th>Clases</th><th>Vencimiento</th></tr>
-            <?php while ($row = $clientes->fetch_assoc()): ?>
-            <tr>
-                <td><?= $row['apellido'] ?></td>
-                <td><?= $row['hora'] ?></td>
-                <td><?= $row['clases_disponibles'] ?? 'N/D' ?></td>
-                <td><?= $row['fecha_vencimiento'] ?? 'N/D' ?></td>
-            </tr>
-            <?php endwhile; ?>
+            <thead><tr><th>Apellido</th><th>Hora</th><th>Clases</th><th>Vencimiento</th></tr></thead>
+            <tbody id="tabla_clientes"></tbody>
         </table>
     </div>
 </body>
