@@ -11,21 +11,6 @@ $nombre_gym = $gimnasio['nombre'] ?? 'Gimnasio';
 $logo = $gimnasio['logo'] ?? '';
 $fecha_venc = $gimnasio['fecha_vencimiento'] ?? '---';
 
-function obtenerMonto($conexion, $tabla, $campo_fecha, $gimnasio_id, $modo = 'DIA') {
-    $cond = $modo === 'MES'
-        ? "MONTH($campo_fecha) = MONTH(CURDATE()) AND YEAR($campo_fecha) = YEAR(CURDATE())"
-        : "$campo_fecha = CURDATE()";
-    $col = ($tabla === 'ventas') ? 'monto_total' : (($tabla === 'pagos') ? 'monto' : 'total_pagado');
-    $q = "SELECT SUM($col) AS total FROM $tabla WHERE $cond AND gimnasio_id = $gimnasio_id";
-    $res = $conexion->query($q);
-    return $res && $res->num_rows > 0 ? ($res->fetch_assoc()['total'] ?? 0) : 0;
-}
-
-$pagos_dia = obtenerMonto($conexion, 'membresias', 'fecha_inicio', $gimnasio_id, 'DIA');
-$pagos_mes = obtenerMonto($conexion, 'membresias', 'fecha_inicio', $gimnasio_id, 'MES');
-$ventas_mes = obtenerMonto($conexion, 'ventas', 'fecha', $gimnasio_id, 'MES');
-$ventas_dia = obtenerMonto($conexion, 'ventas', 'fecha', $gimnasio_id, 'DIA');
-
 $cumples = $conexion->query("SELECT nombre, apellido, fecha_nacimiento FROM clientes WHERE gimnasio_id = $gimnasio_id AND DATE_FORMAT(fecha_nacimiento, '%m-%d') >= DATE_FORMAT(CURDATE(), '%m-%d') ORDER BY DATE_FORMAT(fecha_nacimiento, '%m-%d') LIMIT 5");
 
 $vencimientos = $conexion->query("
@@ -36,28 +21,7 @@ $vencimientos = $conexion->query("
     ORDER BY m.fecha_vencimiento ASC LIMIT 5
 ");
 
-// Filtro de fecha para ver reservas de otros días
 $fecha_filtro = $_GET['fecha'] ?? date('Y-m-d');
-
-$reservas = $conexion->query("
-    SELECT rc.dia_semana, rc.hora_inicio, rc.fecha_reserva,
-           c.nombre, c.apellido,
-           CONCAT(p.apellido, ' ', p.nombre) AS profesor
-    FROM reservas_clientes rc
-    JOIN clientes c ON rc.cliente_id = c.id
-    JOIN profesores p ON rc.profesor_id = p.id
-    WHERE rc.fecha_reserva = '$fecha_filtro'
-      AND rc.gimnasio_id = $gimnasio_id
-    ORDER BY rc.hora_inicio
-");
-
-$alumnos_hoy = $conexion->query("
-    SELECT c.apellido, c.nombre, a.hora 
-    FROM asistencias a
-    JOIN clientes c ON a.cliente_id = c.id
-    WHERE a.fecha = CURDATE() AND c.gimnasio_id = $gimnasio_id
-    ORDER BY a.hora
-");
 ?>
 <!DOCTYPE html>
 <html lang="es">
@@ -104,6 +68,24 @@ $alumnos_hoy = $conexion->query("
 
       icono.textContent = visible ? '👁️' : '👁️‍🗨️';
     }
+
+    function cargarDatos() {
+      fetch('ajax_ingresos.php')
+        .then(r => r.text())
+        .then(html => document.getElementById('contenedor-ingresos').innerHTML = html);
+
+      const fecha = document.getElementById('fecha').value;
+      fetch('ajax_reservas.php?fecha=' + fecha)
+        .then(r => r.text())
+        .then(html => document.getElementById('contenedor-reservas').innerHTML = html);
+
+      fetch('ajax_alumnos_hoy.php')
+        .then(r => r.text())
+        .then(html => document.getElementById('contenedor-alumnos').innerHTML = html);
+    }
+
+    setInterval(cargarDatos, 10000);
+    window.onload = cargarDatos;
   </script>
 </head>
 <body>
@@ -135,54 +117,38 @@ $alumnos_hoy = $conexion->query("
 </div>
 
 <div class="grid">
-  <div class="box bloque-monto"><h2>💰 Ingresos del Día</h2><div class="monto">$<?= number_format($pagos_dia + $ventas_dia, 2) ?></div></div>
-  <div class="box bloque-monto"><h2>📆 Ingresos del Mes</h2><div class="monto">$<?= number_format($pagos_mes + $ventas_mes, 2) ?></div></div>
+  <div id="contenedor-ingresos" class="box bloque-monto">Cargando ingresos...</div>
 
-  <div class="box"><h2>🎂 Próximos Cumpleaños</h2><ul>
-    <?php while($c = $cumples->fetch_assoc()): ?>
-      <li><?= $c['apellido'] . ', ' . $c['nombre'] ?> (<?= date('d/m', strtotime($c['fecha_nacimiento'])) ?>)</li>
-    <?php endwhile; ?>
-  </ul></div>
-
-  <div class="box"><h2>📅 Vencimientos</h2><ul>
-    <?php while($v = $vencimientos->fetch_assoc()): ?>
-      <li><?= $v['apellido'] . ', ' . $v['nombre'] ?> (<?= date('d/m', strtotime($v['fecha_vencimiento'])) ?>)</li>
-    <?php endwhile; ?>
-  </ul></div>
-
-<div class="box">
-  <form method="GET" style="margin-bottom: 10px;">
-    <label for="fecha" style="color: gold;">📅 Ver reservas del día: </label>
-    <input type="date" id="fecha" name="fecha" value="<?= $fecha_filtro ?>" onchange="this.form.submit()">
-  </form>
-
-  <h2>📋 Reservas del <?= date('d/m/Y', strtotime($fecha_filtro)) ?></h2>
-  <ul>
-    <?php if ($reservas && $reservas->num_rows > 0): ?>
-      <?php while ($r = $reservas->fetch_assoc()): ?>
-        <li>
-          📅 <?= $r['dia_semana'] ?> - 🕒 <?= $r['hora_inicio'] ?><br>
-          👤 <?= htmlspecialchars($r['apellido']) ?> <?= htmlspecialchars($r['nombre']) ?><br>
-          👨‍🏫 <?= htmlspecialchars($r['profesor']) ?>
-        </li>
+  <div class="box">
+    <h2>🎂 Próximos Cumpleaños</h2>
+    <ul>
+      <?php while($c = $cumples->fetch_assoc()): ?>
+        <li><?= $c['apellido'] . ', ' . $c['nombre'] ?> (<?= date('d/m', strtotime($c['fecha_nacimiento'])) ?>)</li>
       <?php endwhile; ?>
-    <?php else: ?>
-      <li style="color:gray;">No hay reservas registradas para este día.</li>
-    <?php endif; ?>
-  </ul>
-</div>
+    </ul>
+  </div>
+
+  <div class="box">
+    <h2>📅 Vencimientos</h2>
+    <ul>
+      <?php while($v = $vencimientos->fetch_assoc()): ?>
+        <li><?= $v['apellido'] . ', ' . $v['nombre'] ?> (<?= date('d/m', strtotime($v['fecha_vencimiento'])) ?>)</li>
+      <?php endwhile; ?>
+    </ul>
+  </div>
+
+  <div class="box">
+    <form method="GET" style="margin-bottom: 10px;">
+      <label for="fecha" style="color: gold;">📅 Ver reservas del día: </label>
+      <input type="date" id="fecha" name="fecha" value="<?= $fecha_filtro ?>" onchange="this.form.submit()">
+    </form>
+    <h2>📋 Reservas del día</h2>
+    <ul id="contenedor-reservas">Cargando reservas...</ul>
+  </div>
 
   <div class="cuadro">
     <h3>🧍 Alumnos que ingresaron Hoy</h3>
-    <?php if ($alumnos_hoy->num_rows > 0): ?>
-      <ul>
-        <?php while ($al = $alumnos_hoy->fetch_assoc()): ?>
-          <li><?= $al['apellido'] . ' ' . $al['nombre'] ?> - ⏰ <?= $al['hora'] ?></li>
-        <?php endwhile; ?>
-      </ul>
-    <?php else: ?>
-      <p style="color:gray;">No se registraron ingresos de alumnos hoy.</p>
-    <?php endif; ?>
+    <div id="contenedor-alumnos">Cargando alumnos...</div>
   </div>
 </div>
 
