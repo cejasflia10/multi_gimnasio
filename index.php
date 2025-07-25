@@ -53,7 +53,6 @@ if ($consulta_cc && $r = $consulta_cc->fetch_assoc()) {
 }
 ?>
 
-?>
 <!DOCTYPE html>
 <html lang="es">
 <head>
