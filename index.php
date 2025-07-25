@@ -22,6 +22,37 @@ $vencimientos = $conexion->query("
 ");
 
 $fecha_filtro = $_GET['fecha'] ?? date('Y-m-d');
+
+
+// PAGOS PENDIENTES
+$pagos_pendientes = 0;
+$consulta = $conexion->query("
+    SELECT COUNT(*) AS total 
+    FROM pagos_pendientes 
+    JOIN clientes ON pagos_pendientes.cliente_id = clientes.id 
+    WHERE pagos_pendientes.estado = 'pendiente' 
+    AND clientes.gimnasio_id = $gimnasio_id
+");
+if ($consulta && $r = $consulta->fetch_assoc()) {
+    $pagos_pendientes = (int)$r['total'];
+}
+
+// CUENTAS CORRIENTES
+$cuentas_corrientes = 0;
+$consulta_cc = $conexion->query("
+    SELECT COUNT(*) AS total FROM (
+        SELECT cliente_id
+        FROM cuentas_corrientes
+        WHERE gimnasio_id = $gimnasio_id
+        GROUP BY cliente_id
+        HAVING SUM(monto) < 0
+    ) AS sub
+");
+if ($consulta_cc && $r = $consulta_cc->fetch_assoc()) {
+    $cuentas_corrientes = (int)$r['total'];
+}
+?>
+
 ?>
 <!DOCTYPE html>
 <html lang="es">
@@ -54,6 +85,27 @@ $fecha_filtro = $_GET['fecha'] ?? date('Y-m-d');
         border: none;
         border-radius: 5px;
         cursor: pointer;
+    }
+    .alerta-pagos {
+        background-color: darkred;
+        color: white;
+        padding: 15px;
+        margin-bottom: 20px;
+        border-radius: 10px;
+        font-size: 18px;
+    }
+    .alerta-pagos a {
+        color: yellow;
+        text-decoration: underline;
+        margin-left: 10px;
+    }
+    .alerta-ok {
+        background-color: green;
+        color: white;
+        padding: 15px;
+        margin-bottom: 20px;
+        border-radius: 10px;
+        font-size: 18px;
     }
   </style>
   <script>
@@ -106,14 +158,29 @@ $fecha_filtro = $_GET['fecha'] ?? date('Y-m-d');
 
     <div>
       <h1>🏋️ <?= htmlspecialchars($nombre_gym) ?></h1>
-      <p>📅 Vencimiento del sistema: <strong style="color:orange;"><?= date('d/m/Y', strtotime($fecha_venc)) ?></strong></p>
+      <p>🗓 Vencimiento del sistema: <strong style="color:orange;"><?= date('d/m/Y', strtotime($fecha_venc)) ?></strong></p>
     </div>
   </div>
 </div>
 
+<!-- HTML OMITIDO PARA MOSTRAR SOLO ALERTAS -->
+<?php if ($cuentas_corrientes > 0): ?>
+  <div class="alerta-pagos">
+    ⚠️ Hay <strong><?= $cuentas_corrientes ?></strong> cliente(s) con saldo negativo.
+    <a href="ver_cuentas_corrientes.php">Ver cuentas corrientes</a>
+  </div>
+<?php endif; ?>
+
+<?php if ($pagos_pendientes > 0): ?>
+  <div class="alerta-pagos">
+    💸 Hay <strong><?= $pagos_pendientes ?></strong> pago(s) pendiente(s) de clientes.
+    <a href="ver_pagos_pendientes.php">Ver pagos</a>
+  </div>
+<?php endif; ?>
+
 <!-- Botón mostrar/ocultar montos -->
 <div style="text-align:right; margin-bottom:10px;">
-  <span id="icono-ojo" class="toggle-icon" onclick="toggleMontos()" style="cursor:pointer; font-size:22px;">👁️‍🗨️</span>
+  <span id="icono-ojo" class="toggle-icon" onclick="toggleMontos()" style="cursor:pointer; font-size:22px;">👁️‍🔮</span>
 </div>
 
 <div class="grid">
@@ -129,7 +196,7 @@ $fecha_filtro = $_GET['fecha'] ?? date('Y-m-d');
   </div>
 
   <div class="box">
-    <h2>📅 Vencimientos</h2>
+    <h2>🗓 Vencimientos</h2>
     <ul>
       <?php while($v = $vencimientos->fetch_assoc()): ?>
         <li><?= $v['apellido'] . ', ' . $v['nombre'] ?> (<?= date('d/m', strtotime($v['fecha_vencimiento'])) ?>)</li>
@@ -139,7 +206,7 @@ $fecha_filtro = $_GET['fecha'] ?? date('Y-m-d');
 
   <div class="box">
     <form method="GET" style="margin-bottom: 10px;">
-      <label for="fecha" style="color: gold;">📅 Ver reservas del día: </label>
+      <label for="fecha" style="color: gold;">🗓 Ver reservas del día: </label>
       <input type="date" id="fecha" name="fecha" value="<?= $fecha_filtro ?>" onchange="this.form.submit()">
     </form>
     <h2>📋 Reservas del día</h2>
@@ -147,7 +214,7 @@ $fecha_filtro = $_GET['fecha'] ?? date('Y-m-d');
   </div>
 
   <div class="cuadro">
-    <h3>🧍 Alumnos que ingresaron Hoy</h3>
+    <h3>🧟 Alumnos que ingresaron Hoy</h3>
     <div id="contenedor-alumnos">Cargando alumnos...</div>
   </div>
 </div>

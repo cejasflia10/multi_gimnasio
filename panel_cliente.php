@@ -1,6 +1,5 @@
 <?php
 if (session_status() === PHP_SESSION_NONE) session_start();
-
 include 'conexion.php';
 include 'menu_cliente.php';
 
@@ -20,6 +19,27 @@ if (!$cliente) {
 }
 
 $cliente_nombre = $cliente['apellido'] . ' ' . $cliente['nombre'];
+
+// Verificar membresía activa
+$alerta_membresia = '';
+$hoy = date('Y-m-d');
+$membresia = $conexion->query("
+    SELECT clases_restantes, fecha_vencimiento 
+    FROM membresias 
+    WHERE cliente_id = $cliente_id 
+    ORDER BY fecha_vencimiento DESC 
+    LIMIT 1
+")->fetch_assoc();
+
+if ($membresia) {
+    $clases = intval($membresia['clases_restantes']);
+    $vencimiento = $membresia['fecha_vencimiento'];
+    $dias_restantes = (strtotime($vencimiento) - strtotime($hoy)) / 86400;
+
+    if ($clases <= 2 || $dias_restantes <= 3) {
+        $alerta_membresia = "⚠️ ¡Atención! Te quedan <strong>$clases clase(s)</strong> y tu plan vence en <strong>$dias_restantes día(s)</strong>.";
+    }
+}
 ?>
 
 <!DOCTYPE html>
@@ -38,6 +58,16 @@ $cliente_nombre = $cliente['apellido'] . ' ' . $cliente['nombre'];
         h1 {
             text-align: center;
             margin-top: 30px;
+        }
+        .alerta {
+            background-color: #ffcc00;
+            color: black;
+            padding: 15px;
+            border-radius: 8px;
+            max-width: 600px;
+            margin: 20px auto;
+            font-weight: bold;
+            text-align: center;
         }
         .datos {
             background: #111;
@@ -80,11 +110,79 @@ $cliente_nombre = $cliente['apellido'] . ' ' . $cliente['nombre'];
     <!-- PWA -->
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#000000">
-    <meta name="mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <link rel="icon" sizes="192x192" href="icono192.png">
 </head>
+<body>
+
+<h1>👋 Bienvenido <?= htmlspecialchars($cliente_nombre) ?></h1>
+
+<?php if ($alerta_membresia): ?>
+    <div class="alerta"><?= $alerta_membresia ?></div>
+<?php endif; ?>
+
+<div class="foto">
+    <?php
+    $foto = $cliente['foto'] ?? '';
+    $ruta_foto = "fotos_clientes/" . $foto;
+
+    if (!empty($foto) && file_exists($ruta_foto)) {
+        echo "<img src='$ruta_foto' alt='Foto del cliente'>";
+    } else {
+        echo "<img src='fotos_clientes/default.png' alt='Sin foto' style='opacity:0.7;'>";
+    }
+    ?>
+</div>
+
+<div class="datos">
+    <p><strong>DNI:</strong> <?= $cliente['dni'] ?></p>
+    <p><strong>Email:</strong> <?= $cliente['email'] ?></p>
+    <p><strong>Teléfono:</strong> <?= $cliente['telefono'] ?></p>
+    <p><strong>Disciplina:</strong> <?= $cliente['disciplina'] ?></p>
+</div>
+
+<div style="text-align:center; margin-top: 30px;">
+    <h3 style="color: gold;">📲 Tu código QR personal</h3>
+    <a class="btn-qr" href="generar_qr_individual.php?id=<?= $cliente['id'] ?>" target="_blank">Generar QR</a>
+</div>
+
+<div class="form-foto">
+    <form method="POST" enctype="multipart/form-data">
+        <label for="nueva_foto" style="color:#FFD700;">📸 Subí tu foto (o tomá con la cámara)</label><br><br>
+        <input type="file" name="nueva_foto" accept="image/*" capture="user" required><br><br>
+        <button type="submit" style="padding:5px 15px; background:#FFD700; border:none; border-radius:5px;">Cargar foto</button>
+    </form>
+</div>
+
+<!-- Reservas del Día -->
+<div style="margin-top: 30px; background:#222; padding:15px; border-radius:10px;">
+    <h3 style="color:gold;">📆 Reservas del Día</h3>
+    <?php
+    $reservas_q = $conexion->query("
+        SELECT r.dia_semana AS dia, r.hora_inicio, td.hora_fin,
+               CONCAT(c.apellido, ' ', c.nombre) AS cliente_nombre,
+               CONCAT(p.apellido, ' ', p.nombre) AS profesor
+        FROM reservas_clientes r
+        JOIN clientes c ON r.cliente_id = c.id
+        JOIN profesores p ON r.profesor_id = p.id
+        JOIN turnos_disponibles td ON r.turno_id = td.id
+        WHERE r.fecha_reserva = CURDATE()
+          AND r.gimnasio_id = $gimnasio_id
+          AND r.cliente_id = $cliente_id
+        ORDER BY r.hora_inicio
+    ");
+
+    if ($reservas_q->num_rows > 0) {
+        while ($res = $reservas_q->fetch_assoc()) {
+            echo "<p style='color:white; margin:5px 0;'>
+                🕒 {$res['hora_inicio']} a {$res['hora_fin']}<br>
+                👨‍🏫 Prof. {$res['profesor']}
+            </p>";
+        }
+    } else {
+        echo "<p style='color:gray;'>No hay reservas registradas para hoy.</p>";
+    }
+    ?>
+</div>
 
 <script>
 function actualizarContadorMensajes() {
@@ -115,77 +213,6 @@ if ('serviceWorker' in navigator) {
     });
 }
 </script>
-
-<body>
-
-<h1>👋 Bienvenido <?= htmlspecialchars($cliente_nombre) ?></h1>
-
-<div class="foto">
-    <?php
-    $foto = $cliente['foto'] ?? '';
-    $ruta_foto = "fotos_clientes/" . $foto;
-
-    if (!empty($foto) && file_exists($ruta_foto)) {
-        echo "<img src='$ruta_foto' alt='Foto del cliente'>";
-    } else {
-        echo "<img src='fotos_clientes/default.png' alt='Sin foto' style='opacity:0.7;'>";
-    }
-    ?>
-</div>
-
-<div class="datos">
-    <p><strong>DNI:</strong> <?= $cliente['dni'] ?></p>
-    <p><strong>Email:</strong> <?= $cliente['email'] ?></p>
-    <p><strong>Teléfono:</strong> <?= $cliente['telefono'] ?></p>
-    <p><strong>Disciplina:</strong> <?= $cliente['disciplina'] ?></p>
-</div>
-
-<div style="text-align:center; margin-top: 30px;">
-    <h3 style="color: gold;">📲 Tu código QR personal</h3>
-    <a class="btn-qr" href="generar_qr_individual.php?id=<?= $cliente['id'] ?>" target="_blank">
-        Generar QR
-    </a>
-</div>
-
-<div class="form-foto">
-    <form method="POST" enctype="multipart/form-data">
-        <label for="nueva_foto" style="color:#FFD700;">📸 Subí tu foto (o tomá con la cámara)</label><br><br>
-        <input type="file" name="nueva_foto" accept="image/*" capture="user" required><br><br>
-        <button type="submit" style="padding:5px 15px; background:#FFD700; border:none; border-radius:5px;">Cargar foto</button>
-    </form>
-</div>
-
-<!-- Reservas del Día -->
-<div style="margin-top: 30px; background:#222; padding:15px; border-radius:10px;">
-    <h3 style="color:gold;">📆 Reservas del Día</h3>
-    <?php
-    $reservas_q = $conexion->query("
-        SELECT r.dia_semana AS dia, r.hora_inicio, td.hora_fin,
-               c.nombre, c.apellido,
-               CONCAT(p.apellido, ' ', p.nombre) AS profesor
-        FROM reservas_clientes r
-        JOIN clientes c ON r.cliente_id = c.id
-        JOIN profesores p ON r.profesor_id = p.id
-        JOIN turnos_disponibles td ON r.turno_id = td.id
-        WHERE r.fecha_reserva = CURDATE()
-          AND r.gimnasio_id = $gimnasio_id
-          AND r.cliente_id = $cliente_id
-        ORDER BY r.hora_inicio
-    ");
-
-    if ($reservas_q->num_rows > 0) {
-        while ($res = $reservas_q->fetch_assoc()) {
-            echo "<p style='color:white; margin:5px 0;'>
-                🕒 {$res['hora_inicio']} a {$res['hora_fin']}<br>
-                👤 {$res['apellido']} {$res['nombre']}<br>
-                👨‍🏫 Prof. {$res['profesor']}
-            </p>";
-        }
-    } else {
-        echo "<p style='color:gray;'>No hay reservas registradas para hoy.</p>";
-    }
-    ?>
-</div>
 
 </body>
 </html>
