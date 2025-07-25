@@ -8,22 +8,23 @@ include 'menu_cliente.php';
 
 $mensaje = "";
 $gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
+
 $planes = $conexion->query("SELECT * FROM planes WHERE gimnasio_id = $gimnasio_id ORDER BY nombre");
 $adicionales = $conexion->query("SELECT * FROM planes_adicionales WHERE gimnasio_id = $gimnasio_id ORDER BY nombre");
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $plan_id = $_POST['plan_id'];
+    $plan_id = $_POST['plan_id'] ?? 0;
     $monto = $_POST['monto'];
     $fecha = date('Y-m-d H:i:s');
     $archivo = $_FILES['comprobante']['name'];
     $ruta_tmp = $_FILES['comprobante']['tmp_name'];
     $ruta_destino = "comprobantes/" . uniqid() . "_" . basename($archivo);
     $adicionales_seleccionados = $_POST['adicionales'] ?? [];
-    $json_adicionales = json_encode($adicionales_seleccionados);
+    $adicionales_json = json_encode($adicionales_seleccionados);
 
     if (move_uploaded_file($ruta_tmp, $ruta_destino)) {
         $stmt = $conexion->prepare("INSERT INTO pagos_pendientes (cliente_id, plan_id, monto, archivo_comprobante, fecha_envio, estado, adicionales) VALUES (?, ?, ?, ?, ?, 'pendiente', ?)");
-        $stmt->bind_param("iissss", $cliente_id, $plan_id, $monto, $ruta_destino, $fecha, $json_adicionales);
+        $stmt->bind_param("iissss", $cliente_id, $plan_id, $monto, $ruta_destino, $fecha, $adicionales_json);
         $stmt->execute();
         $mensaje = "✅ Comprobante enviado correctamente. Será validado en breve.";
     } else {
@@ -41,17 +42,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <link rel="stylesheet" href="estilo_unificado.css">
     <script>
         function calcularTotal() {
-            let planSelect = document.querySelector('select[name="plan_id"]');
-            let planPrecio = parseFloat(planSelect.options[planSelect.selectedIndex].dataset.precio || 0);
-            let adicionalCheckboxes = document.querySelectorAll('input[name="adicionales[]"]:checked');
-            let total = planPrecio;
-
-            adicionalCheckboxes.forEach(cb => {
-                total += parseFloat(cb.dataset.precio || 0);
+            let plan = document.getElementById('plan_id');
+            let monto = 0;
+            if (plan && plan.value !== "0") {
+                monto += parseFloat(plan.selectedOptions[0].dataset.precio || 0);
+            }
+            document.querySelectorAll('input[name="adicionales[]"]:checked').forEach(el => {
+                monto += parseFloat(el.dataset.precio || 0);
             });
-
-            document.getElementById('monto').value = total.toFixed(2);
-            document.getElementById('total_texto').textContent = "$" + total.toFixed(2);
+            document.getElementById('monto').value = monto.toFixed(2);
+            document.getElementById('total_mostrar').innerText = "$" + monto.toFixed(2);
         }
     </script>
 </head>
@@ -68,14 +68,13 @@ if ($res_alias && $row = $res_alias->fetch_assoc()) {
 ?>
 <div style="text-align:center; color:gold; font-size:18px; margin-top: 20px;">
     💰 Alias para transferencia:<br>
-    <strong style="color:white;">
-        <?= htmlspecialchars($alias ?: 'No disponible') ?>
-    </strong>
+    <strong style="color:white;"><?= htmlspecialchars($alias ?: 'No disponible') ?></strong>
 </div>
 
 <form method="POST" enctype="multipart/form-data" oninput="calcularTotal()">
     <label>Seleccioná un plan:</label>
-    <select name="plan_id" required>
+    <select name="plan_id" id="plan_id">
+        <option value="0" data-precio="0">-- Solo adicionales --</option>
         <?php while ($p = $planes->fetch_assoc()): ?>
             <option value="<?= $p['id'] ?>" data-precio="<?= $p['precio'] ?>">
                 <?= $p['nombre'] ?> - $<?= number_format($p['precio'], 2, ',', '.') ?>
@@ -83,17 +82,16 @@ if ($res_alias && $row = $res_alias->fetch_assoc()) {
         <?php endwhile; ?>
     </select>
 
-    <label>Seleccionar adicionales:</label>
+    <label>Seleccioná adicionales (opcionales):</label><br>
     <?php while ($a = $adicionales->fetch_assoc()): ?>
-        <div>
+        <label>
             <input type="checkbox" name="adicionales[]" value="<?= $a['id'] ?>" data-precio="<?= $a['precio'] ?>">
-            <?= $a['nombre'] ?> - $<?= number_format($a['precio'], 2, ',', '.') ?>
-        </div>
+            <?= $a['nombre'] ?> ($<?= number_format($a['precio'], 2, ',', '.') ?>)
+        </label><br>
     <?php endwhile; ?>
 
-    <label>Monto total a pagar:</label>
-    <input type="number" id="monto" name="monto" step="0.01" required readonly>
-    <div style="margin-top: 5px; color:lime; font-size: 18px;">Total: <span id="total_texto">$0.00</span></div>
+    <p><strong>Total a pagar: <span id="total_mostrar">$0.00</span></strong></p>
+    <input type="hidden" name="monto" id="monto" value="0">
 
     <label>Comprobante (imagen o PDF):</label>
     <input type="file" name="comprobante" accept=".jpg,.jpeg,.png,.pdf" required>
