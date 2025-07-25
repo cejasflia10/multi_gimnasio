@@ -37,7 +37,7 @@ function calcular_proxima_fecha($dia_nombre) {
     $hoy = date('N');
     $objetivo = $dias[$dia_nombre] ?? 1;
     $diferencia = ($objetivo - $hoy + 7) % 7;
-    if ($diferencia === 0) $diferencia = 7;
+    // ✅ si hoy es el mismo día del turno, usar hoy
     return date('Y-m-d', strtotime("+$diferencia days"));
 }
 
@@ -51,7 +51,6 @@ if (!isset($_POST['turno_id']) || !is_numeric($_POST['turno_id'])) {
 
 $turno_id = intval($_POST['turno_id']);
 
-// ✅ CORRECTO: buscamos el turno en `turnos_disponibles`
 $turno = $conexion->query("SELECT * FROM turnos_disponibles WHERE id = $turno_id AND gimnasio_id = $gimnasio_id")->fetch_assoc();
 if (!$turno) {
     mostrar_error("❌ Turno no encontrado.");
@@ -62,7 +61,12 @@ $hora_inicio = $turno['hora_inicio'];
 $profesor_id = $turno['profesor_id'];
 $fecha_turno = calcular_proxima_fecha($dia);
 
-// Evitar duplicados: ya reservado
+// ✅ CORRECCIÓN: si hoy es el mismo día del turno, usar hoy
+if (date('N') == date('N', strtotime($fecha_turno)) && $dia == date('l', strtotime($fecha_turno))) {
+    $fecha_turno = date('Y-m-d');
+}
+
+// Evitar duplicados
 $ya_reservado = $conexion->query("
     SELECT id FROM reservas_clientes 
     WHERE cliente_id = $cliente_id AND turno_id = $turno_id AND fecha_reserva = '$fecha_turno'
@@ -89,11 +93,9 @@ $membresia = $conexion->query("
 ")->fetch_assoc();
 
 if ($membresia && $membresia['clases_disponibles'] > 0) {
-    // Descontar 1 clase
     $nueva_cantidad = $membresia['clases_disponibles'] - 1;
     $conexion->query("UPDATE membresias SET clases_disponibles = $nueva_cantidad WHERE id = {$membresia['id']}");
 } else {
-    // Generar deuda
     $hoy = date('Y-m-d');
     $conexion->query("
         INSERT INTO pagos (cliente_id, metodo_pago, monto, fecha, fecha_pago, gimnasio_id)
@@ -102,7 +104,6 @@ if ($membresia && $membresia['clases_disponibles'] > 0) {
     $_SESSION['aviso_deuda'] = true;
 }
 
-// Redirigir al listado
 header("Location: ver_turnos_cliente.php?ok=1");
 exit;
 ?>

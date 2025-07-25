@@ -1,25 +1,29 @@
 <?php
 if (session_status() === PHP_SESSION_NONE) session_start();
 include 'conexion.php';
-include 'menu_horizontal.php'; // O usar 'menu_cliente.php' si corresponde
+include 'menu_cliente.php';
 
 date_default_timezone_set('America/Argentina/Buenos_Aires');
 
 $cliente_id = $_SESSION['cliente_id'] ?? null;
-if (!$cliente_id) {
+$gimnasio_id = $_SESSION['gimnasio_id'] ?? null;
+
+if (!$cliente_id || !$gimnasio_id) {
     header("Location: login_cliente.php");
     exit;
 }
 
-// Obtener reservas activas
+$hoy = date('Y-m-d');
+
+// Reservas del cliente
 $reservas_q = $conexion->query("
-    SELECT r.id, r.fecha, t.dia, h.hora_inicio, h.hora_fin, p.apellido AS profesor
-    FROM reservas r
-    JOIN turnos t ON r.turno_id = t.id
-    JOIN horarios h ON t.id_horario = h.id
-    JOIN profesores p ON t.id_profesor = p.id
-    WHERE r.cliente_id = $cliente_id
-    ORDER BY r.fecha DESC
+    SELECT r.id, r.fecha_reserva, r.dia_semana, r.hora_inicio,
+           td.hora_fin, p.apellido AS profesor
+    FROM reservas_clientes r
+    JOIN turnos_disponibles td ON r.turno_id = td.id
+    JOIN profesores p ON td.profesor_id = p.id
+    WHERE r.cliente_id = $cliente_id AND r.gimnasio_id = $gimnasio_id
+    ORDER BY r.fecha_reserva DESC
 ");
 ?>
 
@@ -40,11 +44,11 @@ $reservas_q = $conexion->query("
     <?php else: ?>
         <?php while ($r = $reservas_q->fetch_assoc()): ?>
             <div class="box" style="background:#111; padding:15px; border:1px solid gold; margin-bottom:10px; border-radius:8px;">
-                <strong>📅 Fecha:</strong> <?= $r['fecha'] ?><br>
-                <strong>📌 Día:</strong> <?= $r['dia'] ?><br>
-                <strong>🕐 Horario:</strong> <?= $r['hora_inicio'] ?> - <?= $r['hora_fin'] ?><br>
+                <strong>📅 Fecha:</strong> <?= $r['fecha_reserva'] ?><br>
+                <strong>📌 Día:</strong> <?= $r['dia_semana'] ?><br>
+                <strong>🕐 Horario:</strong> <?= substr($r['hora_inicio'], 0, 5) ?> - <?= substr($r['hora_fin'], 0, 5) ?><br>
                 <strong>👨‍🏫 Profesor:</strong> <?= $r['profesor'] ?><br>
-                <?php if ($r['fecha'] >= date('Y-m-d')): ?>
+                <?php if ($r['fecha_reserva'] >= date('Y-m-d')): ?>
                     <a class="boton boton-rojo" href="cancelar_reserva.php?id=<?= $r['id'] ?>">Cancelar</a>
                 <?php else: ?>
                     <span style="color: gray;">Reserva pasada</span>

@@ -19,10 +19,22 @@ if (!$cliente) {
 }
 
 $cliente_nombre = $cliente['apellido'] . ' ' . $cliente['nombre'];
+$hoy = date('Y-m-d');
+
+// ✅ CONSULTA DE RESERVAS DEL DÍA (TODOS LOS CLIENTES del gimnasio)
+$reservas_hoy = $conexion->query("
+    SELECT rc.*, 
+           c.apellido AS cliente_apellido, c.nombre AS cliente_nombre,
+           p.apellido AS profesor_apellido, p.nombre AS profesor_nombre
+    FROM reservas_clientes rc
+    JOIN clientes c ON rc.cliente_id = c.id
+    JOIN profesores p ON rc.profesor_id = p.id
+    WHERE rc.fecha_reserva = '$hoy' AND rc.gimnasio_id = $gimnasio_id
+    ORDER BY rc.hora_inicio
+");
 
 // Verificar membresía activa
 $alerta_membresia = '';
-$hoy = date('Y-m-d');
 $membresia = $conexion->query("
     SELECT clases_restantes, fecha_vencimiento 
     FROM membresias 
@@ -153,29 +165,16 @@ if ($membresia) {
     </form>
 </div>
 
-<!-- Reservas del Día -->
+<!-- Reservas del Día (todos los clientes del gimnasio) -->
 <div style="margin-top: 30px; background:#222; padding:15px; border-radius:10px;">
     <h3 style="color:gold;">📆 Reservas del Día</h3>
     <?php
-    $reservas_q = $conexion->query("
-        SELECT r.dia_semana AS dia, r.hora_inicio, td.hora_fin,
-               CONCAT(c.apellido, ' ', c.nombre) AS cliente_nombre,
-               CONCAT(p.apellido, ' ', p.nombre) AS profesor
-        FROM reservas_clientes r
-        JOIN clientes c ON r.cliente_id = c.id
-        JOIN profesores p ON r.profesor_id = p.id
-        JOIN turnos_disponibles td ON r.turno_id = td.id
-        WHERE r.fecha_reserva = CURDATE()
-          AND r.gimnasio_id = $gimnasio_id
-          AND r.cliente_id = $cliente_id
-        ORDER BY r.hora_inicio
-    ");
-
-    if ($reservas_q->num_rows > 0) {
-        while ($res = $reservas_q->fetch_assoc()) {
+    if ($reservas_hoy && $reservas_hoy->num_rows > 0) {
+        while ($res = $reservas_hoy->fetch_assoc()) {
             echo "<p style='color:white; margin:5px 0;'>
-                🕒 {$res['hora_inicio']} a {$res['hora_fin']}<br>
-                👨‍🏫 Prof. {$res['profesor']}
+                🕒 {$res['hora_inicio']}<br>
+                👤 Cliente: {$res['cliente_apellido']} {$res['cliente_nombre']}<br>
+                👨‍🏫 Prof.: {$res['profesor_apellido']} {$res['profesor_nombre']}
             </p>";
         }
     } else {

@@ -7,7 +7,7 @@ $cliente_id = $_SESSION['cliente_id'] ?? 0;
 
 $dia_hoy_en = date('l');
 $nombres_dias = ['Monday'=>'Lunes','Tuesday'=>'Martes','Wednesday'=>'Miércoles','Thursday'=>'Jueves','Friday'=>'Viernes','Saturday'=>'Sábado','Sunday'=>'Domingo'];
-$dia_hoy = $nombres_dias[$dia_hoy_en];
+$dia_hoy = $nombres_dias[$dia_hoy_en] ?? 'Lunes'; // Default
 $dia_seleccionado = $_GET['dia'] ?? $dia_hoy;
 
 // Obtener membresía activa
@@ -15,15 +15,19 @@ $membresia = $conexion->query("SELECT * FROM membresias
     WHERE cliente_id = $cliente_id AND fecha_vencimiento >= CURDATE()
     ORDER BY fecha_inicio DESC LIMIT 1")->fetch_assoc();
 
-// Obtener reservas actuales
+// Obtener reservas actuales (por turno_disponible_id)
 $reservas = [];
-$res_q = $conexion->query("SELECT turno_id FROM reservas_clientes WHERE cliente_id = $cliente_id AND gimnasio_id = $gimnasio_id");
+$res_q = $conexion->query("SELECT turno_id FROM reservas_clientes 
+    WHERE cliente_id = $cliente_id AND gimnasio_id = $gimnasio_id 
+    ");
+
 while ($r = $res_q->fetch_assoc()) {
     $reservas[$r['turno_id']] = true;
 }
 
 include 'menu_cliente.php';
 
+// Cargar turnos disponibles del día
 $turnos = $conexion->query("
     SELECT td.*, p.nombre, p.apellido 
     FROM turnos_disponibles td
