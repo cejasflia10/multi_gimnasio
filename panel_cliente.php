@@ -11,17 +11,101 @@ if ($cliente_id == 0 || $gimnasio_id == 0) {
     exit;
 }
 
-// Verificar si el cliente pertenece al gimnasio
-$cliente = $conexion->query("SELECT * FROM clientes WHERE id = $cliente_id AND gimnasio_id = $gimnasio_id")->fetch_assoc();
+// ✅ Verificar si el cliente pertenece al gimnasio
+$stmt = $conexion->prepare("SELECT * FROM clientes WHERE id=? AND gimnasio_id=?");
+$stmt->bind_param("ii", $cliente_id, $gimnasio_id);
+$stmt->execute();
+$cliente = $stmt->get_result()->fetch_assoc();
+
 if (!$cliente) {
     echo "<div style='color:red; text-align:center; font-size:20px;'>❌ Acceso denegado al gimnasio.</div>";
     exit;
 }
 
+// ✅ Si el cliente no completó datos físicos, mostrar formulario
+if ($cliente['datos_completos'] == 0) {
+    if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['guardar_datos_fisicos'])) {
+        $peso = $_POST['peso'] ?? '';
+        $altura = $_POST['altura'] ?? '';
+        $remera = $_POST['talle_remera'] ?? '';
+        $pantalon = $_POST['talle_pantalon'] ?? '';
+        $calzado = $_POST['talle_calzado'] ?? '';
+        $observaciones = $_POST['observaciones'] ?? '';
+        $fecha = date('Y-m-d');
+
+        $stmt = $conexion->prepare("INSERT INTO datos_fisicos 
+            (cliente_id, fecha, peso, altura, talle_remera, talle_pantalon, talle_calzado, observaciones, gimnasio_id) 
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)");
+        $stmt->bind_param(
+            "isssssssi",
+            $cliente_id,
+            $fecha,
+            $peso,
+            $altura,
+            $remera,
+            $pantalon,
+            $calzado,
+            $observaciones,
+            $gimnasio_id
+        );
+        $stmt->execute();
+
+        $conexion->query("UPDATE clientes SET datos_completos=1 WHERE id=$cliente_id AND gimnasio_id=$gimnasio_id");
+
+        header("Location: panel_cliente.php");
+        exit;
+    }
+    ?>
+    <!DOCTYPE html>
+    <html lang="es">
+    <head>
+        <meta charset="UTF-8">
+        <title>Completar Datos Físicos</title>
+        <style>
+            body { background:black; color:gold; font-family:Arial; text-align:center; }
+            .formulario { max-width:400px; margin:auto; background:#111; padding:20px; border-radius:10px; border:1px solid gold; }
+            input, textarea { width:100%; padding:8px; margin-bottom:10px; }
+            button { background:gold; border:none; padding:10px; font-weight:bold; cursor:pointer; width:100%; }
+        </style>
+    </head>
+    <body>
+        <h2>📋 Completar Datos Físicos</h2>
+        <div class="formulario">
+            <form method="POST">
+                <input type="hidden" name="guardar_datos_fisicos" value="1">
+
+                <label>Peso (kg):</label>
+                <input type="text" name="peso" required>
+
+                <label>Altura (cm):</label>
+                <input type="text" name="altura" required>
+
+                <label>Talle Remera:</label>
+                <input type="text" name="talle_remera">
+
+                <label>Talle Pantalón:</label>
+                <input type="text" name="talle_pantalon">
+
+                <label>Talle Calzado:</label>
+                <input type="text" name="talle_calzado">
+
+                <label>Observaciones:</label>
+                <textarea name="observaciones"></textarea>
+
+                <button type="submit">Guardar Datos</button>
+            </form>
+        </div>
+    </body>
+    </html>
+    <?php
+    exit; // Evita que se cargue el resto del panel
+}
+
+// ✅ Si ya completó datos físicos, se muestra el panel normal
 $cliente_nombre = $cliente['apellido'] . ' ' . $cliente['nombre'];
 $hoy = date('Y-m-d');
 
-// ✅ CONSULTA DE RESERVAS DEL DÍA (TODOS LOS CLIENTES del gimnasio)
+// ✅ Consultar reservas del día
 $reservas_hoy = $conexion->query("
     SELECT rc.*, 
            c.apellido AS cliente_apellido, c.nombre AS cliente_nombre,
@@ -33,7 +117,7 @@ $reservas_hoy = $conexion->query("
     ORDER BY rc.hora_inicio
 ");
 
-// Verificar membresía activa
+// ✅ Consultar membresía activa
 $alerta_membresia = '';
 $membresia = $conexion->query("
     SELECT clases_restantes, fecha_vencimiento 
@@ -53,7 +137,6 @@ if ($membresia) {
     }
 }
 ?>
-
 <!DOCTYPE html>
 <html lang="es">
 <head>
@@ -61,68 +144,16 @@ if ($membresia) {
     <title>Panel del Cliente</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
-        body {
-            background-color: black;
-            color: gold;
-            font-family: Arial, sans-serif;
-            padding: 20px;
-        }
-        h1 {
-            text-align: center;
-            margin-top: 30px;
-        }
-        .alerta {
-            background-color: #ffcc00;
-            color: black;
-            padding: 15px;
-            border-radius: 8px;
-            max-width: 600px;
-            margin: 20px auto;
-            font-weight: bold;
-            text-align: center;
-        }
-        .datos {
-            background: #111;
-            padding: 20px;
-            border-radius: 10px;
-            max-width: 600px;
-            margin: auto;
-            border: 1px solid gold;
-        }
-        .foto {
-            text-align: center;
-            margin: 20px auto;
-        }
-        .foto img {
-            width: 150px;
-            height: 150px;
-            border-radius: 50%;
-            object-fit: cover;
-            border: 2px solid gold;
-        }
-        .form-foto {
-            text-align: center;
-            margin-top: 10px;
-        }
-        .btn-qr {
-            padding: 10px 20px;
-            background-color: #222;
-            color: gold;
-            border: 1px solid gold;
-            border-radius: 5px;
-            font-weight: bold;
-            text-decoration: none;
-            display: inline-block;
-        }
-        .btn-qr:hover {
-            background-color: #333;
-        }
+        body { background-color: black; color: gold; font-family: Arial, sans-serif; padding: 20px; }
+        h1 { text-align: center; margin-top: 30px; }
+        .alerta { background-color: #ffcc00; color: black; padding: 15px; border-radius: 8px; max-width: 600px; margin: 20px auto; font-weight: bold; text-align: center; }
+        .datos { background: #111; padding: 20px; border-radius: 10px; max-width: 600px; margin: auto; border: 1px solid gold; }
+        .foto { text-align: center; margin: 20px auto; }
+        .foto img { width: 150px; height: 150px; border-radius: 50%; object-fit: cover; border: 2px solid gold; }
+        .form-foto { text-align: center; margin-top: 10px; }
+        .btn-qr { padding: 10px 20px; background-color: #222; color: gold; border: 1px solid gold; border-radius: 5px; font-weight: bold; text-decoration: none; display: inline-block; }
+        .btn-qr:hover { background-color: #333; }
     </style>
-
-    <!-- PWA -->
-    <link rel="manifest" href="manifest.json">
-    <meta name="theme-color" content="#000000">
-    <link rel="icon" sizes="192x192" href="icono192.png">
 </head>
 <body>
 
@@ -165,7 +196,7 @@ if ($membresia) {
     </form>
 </div>
 
-<!-- Reservas del Día (todos los clientes del gimnasio) -->
+<!-- Reservas del Día -->
 <div style="margin-top: 30px; background:#222; padding:15px; border-radius:10px;">
     <h3 style="color:gold;">📆 Reservas del Día</h3>
     <?php
@@ -183,41 +214,11 @@ if ($membresia) {
     ?>
 </div>
 
-<script>
-function actualizarContadorMensajes() {
-    fetch('contador_mensajes.php')
-        .then(response => response.text())
-        .then(numero => {
-            const contenedor = document.getElementById('contador-mensajes');
-            if (contenedor) {
-                if (parseInt(numero) > 0) {
-                    contenedor.innerText = '🔔 ' + numero;
-                    contenedor.style.display = 'inline-block';
-                } else {
-                    contenedor.innerText = '';
-                    contenedor.style.display = 'none';
-                }
-            }
-        });
-}
-setInterval(actualizarContadorMensajes, 30000);
-actualizarContadorMensajes();
-
-if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('service-worker.js')
-    .then(function(reg) {
-      console.log("✅ SW Cliente registrado", reg.scope);
-    }).catch(function(err) {
-      console.log("❌ Error SW Cliente:", err);
-    });
-}
-</script>
-
 </body>
 </html>
 
 <?php
-// Subida de foto
+// ✅ Subida de foto
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['nueva_foto'])) {
     if ($_FILES['nueva_foto']['error'] === UPLOAD_ERR_OK) {
         $foto_tmp = $_FILES['nueva_foto']['tmp_name'];
@@ -225,7 +226,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['nueva_foto'])) {
         $ruta_destino = 'fotos_clientes/' . $nombre_archivo;
 
         if (move_uploaded_file($foto_tmp, $ruta_destino)) {
-            $conexion->query("UPDATE clientes SET foto = '$nombre_archivo' WHERE id = $cliente_id");
+            $conexion->query("UPDATE clientes SET foto = '$nombre_archivo' WHERE id = $cliente_id AND gimnasio_id=$gimnasio_id");
             echo "<script>location.href='panel_cliente.php';</script>";
             exit;
         } else {

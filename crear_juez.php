@@ -3,6 +3,7 @@ include 'conexion.php';
 if (session_status() === PHP_SESSION_NONE) session_start();
 
 $mensaje = "";
+include 'menu_evento.php';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $nombre = trim($_POST['nombre']);
