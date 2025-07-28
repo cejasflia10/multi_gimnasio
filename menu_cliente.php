@@ -45,5 +45,5 @@
     <a href="grafico_progreso_cliente.php">Evolución</a>
     <a href="subastas.php">Subastas</a>
     <a href="sorteos.php">Sorteos</a>
-    <a href="logout.php">Salir</a>
+    <a href="logout:cliente.php">Salir</a>
 </div>

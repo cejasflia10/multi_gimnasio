@@ -11,7 +11,7 @@ if ($cliente_id == 0 || $gimnasio_id == 0) {
     exit;
 }
 
-// ✅ Verificar si el cliente pertenece al gimnasio
+// Obtener datos del cliente con gimnasio_id para validar acceso
 $stmt = $conexion->prepare("SELECT * FROM clientes WHERE id=? AND gimnasio_id=?");
 $stmt->bind_param("ii", $cliente_id, $gimnasio_id);
 $stmt->execute();
@@ -22,38 +22,35 @@ if (!$cliente) {
     exit;
 }
 
-// ✅ Si el cliente no completó datos físicos, mostrar formulario
+// Si el cliente no completó datos físicos, mostrar formulario
 if ($cliente['datos_completos'] == 0) {
+    $mensaje = "";
+
     if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['guardar_datos_fisicos'])) {
         $peso = $_POST['peso'] ?? '';
         $altura = $_POST['altura'] ?? '';
         $remera = $_POST['talle_remera'] ?? '';
         $pantalon = $_POST['talle_pantalon'] ?? '';
         $calzado = $_POST['talle_calzado'] ?? '';
+        $patologias = isset($_POST['patologias']) ? implode(", ", $_POST['patologias']) : '';
+        $tipo_diabetes = $_POST['tipo_diabetes'] ?? '';
+        $medicaciones = $_POST['medicaciones'] ?? '';
         $observaciones = $_POST['observaciones'] ?? '';
         $fecha = date('Y-m-d');
 
-        $stmt = $conexion->prepare("INSERT INTO datos_fisicos 
-            (cliente_id, fecha, peso, altura, talle_remera, talle_pantalon, talle_calzado, observaciones, gimnasio_id) 
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)");
-        $stmt->bind_param(
-            "isssssssi",
-            $cliente_id,
-            $fecha,
-            $peso,
-            $altura,
-            $remera,
-            $pantalon,
-            $calzado,
-            $observaciones,
-            $gimnasio_id
-        );
-        $stmt->execute();
-
-        $conexion->query("UPDATE clientes SET datos_completos=1 WHERE id=$cliente_id AND gimnasio_id=$gimnasio_id");
-
-        header("Location: panel_cliente.php");
-        exit;
+        $stmtInsert = $conexion->prepare("INSERT INTO datos_fisicos 
+            (cliente_id, fecha, peso, altura, talle_remera, talle_pantalon, talle_calzado, patologias, tipo_diabetes, medicaciones, observaciones) 
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+        $stmtInsert->bind_param("issssssssss", 
+            $cliente_id, $fecha, $peso, $altura, $remera, $pantalon, $calzado, $patologias, $tipo_diabetes, $medicaciones, $observaciones);
+        
+        if ($stmtInsert->execute()) {
+            $conexion->query("UPDATE clientes SET datos_completos=1 WHERE id=$cliente_id AND gimnasio_id=$gimnasio_id");
+            header("Location: panel_cliente.php");
+            exit;
+        } else {
+            $mensaje = "❌ Error al guardar los datos. Intente nuevamente.";
+        }
     }
     ?>
     <!DOCTYPE html>
@@ -63,49 +60,82 @@ if ($cliente['datos_completos'] == 0) {
         <title>Completar Datos Físicos</title>
         <style>
             body { background:black; color:gold; font-family:Arial; text-align:center; }
-            .formulario { max-width:400px; margin:auto; background:#111; padding:20px; border-radius:10px; border:1px solid gold; }
-            input, textarea { width:100%; padding:8px; margin-bottom:10px; }
-            button { background:gold; border:none; padding:10px; font-weight:bold; cursor:pointer; width:100%; }
+            .formulario { max-width:450px; margin:auto; background:#111; padding:20px; border-radius:10px; border:1px solid gold; }
+            input, textarea, select { width:100%; padding:8px; margin-bottom:10px; border-radius: 5px; border: 1px solid gold; background:#222; color:gold; font-size:1rem; }
+            button { background:gold; border:none; padding:12px; font-weight:bold; cursor:pointer; width:100%; border-radius: 6px; }
+            button:hover { background:#e6b800; }
+            label { font-weight:bold; margin-top:10px; display:block; text-align:left; }
+            .checkbox-group label { font-weight: normal; display: block; margin: 5px 0; cursor: pointer; }
+            .mensaje { margin-bottom: 15px; font-weight: bold; color: red; }
         </style>
     </head>
     <body>
         <h2>📋 Completar Datos Físicos</h2>
         <div class="formulario">
-            <form method="POST">
+            <?php if ($mensaje): ?>
+                <div class="mensaje"><?= htmlspecialchars($mensaje) ?></div>
+            <?php endif; ?>
+            <form method="POST" autocomplete="off" novalidate>
                 <input type="hidden" name="guardar_datos_fisicos" value="1">
 
-                <label>Peso (kg):</label>
-                <input type="text" name="peso" required>
+                <label for="peso">Peso (kg):</label>
+                <input type="text" id="peso" name="peso" required pattern="^\d+(\.\d{1,2})?$" title="Ingrese un número válido">
 
-                <label>Altura (cm):</label>
-                <input type="text" name="altura" required>
+                <label for="altura">Altura (cm):</label>
+                <input type="text" id="altura" name="altura" required pattern="^\d+(\.\d{1,2})?$" title="Ingrese un número válido">
 
-                <label>Talle Remera:</label>
-                <input type="text" name="talle_remera">
+                <label for="talle_remera">Talle Remera:</label>
+                <input type="text" id="talle_remera" name="talle_remera">
 
-                <label>Talle Pantalón:</label>
-                <input type="text" name="talle_pantalon">
+                <label for="talle_pantalon">Talle Pantalón:</label>
+                <input type="text" id="talle_pantalon" name="talle_pantalon">
 
-                <label>Talle Calzado:</label>
-                <input type="text" name="talle_calzado">
+                <label for="talle_calzado">Talle Calzado:</label>
+                <input type="text" id="talle_calzado" name="talle_calzado">
 
-                <label>Observaciones:</label>
-                <textarea name="observaciones"></textarea>
+                <label>Patologías (marcar las que tenga):</label>
+                <div class="checkbox-group">
+                    <label><input type="checkbox" name="patologias[]" value="Diabetes" onchange="toggleDiabetes(this)"> Diabetes</label>
+                    <label><input type="checkbox" name="patologias[]" value="Hipertensión"> Hipertensión</label>
+                    <label><input type="checkbox" name="patologias[]" value="Asma"> Asma</label>
+                    <label><input type="checkbox" name="patologias[]" value="Otra"> Otra</label>
+                </div>
+
+                <div id="tipo_diabetes" style="display:none;">
+                    <label for="tipo_diabetes_select">Tipo de Diabetes:</label>
+                    <select id="tipo_diabetes_select" name="tipo_diabetes">
+                        <option value="">-- Seleccionar --</option>
+                        <option value="Tipo 1">Tipo 1</option>
+                        <option value="Tipo 2">Tipo 2</option>
+                        <option value="Gestacional">Gestacional</option>
+                    </select>
+                </div>
+
+                <label for="medicaciones">¿Toma medicaciones? ¿Cuáles?</label>
+                <textarea id="medicaciones" name="medicaciones" placeholder="Describa las medicaciones que toma"></textarea>
+
+                <label for="observaciones">Observaciones:</label>
+                <textarea id="observaciones" name="observaciones" placeholder="Otros comentarios, alergias, etc."></textarea>
 
                 <button type="submit">Guardar Datos</button>
             </form>
         </div>
+        <script>
+            function toggleDiabetes(checkbox) {
+                document.getElementById('tipo_diabetes').style.display = checkbox.checked ? 'block' : 'none';
+            }
+        </script>
     </body>
     </html>
     <?php
-    exit; // Evita que se cargue el resto del panel
+    exit; // Para no cargar el resto del panel hasta que complete datos
 }
 
-// ✅ Si ya completó datos físicos, se muestra el panel normal
+// Panel normal si ya completó datos físicos
 $cliente_nombre = $cliente['apellido'] . ' ' . $cliente['nombre'];
 $hoy = date('Y-m-d');
 
-// ✅ Consultar reservas del día
+// Consultar reservas del día
 $reservas_hoy = $conexion->query("
     SELECT rc.*, 
            c.apellido AS cliente_apellido, c.nombre AS cliente_nombre,
@@ -117,7 +147,7 @@ $reservas_hoy = $conexion->query("
     ORDER BY rc.hora_inicio
 ");
 
-// ✅ Consultar membresía activa
+// Consultar membresía activa
 $alerta_membresia = '';
 $membresia = $conexion->query("
     SELECT clases_restantes, fecha_vencimiento 
@@ -130,7 +160,7 @@ $membresia = $conexion->query("
 if ($membresia) {
     $clases = intval($membresia['clases_restantes']);
     $vencimiento = $membresia['fecha_vencimiento'];
-    $dias_restantes = (strtotime($vencimiento) - strtotime($hoy)) / 86400;
+    $dias_restantes = floor((strtotime($vencimiento) - strtotime($hoy)) / 86400);
 
     if ($clases <= 2 || $dias_restantes <= 3) {
         $alerta_membresia = "⚠️ ¡Atención! Te quedan <strong>$clases clase(s)</strong> y tu plan vence en <strong>$dias_restantes día(s)</strong>.";
@@ -177,10 +207,10 @@ if ($membresia) {
 </div>
 
 <div class="datos">
-    <p><strong>DNI:</strong> <?= $cliente['dni'] ?></p>
-    <p><strong>Email:</strong> <?= $cliente['email'] ?></p>
-    <p><strong>Teléfono:</strong> <?= $cliente['telefono'] ?></p>
-    <p><strong>Disciplina:</strong> <?= $cliente['disciplina'] ?></p>
+    <p><strong>DNI:</strong> <?= htmlspecialchars($cliente['dni']) ?></p>
+    <p><strong>Email:</strong> <?= htmlspecialchars($cliente['email']) ?></p>
+    <p><strong>Teléfono:</strong> <?= htmlspecialchars($cliente['telefono']) ?></p>
+    <p><strong>Disciplina:</strong> <?= htmlspecialchars($cliente['disciplina']) ?></p>
 </div>
 
 <div style="text-align:center; margin-top: 30px;">
@@ -218,7 +248,7 @@ if ($membresia) {
 </html>
 
 <?php
-// ✅ Subida de foto
+// Subida de foto
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['nueva_foto'])) {
     if ($_FILES['nueva_foto']['error'] === UPLOAD_ERR_OK) {
         $foto_tmp = $_FILES['nueva_foto']['tmp_name'];
@@ -226,12 +256,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['nueva_foto'])) {
         $ruta_destino = 'fotos_clientes/' . $nombre_archivo;
 
         if (move_uploaded_file($foto_tmp, $ruta_destino)) {
-            $conexion->query("UPDATE clientes SET foto = '$nombre_archivo' WHERE id = $cliente_id AND gimnasio_id=$gimnasio_id");
+            $conexion->query("UPDATE clientes SET foto = '$nombre_archivo' WHERE id = $cliente_id AND gimnasio_id = $gimnasio_id");
             echo "<script>location.href='panel_cliente.php';</script>";
             exit;
         } else {
             echo "<p style='color:red; text-align:center;'>Error al guardar la imagen.</p>";
         }
+    } else {
+        echo "<p style='color:red; text-align:center;'>Error en la subida del archivo.</p>";
     }
 }
 ?>
