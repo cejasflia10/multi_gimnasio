@@ -5,22 +5,30 @@ include 'conexion.php';
 $mensaje = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $usuario = trim($_POST['usuario'] ?? '');
+    // Normalizamos el usuario ingresado
+    $usuario = strtolower(trim($_POST['usuario'] ?? ''));
     $clave = trim($_POST['clave'] ?? '');
 
     if ($usuario && $clave) {
-        $stmt = $conexion->prepare("SELECT id, nombre, clave, rol FROM usuarios_eventos WHERE usuario = ?");
+        $stmt = $conexion->prepare("SELECT id, nombre, clave, rol, usuario FROM usuarios_eventos WHERE LOWER(usuario) = ?");
         $stmt->bind_param("s", $usuario);
         $stmt->execute();
         $res = $stmt->get_result();
 
         if ($res->num_rows > 0) {
             $datos = $res->fetch_assoc();
-            // Contraseña encriptada o directa
+
+            // Verificamos clave (encriptada o en texto plano)
             if ($clave === $datos['clave'] || password_verify($clave, $datos['clave'])) {
+
+                // Guardamos todos los datos normalizados
                 $_SESSION['evento_usuario_id'] = $datos['id'];
                 $_SESSION['evento_usuario_nombre'] = $datos['nombre'];
                 $_SESSION['evento_usuario_rol'] = $datos['rol'];
+
+                // ✅ Guardamos el usuario en minúsculas sin espacios
+                $_SESSION['usuario'] = strtolower(trim($datos['usuario']));
+
                 header("Location: panel_eventos.php");
                 exit;
             } else {
@@ -34,7 +42,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 ?>
-
 <!DOCTYPE html>
 <html lang="es">
 <head>

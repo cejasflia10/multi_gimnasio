@@ -1,8 +1,9 @@
 <?php
 if (session_status() === PHP_SESSION_NONE) session_start();
+
 // 🔒 SOLO fightacademy y lucianoc pueden entrar
 if (!isset($_SESSION['usuario']) || 
-   ($_SESSION['usuario'] !== 'fightacademy' && $_SESSION['usuario'] !== 'lucianoc')) {
+   !in_array(strtolower($_SESSION['usuario']), ['fightacademy', 'lucianoc'])) {
     echo "<p style='color:red; text-align:center; font-size:20px;'>🚫 No tienes permisos para acceder a esta página.</p>";
     exit;
 }
@@ -12,6 +13,7 @@ include 'menu_eventos.php';
 
 $usuarios = $conexion->query("SELECT * FROM usuarios_evento ORDER BY id DESC");
 ?>
+
 <!DOCTYPE html>
 <html lang="es">
 <head>

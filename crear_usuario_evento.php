@@ -1,7 +1,7 @@
 <?php
 if (session_status() === PHP_SESSION_NONE) session_start();
-// 🔒 SOLO fightacademy y lucianoc pueden entrar
-if (!isset($_SESSION['usuario']) || 
+
+if (!isset($_SESSION['usuario']) ||
    ($_SESSION['usuario'] !== 'fightacademy' && $_SESSION['usuario'] !== 'lucianoc')) {
     echo "<p style='color:red; text-align:center; font-size:20px;'>🚫 No tienes permisos para acceder a esta página.</p>";
     exit;
@@ -13,16 +13,21 @@ include 'menu_eventos.php';
 $mensaje = "";
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $nombre = $_POST['nombre'];
-    $email = $_POST['email'];
-    $usuario = $_POST['usuario'];
-    $password = password_hash($_POST['password'], PASSWORD_DEFAULT);
-    $rol = $_POST['rol'];
+    $nombre  = trim($_POST['nombre']);
+    // $email   = trim($_POST['email']);  // ELIMINADO
+    $usuario = strtolower(trim($_POST['usuario']));
+    $clave   = password_hash($_POST['password'], PASSWORD_DEFAULT);
+    $rol     = $_POST['rol'];
 
-    $stmt = $conexion->prepare("INSERT INTO usuarios_evento (nombre,email,usuario,password,rol) VALUES (?,?,?,?,?)");
-    $stmt->bind_param("sssss", $nombre, $email, $usuario, $password, $rol);
+    $stmt = $conexion->prepare("INSERT INTO usuarios_eventos (nombre,usuario,clave,rol) VALUES (?,?,?,?)");
+    $stmt->bind_param("ssss", $nombre, $usuario, $clave, $rol);
 
-    $mensaje = $stmt->execute() ? "✅ Usuario creado correctamente." : "❌ Error al crear el usuario.";
+    if ($stmt->execute()) {
+        $mensaje = "✅ Usuario creado correctamente.";
+    } else {
+        $mensaje = "❌ Error al crear el usuario: " . $conexion->error;
+    }
+
     $stmt->close();
 }
 ?>
@@ -42,8 +47,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       <label>Nombre:</label>
       <input type="text" name="nombre" required>
 
-      <label>Email:</label>
-      <input type="email" name="email">
+      <!-- Campo email eliminado -->
 
       <label>Usuario:</label>
       <input type="text" name="usuario" required>
@@ -52,7 +56,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       <input type="password" name="password" required>
 
       <label>Rol:</label>
-      <select name="rol">
+      <select name="rol" required>
           <option value="organizador">Organizador</option>
           <option value="juez">Juez</option>
           <option value="staff">Staff</option>
