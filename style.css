@@ -188,3 +188,40 @@ table th {
     display: none !important;
   }
 }
+.cronometro-box {
+    display: flex;
+    justify-content: space-between;
+    align-items: stretch; /* 🔹 Esto hace que tengan la misma altura */
+    margin: 40px auto;
+    max-width: 900px;
+}
+
+.rincón {
+    flex: 1; /* 🔹 Ambos rincones ocuparán el mismo espacio */
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    font-size: 24px;
+    font-weight: bold;
+    padding: 20px;
+    min-height: 200px; /* 🔹 Garantiza que ambos tengan la misma altura */
+    box-sizing: border-box;
+}
+
+.rojo {
+    background-color: #c62828; /* 🔹 Rojo uniforme */
+    color: white;
+}
+
+.azul {
+    background-color: #1565c0; /* 🔹 Azul uniforme */
+    color: white;
+}
+
+.nombre {
+    font-size: 20px;
+    margin-top: 10px;
+    color: gold;
+    text-align: center;
+}

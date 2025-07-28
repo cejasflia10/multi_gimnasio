@@ -21,29 +21,47 @@ $nombre_azul = $_GET['azul'] ?? 'RINCÓN AZUL';
             font-family: Arial, sans-serif;
         }
         .cronometro-box {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin: 40px auto;
-            max-width: 900px;
-        }
-        .rincón {
-            width: 25%;
-            font-size: 24px;
-            font-weight: bold;
-            padding: 20px;
-        }
-        .rojo { background: #900; }
-        .azul { background: #006; }
-        .nombre {
-            font-size: 18px;
-            margin-top: 8px;
-            color: gold;
-        }
-        .centro {
-            width: 50%;
-            text-align: center;
-        }
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr; /* 🔹 3 columnas iguales */
+    align-items: stretch;
+    margin: 40px auto;
+    max-width: 900px;
+    gap: 10px;
+}
+
+.rincón, .centro {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    font-size: 24px;
+    font-weight: bold;
+    padding: 20px;
+    min-height: 200px;
+    box-sizing: border-box;
+    text-align: center;
+}
+
+.rojo {
+    background-color: #c62828;
+    color: white;
+}
+
+.azul {
+    background-color: #1565c0;
+    color: white;
+}
+
+.centro {
+    background-color: #222; /* Fondo del centro */
+}
+
+.nombre {
+    font-size: 20px;
+    margin-top: 10px;
+    color: gold;
+}
+
         #tiempo {
             font-size: 80px;
             margin: 10px 0;
