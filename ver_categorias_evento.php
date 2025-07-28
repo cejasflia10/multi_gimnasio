@@ -16,7 +16,7 @@ $resultado = $conexion->query("SELECT * FROM categorias_evento ORDER BY peso_min
 <body>
     <div class="contenedor">
         <h2>📋 Categorías de Competencia</h2>
-        <a href="agregar_categoria.php" class="btn-principal">➕ Agregar Categoría</a>
+        <a href="agregar_categoria_evento.php" class="btn-principal">➕ Agregar Categoría</a>
         <table>
             <tr>
                 <th>Nombre</th>

@@ -2,6 +2,9 @@
 if (session_status() === PHP_SESSION_NONE) session_start();
 include 'conexion.php';
 include 'menu_eventos.php';
+
+$nombre_rojo = $_GET['rojo'] ?? 'RINCÓN ROJO';
+$nombre_azul = $_GET['azul'] ?? 'RINCÓN AZUL';
 ?>
 
 <!DOCTYPE html>
@@ -11,16 +14,32 @@ include 'menu_eventos.php';
     <title>⏱️ Cronómetro de Combate</title>
     <link rel="stylesheet" href="estilo_unificado.css">
     <style>
-        body { text-align: center; background: #111; color: white; font-family: Arial, sans-serif; }
+        body {
+            text-align: center;
+            background: #111;
+            color: white;
+            font-family: Arial, sans-serif;
+        }
         .cronometro-box {
-            display: flex; justify-content: space-between; align-items: center;
-            margin: 40px auto; max-width: 800px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin: 40px auto;
+            max-width: 900px;
         }
         .rincón {
-            width: 25%; font-size: 24px; font-weight: bold; padding: 20px;
+            width: 25%;
+            font-size: 24px;
+            font-weight: bold;
+            padding: 20px;
         }
         .rojo { background: #900; }
         .azul { background: #006; }
+        .nombre {
+            font-size: 18px;
+            margin-top: 8px;
+            color: gold;
+        }
         .centro {
             width: 50%;
             text-align: center;
@@ -50,7 +69,10 @@ include 'menu_eventos.php';
 <h1>🥊 Combate en Vivo</h1>
 
 <div class="cronometro-box">
-    <div class="rincón rojo">🔴 RINCÓN ROJO</div>
+    <div class="rincón rojo">
+        🔴 RINCÓN ROJO
+        <div class="nombre"><?php echo htmlspecialchars($nombre_rojo); ?></div>
+    </div>
     <div class="centro">
         <div id="estado">Esperando...</div>
         <div id="tiempo">00:00</div>
@@ -60,7 +82,10 @@ include 'menu_eventos.php';
             <button onclick="reiniciar()">🔁 Reiniciar</button>
         </div>
     </div>
-    <div class="rincón azul">🔵 RINCÓN AZUL</div>
+    <div class="rincón azul">
+        🔵 RINCÓN AZUL
+        <div class="nombre"><?php echo htmlspecialchars($nombre_azul); ?></div>
+    </div>
 </div>
 
 <div class="config">
@@ -70,7 +95,9 @@ include 'menu_eventos.php';
     <button onclick="guardarConfig()">✅ Aplicar</button>
 </div>
 
+<!-- SONIDOS -->
 <audio id="campana" src="campana_boxeo.mp3" preload="auto"></audio>
+<audio id="descanso" src="descanso.mp3" preload="auto"></audio>
 
 <script>
 let tiempo = 0;
@@ -93,9 +120,10 @@ function toggleTimer() {
     if (intervalo) {
         clearInterval(intervalo);
         intervalo = null;
+        document.getElementById('estado').innerText += " ⏸️ Pausa";
     } else {
         if (roundActual === 0) nuevaRonda();
-        intervalo = setInterval(tick, 1000);
+        else intervalo = setInterval(tick, 1000);
     }
 }
 
@@ -104,9 +132,9 @@ function tick() {
         tiempo--;
         actualizarTiempo();
     } else {
-        document.getElementById('campana').play();
         clearInterval(intervalo);
         intervalo = null;
+        document.getElementById('campana').play();
 
         if (enDescanso) {
             nuevaRonda();
@@ -115,6 +143,7 @@ function tick() {
             document.getElementById('estado').innerText = "😮 Descanso";
             tiempo = minDescanso * 60;
             actualizarTiempo();
+            document.getElementById('descanso').play();
             intervalo = setInterval(tick, 1000);
         }
     }
@@ -123,7 +152,7 @@ function tick() {
 function nuevaRonda() {
     roundActual++;
     if (roundActual > totalRounds) {
-        document.getElementById('estado').innerText = "✅ Finalizado";
+        document.getElementById('estado').innerText = "✅ Combate Finalizado";
         document.getElementById('round').innerText = totalRounds;
         return;
     }
@@ -132,8 +161,8 @@ function nuevaRonda() {
     document.getElementById('round').innerText = roundActual;
     tiempo = minRound * 60;
     actualizarTiempo();
-    intervalo = setInterval(tick, 1000);
     document.getElementById('campana').play();
+    intervalo = setInterval(tick, 1000);
 }
 
 function reiniciar() {

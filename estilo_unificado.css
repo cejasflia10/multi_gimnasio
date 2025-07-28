@@ -204,3 +204,64 @@ a:hover {
     margin-right: 10px;
     color: gold;
 }
+.menu-eventos {
+  background-color: #111;
+  padding: 10px;
+  position: relative;
+}
+
+.menu-eventos .menu {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.menu-eventos .menu li {
+  margin: 5px 10px;
+}
+
+.menu-eventos .menu a {
+  display: block;
+  padding: 8px 12px;
+  background-color: #222;
+  color: gold;
+  text-decoration: none;
+  border-radius: 6px;
+  transition: background 0.3s;
+}
+
+.menu-eventos .menu a:hover {
+  background-color: #333;
+}
+
+.menu-toggle {
+  display: none;
+  background: #222;
+  color: gold;
+  border: none;
+  padding: 10px;
+  font-size: 18px;
+  margin-bottom: 10px;
+  border-radius: 6px;
+}
+
+/* Responsive para móviles */
+@media screen and (max-width: 768px) {
+  .menu-eventos .menu {
+    display: none;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .menu-eventos .menu.show {
+    display: flex;
+  }
+
+  .menu-toggle {
+    display: block;
+    margin: auto;
+  }
+}

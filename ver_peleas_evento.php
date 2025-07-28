@@ -1,6 +1,7 @@
 <?php
 include 'conexion.php';
 if (session_status() === PHP_SESSION_NONE) session_start();
+include 'menu_eventos.php';
 
 // Obtener peleas del evento
 $evento_id = $_SESSION['evento_id'] ?? 0;

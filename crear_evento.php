@@ -1,7 +1,7 @@
 <?php
 session_start();
 include 'conexion.php';
-include 'menu_horizontal.php';
+include 'menu_eventos.php';
 
 $mensaje = '';
 

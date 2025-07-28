@@ -4,6 +4,7 @@ if (session_status() === PHP_SESSION_NONE) session_start();
 
 // Consultas corregidas
 $disciplinas = $conexion->query("SELECT id, nombre FROM disciplinas_evento");
+include 'menu_eventos.php';
 
 $pesos = $conexion->query("
     SELECT DISTINCT cp.id, cp.nombre 

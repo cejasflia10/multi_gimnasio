@@ -1,5 +1,6 @@
 <?php
 include 'conexion.php';
+include 'menu_eventos.php';
 
 $disciplinas = $conexion->query("SELECT * FROM disciplinas_evento");
 $modalidades = $conexion->query("SELECT * FROM modalidades_evento");
