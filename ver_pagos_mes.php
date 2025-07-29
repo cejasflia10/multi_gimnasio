@@ -115,9 +115,11 @@ while ($fila = $resultado->fetch_assoc()) {
 
         <!-- ✅ Se pasa el gimnasio_id en la URL para que funcione en APK -->
         <a class="boton-descarga" 
-           href="exportar_pagos_pdf.php?mes=<?= $mes ?>&anio=<?= $anio ?>&gimnasio_id=<?= $gimnasio_id ?>">
-           📄 Descargar PDF
-        </a>
+   href="<?= "https://".$_SERVER['HTTP_HOST']."/exportar_pagos_pdf.php?mes=$mes&anio=$anio&gimnasio_id=$gimnasio_id" ?>" 
+   target="_blank">
+   📄 Descargar PDF
+</a>
+
     </form>
 
     <table>
