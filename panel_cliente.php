@@ -10,6 +10,7 @@ if ($cliente_id == 0 || $gimnasio_id == 0) {
     exit;
 }
 
+// ✅ Validar cliente
 $stmt = $conexion->prepare("SELECT * FROM clientes WHERE id=? AND gimnasio_id=?");
 $stmt->bind_param("ii", $cliente_id, $gimnasio_id);
 $stmt->execute();
@@ -19,6 +20,7 @@ if (!$cliente) {
     exit;
 }
 
+// ✅ Si no completó datos físicos
 if ($cliente['datos_completos'] == 0) {
     $mensaje = "";
     if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['guardar_datos_fisicos'])) {
@@ -32,12 +34,26 @@ if ($cliente['datos_completos'] == 0) {
         $medicacion = $_POST['medicacion'] ?? '';
         $fecha = date('Y-m-d');
 
+        // ✅ Se agrega gimnasio_id en el INSERT
         $stmtInsert = $conexion->prepare(
             "INSERT INTO datos_fisicos 
-            (cliente_id, fecha, peso, altura, talle_remera, talle_pantalon, talle_calzado, observaciones, enfermedades, medicacion) 
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+            (cliente_id, gimnasio_id, fecha, peso, altura, talle_remera, talle_pantalon, talle_calzado, observaciones, enfermedades, medicacion) 
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
         );
-        $stmtInsert->bind_param("isssssssss", $cliente_id, $fecha, $peso, $altura, $remera, $pantalon, $calzado, $observaciones, $enfermedades, $medicacion);
+        $stmtInsert->bind_param(
+            "iisssssssss",
+            $cliente_id,
+            $gimnasio_id,
+            $fecha,
+            $peso,
+            $altura,
+            $remera,
+            $pantalon,
+            $calzado,
+            $observaciones,
+            $enfermedades,
+            $medicacion
+        );
 
         if ($stmtInsert->execute()) {
             $conexion->query("UPDATE clientes SET datos_completos=1 WHERE id=$cliente_id AND gimnasio_id=$gimnasio_id");
@@ -101,8 +117,12 @@ $cliente_nombre = $cliente['apellido'] . ' ' . $cliente['nombre'];
 $hoy = date('Y-m-d');
 $fecha_filtro = $_GET['fecha'] ?? $hoy;
 
-$stmtMemb = $conexion->prepare("SELECT clases_restantes, fecha_vencimiento FROM membresias WHERE cliente_id=? ORDER BY fecha_vencimiento DESC LIMIT 1");
-$stmtMemb->bind_param("i", $cliente_id);
+// ✅ Consulta membresía filtrando por gimnasio
+$stmtMemb = $conexion->prepare("SELECT clases_restantes, fecha_vencimiento 
+                                FROM membresias 
+                                WHERE cliente_id=? AND gimnasio_id=? 
+                                ORDER BY fecha_vencimiento DESC LIMIT 1");
+$stmtMemb->bind_param("ii", $cliente_id, $gimnasio_id);
 $stmtMemb->execute();
 $membresia = $stmtMemb->get_result()->fetch_assoc();
 
