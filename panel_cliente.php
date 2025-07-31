@@ -118,7 +118,7 @@ $hoy = date('Y-m-d');
 $fecha_filtro = $_GET['fecha'] ?? $hoy;
 
 // ✅ Consulta membresía filtrando por gimnasio
-$stmtMemb = $conexion->prepare("SELECT clases_restantes, fecha_vencimiento 
+$stmtMemb = $conexion->prepare("SELECT clases_disponibles, fecha_vencimiento 
                                 FROM membresias 
                                 WHERE cliente_id=? AND gimnasio_id=? 
                                 ORDER BY fecha_vencimiento DESC LIMIT 1");
@@ -128,7 +128,7 @@ $membresia = $stmtMemb->get_result()->fetch_assoc();
 
 $alerta_membresia = '';
 if ($membresia) {
-    $clases = intval($membresia['clases_restantes']);
+    $clases = intval($membresia['clases_disponibles']);
     $vencimiento = $membresia['fecha_vencimiento'];
     $dias_restantes = floor((strtotime($vencimiento) - strtotime($hoy)) / 86400);
     if ($clases <= 2 || $dias_restantes <= 3) {

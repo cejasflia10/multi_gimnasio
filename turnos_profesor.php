@@ -1,5 +1,6 @@
 <?php
-if (session_status() === PHP_SESSION_NONE) session_start();
+ob_start();  // <-- Agrega esto para evitar problemas de header()
+session_start();
 $gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
 
 include 'conexion.php';
@@ -35,15 +36,56 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST['profesor_id'])) {
 // Eliminar turno
 if (isset($_GET['eliminar'])) {
     $id_turno = intval($_GET['eliminar']);
-    $conexion->query("DELETE FROM turnos_profesor WHERE id = $id_turno");
-    $conexion->query("DELETE FROM turnos_disponibles WHERE profesor_id IN (SELECT profesor_id FROM turnos_profesor WHERE id = $id_turno)");
-    header("Location: turnos_profesor.php");
-    exit();
-}
 
+    // Primero obtenemos el profesor_id de ese turno para eliminar la fila correcta en turnos_disponibles
+    $resultado = $conexion->query("SELECT profesor_id FROM turnos_profesor WHERE id = $id_turno");
+    if ($resultado && $fila = $resultado->fetch_assoc()) {
+        $profesor_id_turno = $fila['profesor_id'];
+
+        // Eliminamos el turno de turnos_profesor
+        $conexion->query("DELETE FROM turnos_profesor WHERE id = $id_turno");
+
+        // Eliminamos el turno correspondiente en turnos_disponibles usando profesor_id, dia, hora_inicio y hora_fin
+        // Mejor eliminar solo el turno disponible que coincide con el mismo profesor, día y horario
+        // Para eso obtenemos esos datos:
+        $resultado2 = $conexion->query("SELECT dia, hora_inicio, hora_fin FROM turnos_profesor WHERE id = $id_turno");
+        // Pero como ya eliminamos el turno anterior, hay que obtener esos datos antes de eliminar
+        // Cambiamos el orden para evitar esto:
+    }
+    // Reordenamos para obtener datos antes de eliminar:
+}
+?>
+
+<?php
+// Reorganizando la eliminación para evitar borrar y perder datos antes de usarlos:
+if (isset($_GET['eliminar'])) {
+    $id_turno = intval($_GET['eliminar']);
+
+    // Obtener datos del turno antes de borrar
+    $resultado = $conexion->query("SELECT profesor_id, dia, hora_inicio, hora_fin FROM turnos_profesor WHERE id = $id_turno");
+    if ($resultado && $fila = $resultado->fetch_assoc()) {
+        $profesor_id_turno = $fila['profesor_id'];
+        $dia_turno = $conexion->real_escape_string($fila['dia']);
+        $hora_inicio_turno = $conexion->real_escape_string($fila['hora_inicio']);
+        $hora_fin_turno = $conexion->real_escape_string($fila['hora_fin']);
+
+        // Eliminar de turnos_profesor
+        $conexion->query("DELETE FROM turnos_profesor WHERE id = $id_turno");
+
+        // Eliminar el turno correspondiente en turnos_disponibles
+        $conexion->query("DELETE FROM turnos_disponibles WHERE profesor_id = $profesor_id_turno AND dia = '$dia_turno' AND hora_inicio = '$hora_inicio_turno' AND hora_fin = '$hora_fin_turno'");
+
+        header("Location: turnos_profesor.php");
+        exit();
+    }
+}
+?>
+
+<?php
 // Obtener profesores del gimnasio actual
 $result = $conexion->query("SELECT id, apellido, nombre FROM profesores WHERE gimnasio_id = $gimnasio_id");
 
+// Obtener turnos
 $turnos = $conexion->query("
     SELECT t.*, p.apellido, p.nombre 
     FROM turnos_profesor t 
@@ -68,7 +110,7 @@ $turnos = $conexion->query("
     <select name="profesor_id" required>
       <option value="">Seleccionar Profesor</option>
       <?php while ($row = $result->fetch_assoc()) {
-        echo "<option value='{$row['id']}'>{$row['apellido']} {$row['nombre']}</option>";
+        echo "<option value='".htmlspecialchars($row['id'])."'>".htmlspecialchars($row['apellido'].' '.$row['nombre'])."</option>";
       } ?>
     </select>
     <select name="dia" required>
@@ -106,3 +148,5 @@ $turnos = $conexion->query("
 </div>
 </body>
 </html>
+
+<?php ob_end_flush(); // Finalizamos el buffer ?>

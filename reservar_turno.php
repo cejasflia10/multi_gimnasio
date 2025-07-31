@@ -37,7 +37,6 @@ function calcular_proxima_fecha($dia_nombre) {
     $hoy = date('N');
     $objetivo = $dias[$dia_nombre] ?? 1;
     $diferencia = ($objetivo - $hoy + 7) % 7;
-    // ✅ si hoy es el mismo día del turno, usar hoy
     return date('Y-m-d', strtotime("+$diferencia days"));
 }
 
@@ -61,8 +60,8 @@ $hora_inicio = $turno['hora_inicio'];
 $profesor_id = $turno['profesor_id'];
 $fecha_turno = calcular_proxima_fecha($dia);
 
-// ✅ CORRECCIÓN: si hoy es el mismo día del turno, usar hoy
-if (date('N') == date('N', strtotime($fecha_turno)) && $dia == date('l', strtotime($fecha_turno))) {
+// Si hoy es el mismo día del turno, usar hoy
+if (date('N') == date('N', strtotime($fecha_turno))) {
     $fecha_turno = date('Y-m-d');
 }
 
@@ -76,30 +75,39 @@ if ($ya_reservado) {
     mostrar_error("⚠️ Ya reservaste este turno.");
 }
 
-// Registrar reserva
+// Registrar reserva (sin descontar clases)
 $conexion->query("
     INSERT INTO reservas_clientes 
     (cliente_id, turno_id, profesor_id, dia_semana, hora_inicio, fecha_reserva, gimnasio_id)
     VALUES ($cliente_id, $turno_id, $profesor_id, '$dia', '$hora_inicio', '$fecha_turno', $gimnasio_id)
 ");
 
-// Verificar membresía
+// Verificar membresía activa y clases disponibles para registrar deuda si no tiene membresía o clases
 $membresia = $conexion->query("
     SELECT * FROM membresias 
     WHERE cliente_id = $cliente_id 
-    AND fecha_vencimiento >= CURDATE()
-    AND gimnasio_id = $gimnasio_id
+      AND fecha_vencimiento >= CURDATE()
+      AND gimnasio_id = $gimnasio_id
     ORDER BY fecha_inicio DESC LIMIT 1
 ")->fetch_assoc();
 
-if ($membresia && $membresia['clases_disponibles'] > 0) {
-    $nueva_cantidad = $membresia['clases_disponibles'] - 1;
-    $conexion->query("UPDATE membresias SET clases_disponibles = $nueva_cantidad WHERE id = {$membresia['id']}");
+$hoy = date('Y-m-d');
+$monto_deuda_por_clase = -1000; // monto negativo por clase (ajustalo a tu valor)
+
+if ($membresia) {
+    if ($membresia['clases_disponibles'] <= 0) {
+        // No tiene clases, registrar deuda
+        $conexion->query("
+            INSERT INTO pagos (cliente_id, metodo_pago, monto, fecha, fecha_pago, gimnasio_id)
+            VALUES ($cliente_id, 'Cuenta Corriente', $monto_deuda_por_clase, '$hoy', '$hoy', $gimnasio_id)
+        ");
+        $_SESSION['aviso_deuda'] = true;
+    }
 } else {
-    $hoy = date('Y-m-d');
+    // No tiene membresía activa, registrar deuda
     $conexion->query("
         INSERT INTO pagos (cliente_id, metodo_pago, monto, fecha, fecha_pago, gimnasio_id)
-        VALUES ($cliente_id, 'Cuenta Corriente', -1000, '$hoy', '$hoy', $gimnasio_id)
+        VALUES ($cliente_id, 'Cuenta Corriente', $monto_deuda_por_clase, '$hoy', '$hoy', $gimnasio_id)
     ");
     $_SESSION['aviso_deuda'] = true;
 }
