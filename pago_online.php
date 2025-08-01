@@ -3,12 +3,17 @@ session_start();
 include 'conexion.php';
 
 $cliente_id = $_SESSION['cliente_id'] ?? 0;
-if ($cliente_id == 0) die("Acceso denegado.");
+$gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
+
+if ($cliente_id == 0 || $gimnasio_id == 0) {
+    die("Acceso denegado.");
+}
+
 include 'menu_cliente.php';
 
 $mensaje = "";
-$gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
 
+// Obtener planes y adicionales del gimnasio logueado
 $planes = $conexion->query("SELECT * FROM planes WHERE gimnasio_id = $gimnasio_id ORDER BY nombre");
 $adicionales = $conexion->query("SELECT * FROM planes_adicionales WHERE gimnasio_id = $gimnasio_id ORDER BY nombre");
 
@@ -19,12 +24,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $archivo = $_FILES['comprobante']['name'];
     $ruta_tmp = $_FILES['comprobante']['tmp_name'];
     $ruta_destino = "comprobantes/" . uniqid() . "_" . basename($archivo);
+
+    // Guardar adicionales como JSON
     $adicionales_seleccionados = $_POST['adicionales'] ?? [];
     $adicionales_json = json_encode($adicionales_seleccionados);
 
     if (move_uploaded_file($ruta_tmp, $ruta_destino)) {
-        $stmt = $conexion->prepare("INSERT INTO pagos_pendientes (cliente_id, plan_id, monto, archivo_comprobante, fecha_envio, estado, adicionales) VALUES (?, ?, ?, ?, ?, 'pendiente', ?)");
-        $stmt->bind_param("iissss", $cliente_id, $plan_id, $monto, $ruta_destino, $fecha, $adicionales_json);
+        $stmt = $conexion->prepare("INSERT INTO pagos_pendientes 
+            (cliente_id, gimnasio_id, plan_id, monto, archivo_comprobante, fecha_envio, estado, adicionales) 
+            VALUES (?, ?, ?, ?, ?, ?, 'pendiente', ?)");
+        $stmt->bind_param("iiissss", $cliente_id, $gimnasio_id, $plan_id, $monto, $ruta_destino, $fecha, $adicionales_json);
         $stmt->execute();
         $mensaje = "✅ Comprobante enviado correctamente. Será validado en breve.";
     } else {

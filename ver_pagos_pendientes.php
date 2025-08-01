@@ -12,14 +12,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $accion = $_POST['accion'] ?? '';
 
     if ($accion === 'aprobar') {
-        $pago = $conexion->query("SELECT * FROM pagos_pendientes WHERE id = $id")->fetch_assoc();
+        $pago = $conexion->query("SELECT * FROM pagos_pendientes WHERE id = $id AND gimnasio_id = $gimnasio_id")->fetch_assoc();
 
         if ($pago) {
             $plan_id = intval($pago['plan_id']);
             $cliente_id = intval($pago['cliente_id']);
             $total = floatval($pago['monto']);
 
-            $plan = $conexion->query("SELECT * FROM planes WHERE id = $plan_id")->fetch_assoc();
+            $plan = $conexion->query("SELECT * FROM planes WHERE id = $plan_id AND gimnasio_id = $gimnasio_id")->fetch_assoc();
 
             if ($plan) {
                 $clases = intval($plan['clases']);
@@ -29,27 +29,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                 $conexion->query("INSERT INTO membresias 
                     (cliente_id, plan_id, fecha_inicio, fecha_vencimiento, clases_disponibles, total, metodo_pago, gimnasio_id) 
-                    VALUES (
-                        $cliente_id, $plan_id, '$fecha_inicio', '$fecha_vencimiento', $clases, $total, 'Transferencia (comprobante)', $gimnasio_id
-                    )");
+                    VALUES ($cliente_id, $plan_id, '$fecha_inicio', '$fecha_vencimiento', $clases, $total, 'Transferencia (comprobante)', $gimnasio_id)");
 
                 $conexion->query("UPDATE pagos_pendientes SET estado = 'aprobado' WHERE id = $id");
                 $mensaje = "<p style='color:lime;'>✅ Pago aprobado correctamente.</p>";
             }
         }
     } elseif ($accion === 'rechazar') {
-        $conexion->query("UPDATE pagos_pendientes SET estado = 'rechazado' WHERE id = $id");
+        $conexion->query("UPDATE pagos_pendientes SET estado = 'rechazado' WHERE id = $id AND gimnasio_id = $gimnasio_id");
         $mensaje = "<p style='color:red;'>❌ Pago rechazado.</p>";
     }
 }
 
-// Consultar pagos pendientes
+// Consultar pagos pendientes del gimnasio logueado
 $pagos = $conexion->query("SELECT p.*, c.apellido, c.nombre, pl.nombre AS nombre_plan 
     FROM pagos_pendientes p
     JOIN clientes c ON p.cliente_id = c.id
     JOIN planes pl ON p.plan_id = pl.id
     WHERE p.estado = 'pendiente' AND p.gimnasio_id = $gimnasio_id
-    ORDER BY p.fecha DESC");
+    ORDER BY p.fecha_envio DESC");
 ?>
 
 <!DOCTYPE html>
@@ -91,10 +89,10 @@ $pagos = $conexion->query("SELECT p.*, c.apellido, c.nombre, pl.nombre AS nombre
             <td><?= htmlspecialchars($p['apellido'] . ', ' . $p['nombre']) ?></td>
             <td><?= htmlspecialchars($p['nombre_plan']) ?></td>
             <td>$<?= number_format($p['monto'], 2, ',', '.') ?></td>
-            <td><?= date('d/m/Y', strtotime($p['fecha'])) ?></td>
+            <td><?= date('d/m/Y', strtotime($p['fecha_envio'])) ?></td>
             <td>
-                <?php if (!empty($p['comprobante'])): ?>
-                    <a href="comprobantes/<?= $p['comprobante'] ?>" target="_blank" style="color:deepskyblue;">📄 Ver</a>
+                <?php if (!empty($p['archivo_comprobante'])): ?>
+                    <a href="<?= htmlspecialchars($p['archivo_comprobante']) ?>" target="_blank" style="color:deepskyblue;">📄 Ver</a>
                 <?php else: ?>
                     Sin archivo
                 <?php endif; ?>
