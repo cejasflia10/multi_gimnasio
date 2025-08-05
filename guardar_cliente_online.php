@@ -1,79 +1,52 @@
 <?php
-if (session_status() === PHP_SESSION_NONE) {
-    session_start();
-}
-
+// guardar_cliente_online.php
+if (session_status() === PHP_SESSION_NONE) session_start();
 include 'conexion.php';
 
-// Validar datos
+// Recibir POST
+$gimnasio_id = intval($_POST['gimnasio_id'] ?? 0);
 $apellido = trim($_POST['apellido'] ?? '');
 $nombre = trim($_POST['nombre'] ?? '');
-$dni = intval($_POST['dni'] ?? 0);
-$fecha_nacimiento = $_POST['fecha_nacimiento'] ?? '';
+$dni = trim($_POST['dni'] ?? '');
+$fecha_nac = $_POST['fecha_nacimiento'] ?? null;
 $domicilio = trim($_POST['domicilio'] ?? '');
 $telefono = trim($_POST['telefono'] ?? '');
 $email = trim($_POST['email'] ?? '');
 $disciplina = trim($_POST['disciplina'] ?? '');
-$gimnasio_id = intval($_POST['gimnasio_id'] ?? 0);
 
-// Verificar si el DNI ya existe
-$existe = $conexion->query("SELECT id FROM clientes WHERE dni = $dni AND gimnasio_id = $gimnasio_id")->num_rows;
-if ($existe > 0) {
-    echo "<div style='color: red; text-align: center; font-size: 20px;'>❌ El cliente con ese DNI ya está registrado.</div>";
-    echo "<div style='text-align: center;'><a href='registrar_cliente_online.php?gimnasio=$gimnasio_id'>Volver</a></div>";
-    exit;
+if ($gimnasio_id <= 0 || $apellido === '' || $nombre === '' || $dni === '') {
+    die("Faltan datos obligatorios.");
 }
 
-// Calcular edad automáticamente
-$nacimiento = new DateTime($fecha_nacimiento);
-$hoy = new DateTime();
-$edad = $hoy->diff($nacimiento)->y;
-
-// Insertar en la tabla clientes
-$stmt = $conexion->prepare("INSERT INTO clientes (apellido, nombre, dni, fecha_nacimiento, edad, domicilio, telefono, email, disciplina, gimnasio_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
-$stmt->bind_param("ssissssssi", $apellido, $nombre, $dni, $fecha_nacimiento, $edad, $domicilio, $telefono, $email, $disciplina, $gimnasio_id);
+// 1) Buscar si ya existe cliente con ese DNI en este gimnasio
+$stmt = $conexion->prepare("SELECT id FROM clientes WHERE dni = ? AND gimnasio_id = ? LIMIT 1");
+$stmt->bind_param("si", $dni, $gimnasio_id);
 $stmt->execute();
+$res = $stmt->get_result();
+$cliente_id = 0;
 
-// Obtener nombre del gimnasio
-$gimnasio = $conexion->query("SELECT nombre FROM gimnasios WHERE id = $gimnasio_id")->fetch_assoc();
-$nombre_gimnasio = $gimnasio['nombre'] ?? 'el gimnasio';
+if ($row = $res->fetch_assoc()) {
+    // Ya existe -> actualizar algunos datos y marcar nuevo_online = 1
+    $cliente_id = intval($row['id']);
+    $upd = $conexion->prepare("UPDATE clientes SET apellido = ?, nombre = ?, fecha_nacimiento = ?, domicilio = ?, telefono = ?, email = ?, disciplina = ? WHERE id = ? AND gimnasio_id = ?");
+    $upd->bind_param("ssssssiii", $apellido, $nombre, $fecha_nac, $domicilio, $telefono, $email, $disciplina, $cliente_id, $gimnasio_id);
+    $upd->execute();
+    $upd->close();
+} else {
+    // No existe -> insertar
+    $ins = $conexion->prepare("INSERT INTO clientes (apellido, nombre, dni, fecha_nacimiento, domicilio, telefono, email, disciplina, gimnasio_id, creado_en) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())");
+    $ins->bind_param("sssssssis", $apellido, $nombre, $dni, $fecha_nac, $domicilio, $telefono, $email, $disciplina, $gimnasio_id);
+    if (!$ins->execute()) {
+        die("Error al insertar cliente: " . $ins->error);
+    }
+    $cliente_id = $ins->insert_id;
+    $ins->close();
+}
 
-?>
+// 2) Intentar marcar cliente como 'nuevo_online = 1' para que se muestre en el index
+// (Si la columna no existe, el UPDATE fallará; capturamos silenciosamente el error)
+$conexion->query("UPDATE clientes SET nuevo_online = 1 WHERE id = $cliente_id AND gimnasio_id = $gimnasio_id");
 
-<!DOCTYPE html>
-<html lang="es">
-<head>
-    <meta charset="UTF-8">
-    <title>Registro Exitoso</title>
-    <meta http-equiv="refresh" content="3;url=cliente_acceso.php">
-    <style>
-        body {
-            background: #000;
-            color: gold;
-            font-family: Arial, sans-serif;
-            text-align: center;
-            padding: 40px;
-        }
-        .mensaje {
-            font-size: 24px;
-            margin-top: 40px;
-        }
-        .btn {
-            background-color: gold;
-            color: black;
-            padding: 10px 20px;
-            text-decoration: none;
-            font-weight: bold;
-            border-radius: 5px;
-            display: inline-block;
-            margin-top: 20px;
-        }
-    </style>
-</head>
-<body>
-    <img src="logo.png" alt="Logo" style="max-width: 150px;">
-    <h1>🎉 ¡Bienvenido a <?= htmlspecialchars($nombre_gimnasio) ?>!</h1>
-    <p class="mensaje">Tu registro fue exitoso.</p>
-    <a href="cliente_acceso.php" class="btn">Ir al panel</a>
-</body>
-</html>
+// 3) Redirigir a bienvenida con el id de cliente
+header("Location: bienvenida_online.php?cliente_id=" . intval($cliente_id));
+exit;

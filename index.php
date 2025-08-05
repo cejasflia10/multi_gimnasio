@@ -1,5 +1,39 @@
 <?php
-session_start();
+// --- INICIO: validación de sesión e inactividad ---
+if (session_status() === PHP_SESSION_NONE) session_start();
+
+$timeout_minutos = 30;
+$timeout_seg = $timeout_minutos * 60;
+
+if (!isset($_SESSION['gimnasio_id'])) {
+    if (session_status() !== PHP_SESSION_NONE) {
+        session_unset();
+        session_destroy();
+    }
+    header('Location: login.php');
+    exit;
+}
+
+if (isset($_SESSION['last_activity']) && (time() - $_SESSION['last_activity']) > $timeout_seg) {
+    session_unset();
+    session_destroy();
+    header('Location: login.php?timeout=1');
+    exit;
+}
+
+$_SESSION['last_activity'] = time();
+
+if (!isset($_SESSION['session_regenerated_time'])) {
+    session_regenerate_id(true);
+    $_SESSION['session_regenerated_time'] = time();
+} else {
+    if (time() - $_SESSION['session_regenerated_time'] > 15 * 60) {
+        session_regenerate_id(true);
+        $_SESSION['session_regenerated_time'] = time();
+    }
+}
+// --- FIN: validación de sesión e inactividad ---
+
 include 'conexion.php';
 include 'menu_horizontal.php';
 
@@ -51,6 +85,16 @@ $consulta_cc = $conexion->query("
 if ($consulta_cc && $r = $consulta_cc->fetch_assoc()) {
     $cuentas_corrientes = (int)$r['total'];
 }
+$nuevos = $conexion->query("SELECT id, nombre, apellido FROM clientes WHERE gimnasio_id = $gimnasio_id AND nuevo_online = 1");
+if ($nuevos && $nuevos->num_rows > 0) {
+    echo "<div style='background:#fff3cd;border:1px solid #ffeeba;padding:12px;border-radius:8px;color:#856404;'>";
+    echo "<strong>📢 Nuevos registros online:</strong><br>";
+    while ($n = $nuevos->fetch_assoc()) {
+        echo htmlspecialchars($n['nombre'].' '.$n['apellido']) . " — <a href='marcar_visto.php?id={$n['id']}'>Marcar como visto</a><br>";
+    }
+    echo "</div>";
+}
+
 ?>
 
 <!DOCTYPE html>
@@ -162,7 +206,6 @@ if ($consulta_cc && $r = $consulta_cc->fetch_assoc()) {
   </div>
 </div>
 
-<!-- HTML OMITIDO PARA MOSTRAR SOLO ALERTAS -->
 <?php if ($cuentas_corrientes > 0): ?>
   <div class="alerta-pagos">
     ⚠️ Hay <strong><?= $cuentas_corrientes ?></strong> cliente(s) con saldo negativo.
@@ -177,7 +220,6 @@ if ($consulta_cc && $r = $consulta_cc->fetch_assoc()) {
   </div>
 <?php endif; ?>
 
-<!-- Botón mostrar/ocultar montos -->
 <div style="text-align:right; margin-bottom:10px;">
   <span id="icono-ojo" class="toggle-icon" onclick="toggleMontos()" style="cursor:pointer; font-size:22px;">👁️‍🔮</span>
 </div>

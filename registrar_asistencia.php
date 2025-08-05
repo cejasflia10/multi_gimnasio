@@ -135,7 +135,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST["codigo"])) {
 <div style="margin: 15px 0; display: flex; gap: 10px;">
     <a href="agregar_cliente.php" style="padding: 10px 15px; background: dodgerblue; color: white; text-decoration: none; font-weight: bold; border-radius: 5px;">➕ Agregar Cliente</a>
     <a href="nueva_membresia.php" style="padding: 10px 15px; background: limegreen; color: black; text-decoration: none; font-weight: bold; border-radius: 5px;">🏋️ Nueva Membresía</a>
-    <a href="ver_membresias.php" style="padding: 10px 15px; background: orange; color: black; text-decoration: none; font-weight: bold; border-radius: 5px;">♻️ Ver Membresía</a>
+    <a href="ver_membresias.php" style="padding: 10px 15px; background: orange; color: black; text-decoration: none; font-weight: bold; borde-r-radius: 5px;">♻️ Ver Membresía</a>
 </div>
 
         <form method="POST" action="">
