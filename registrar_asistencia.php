@@ -92,6 +92,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST["codigo"])) {
 <!DOCTYPE html>
 <html lang="es">
 <head>
+    
     <meta charset="UTF-8">
     <title>Registro de Asistencia</title>
     <link rel="stylesheet" href="estilo_unificado.css">
@@ -129,6 +130,13 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST["codigo"])) {
             <img src="<?= $logo_gimnasio ?>" height="70">
             <h1><?= strtoupper($nombre_gimnasio) ?></h1>
         </div>
+
+<!-- Botones de acción -->
+<div style="margin: 15px 0; display: flex; gap: 10px;">
+    <a href="agregar_cliente.php" style="padding: 10px 15px; background: dodgerblue; color: white; text-decoration: none; font-weight: bold; border-radius: 5px;">➕ Agregar Cliente</a>
+    <a href="nueva_membresia.php" style="padding: 10px 15px; background: limegreen; color: black; text-decoration: none; font-weight: bold; border-radius: 5px;">🏋️ Nueva Membresía</a>
+    <a href="ver_membresias.php" style="padding: 10px 15px; background: orange; color: black; text-decoration: none; font-weight: bold; border-radius: 5px;">♻️ Ver Membresía</a>
+</div>
 
         <form method="POST" action="">
             <input type="text" name="codigo" autofocus placeholder="Ingresar DNI...">
