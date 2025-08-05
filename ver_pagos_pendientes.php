@@ -22,15 +22,45 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $plan = $conexion->query("SELECT * FROM planes WHERE id = $plan_id AND gimnasio_id = $gimnasio_id")->fetch_assoc();
 
             if ($plan) {
-                $clases = intval($plan['clases']);
-                $duracion = intval($plan['duracion']);
+                $clases = intval($plan['clases_disponibles']);
+                $duracion = intval($plan['duracion_meses']);
                 $fecha_inicio = date('Y-m-d');
-                $fecha_vencimiento = date('Y-m-d', strtotime("+$duracion months"));
 
-                $conexion->query("INSERT INTO membresias 
-                    (cliente_id, plan_id, fecha_inicio, fecha_vencimiento, clases_disponibles, total, metodo_pago, gimnasio_id) 
-                    VALUES ($cliente_id, $plan_id, '$fecha_inicio', '$fecha_vencimiento', $clases, $total, 'Transferencia (comprobante)', $gimnasio_id)");
+                // Verificar si el cliente tiene membresía activa
+                $membresia_activa = $conexion->query("
+                    SELECT * FROM membresias 
+                    WHERE cliente_id = $cliente_id 
+                      AND gimnasio_id = $gimnasio_id 
+                      AND fecha_vencimiento >= CURDATE()
+                    ORDER BY fecha_vencimiento DESC LIMIT 1
+                ")->fetch_assoc();
 
+                if ($membresia_activa) {
+                    // ✅ Renovar membresía existente
+                    $nueva_fecha_vencimiento = date('Y-m-d', strtotime($membresia_activa['fecha_vencimiento'] . " +$duracion months"));
+                    $nuevas_clases = $membresia_activa['clases_disponibles'] + $clases;
+                    $nuevo_total = $membresia_activa['total_pagado'] + $total;
+
+                    $conexion->query("
+                        UPDATE membresias 
+                        SET fecha_vencimiento = '$nueva_fecha_vencimiento',
+                            clases_disponibles = $nuevas_clases,
+                            total_pagado = $nuevo_total
+                        WHERE id = {$membresia_activa['id']}
+                    ");
+                } else {
+                    // ✅ Crear nueva membresía
+                    $fecha_vencimiento = date('Y-m-d', strtotime("+$duracion months"));
+
+                    $conexion->query("
+                        INSERT INTO membresias 
+                        (cliente_id, plan_id, fecha_inicio, fecha_vencimiento, clases_disponibles, total_pagado, metodo_pago, gimnasio_id) 
+                        VALUES 
+                        ($cliente_id, $plan_id, '$fecha_inicio', '$fecha_vencimiento', $clases, $total, 'Transferencia (comprobante)', $gimnasio_id)
+                    ");
+                }
+
+                // ✅ Marcar el pago como aprobado
                 $conexion->query("UPDATE pagos_pendientes SET estado = 'aprobado' WHERE id = $id");
                 $mensaje = "<p style='color:lime;'>✅ Pago aprobado correctamente.</p>";
             }
@@ -42,14 +72,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 // Consultar pagos pendientes del gimnasio logueado
-$pagos = $conexion->query("SELECT p.*, c.apellido, c.nombre, pl.nombre AS nombre_plan 
+$pagos = $conexion->query("
+    SELECT p.*, c.apellido, c.nombre, pl.nombre AS nombre_plan 
     FROM pagos_pendientes p
     JOIN clientes c ON p.cliente_id = c.id
     JOIN planes pl ON p.plan_id = pl.id
     WHERE p.estado = 'pendiente' AND p.gimnasio_id = $gimnasio_id
-    ORDER BY p.fecha_envio DESC");
+    ORDER BY p.fecha_envio DESC
+");
 ?>
-
 <!DOCTYPE html>
 <html lang="es">
 <head>
