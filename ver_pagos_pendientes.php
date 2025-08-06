@@ -1,25 +1,37 @@
 <?php
-session_start();
+if (session_status() === PHP_SESSION_NONE) session_start();
 include 'conexion.php';
 include 'menu_horizontal.php';
 
-$gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
+$gimnasio_id = intval($_SESSION['gimnasio_id'] ?? 0);
 $mensaje = "";
 
-// Acción: Aprobar o Rechazar
+if ($gimnasio_id <= 0) {
+    die("Acceso denegado.");
+}
+
+// Acción: Aprobar o Rechazar (uso de prepared statements donde aplica)
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $id = intval($_POST['id']);
+    $id = intval($_POST['id'] ?? 0);
     $accion = $_POST['accion'] ?? '';
 
-    if ($accion === 'aprobar') {
-        $pago = $conexion->query("SELECT * FROM pagos_pendientes WHERE id = $id AND gimnasio_id = $gimnasio_id")->fetch_assoc();
+    if ($id > 0 && $accion === 'aprobar') {
+        $stmt = $conexion->prepare("SELECT * FROM pagos_pendientes WHERE id = ? AND gimnasio_id = ? LIMIT 1");
+        $stmt->bind_param('ii', $id, $gimnasio_id);
+        $stmt->execute();
+        $pago = $stmt->get_result()->fetch_assoc();
+        $stmt->close();
 
         if ($pago) {
             $plan_id = intval($pago['plan_id']);
             $cliente_id = intval($pago['cliente_id']);
             $total = floatval($pago['monto']);
 
-            $plan = $conexion->query("SELECT * FROM planes WHERE id = $plan_id AND gimnasio_id = $gimnasio_id")->fetch_assoc();
+            $stmt2 = $conexion->prepare("SELECT * FROM planes WHERE id = ? AND gimnasio_id = ? LIMIT 1");
+            $stmt2->bind_param('ii', $plan_id, $gimnasio_id);
+            $stmt2->execute();
+            $plan = $stmt2->get_result()->fetch_assoc();
+            $stmt2->close();
 
             if ($plan) {
                 $clases = intval($plan['clases_disponibles']);
@@ -27,60 +39,60 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $fecha_inicio = date('Y-m-d');
 
                 // Verificar si el cliente tiene membresía activa
-                $membresia_activa = $conexion->query("
-                    SELECT * FROM membresias 
-                    WHERE cliente_id = $cliente_id 
-                      AND gimnasio_id = $gimnasio_id 
-                      AND fecha_vencimiento >= CURDATE()
-                    ORDER BY fecha_vencimiento DESC LIMIT 1
-                ")->fetch_assoc();
+                $stmt3 = $conexion->prepare("SELECT * FROM membresias WHERE cliente_id = ? AND gimnasio_id = ? AND fecha_vencimiento >= CURDATE() ORDER BY fecha_vencimiento DESC LIMIT 1");
+                $stmt3->bind_param('ii', $cliente_id, $gimnasio_id);
+                $stmt3->execute();
+                $membresia_activa = $stmt3->get_result()->fetch_assoc();
+                $stmt3->close();
 
                 if ($membresia_activa) {
-                    // ✅ Renovar membresía existente
+                    // Renovar membresía existente
                     $nueva_fecha_vencimiento = date('Y-m-d', strtotime($membresia_activa['fecha_vencimiento'] . " +$duracion months"));
-                    $nuevas_clases = $membresia_activa['clases_disponibles'] + $clases;
-                    $nuevo_total = $membresia_activa['total_pagado'] + $total;
+                    $nuevas_clases = intval($membresia_activa['clases_disponibles']) + $clases;
+                    $nuevo_total = floatval($membresia_activa['total_pagado']) + $total;
 
-                    $conexion->query("
-                        UPDATE membresias 
-                        SET fecha_vencimiento = '$nueva_fecha_vencimiento',
-                            clases_disponibles = $nuevas_clases,
-                            total_pagado = $nuevo_total
-                        WHERE id = {$membresia_activa['id']}
-                    ");
+                    $upd = $conexion->prepare("UPDATE membresias SET fecha_vencimiento = ?, clases_disponibles = ?, total_pagado = ? WHERE id = ? AND gimnasio_id = ?");
+                    $upd->bind_param('siidi', $nueva_fecha_vencimiento, $nuevas_clases, $nuevo_total, $membresia_activa['id'], $gimnasio_id);
+                    $upd->execute();
+                    $upd->close();
                 } else {
-                    // ✅ Crear nueva membresía
+                    // Crear nueva membresía
                     $fecha_vencimiento = date('Y-m-d', strtotime("+$duracion months"));
 
-                    $conexion->query("
-                        INSERT INTO membresias 
-                        (cliente_id, plan_id, fecha_inicio, fecha_vencimiento, clases_disponibles, total_pagado, metodo_pago, gimnasio_id) 
-                        VALUES 
-                        ($cliente_id, $plan_id, '$fecha_inicio', '$fecha_vencimiento', $clases, $total, 'Transferencia (comprobante)', $gimnasio_id)
-                    ");
+                    $ins = $conexion->prepare("INSERT INTO membresias (cliente_id, plan_id, fecha_inicio, fecha_vencimiento, clases_disponibles, total_pagado, metodo_pago, gimnasio_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
+                    $metodo = 'Transferencia (comprobante)';
+                    $ins->bind_param('iissdssi', $cliente_id, $plan_id, $fecha_inicio, $fecha_vencimiento, $clases, $total, $metodo, $gimnasio_id);
+                    $ins->execute();
+                    $ins->close();
                 }
 
-                // ✅ Marcar el pago como aprobado
-                $conexion->query("UPDATE pagos_pendientes SET estado = 'aprobado' WHERE id = $id");
+                // Marcar el pago como aprobado (con control de gimnasio)
+                $updPago = $conexion->prepare("UPDATE pagos_pendientes SET estado = 'aprobado' WHERE id = ? AND gimnasio_id = ?");
+                $updPago->bind_param('ii', $id, $gimnasio_id);
+                $updPago->execute();
+                $updPago->close();
+
                 $mensaje = "<p style='color:lime;'>✅ Pago aprobado correctamente.</p>";
             }
         }
-    } elseif ($accion === 'rechazar') {
-        $conexion->query("UPDATE pagos_pendientes SET estado = 'rechazado' WHERE id = $id AND gimnasio_id = $gimnasio_id");
+
+    } elseif ($id > 0 && $accion === 'rechazar') {
+        $upd = $conexion->prepare("UPDATE pagos_pendientes SET estado = 'rechazado' WHERE id = ? AND gimnasio_id = ?");
+        $upd->bind_param('ii', $id, $gimnasio_id);
+        $upd->execute();
+        $upd->close();
         $mensaje = "<p style='color:red;'>❌ Pago rechazado.</p>";
     }
 }
 
 // Consultar pagos pendientes del gimnasio logueado
-$pagos = $conexion->query("
-    SELECT p.*, c.apellido, c.nombre, pl.nombre AS nombre_plan 
-    FROM pagos_pendientes p
-    JOIN clientes c ON p.cliente_id = c.id
-    JOIN planes pl ON p.plan_id = pl.id
-    WHERE p.estado = 'pendiente' AND p.gimnasio_id = $gimnasio_id
-    ORDER BY p.fecha_envio DESC
-");
+$stmt_list = $conexion->prepare("SELECT p.*, c.apellido, c.nombre, pl.nombre AS nombre_plan FROM pagos_pendientes p JOIN clientes c ON p.cliente_id = c.id JOIN planes pl ON p.plan_id = pl.id WHERE p.estado = 'pendiente' AND p.gimnasio_id = ? ORDER BY p.fecha_envio DESC");
+$stmt_list->bind_param('i', $gimnasio_id);
+$stmt_list->execute();
+$pagos = $stmt_list->get_result();
+$stmt_list->close();
 ?>
+
 <!DOCTYPE html>
 <html lang="es">
 <head>
@@ -100,7 +112,7 @@ $pagos = $conexion->query("
 <body>
 
 <h2 style="text-align:center;">📥 Pagos Pendientes</h2>
-<div class="mensaje"><?= $mensaje ?></div>
+<div class="mensaje"><?php echo $mensaje; ?></div>
 
 <?php if ($pagos && $pagos->num_rows > 0): ?>
 <table>
@@ -117,25 +129,26 @@ $pagos = $conexion->query("
     <tbody>
         <?php while ($p = $pagos->fetch_assoc()): ?>
         <tr>
-            <td><?= htmlspecialchars($p['apellido'] . ', ' . $p['nombre']) ?></td>
-            <td><?= htmlspecialchars($p['nombre_plan']) ?></td>
-            <td>$<?= number_format($p['monto'], 2, ',', '.') ?></td>
-            <td><?= date('d/m/Y', strtotime($p['fecha_envio'])) ?></td>
+            <td><?php echo htmlspecialchars($p['apellido'] . ', ' . $p['nombre']); ?></td>
+            <td><?php echo htmlspecialchars($p['nombre_plan']); ?></td>
+            <td>$<?php echo number_format($p['monto'], 2, ',', '.'); ?></td>
+            <td><?php echo date('d/m/Y', strtotime($p['fecha_envio'])); ?></td>
             <td>
                 <?php if (!empty($p['archivo_comprobante'])): ?>
-                    <a href="<?= htmlspecialchars($p['archivo_comprobante']) ?>" target="_blank" style="color:deepskyblue;">📄 Ver</a>
+                    <!-- Enlace seguro al comprobante -->
+                    <a href="ver_comprobante.php?id=<?php echo $p['id']; ?>" target="_blank" style="color:deepskyblue;">📄 Ver</a>
                 <?php else: ?>
                     Sin archivo
                 <?php endif; ?>
             </td>
             <td>
                 <form method="post" style="display:inline;">
-                    <input type="hidden" name="id" value="<?= $p['id'] ?>">
+                    <input type="hidden" name="id" value="<?php echo $p['id']; ?>">
                     <input type="hidden" name="accion" value="aprobar">
                     <button class="btn-aprobar" onclick="return confirm('¿Aprobar este pago?')">✅ Aprobar</button>
                 </form>
                 <form method="post" style="display:inline;">
-                    <input type="hidden" name="id" value="<?= $p['id'] ?>">
+                    <input type="hidden" name="id" value="<?php echo $p['id']; ?>">
                     <input type="hidden" name="accion" value="rechazar">
                     <button class="btn-rechazar" onclick="return confirm('¿Rechazar este pago?')">❌ Rechazar</button>
                 </form>
