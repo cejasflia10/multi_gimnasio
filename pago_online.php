@@ -21,19 +21,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $plan_id = $_POST['plan_id'] ?? 0;
     $monto = $_POST['monto'];
     $fecha = date('Y-m-d H:i:s');
+    
     $archivo = $_FILES['comprobante']['name'];
     $ruta_tmp = $_FILES['comprobante']['tmp_name'];
-    $ruta_destino = "comprobantes/" . uniqid() . "_" . basename($archivo);
+
+    // RUTA ABSOLUTA PARA GUARDAR FÍSICAMENTE
+    $nombre_final = uniqid() . "_" . basename($archivo);
+    $carpeta = "multi_gimnasio/comprobantes/";
+    $ruta_destino = $carpeta . $nombre_final;
 
     // Guardar adicionales como JSON
     $adicionales_seleccionados = $_POST['adicionales'] ?? [];
     $adicionales_json = json_encode($adicionales_seleccionados);
 
+    // Intentar mover el archivo
     if (move_uploaded_file($ruta_tmp, $ruta_destino)) {
         $stmt = $conexion->prepare("INSERT INTO pagos_pendientes 
             (cliente_id, gimnasio_id, plan_id, monto, archivo_comprobante, fecha_envio, estado, adicionales) 
             VALUES (?, ?, ?, ?, ?, ?, 'pendiente', ?)");
-        $stmt->bind_param("iiissss", $cliente_id, $gimnasio_id, $plan_id, $monto, $ruta_destino, $fecha, $adicionales_json);
+        $stmt->bind_param("iiissss", 
+            $cliente_id, 
+            $gimnasio_id, 
+            $plan_id, 
+            $monto, 
+            $ruta_destino, 
+            $fecha, 
+            $adicionales_json
+        );
         $stmt->execute();
         $mensaje = "✅ Comprobante enviado correctamente. Será validado en breve.";
     } else {

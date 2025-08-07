@@ -3,11 +3,9 @@ if (session_status() === PHP_SESSION_NONE) session_start();
 include 'conexion.php';
 include 'menu_horizontal.php';
 
-
-
 $query = "SELECT u.id, u.usuario, u.rol, g.nombre AS gimnasio 
           FROM usuarios u
-          LEFT JOIN gimnasios g ON u.id_gimnasio = g.id";
+          LEFT JOIN gimnasios g ON u.gimnasio_id = g.id";
 
 $resultado = $conexion->query($query);
 if (!$resultado) {

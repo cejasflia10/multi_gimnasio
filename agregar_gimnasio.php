@@ -1,16 +1,19 @@
 <?php
+error_reporting(E_ALL);
+ini_set('display_errors', 1);
+
 session_start();
 include 'conexion.php';
 include 'menu_horizontal.php';
-if (session_status() === PHP_SESSION_NONE) { session_start(); }
 
-$gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
+// Cargamos todos los planes sin filtrar por gimnasio_id
+$planes = $conexion->query("SELECT id, nombre, precio FROM planes_gimnasio");
 
-// Obtener planes desde planes_gimnasio con precio
-$planes = $conexion->query("SELECT id, nombre, precio FROM planes_gimnasio WHERE gimnasio_id = $gimnasio_id");
+if (!$planes) {
+    die("Error en consulta de planes: " . $conexion->error);
+}
 
 // Preparar datos para JS
-$planes->data_seek(0);
 $planes_data = [];
 while ($p = $planes->fetch_assoc()) {
     $planes_data[$p['id']] = [
@@ -19,48 +22,99 @@ while ($p = $planes->fetch_assoc()) {
     ];
 }
 
+$mensaje = "";
+
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
-    $nombre = $_POST["nombre"];
-    $direccion = $_POST["direccion"];
-    $telefono = $_POST["telefono"];
-    $email = $_POST["email"];
-    $fecha_inicio = $_POST["fecha_inicio"];
-    $fecha_vencimiento = $_POST["fecha_vencimiento"];
-    $monto_plan = floatval($_POST["monto_plan"]);
-    $forma_pago = $_POST["forma_pago"];
-    $plan_id = intval($_POST["plan_id"]);
-    $usuario = trim($_POST["usuario"]);
-    $clave = password_hash(trim($_POST["clave"]), PASSWORD_DEFAULT);
-    $alias = $_POST["alias"];
-    $cuit = $_POST["cuit"];
-    $estado = $_POST["estado"];
-    $nota_admin = $_POST["nota_admin"];
-    $mensaje_alumno = $_POST["mensaje_alumno"];
-    $redes_sociales = $_POST["redes_sociales"];
+    // Mostrar lo recibido para debug
+    //echo "<pre>POST recibido:\n";
+    //print_r($_POST);
+    //echo "</pre>";
 
-    $stmt = $conexion->prepare("INSERT INTO gimnasios 
-        (nombre, direccion, telefono, email, fecha_inicio, fecha_vencimiento, monto_plan, forma_pago, plan_id, alias, cuit, estado, nota_admin, mensaje_alumno, redes_sociales) 
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+    // Capturar datos
+    $nombre = trim($_POST["nombre"] ?? '');
+    $direccion = trim($_POST["direccion"] ?? '');
+    $telefono = trim($_POST["telefono"] ?? '');
+    $email = trim($_POST["email"] ?? '');
 
-    $stmt->bind_param("ssssssdsissssss", 
-        $nombre, $direccion, $telefono, $email, 
-        $fecha_inicio, $fecha_vencimiento, $monto_plan, $forma_pago, $plan_id,
-        $alias, $cuit, $estado, $nota_admin, $mensaje_alumno, $redes_sociales);
-    $stmt->execute();
-    $nuevo_gimnasio_id = $stmt->insert_id;
-    $stmt->close();
+    $fecha_inicio = $_POST["fecha_inicio"] ?? '';
+    $fecha_vencimiento = $_POST["fecha_vencimiento"] ?? '';
+    $monto_plan = floatval($_POST["monto_plan"] ?? 0);
+    $forma_pago = $_POST["forma_pago"] ?? '';
+    $plan_id = intval($_POST["plan_id"] ?? 0);
 
-    $stmt_user = $conexion->prepare("INSERT INTO usuarios_gimnasio (nombre, apellido, usuario, clave, gimnasio_id, rol) VALUES (?, ?, ?, ?, ?, 'cliente_gym')");
-    $nombre_usuario = $nombre;
-    $apellido_usuario = '';
-    $stmt_user->bind_param("ssssi", $nombre_usuario, $apellido_usuario, $usuario, $clave, $nuevo_gimnasio_id);
-    $stmt_user->execute();
-    $stmt_user->close();
+    $usuario = trim($_POST["usuario"] ?? '');
+    $email_usuario = trim($_POST["email_usuario"] ?? $email); // si no envían email_usuario, usa email gimnasio
+    $clave_texto = trim($_POST["clave"] ?? '');
+
+    $alias = trim($_POST["alias"] ?? '');
+    $cuit = trim($_POST["cuit"] ?? '');
+    $estado = $_POST["estado"] ?? '';
+    $nota_admin = trim($_POST["nota_admin"] ?? '');
+    $mensaje_alumno = trim($_POST["mensaje_alumno"] ?? '');
+    $redes_sociales = trim($_POST["redes_sociales"] ?? '');
+
+    if ($usuario === '' || $clave_texto === '' || $email_usuario === '') {
+        $mensaje = "<p style='color: red;'>El usuario, email y la contraseña son obligatorios.</p>";
+    } else {
+        $clave = password_hash($clave_texto, PASSWORD_DEFAULT);
+
+        // Insertar gimnasio
+        $stmt = $conexion->prepare("INSERT INTO gimnasios 
+            (nombre, direccion, telefono, email, fecha_inicio, fecha_vencimiento, monto_plan, forma_pago, plan_id, alias, cuit, estado, nota_admin, mensaje_alumno, redes_sociales) 
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+
+        if (!$stmt) {
+            die("Error en prepare gimnasios: " . $conexion->error);
+        }
+
+        $stmt->bind_param("ssssssdsissssss", 
+            $nombre, $direccion, $telefono, $email, 
+            $fecha_inicio, $fecha_vencimiento, $monto_plan, $forma_pago, $plan_id,
+            $alias, $cuit, $estado, $nota_admin, $mensaje_alumno, $redes_sociales);
+
+        if (!$stmt->execute()) {
+            die("Error al insertar gimnasio: " . $stmt->error);
+        }
+
+        // Obtenemos el ID del gimnasio recién creado (autoincremental)
+        $nuevo_gimnasio_id = $conexion->insert_id;
+        $stmt->close();
+
+        // Verificar que usuario no exista ya
+        $existe_usuario = $conexion->prepare("SELECT id FROM usuarios WHERE usuario = ?");
+        if (!$existe_usuario) {
+            die("Error en prepare existe_usuario: " . $conexion->error);
+        }
+        $existe_usuario->bind_param("s", $usuario);
+        $existe_usuario->execute();
+        $res_usuario = $existe_usuario->get_result();
+        if ($res_usuario->num_rows > 0) {
+            die("<p style='color: red;'>El usuario ya existe. Elige otro.</p>");
+        }
+        $existe_usuario->close();
+
+        // Insertar usuario en tabla usuarios con gimnasio_id correcto
+        $stmt_user = $conexion->prepare("INSERT INTO usuarios (usuario, email, contrasena, rol, gimnasio_id, debe_cambiar_contrasena) VALUES (?, ?, ?, 'cliente_gym', ?, 1)");
+        if (!$stmt_user) {
+            die("Error en prepare usuarios: " . $conexion->error);
+        }
+        $stmt_user->bind_param("sssi", $usuario, $email_usuario, $clave, $nuevo_gimnasio_id);
+        if (!$stmt_user->execute()) {
+            die("Error al insertar usuario: " . $stmt_user->error);
+        }
+        $stmt_user->close();
+
+        $mensaje = "<p style='color: lime;'>Gimnasio y usuario creados correctamente.</p>";
+    }
 }
 
 if (isset($_GET['eliminar'])) {
     $id = intval($_GET['eliminar']);
-    $conexion->query("DELETE FROM gimnasios WHERE id = $id");
+    if ($conexion->query("DELETE FROM gimnasios WHERE id = $id")) {
+        $mensaje = "<p style='color: lime;'>Gimnasio eliminado correctamente.</p>";
+    } else {
+        $mensaje = "<p style='color: red;'>Error al eliminar gimnasio: " . $conexion->error . "</p>";
+    }
 }
 
 $resultado = $conexion->query("SELECT g.*, p.nombre AS nombre_plan 
@@ -74,51 +128,35 @@ $resultado = $conexion->query("SELECT g.*, p.nombre AS nombre_plan
     <meta charset="UTF-8">
     <title>Gimnasios y Pagos</title>
     <style>
-        body {
-            background-color: #111;
-            color: #FFD700;
-            font-family: Arial, sans-serif;
-            padding: 30px;
-        }
-        h2 {
-            color: #FFD700;
-        }
-        form input, form select, form button, form textarea {
-            padding: 10px;
-            margin: 5px;
-            width: 95%;
-            background-color: #222;
-            color: #fff;
-            border: 1px solid #444;
-        }
+        /* tu CSS aquí */
         table {
-            width: 100%;
             border-collapse: collapse;
-            background-color: #222;
-            color: #fff;
+            width: 100%;
         }
         th, td {
-            padding: 12px;
-            border: 1px solid #444;
-            text-align: center;
+            border: 1px solid #999;
+            padding: 8px;
         }
         th {
-            background-color: #333;
-            color: #FFD700;
+            background-color: #444;
+            color: #fff;
         }
-        a.btn {
-            padding: 6px 12px;
+        .btn {
+            padding: 4px 8px;
+            background-color: #666;
+            color: #fff;
             text-decoration: none;
-            color: black;
-            background-color: #FFD700;
-            border-radius: 5px;
+            margin-right: 5px;
+            border-radius: 3px;
+        }
+        .btn:hover {
+            background-color: #999;
         }
         .volver {
-            margin-top: 20px;
+            margin-top: 15px;
             display: inline-block;
         }
     </style>
-
     <script>
         const planes = <?= json_encode($planes_data) ?>;
 
@@ -131,13 +169,17 @@ $resultado = $conexion->query("SELECT g.*, p.nombre AS nombre_plan
 </head>
 <body>
 
+<?= $mensaje ?>
+
 <h2>🏢 Agregar Gimnasio</h2>
 
 <form method="POST">
     <input type="text" name="nombre" placeholder="Nombre del gimnasio" required>
     <input type="text" name="direccion" placeholder="Dirección" required>
     <input type="text" name="telefono" placeholder="Teléfono" required>
-    <input type="email" name="email" placeholder="Email" required>
+    <input type="email" name="email" placeholder="Email del gimnasio" required>
+
+    <input type="email" name="email_usuario" placeholder="Email para usuario" required>
 
     <input type="text" name="usuario" placeholder="Usuario de acceso" required>
     <input type="password" name="clave" placeholder="Contraseña" required>
