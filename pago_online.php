@@ -18,40 +18,76 @@ $planes = $conexion->query("SELECT * FROM planes WHERE gimnasio_id = $gimnasio_i
 $adicionales = $conexion->query("SELECT * FROM planes_adicionales WHERE gimnasio_id = $gimnasio_id ORDER BY nombre");
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $plan_id = $_POST['plan_id'] ?? 0;
-    $monto = $_POST['monto'];
-    $fecha = date('Y-m-d H:i:s');
-    
-    $archivo = $_FILES['comprobante']['name'];
-    $ruta_tmp = $_FILES['comprobante']['tmp_name'];
+    $plan_id = isset($_POST['plan_id']) ? (int)$_POST['plan_id'] : 0;
+    $monto   = isset($_POST['monto']) ? (float)$_POST['monto'] : 0;
+    $fecha   = date('Y-m-d H:i:s');
 
-    // RUTA ABSOLUTA PARA GUARDAR FÍSICAMENTE
-    $nombre_final = uniqid() . "_" . basename($archivo);
-    $carpeta = "multi_gimnasio/comprobantes/";
-    $ruta_destino = $carpeta . $nombre_final;
-
-    // Guardar adicionales como JSON
-    $adicionales_seleccionados = $_POST['adicionales'] ?? [];
-    $adicionales_json = json_encode($adicionales_seleccionados);
-
-    // Intentar mover el archivo
-    if (move_uploaded_file($ruta_tmp, $ruta_destino)) {
-        $stmt = $conexion->prepare("INSERT INTO pagos_pendientes 
-            (cliente_id, gimnasio_id, plan_id, monto, archivo_comprobante, fecha_envio, estado, adicionales) 
-            VALUES (?, ?, ?, ?, ?, ?, 'pendiente', ?)");
-        $stmt->bind_param("iiissss", 
-            $cliente_id, 
-            $gimnasio_id, 
-            $plan_id, 
-            $monto, 
-            $ruta_destino, 
-            $fecha, 
-            $adicionales_json
-        );
-        $stmt->execute();
-        $mensaje = "✅ Comprobante enviado correctamente. Será validado en breve.";
+    // Validación básica del archivo
+    if (!isset($_FILES['comprobante']) || $_FILES['comprobante']['error'] !== UPLOAD_ERR_OK) {
+        $cod = $_FILES['comprobante']['error'] ?? -1;
+        $mensaje = "❌ Error al recibir el archivo (código {$cod}).";
     } else {
-        $mensaje = "❌ Error al subir el comprobante.";
+        $ruta_tmp = $_FILES['comprobante']['tmp_name'];
+        $archivo  = $_FILES['comprobante']['name'];
+        $tam      = (int)$_FILES['comprobante']['size'];
+
+        // (opcional) límite 10 MB
+        if ($tam <= 0 || $tam > 10 * 1024 * 1024) {
+            $mensaje = "❌ El archivo supera el tamaño permitido (máx. 10 MB).";
+        }
+
+        // Ruta ABSOLUTA (y relativa para BD)
+        $relDir = 'multi_gimnasio/comprobantes'; // se guarda en BD/servida por web
+        $absDir = rtrim(__DIR__, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . $relDir;
+
+        if (empty($mensaje) && !is_dir($absDir)) {
+            if (!mkdir($absDir, 0775, true)) {
+                $mensaje = "❌ No se pudo crear la carpeta de destino.";
+            }
+        }
+        if (empty($mensaje) && !is_writable($absDir)) {
+            $mensaje = "❌ La carpeta no es escribible: {$absDir}";
+        }
+
+        if (empty($mensaje)) {
+            // Sanitizar nombre y evitar colisiones entre gimnasios
+            $base = preg_replace('/[^a-zA-Z0-9._-]/', '_', basename($archivo));
+            $nombre_final = 'g'.$gimnasio_id.'_'.uniqid('', true).'_'.$base;
+
+            $ruta_publica = '/' . $relDir . '/' . $nombre_final; // ruta web absoluta
+            $ruta_fisica  = $absDir  . DIRECTORY_SEPARATOR . $nombre_final; // para mover
+
+            // Adicionales como JSON
+            $adicionales_seleccionados = isset($_POST['adicionales']) && is_array($_POST['adicionales'])
+                ? array_map('intval', $_POST['adicionales'])
+                : [];
+            $adicionales_json = json_encode($adicionales_seleccionados);
+
+            if (!is_uploaded_file($ruta_tmp) || !move_uploaded_file($ruta_tmp, $ruta_fisica)) {
+                error_log('Fallo move_uploaded_file hacia: ' . $ruta_fisica);
+                $mensaje = "❌ No se pudo guardar el comprobante en el servidor.";
+            } else {
+                $stmt = $conexion->prepare("INSERT INTO pagos_pendientes 
+                    (cliente_id, gimnasio_id, plan_id, monto, archivo_comprobante, fecha_envio, estado, adicionales) 
+                    VALUES (?, ?, ?, ?, ?, ?, 'pendiente', ?)");
+                $stmt->bind_param(
+                    "iiissss", 
+                    $cliente_id, 
+                    $gimnasio_id, 
+                    $plan_id, 
+                    $monto, 
+                    $ruta_publica,  // <-- guardar ruta relativa (web)
+                    $fecha, 
+                    $adicionales_json
+                );
+                if ($stmt->execute()) {
+                    $mensaje = "✅ Comprobante enviado correctamente. Será validado en breve.";
+                } else {
+                    @unlink($ruta_fisica); // limpiar si falla BD
+                    $mensaje = "❌ Error al guardar el registro en la base de datos.";
+                }
+            }
+        }
     }
 }
 ?>

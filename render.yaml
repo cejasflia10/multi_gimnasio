@@ -7,3 +7,7 @@ services:
     buildCommand: ""
     startCommand: ""
     autoDeploy: true
+    disks:
+      - name: uploads
+        mountPath: /var/www/html/multi_gimnasio/comprobantes
+        sizeGB: 2

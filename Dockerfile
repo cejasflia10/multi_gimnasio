@@ -1,25 +1,34 @@
 FROM php:8.1-apache
 
-# Instalar extensiones necesarias
+# Paquetes necesarios (GD con freetype/jpeg, zip, etc.)
 RUN apt-get update && apt-get install -y \
-    libpng-dev \
-    libjpeg-dev \
     libfreetype6-dev \
+    libjpeg62-turbo-dev \
+    libpng-dev \
     libzip-dev \
     zip \
     unzip \
-    libonig-dev \
-    libxml2-dev \
-    && docker-php-ext-install pdo pdo_mysql mysqli gd
+    git \
+ && docker-php-ext-configure gd --with-freetype --with-jpeg \
+ && docker-php-ext-install -j$(nproc) gd mysqli pdo pdo_mysql zip \
+ && a2enmod rewrite headers \
+ && rm -rf /var/lib/apt/lists/*
 
-# Habilitar módulos de Apache
-RUN a2enmod rewrite
+# PHP config para uploads (se copia como ini suelto)
+COPY php/uploads.ini /usr/local/etc/php/conf.d/uploads.ini
 
-# Copiar archivos del proyecto
+# Script de arranque: asegura carpeta de comprobantes y permisos en cada boot
+COPY docker/start.sh /usr/local/bin/start.sh
+RUN chmod +x /usr/local/bin/start.sh
+
+# Copiar app
 COPY . /var/www/html/
 
-# Permisos correctos
+# Propietario por defecto (el Disk montado igual se repropietariza en start.sh)
 RUN chown -R www-data:www-data /var/www/html \
-    && chmod -R 755 /var/www/html
+ && chmod -R 755 /var/www/html
 
 EXPOSE 80
+
+# Arranque (Render usa este CMD)
+CMD ["start.sh"]
