@@ -135,30 +135,83 @@ if ($nuevos && $nuevos->num_rows > 0) {
     echo "</div>";
     $avisos_html = ob_get_clean();
 }
-
-// ===== Disciplinas TOP para gráfico =====
+// ===== Disciplinas TOP (normalizadas y sin duplicados visibles) =====
 $disciplinas_top_q = $conexion->query("
+  SELECT nombre_mostrar, total
+  FROM (
     SELECT
-      UPPER(TRIM(COALESCE(d.nombre, c.disciplina))) AS nombre_norm,
+      /* Tomamos un nombre legible ya con espacios/tab/NBSP normalizados */
+      MIN(
+        TRIM(
+          REPLACE(
+            REPLACE(COALESCE(d.nombre, c.disciplina), CONVERT(0xC2A0 USING utf8mb4), ' '), /* NBSP */
+          CHAR(9), ' ')                                                                  /* TAB */
+        )
+      ) AS nombre_mostrar,
+
+      /* clave compacta para agrupar */
+      UPPER(
+        REPLACE(
+          REPLACE(
+            REPLACE(
+              REPLACE(
+                REPLACE(
+                  /* quitamos NBSP y TAB antes de compactar */
+                  TRIM(
+                    REPLACE(
+                      REPLACE(COALESCE(d.nombre, c.disciplina), CONVERT(0xC2A0 USING utf8mb4), ' '),
+                    CHAR(9), ' ')
+                  ),
+                ' ', ''),  /* sin espacios */
+              '-', ''),    /* sin guiones  */
+            '.', ''),      /* sin puntos   */
+          '_', ''),        /* sin underscore */
+        '/' , '' )         /* sin slash */
+      ) AS clave,
+
       COUNT(*) AS total
     FROM clientes c
     LEFT JOIN disciplinas d ON d.id = c.disciplina_id
     WHERE c.gimnasio_id = $gimnasio_id
       AND COALESCE(d.nombre, c.disciplina) IS NOT NULL
-      AND TRIM(COALESCE(d.nombre, c.disciplina)) <> ''
-    GROUP BY UPPER(TRIM(COALESCE(d.nombre, c.disciplina)))
-    ORDER BY total DESC
-    LIMIT 6
+      AND TRIM(
+            REPLACE(
+              REPLACE(COALESCE(d.nombre, c.disciplina), CONVERT(0xC2A0 USING utf8mb4), ' '),
+            CHAR(9), ' ')
+          ) <> ''
+    GROUP BY clave
+  ) u
+  ORDER BY total DESC
+  LIMIT 10
 ");
+
 $disciplinas_rows = [];
 if ($disciplinas_top_q) {
-    while ($row = $disciplinas_top_q->fetch_assoc()) {
-        $disciplinas_rows[] = [
-          'nombre' => ucwords(strtolower($row['nombre_norm'])),
-          'total'  => (int)$row['total']
-        ];
-    }
+  while ($row = $disciplinas_top_q->fetch_assoc()) {
+    // Presentación prolija
+    $nombre = ucwords(strtolower($row['nombre_mostrar']));
+    $disciplinas_rows[] = ['nombre' => $nombre, 'total' => (int)$row['total']];
+  }
 }
+
+/* Consolidación extra en PHP por si dos claves distintas terminan
+   mostrando el mismo texto (ej: 'Kick-Boxing' y 'Kick Boxing' => 'Kickboxing') */
+if ($disciplinas_rows) {
+  $agg = [];
+  foreach ($disciplinas_rows as $r) {
+    $k = strtolower(trim($r['nombre']));
+    if (!isset($agg[$k])) {
+      $agg[$k] = ['nombre' => $r['nombre'], 'total' => 0];
+    }
+    $agg[$k]['total'] += (int)$r['total'];
+  }
+  // Reindexado y orden por total desc para el gráfico
+  $disciplinas_rows = array_values($agg);
+  usort($disciplinas_rows, function($a,$b){ return $b['total'] <=> $a['total']; });
+  // si querés limitar a 10 de nuevo:
+  $disciplinas_rows = array_slice($disciplinas_rows, 0, 10);
+}
+
 ?>
 <!DOCTYPE html>
 <html lang="es">

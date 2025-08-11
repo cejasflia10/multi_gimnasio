@@ -1,7 +1,12 @@
 <?php
-ob_start();  // <-- Agrega esto para evitar problemas de header()
+ob_start();
 session_start();
+
 $gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
+if (!$gimnasio_id) {
+    header("Location: login.php");
+    exit();
+}
 
 include 'conexion.php';
 
@@ -12,88 +17,158 @@ if (!isset($_SESSION['usuario'])) {
 
 include 'menu_horizontal.php';
 
-// Insertar turno si se envió el formulario
+$msg = '';
+$err = '';
+
+// ======================= INSERTAR TURNOS (MÚLTIPLES DÍAS) =======================
 if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST['profesor_id'])) {
-    $profesor_id = $_POST["profesor_id"];
-    $dia = $_POST["dia"];
-    $hora_inicio = $_POST["hora_inicio"];
-    $hora_fin = $_POST["hora_fin"];
-    $cupo_maximo = 10;
+    $profesor_id  = (int)($_POST["profesor_id"] ?? 0);
+    $dias         = $_POST["dias"] ?? [];                 // <- array de días tildados
+    $hora_inicio  = trim($_POST["hora_inicio"] ?? '');
+    $hora_fin     = trim($_POST["hora_fin"] ?? '');
+    $cupo_maximo  = 10;
 
-    // Insertar en turnos_profesor
-    $stmt1 = $conexion->prepare("INSERT INTO turnos_profesor (profesor_id, dia, hora_inicio, hora_fin) VALUES (?, ?, ?, ?)");
-    $stmt1->bind_param("isss", $profesor_id, $dia, $hora_inicio, $hora_fin);
-    $stmt1->execute();
-    $stmt1->close();
+    // Validaciones básicas
+    if ($profesor_id <= 0)               { $err = "Seleccioná un profesor."; }
+    elseif (empty($dias))                { $err = "Tildá al menos un día."; }
+    elseif (!$hora_inicio || !$hora_fin) { $err = "Completá hora de inicio y fin."; }
+    elseif ($hora_inicio >= $hora_fin)   { $err = "La hora de inicio debe ser menor que la de fin."; }
 
-    // Insertar en turnos_disponibles
-    $stmt2 = $conexion->prepare("INSERT INTO turnos_disponibles (profesor_id, dia, hora_inicio, hora_fin, gimnasio_id, cupo_maximo) VALUES (?, ?, ?, ?, ?, ?)");
-    $stmt2->bind_param("isssii", $profesor_id, $dia, $hora_inicio, $hora_fin, $gimnasio_id, $cupo_maximo);
-    $stmt2->execute();
-    $stmt2->close();
-}
+    if ($err === '') {
+        // Preparados
+        $stmtExiste = $conexion->prepare("
+            SELECT COUNT(*) AS c
+            FROM turnos_profesor
+            WHERE profesor_id = ?
+              AND dia = ?
+              AND (hora_inicio < ? AND hora_fin > ?)  -- solapamiento
+        ");
 
-// Eliminar turno
-if (isset($_GET['eliminar'])) {
-    $id_turno = intval($_GET['eliminar']);
+        $stmtInsertTP = $conexion->prepare("
+            INSERT INTO turnos_profesor (profesor_id, dia, hora_inicio, hora_fin)
+            VALUES (?, ?, ?, ?)
+        ");
 
-    // Primero obtenemos el profesor_id de ese turno para eliminar la fila correcta en turnos_disponibles
-    $resultado = $conexion->query("SELECT profesor_id FROM turnos_profesor WHERE id = $id_turno");
-    if ($resultado && $fila = $resultado->fetch_assoc()) {
-        $profesor_id_turno = $fila['profesor_id'];
+        $stmtInsertTD = $conexion->prepare("
+            INSERT INTO turnos_disponibles (profesor_id, dia, hora_inicio, hora_fin, gimnasio_id, cupo_maximo)
+            VALUES (?, ?, ?, ?, ?, ?)
+        ");
 
-        // Eliminamos el turno de turnos_profesor
-        $conexion->query("DELETE FROM turnos_profesor WHERE id = $id_turno");
+        $conexion->begin_transaction();
 
-        // Eliminamos el turno correspondiente en turnos_disponibles usando profesor_id, dia, hora_inicio y hora_fin
-        // Mejor eliminar solo el turno disponible que coincide con el mismo profesor, día y horario
-        // Para eso obtenemos esos datos:
-        $resultado2 = $conexion->query("SELECT dia, hora_inicio, hora_fin FROM turnos_profesor WHERE id = $id_turno");
-        // Pero como ya eliminamos el turno anterior, hay que obtener esos datos antes de eliminar
-        // Cambiamos el orden para evitar esto:
+        $insertados = 0;
+        $saltados   = []; // días con solapamiento
+
+        foreach ($dias as $dia) {
+            $dia = trim($dia);
+            if ($dia === '') continue;
+
+            // ¿ya existe algo que se solape?
+            $stmtExiste->bind_param("isss", $profesor_id, $dia, $hora_fin, $hora_inicio);
+            $stmtExiste->execute();
+            $res = $stmtExiste->get_result();
+            $row = $res->fetch_assoc();
+            $haySolape = (int)$row['c'] > 0;
+
+            if ($haySolape) {
+                $saltados[] = $dia;
+                continue;
+            }
+
+            // Insertar en ambas tablas
+            $stmtInsertTP->bind_param("isss", $profesor_id, $dia, $hora_inicio, $hora_fin);
+            $stmtInsertTP->execute();
+
+            $stmtInsertTD->bind_param("isssii", $profesor_id, $dia, $hora_inicio, $hora_fin, $gimnasio_id, $cupo_maximo);
+            $stmtInsertTD->execute();
+
+            $insertados++;
+        }
+
+        if ($insertados > 0) {
+            $conexion->commit();
+            $msg = "Se guardaron $insertados turno(s).";
+            if (!empty($saltados)) {
+                $msg .= " (Saltados por solapamiento: " . implode(', ', $saltados) . ")";
+            }
+        } else {
+            $conexion->rollback();
+            if (!empty($saltados)) {
+                $err = "No se guardó nada. Todos los días tildados se solapan: " . implode(', ', $saltados);
+            } else {
+                $err = "No se pudo guardar. Verificá los datos.";
+            }
+        }
+
+        $stmtExiste->close();
+        $stmtInsertTP->close();
+        $stmtInsertTD->close();
     }
-    // Reordenamos para obtener datos antes de eliminar:
 }
-?>
 
-<?php
-// Reorganizando la eliminación para evitar borrar y perder datos antes de usarlos:
+// ======================= ELIMINAR TURNO =======================
 if (isset($_GET['eliminar'])) {
-    $id_turno = intval($_GET['eliminar']);
+    $id_turno = (int)$_GET['eliminar'];
 
-    // Obtener datos del turno antes de borrar
-    $resultado = $conexion->query("SELECT profesor_id, dia, hora_inicio, hora_fin FROM turnos_profesor WHERE id = $id_turno");
-    if ($resultado && $fila = $resultado->fetch_assoc()) {
-        $profesor_id_turno = $fila['profesor_id'];
-        $dia_turno = $conexion->real_escape_string($fila['dia']);
-        $hora_inicio_turno = $conexion->real_escape_string($fila['hora_inicio']);
-        $hora_fin_turno = $conexion->real_escape_string($fila['hora_fin']);
+    // Obtener datos del turno ANTES de borrar
+    $stmtDatos = $conexion->prepare("
+        SELECT t.profesor_id, t.dia, t.hora_inicio, t.hora_fin
+        FROM turnos_profesor t
+        JOIN profesores p ON p.id = t.profesor_id
+        WHERE t.id = ? AND p.gimnasio_id = ?
+    ");
+    $stmtDatos->bind_param("ii", $id_turno, $gimnasio_id);
+    $stmtDatos->execute();
+    $res = $stmtDatos->get_result();
 
-        // Eliminar de turnos_profesor
-        $conexion->query("DELETE FROM turnos_profesor WHERE id = $id_turno");
+    if ($res && $fila = $res->fetch_assoc()) {
+        $profesor_id_turno = (int)$fila['profesor_id'];
+        $dia_turno         = $fila['dia'];
+        $hora_inicio_turno = $fila['hora_inicio'];
+        $hora_fin_turno    = $fila['hora_fin'];
 
-        // Eliminar el turno correspondiente en turnos_disponibles
-        $conexion->query("DELETE FROM turnos_disponibles WHERE profesor_id = $profesor_id_turno AND dia = '$dia_turno' AND hora_inicio = '$hora_inicio_turno' AND hora_fin = '$hora_fin_turno'");
+        $conexion->begin_transaction();
+
+        // Borrar de turnos_profesor
+        $stmtDelTP = $conexion->prepare("DELETE FROM turnos_profesor WHERE id = ?");
+        $stmtDelTP->bind_param("i", $id_turno);
+        $stmtDelTP->execute();
+
+        // Borrar de turnos_disponibles
+        $stmtDelTD = $conexion->prepare("
+            DELETE FROM turnos_disponibles
+            WHERE profesor_id = ? AND dia = ? AND hora_inicio = ? AND hora_fin = ? AND gimnasio_id = ?
+        ");
+        $stmtDelTD->bind_param("isssi", $profesor_id_turno, $dia_turno, $hora_inicio_turno, $hora_fin_turno, $gimnasio_id);
+        $stmtDelTD->execute();
+
+        $conexion->commit();
 
         header("Location: turnos_profesor.php");
         exit();
+    } else {
+        $err = "Turno no encontrado.";
     }
 }
-?>
 
-<?php
-// Obtener profesores del gimnasio actual
-$result = $conexion->query("SELECT id, apellido, nombre FROM profesores WHERE gimnasio_id = $gimnasio_id");
+// ======================= LISTADOS =======================
+$result = $conexion->query("
+    SELECT id, apellido, nombre
+    FROM profesores
+    WHERE gimnasio_id = {$gimnasio_id}
+    ORDER BY apellido, nombre
+");
 
-// Obtener turnos
 $turnos = $conexion->query("
-    SELECT t.*, p.apellido, p.nombre 
-    FROM turnos_profesor t 
-    JOIN profesores p ON t.profesor_id = p.id 
-    WHERE p.gimnasio_id = $gimnasio_id
+    SELECT t.*, p.apellido, p.nombre
+    FROM turnos_profesor t
+    JOIN profesores p ON t.profesor_id = p.id
+    WHERE p.gimnasio_id = {$gimnasio_id}
+    ORDER BY p.apellido, p.nombre, 
+             FIELD(t.dia,'Lunes','Martes','Miércoles','Jueves','Viernes','Sábado','Domingo'),
+             t.hora_inicio
 ");
 ?>
-
 <!DOCTYPE html>
 <html lang="es">
 <head>
@@ -101,26 +176,54 @@ $turnos = $conexion->query("
   <title>Turnos de Profesores</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="stylesheet" href="estilo_unificado.css">
+  <style>
+    .alert-ok{background:#e6ffed;border:1px solid #a7f3d0;padding:.5rem 1rem;border-radius:.5rem;margin:.5rem 0;}
+    .alert-err{background:#ffe6e6;border:1px solid #f5a0a0;padding:.5rem 1rem;border-radius:.5rem;margin:.5rem 0;}
+    .dias {display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:.3rem;margin:.5rem 0;}
+    .dias label{display:flex;align-items:center;gap:.4rem;padding:.35rem .5rem;background:#1f2937;color:#fff;border-radius:.4rem;}
+    form .fila{display:flex;gap:.5rem;flex-wrap:wrap;align-items:center;margin:.5rem 0;}
+    button[type=submit]{background:#fbbf24;border:0;padding:.6rem 1rem;border-radius:.5rem;font-weight:600;cursor:pointer;}
+    table {width:100%;border-collapse:collapse;}
+    th, td {padding:.5rem;border-bottom:1px solid #444;}
+    .boton{background:#374151;color:#fff;padding:.35rem .6rem;border-radius:.375rem;text-decoration:none;}
+  </style>
 </head>
 <body>
 <div class="contenedor">
   <h1>🕓 Turnos de Profesores</h1>
 
+  <?php if ($msg): ?><div class="alert-ok"><?= htmlspecialchars($msg) ?></div><?php endif; ?>
+  <?php if ($err): ?><div class="alert-err"><?= htmlspecialchars($err) ?></div><?php endif; ?>
+
   <form method="POST">
-    <select name="profesor_id" required>
-      <option value="">Seleccionar Profesor</option>
-      <?php while ($row = $result->fetch_assoc()) {
-        echo "<option value='".htmlspecialchars($row['id'])."'>".htmlspecialchars($row['apellido'].' '.$row['nombre'])."</option>";
-      } ?>
-    </select>
-    <select name="dia" required>
-      <option value="Lunes">Lunes</option><option value="Martes">Martes</option>
-      <option value="Miércoles">Miércoles</option><option value="Jueves">Jueves</option>
-      <option value="Viernes">Viernes</option><option value="Sábado">Sábado</option>
-    </select>
-    <input type="time" name="hora_inicio" required>
-    <input type="time" name="hora_fin" required>
-    <button type="submit">Agregar Turno</button>
+    <div class="fila">
+      <select name="profesor_id" required>
+        <option value="">Seleccionar Profesor</option>
+        <?php while ($row = $result->fetch_assoc()): ?>
+          <option value="<?= (int)$row['id'] ?>">
+            <?= htmlspecialchars($row['apellido'].' '.$row['nombre']) ?>
+          </option>
+        <?php endwhile; ?>
+      </select>
+    </div>
+
+    <div class="fila">
+      <div class="dias">
+        <?php
+          $diasSemana = ['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado','Domingo'];
+          foreach ($diasSemana as $d):
+        ?>
+          <label><input type="checkbox" name="dias[]" value="<?= $d ?>"> <?= $d ?></label>
+        <?php endforeach; ?>
+      </div>
+    </div>
+
+    <div class="fila">
+      <label>Inicio: <input type="time" name="hora_inicio" required></label>
+      <label>Fin: <input type="time" name="hora_fin" required></label>
+    </div>
+
+    <button type="submit">Agregar Turnos</button>
   </form>
 
   <h2>Turnos Registrados</h2>
@@ -139,8 +242,8 @@ $turnos = $conexion->query("
         <td><?= htmlspecialchars($t['hora_inicio']) ?></td>
         <td><?= htmlspecialchars($t['hora_fin']) ?></td>
         <td>
-          <a class="boton" href="editar_turno_profesor.php?id=<?= $t['id'] ?>">✏️ Editar</a>
-          <a class="boton" href="turnos_profesor.php?eliminar=<?= $t['id'] ?>" onclick="return confirm('¿Eliminar este turno?')">🗑️ Eliminar</a>
+          <a class="boton" href="editar_turno_profesor.php?id=<?= (int)$t['id'] ?>">✏️ Editar</a>
+          <a class="boton" href="turnos_profesor.php?eliminar=<?= (int)$t['id'] ?>" onclick="return confirm('¿Eliminar este turno?')">🗑️ Eliminar</a>
         </td>
       </tr>
     <?php endwhile; ?>
@@ -148,5 +251,4 @@ $turnos = $conexion->query("
 </div>
 </body>
 </html>
-
-<?php ob_end_flush(); // Finalizamos el buffer ?>
+<?php ob_end_flush(); ?>

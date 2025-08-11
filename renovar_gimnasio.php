@@ -21,8 +21,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $conexion->query("UPDATE gimnasios SET fecha_vencimiento = '$nueva_fecha' WHERE id = $gimnasio_id");
 
     // Registrar en historial de pagos
-    $stmt = $conexion->prepare("INSERT INTO pagos_gimnasios (gimnasio_id, fecha_pago, fecha_vencimiento, monto, observacion) VALUES (?, ?, ?, ?, ?)");
-    $stmt->bind_param("issds", $gimnasio_id, $fecha_actual, $nueva_fecha, $monto, $observacion);
+$stmt = $conexion->prepare("
+    INSERT INTO pagos_gimnasios (gimnasio_id, fecha_pago, fecha, monto, observaciones)
+    VALUES (?, ?, ?, ?, ?)
+");
+$stmt->bind_param("issds", $gimnasio_id, $fecha_actual, $nueva_fecha, $monto, $observacion);
     $stmt->execute();
     $stmt->close();
 
