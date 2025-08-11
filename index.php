@@ -37,7 +37,7 @@ if (!isset($_SESSION['session_regenerated_time'])) {
 include 'conexion.php';
 include 'menu_horizontal.php';
 
-$gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
+$gimnasio_id = isset($_SESSION['gimnasio_id']) ? (int)$_SESSION['gimnasio_id'] : 0;
 $rol = $_SESSION['rol'] ?? '';
 
 $gimnasio = $conexion->query("SELECT nombre, logo, fecha_vencimiento FROM gimnasios WHERE id = $gimnasio_id")->fetch_assoc();
@@ -45,32 +45,69 @@ $nombre_gym = $gimnasio['nombre'] ?? 'Gimnasio';
 $logo = $gimnasio['logo'] ?? '';
 $fecha_venc = $gimnasio['fecha_vencimiento'] ?? '---';
 
-$cumples = $conexion->query("SELECT nombre, apellido, fecha_nacimiento FROM clientes WHERE gimnasio_id = $gimnasio_id AND DATE_FORMAT(fecha_nacimiento, '%m-%d') >= DATE_FORMAT(CURDATE(), '%m-%d') ORDER BY DATE_FORMAT(fecha_nacimiento, '%m-%d') LIMIT 5");
+// ===== KPIs Activos vs Inactivos (última membresía por cliente) =====
+$estado = $conexion->query("
+  SELECT
+    SUM(CASE WHEN u.fv IS NOT NULL AND u.fv >= CURDATE() THEN 1 ELSE 0 END) AS activos,
+    SUM(CASE WHEN u.fv IS NULL OR u.fv < CURDATE() THEN 1 ELSE 0 END) AS inactivos
+  FROM clientes c
+  LEFT JOIN (
+    SELECT cliente_id, MAX(fecha_vencimiento) AS fv
+    FROM membresias
+    WHERE gimnasio_id = $gimnasio_id
+      AND fecha_vencimiento IS NOT NULL
+      AND fecha_vencimiento >= '1000-01-01'
+    GROUP BY cliente_id
+  ) u ON u.cliente_id = c.id
+  WHERE c.gimnasio_id = $gimnasio_id
+")->fetch_assoc();
 
+$activos   = (int)($estado['activos'] ?? 0);
+$inactivos = (int)($estado['inactivos'] ?? 0);
+
+// ===== Cumpleaños (filtro seguro) =====
+$cumples = $conexion->query("
+  SELECT nombre, apellido, fecha_nacimiento
+  FROM clientes
+  WHERE gimnasio_id = $gimnasio_id
+    AND fecha_nacimiento IS NOT NULL
+    AND fecha_nacimiento >= '1000-01-01'
+    AND DATE_FORMAT(fecha_nacimiento, '%m-%d') >= DATE_FORMAT(CURDATE(), '%m-%d')
+  ORDER BY DATE_FORMAT(fecha_nacimiento, '%m-%d')
+  LIMIT 5
+");
+
+// ===== Vencimientos (filtro seguro) =====
 $vencimientos = $conexion->query("
-    SELECT c.nombre, c.apellido, m.fecha_vencimiento 
-    FROM membresias m 
-    JOIN clientes c ON m.cliente_id = c.id 
-    WHERE m.gimnasio_id = $gimnasio_id AND m.fecha_vencimiento >= CURDATE() 
+    SELECT c.nombre, c.apellido, m.fecha_vencimiento
+    FROM membresias m
+    JOIN clientes c ON m.cliente_id = c.id
+    WHERE m.gimnasio_id = $gimnasio_id
+      AND m.fecha_vencimiento IS NOT NULL
+      AND m.fecha_vencimiento >= '1000-01-01'
+      AND m.fecha_vencimiento >= CURDATE()
     ORDER BY m.fecha_vencimiento ASC LIMIT 5
 ");
 
 $fecha_filtro = $_GET['fecha'] ?? date('Y-m-d');
+if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $fecha_filtro)) {
+    $fecha_filtro = date('Y-m-d');
+}
 
-// PAGOS PENDIENTES
+// ===== PAGOS PENDIENTES =====
 $pagos_pendientes = 0;
 $consulta = $conexion->query("
     SELECT COUNT(*) AS total 
     FROM pagos_pendientes 
     JOIN clientes ON pagos_pendientes.cliente_id = clientes.id 
     WHERE pagos_pendientes.estado = 'pendiente' 
-    AND clientes.gimnasio_id = $gimnasio_id
+      AND clientes.gimnasio_id = $gimnasio_id
 ");
 if ($consulta && $r = $consulta->fetch_assoc()) {
     $pagos_pendientes = (int)$r['total'];
 }
 
-// CUENTAS CORRIENTES
+// ===== CUENTAS CORRIENTES =====
 $cuentas_corrientes = 0;
 $consulta_cc = $conexion->query("
     SELECT COUNT(*) AS total FROM (
@@ -85,22 +122,21 @@ if ($consulta_cc && $r = $consulta_cc->fetch_assoc()) {
     $cuentas_corrientes = (int)$r['total'];
 }
 
-// Avisos de nuevos online
+// ===== Avisos de nuevos online =====
 $nuevos = $conexion->query("SELECT id, nombre, apellido FROM clientes WHERE gimnasio_id = $gimnasio_id AND nuevo_online = 1");
+$avisos_html = '';
 if ($nuevos && $nuevos->num_rows > 0) {
-    echo "<div style='background:#fff3cd;border:1px solid #ffeeba;padding:12px;border-radius:8px;color:#856404;'>";
+    ob_start();
+    echo "<div style='background:#fff3cd;border:1px solid #ffeeba;padding:12px;border-radius:10px;color:#856404;margin-top:10px;'>";
     echo "<strong>📢 Nuevos registros online:</strong><br>";
     while ($n = $nuevos->fetch_assoc()) {
         echo htmlspecialchars($n['nombre'].' '.$n['apellido']) . " — <a href='marcar_visto.php?id={$n['id']}'>Marcar como visto</a><br>";
     }
     echo "</div>";
+    $avisos_html = ob_get_clean();
 }
 
-/* =========================
-   DATOS PARA LOS GRÁFICOS
-   ========================= */
-
-// Disciplinas más registradas: cuenta por clientes (disciplina_id -> disciplinas.nombre, o texto en clientes.disciplina)
+// ===== Disciplinas TOP para gráfico =====
 $disciplinas_top_q = $conexion->query("
     SELECT
       UPPER(TRIM(COALESCE(d.nombre, c.disciplina))) AS nombre_norm,
@@ -114,40 +150,15 @@ $disciplinas_top_q = $conexion->query("
     ORDER BY total DESC
     LIMIT 6
 ");
-
 $disciplinas_rows = [];
 if ($disciplinas_top_q) {
     while ($row = $disciplinas_top_q->fetch_assoc()) {
-        $row['nombre'] = ucwords(strtolower($row['nombre_norm']));
-        $disciplinas_rows[] = ['nombre' => $row['nombre'], 'total' => (int)$row['total']];
+        $disciplinas_rows[] = [
+          'nombre' => ucwords(strtolower($row['nombre_norm'])),
+          'total'  => (int)$row['total']
+        ];
     }
 }
-
-// Activos vs Inactivos (sin STR_TO_DATE, filtrando '0000-00-00' antes de comparar)
-$estado = $conexion->query("
-    SELECT
-      SUM(
-        CASE 
-          WHEN fecha_vencimiento IS NOT NULL 
-           AND fecha_vencimiento <> '0000-00-00'
-           AND fecha_vencimiento >= CURDATE()
-          THEN 1 ELSE 0
-        END
-      ) AS activos,
-      SUM(
-        CASE 
-          WHEN fecha_vencimiento IS NULL 
-            OR fecha_vencimiento = '0000-00-00'
-            OR fecha_vencimiento < CURDATE()
-          THEN 1 ELSE 0
-        END
-      ) AS inactivos
-    FROM clientes
-    WHERE gimnasio_id = $gimnasio_id
-")->fetch_assoc();
-
-$activos   = (int)($estado['activos'] ?? 0);
-$inactivos = (int)($estado['inactivos'] ?? 0);
 ?>
 <!DOCTYPE html>
 <html lang="es">
@@ -155,6 +166,7 @@ $inactivos = (int)($estado['inactivos'] ?? 0);
   <meta charset="UTF-8">
   <title>Panel General - <?= htmlspecialchars($nombre_gym) ?></title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
   <style>
     body { background: #000; color: gold; font-family: Arial, sans-serif; padding: 20px; }
     .grid { display: flex; flex-wrap: wrap; gap: 20px; }
@@ -162,13 +174,27 @@ $inactivos = (int)($estado['inactivos'] ?? 0);
     h1, h2, h3 { color: gold; margin-top: 0; }
     ul { padding-left: 20px; }
     .monto { font-size: 24px; color: lime; }
-    .encabezado { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
+    .encabezado { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
     .logo-gym { max-height: 60px; max-width: 180px; border-radius: 8px; background: white; padding: 5px; object-fit: contain; }
     .btn-logo-mini { margin-top: 8px; padding: 5px 10px; background: gold; color: black; font-weight: bold; border: none; border-radius: 5px; cursor: pointer; }
-    .alerta-pagos { background-color: darkred; color: white; padding: 15px; margin-bottom: 20px; border-radius: 10px; font-size: 18px; }
+    .alerta-pagos { box-shadow: none; border: 1px solid rgba(255,255,255,.15); padding:10px; border-radius:10px; }
     .alerta-pagos a { color: yellow; text-decoration: underline; margin-left: 10px; }
     .toggle-icon { cursor: pointer; font-size: 22px; }
+
+    /* KPIs Activos/Inactivos */
+    .kpis { display:flex; gap:12px; flex-wrap:wrap; margin:10px 0 16px; }
+    .kpi { background:#111; border:1px solid rgba(255,215,0,.15); border-radius:12px; padding:10px 14px; min-width:140px; }
+    .kpi-label { color:#ffdf6b; font-size:12px; opacity:.85; letter-spacing:.3px; }
+    .kpi-value { color:#fff; font-weight:800; font-size:26px; line-height:1.1; }
+
+    /* Tamaño y sombra del gráfico de disciplinas */
+    .chart-wrap { display:flex; justify-content:center; }
+    #disciplinasChart { width:100%; max-width:560px; height:300px; filter: drop-shadow(0 8px 18px rgba(0,0,0,.45)); }
   </style>
+
+  <!-- Solo cargamos Chart.js para el gráfico de disciplinas -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
   <script>
     function toggleMontos() {
       const montos = document.querySelectorAll('.bloque-monto');
@@ -186,7 +212,6 @@ $inactivos = (int)($estado['inactivos'] ?? 0);
     setInterval(cargarDatos, 10000);
     window.onload = cargarDatos;
   </script>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
 
@@ -206,20 +231,36 @@ $inactivos = (int)($estado['inactivos'] ?? 0);
 
     <div>
       <h1>🏋️ <?= htmlspecialchars($nombre_gym) ?></h1>
-      <p>🗓 Vencimiento del sistema: <strong style="color:orange;"><?= is_numeric(strtotime($fecha_venc)) ? date('d/m/Y', strtotime($fecha_venc)) : '---' ?></strong></p>
+      <p>🗓 Vencimiento del sistema: <strong style="color:orange;">
+        <?= (is_string($fecha_venc) && $fecha_venc !== '0000-00-00' && strtotime($fecha_venc)) ? date('d/m/Y', strtotime($fecha_venc)) : '---' ?>
+      </strong></p>
     </div>
   </div>
 </div>
 
+<!-- KPIs: Activos / Inactivos (sin gráfico) -->
+<div class="kpis">
+  <div class="kpi">
+    <div class="kpi-label">Activos</div>
+    <div class="kpi-value"><?= (int)$activos ?></div>
+  </div>
+  <div class="kpi">
+    <div class="kpi-label">Inactivos</div>
+    <div class="kpi-value"><?= (int)$inactivos ?></div>
+  </div>
+</div>
+
+<?= $avisos_html ?>
+
 <?php if ($cuentas_corrientes > 0): ?>
-  <div class="alerta-pagos">
+  <div class="alerta-pagos" style="margin:10px 0;">
     ⚠️ Hay <strong><?= $cuentas_corrientes ?></strong> cliente(s) con saldo negativo.
     <a href="ver_cuentas_corrientes.php">Ver cuentas corrientes</a>
   </div>
 <?php endif; ?>
 
 <?php if ($pagos_pendientes > 0): ?>
-  <div class="alerta-pagos">
+  <div class="alerta-pagos" style="margin:10px 0;">
     💸 Hay <strong><?= $pagos_pendientes ?></strong> pago(s) pendiente(s) de clientes.
     <a href="ver_pagos_pendientes.php">Ver pagos</a>
   </div>
@@ -230,14 +271,20 @@ $inactivos = (int)($estado['inactivos'] ?? 0);
 </div>
 
 <div class="grid">
-  <!-- LO QUE YA TENÍAS -->
   <div id="contenedor-ingresos" class="box bloque-monto">Cargando ingresos...</div>
 
   <div class="box">
     <h2>🎂 Próximos Cumpleaños</h2>
     <ul>
       <?php while($c = $cumples->fetch_assoc()): ?>
-        <li><?= htmlspecialchars($c['apellido'] . ', ' . $c['nombre']) ?> (<?= date('d/m', strtotime($c['fecha_nacimiento'])) ?>)</li>
+        <li>
+          <?= htmlspecialchars($c['apellido'] . ', ' . $c['nombre']) ?>
+          (
+            <?= ($c['fecha_nacimiento'] && strtotime($c['fecha_nacimiento']))
+                  ? date('d/m', strtotime($c['fecha_nacimiento']))
+                  : '--' ?>
+          )
+        </li>
       <?php endwhile; ?>
     </ul>
   </div>
@@ -246,7 +293,14 @@ $inactivos = (int)($estado['inactivos'] ?? 0);
     <h2>🗓 Vencimientos</h2>
     <ul>
       <?php while($v = $vencimientos->fetch_assoc()): ?>
-        <li><?= htmlspecialchars($v['apellido'] . ', ' . $v['nombre']) ?> (<?= date('d/m', strtotime($v['fecha_vencimiento'])) ?>)</li>
+        <li>
+          <?= htmlspecialchars($v['apellido'] . ', ' . $v['nombre']) ?>
+          (
+            <?= ($v['fecha_vencimiento'] && strtotime($v['fecha_vencimiento']))
+                  ? date('d/m', strtotime($v['fecha_vencimiento']))
+                  : '--' ?>
+          )
+        </li>
       <?php endwhile; ?>
     </ul>
   </div>
@@ -254,79 +308,68 @@ $inactivos = (int)($estado['inactivos'] ?? 0);
   <div class="box">
     <form method="GET" style="margin-bottom: 10px;">
       <label for="fecha" style="color: gold;">🗓 Ver reservas del día: </label>
-      <input type="date" id="fecha" name="fecha" value="<?= $fecha_filtro ?>" onchange="this.form.submit()">
+      <input type="date" id="fecha" name="fecha" value="<?= htmlspecialchars($fecha_filtro) ?>" onchange="this.form.submit()">
     </form>
     <h2>📋 Reservas del día</h2>
     <ul id="contenedor-reservas">Cargando reservas...</ul>
   </div>
 
-  <div class="cuadro">
-    <h3>🧟 Alumnos que ingresaron Hoy</h3>
-    <div id="contenedor-alumnos">Cargando alumnos...</div>
-  </div>
-
-  <!-- GRÁFICOS -->
+  <!-- ÚNICO GRÁFICO: Disciplinas más registradas -->
   <div class="box">
     <h2>📊 Disciplinas más registradas</h2>
-    <canvas id="disciplinasChart"></canvas>
+    <div class="chart-wrap">
+      <canvas id="disciplinasChart"></canvas>
+    </div>
     <?php if (count($disciplinas_rows) === 0): ?>
-      <small>No hay datos para mostrar.</small>
-    <?php endif; ?>
-  </div>
-
-  <div class="box">
-    <h2>📊 Alumnos Activos vs Inactivos</h2>
-    <canvas id="alumnosChart"></canvas>
-    <?php if (($activos + $inactivos) === 0): ?>
       <small>No hay datos para mostrar.</small>
     <?php endif; ?>
   </div>
 </div>
 
 <script>
+  // Render del único gráfico (disciplinas)
   const disciplinas = <?= json_encode($disciplinas_rows, JSON_UNESCAPED_UNICODE) ?>;
-  const activos = <?= (int)$activos ?>;
-  const inactivos = <?= (int)$inactivos ?>;
+  if (Array.isArray(disciplinas) && disciplinas.length) {
+    const canvas = document.getElementById('disciplinasChart');
+    if (canvas) {
+      const ctxD = canvas.getContext('2d');
+      const grad = ctxD.createLinearGradient(0, 0, 0, canvas.height);
+      grad.addColorStop(0, 'rgba(255, 193, 7, 0.9)');
+      grad.addColorStop(1, 'rgba(230, 81, 0, 0.6)');
 
-  if (disciplinas.length) {
-    const ctxD = document.getElementById('disciplinasChart').getContext('2d');
-    new Chart(ctxD, {
-      type: 'bar',
-      data: {
-        labels: disciplinas.map(d => d.nombre),
-        datasets: [{
-          label: 'Registros de disciplinas (top)',
-          data: disciplinas.map(d => Number(d.total)),
-          backgroundColor: 'rgba(255,159,64,0.25)',
-          borderColor: 'rgba(255,159,64,1)',
-          borderWidth: 1
-        }]
-      },
-      options: {
-        plugins: { legend: { labels: { color: 'gold' } } },
-        scales: {
-          x: { ticks: { color: 'gold' } },
-          y: { ticks: { color: 'gold', precision: 0 }, beginAtZero: true }
+      new Chart(ctxD, {
+        type: 'bar',
+        data: {
+          labels: disciplinas.map(d => d.nombre),
+          datasets: [{
+            label: 'Registros de disciplinas',
+            data: disciplinas.map(d => Number(d.total)),
+            backgroundColor: grad,
+            borderColor: 'rgba(255,160,0,1)',
+            borderWidth: 2,
+            borderRadius: 10
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { labels: { color: '#FFD54F' } },
+            tooltip: {
+              backgroundColor: 'rgba(20,20,20,.95)',
+              titleColor: '#FFD54F',
+              bodyColor: '#EEE',
+              borderWidth: 1,
+              borderColor: 'rgba(255,215,0,.35)'
+            }
+          },
+          scales: {
+            x: { ticks: { color: '#FFD54F' }, grid: { color: 'rgba(255,215,0,.10)' } },
+            y: { beginAtZero: true, ticks: { color: '#FFD54F', precision: 0 }, grid: { color: 'rgba(255,215,0,.08)' } }
+          }
         }
-      }
-    });
-  }
-
-  if ((activos + inactivos) > 0) {
-    const ctxA = document.getElementById('alumnosChart').getContext('2d');
-    new Chart(ctxA, {
-      type: 'pie',
-      data: {
-        labels: ['Activos ('+activos+')', 'Inactivos ('+inactivos+')'],
-        datasets: [{
-          data: [activos, inactivos],
-          backgroundColor: ['rgba(75,192,192,0.25)','rgba(255,99,132,0.25)'],
-          borderColor: ['rgba(75,192,192,1)','rgba(255,99,132,1)'],
-          borderWidth: 1
-        }]
-      },
-      options: { plugins: { legend: { labels: { color: 'gold' } } } }
-    });
+      });
+    }
   }
 </script>
 
