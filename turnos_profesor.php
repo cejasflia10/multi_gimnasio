@@ -20,8 +20,12 @@ include 'menu_horizontal.php';
 $msg = '';
 $err = '';
 
+// Mensajes de redirecciones (ok/err)
+if (isset($_GET['ok']))  { $msg = strip_tags($_GET['ok']); }
+if (isset($_GET['err'])) { $err = strip_tags($_GET['err']); }
+
 // ======================= INSERTAR TURNOS (MÚLTIPLES DÍAS) =======================
-if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST['profesor_id'])) {
+if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST['profesor_id']) && isset($_POST['__accion']) && $_POST['__accion']==='alta_turnos') {
     $profesor_id  = (int)($_POST["profesor_id"] ?? 0);
     $dias         = $_POST["dias"] ?? [];                 // <- array de días tildados
     $hora_inicio  = trim($_POST["hora_inicio"] ?? '');
@@ -186,6 +190,7 @@ $turnos = $conexion->query("
     table {width:100%;border-collapse:collapse;}
     th, td {padding:.5rem;border-bottom:1px solid #444;}
     .boton{background:#374151;color:#fff;padding:.35rem .6rem;border-radius:.375rem;text-decoration:none;}
+    .seccion {margin-top:1.25rem;padding-top:1rem;border-top:1px dashed #555;}
   </style>
 </head>
 <body>
@@ -195,7 +200,9 @@ $turnos = $conexion->query("
   <?php if ($msg): ?><div class="alert-ok"><?= htmlspecialchars($msg) ?></div><?php endif; ?>
   <?php if ($err): ?><div class="alert-err"><?= htmlspecialchars($err) ?></div><?php endif; ?>
 
+  <!-- Alta rápida de múltiples días para un profesor -->
   <form method="POST">
+    <input type="hidden" name="__accion" value="alta_turnos">
     <div class="fila">
       <select name="profesor_id" required>
         <option value="">Seleccionar Profesor</option>
@@ -226,7 +233,23 @@ $turnos = $conexion->query("
     <button type="submit">Agregar Turnos</button>
   </form>
 
-  <h2>Turnos Registrados</h2>
+  <!-- ======= FERIADO: HORARIO REDUCIDO SOLO PARA UNA FECHA ======= -->
+  <div class="seccion">
+    <h2>Feriado (horario reducido solo para una fecha)</h2>
+    <form method="post" action="aplicar_feriado_min.php" style="display:grid;gap:.5rem;max-width:520px">
+      <label>Fecha feriado:
+        <input type="date" name="fecha" required>
+      </label>
+      <div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap">
+        <label>Inicio: <input type="time" name="hora_inicio" required></label>
+        <label>Fin: <input type="time" name="hora_fin" required></label>
+      </div>
+      <small>Se aplicará este horario a todos los profesores que <b>normalmente</b> trabajan ese día de la semana.</small>
+      <button>Aplicar horario reducido</button>
+    </form>
+  </div>
+
+  <h2 class="seccion">Turnos Registrados</h2>
   <table>
     <tr>
       <th>Profesor</th>
