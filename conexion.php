@@ -1,51 +1,104 @@
 <?php
 if (session_status() === PHP_SESSION_NONE) { session_start(); }
-
 ini_set('display_errors', 1);
 error_reporting(E_ALL);
-
-// 1) Intentar tomar todo desde MYSQL_PUBLIC_URL (recomendado)
-// Ej: mysql://root:PASS@shuttle.proxy.rlwy.net:51676/railway
-$publicUrl = getenv('MYSQL_PUBLIC_URL');
-
-if ($publicUrl) {
-    $u = parse_url($publicUrl);
-    $host       = $u['host'] ?? 'shuttle.proxy.rlwy.net';
-    $puerto     = isset($u['port']) ? (int)$u['port'] : 3306;
-    $usuario    = $u['user'] ?? 'root';
-    $contrasena = isset($u['pass']) ? urldecode($u['pass']) : '';
-    $basedatos  = isset($u['path']) ? ltrim($u['path'], '/') : 'railway';
-} else {
-    // 2) Fallback: variables de entorno individuales o valores por defecto
-    $host       = getenv('MYSQLHOST')      ?: 'shuttle.proxy.rlwy.net';
-    $puerto     = (int)(getenv('MYSQLPORT') ?: 51676);   // <- actualiza si el puerto cambia
-    $usuario    = getenv('MYSQLUSER')      ?: 'root';
-    $contrasena = getenv('MYSQLPASSWORD')  ?: 'bZwtwptDJTaiWydjpfMWTBGwcwMzSKTt';
-    $basedatos  = getenv('MYSQLDATABASE')  ?: 'railway';
-}
-
-// 3) Conexión robusta con timeout
 mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);
 
-try {
+/**
+ * Intenta conectar con opciones dadas.
+ * $opts = ['host','port','user','pass','db','use_ssl'=>bool]
+ */
+function try_connect(array $opts): mysqli {
     $cx = mysqli_init();
-    mysqli_options($cx, MYSQLI_OPT_CONNECT_TIMEOUT, 10); // evita “greeting packet” por latencia
-    @mysqli_options($cx, MYSQLI_OPT_READ_TIMEOUT, 10);   // si está disponible
+    mysqli_options($cx, MYSQLI_OPT_CONNECT_TIMEOUT, 10);
+    @mysqli_options($cx, MYSQLI_OPT_READ_TIMEOUT, 10);
 
-    if (!mysqli_real_connect($cx, $host, $usuario, $contrasena, $basedatos, (int)$puerto)) {
-        throw new Exception('No se pudo conectar a MySQL.');
+    // Fuerza IPv4 para evitar issues con IPv6
+    $host_ip = gethostbyname($opts['host']) ?: $opts['host'];
+
+    if (!empty($opts['use_ssl'])) {
+        mysqli_ssl_set($cx, null, null, null, null, null); // SSL sin certs
+        mysqli_real_connect(
+            $cx, $host_ip, $opts['user'], $opts['pass'], $opts['db'], (int)$opts['port'],
+            null, MYSQLI_CLIENT_SSL
+        );
+    } else {
+        mysqli_real_connect(
+            $cx, $host_ip, $opts['user'], $opts['pass'], $opts['db'], (int)$opts['port']
+        );
     }
 
     $cx->set_charset('utf8mb4');
-
     date_default_timezone_set('America/Argentina/Buenos_Aires');
     $cx->query("SET time_zone = '-03:00'");
-
-    // Exponer como $conexion para el resto de la app
-    $conexion = $cx;
-
-    // echo "✅ Conectado a $host:$puerto / $basedatos";
-} catch (Throwable $e) {
-    http_response_code(500);
-    die("❌ Error conectando a MySQL en {$host}:{$puerto}: " . $e->getMessage());
+    return $cx;
 }
+
+/** Lee credenciales desde MYSQL_PUBLIC_URL si existe */
+function from_public_url(): ?array {
+    $url = getenv('MYSQL_PUBLIC_URL'); // mysql://user:pass@host:port/db
+    if (!$url) return null;
+    $u = parse_url($url);
+    return [
+        'host' => $u['host'] ?? 'shuttle.proxy.rlwy.net',
+        'port' => isset($u['port']) ? (int)$u['port'] : 3306,
+        'user' => $u['user'] ?? 'root',
+        'pass' => isset($u['pass']) ? urldecode($u['pass']) : '',
+        'db'   => isset($u['path']) ? ltrim($u['path'], '/') : 'railway',
+    ];
+}
+
+/** Candidatos de conexión en orden de preferencia */
+$candidates = [];
+
+/* 1) Interno (para app dentro de Railway/Render en el mismo proyecto) */
+$candidates[] = [
+    'host' => getenv('MYSQLHOST') ?: 'mysql.railway.internal',
+    'port' => (int)(getenv('MYSQLPORT') ?: 3306),
+    'user' => getenv('MYSQLUSER') ?: 'root',
+    'pass' => getenv('MYSQLPASSWORD') ?: 'bZwtwptDJTaiWydjpfMWTBGwcwMzSKTt',
+    'db'   => getenv('MYSQLDATABASE') ?: 'railway',
+    'use_ssl' => false,
+];
+
+/* 2) Proxy público (desde fuera de Railway): primero por MYSQL_PUBLIC_URL si existe */
+if ($p = from_public_url()) {
+    $p['use_ssl'] = true;        // muchos proxies piden SSL
+    $candidates[] = $p;
+} else {
+    $candidates[] = [
+        'host' => 'shuttle.proxy.rlwy.net',
+        'port' => 51676,          // ACTUALIZA si cambia en Railway
+        'user' => 'root',
+        'pass' => 'bZwtwptDJTaiWydjpfMWTBGwcwMzSKTt',
+        'db'   => 'railway',
+        'use_ssl' => true,
+    ];
+}
+
+/* 3) Proxy público sin SSL como último intento (por si tu proxy no exige SSL) */
+$candidates[] = [
+    'host' => 'shuttle.proxy.rlwy.net',
+    'port' => 51676,
+    'user' => 'root',
+    'pass' => 'bZwtwptDJTaiWydjpfMWTBGwcwMzSKTt',
+    'db'   => 'railway',
+    'use_ssl' => false,
+];
+
+/* Ejecuta intentos en cadena hasta conectar */
+$errores = [];
+foreach ($candidates as $opt) {
+    try {
+        $conexion = try_connect($opt);
+        // echo "✅ Conectado a {$opt['host']}:{$opt['port']} (SSL: " . ($opt['use_ssl']?'sí':'no') . ")";
+        return; // listo: $conexion disponible
+    } catch (Throwable $e) {
+        $errores[] = "{$opt['host']}:{$opt['port']} (SSL: ".($opt['use_ssl']?'sí':'no').") -> ".$e->getMessage();
+        // sigue al siguiente candidato
+    }
+}
+
+/* Si ninguno funcionó, mostrar diagnóstico */
+http_response_code(500);
+die("❌ No se pudo conectar a MySQL.\n" . implode("\n", $errores));
