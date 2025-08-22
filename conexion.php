@@ -5,19 +5,20 @@ ini_set('display_errors', 1);
 error_reporting(E_ALL);
 
 // 1) Intentar tomar todo desde MYSQL_PUBLIC_URL (recomendado)
-$publicUrl = getenv('MYSQL_PUBLIC_URL'); // p.ej: mysql://root:PASS@shuttle.proxy.rlwy.net:51676/railway
+// Ej: mysql://root:PASS@shuttle.proxy.rlwy.net:51676/railway
+$publicUrl = getenv('MYSQL_PUBLIC_URL');
 
 if ($publicUrl) {
     $u = parse_url($publicUrl);
     $host       = $u['host'] ?? 'shuttle.proxy.rlwy.net';
     $puerto     = isset($u['port']) ? (int)$u['port'] : 3306;
     $usuario    = $u['user'] ?? 'root';
-    $contrasena = $u['pass'] ?? '';
+    $contrasena = isset($u['pass']) ? urldecode($u['pass']) : '';
     $basedatos  = isset($u['path']) ? ltrim($u['path'], '/') : 'railway';
 } else {
     // 2) Fallback: variables de entorno individuales o valores por defecto
     $host       = getenv('MYSQLHOST')      ?: 'shuttle.proxy.rlwy.net';
-    $puerto     = (int)(getenv('MYSQLPORT') ?: 51676);  // <- cambia si el puerto cambia
+    $puerto     = (int)(getenv('MYSQLPORT') ?: 51676);   // <- actualiza si el puerto cambia
     $usuario    = getenv('MYSQLUSER')      ?: 'root';
     $contrasena = getenv('MYSQLPASSWORD')  ?: 'bZwtwptDJTaiWydjpfMWTBGwcwMzSKTt';
     $basedatos  = getenv('MYSQLDATABASE')  ?: 'railway';
@@ -28,9 +29,10 @@ mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);
 
 try {
     $cx = mysqli_init();
-    mysqli_options($cx, MYSQLI_OPT_CONNECT_TIMEOUT, 10); // evita “greeting packet” si tarda
+    mysqli_options($cx, MYSQLI_OPT_CONNECT_TIMEOUT, 10); // evita “greeting packet” por latencia
+    @mysqli_options($cx, MYSQLI_OPT_READ_TIMEOUT, 10);   // si está disponible
 
-    if (!mysqli_real_connect($cx, $host, $usuario, $contrasena, $basedatos, $puerto)) {
+    if (!mysqli_real_connect($cx, $host, $usuario, $contrasena, $basedatos, (int)$puerto)) {
         throw new Exception('No se pudo conectar a MySQL.');
     }
 
