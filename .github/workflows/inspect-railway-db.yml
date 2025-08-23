@@ -1,0 +1,47 @@
+name: Inspect Railway DB
+
+on:
+  workflow_dispatch: {}
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install MySQL client
+        run: sudo apt-get update && sudo apt-get install -y mysql-client
+
+      - name: Show server & schema info
+        env:
+          HOST: ${{ secrets.MYSQL_HOST }}
+          PORT: ${{ secrets.MYSQL_PORT }}
+          USER: ${{ secrets.MYSQL_USER }}
+          PASS: ${{ secrets.MYSQL_PASSWORD }}
+          DB:   ${{ secrets.MYSQL_DB }}
+        run: |
+          echo "== Server version =="
+          mysql -h "$HOST" -P "$PORT" -u "$USER" -p"$PASS" \
+            --ssl-mode=REQUIRED --tls-version=TLSv1.2 \
+            -e "SELECT VERSION()\G"
+
+          echo "== Databases =="
+          mysql -h "$HOST" -P "$PORT" -u "$USER" -p"$PASS" \
+            --ssl-mode=REQUIRED --tls-version=TLSv1.2 \
+            -e "SHOW DATABASES;"
+
+          echo "== Tables in $DB (top 50 by rows) =="
+          mysql -h "$HOST" -P "$PORT" -u "$USER" -p"$PASS" "$DB" \
+            --ssl-mode=REQUIRED --tls-version=TLSv1.2 \
+            -e "SELECT table_name, table_rows FROM information_schema.tables WHERE table_schema='$DB' ORDER BY table_rows+0 DESC LIMIT 50;"
+
+          echo "== Sample counts (first 10 tables) =="
+          mysql -N -h "$HOST" -P "$PORT" -u "$USER" -p"$PASS" "$DB" \
+            --ssl-mode=REQUIRED --tls-version=TLSv1.2 \
+            -e "SELECT table_name FROM information_schema.tables WHERE table_schema='$DB' ORDER BY table_name LIMIT 10;" \
+          | while read T; do
+              echo "--- $T ---"
+              mysql -h "$HOST" -P "$PORT" -u "$USER" -p"$PASS" "$DB" \
+                --ssl-mode=REQUIRED --tls-version=TLSv1.2 \
+                -e "SELECT COUNT(*) AS rows FROM \\\`$T\\\`;"
+            done
