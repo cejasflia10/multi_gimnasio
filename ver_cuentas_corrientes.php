@@ -2,20 +2,40 @@
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
-include 'conexion.php';
-include 'menu_horizontal.php';
+require __DIR__ . '/conexion.php';
+require __DIR__ . '/menu_horizontal.php';
 
-$gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
+$gimnasio_id = (int)($_SESSION['gimnasio_id'] ?? 0);
+if ($gimnasio_id <= 0) {
+    http_response_code(403);
+    exit('Acceso denegado');
+}
 
-$resultado = $conexion->query("
-    SELECT cc.cliente_id, c.nombre, c.apellido, SUM(cc.monto) AS saldo
-    FROM cuentas_corrientes cc
-    JOIN clientes c ON cc.cliente_id = c.id
-    WHERE cc.gimnasio_id = $gimnasio_id
-    GROUP BY cc.cliente_id
-    HAVING saldo < 0
-    ORDER BY saldo ASC
-");
+// Consulta: saldo = SUM(debe - haber). Mostramos solo saldos positivos (>0).
+$sql = "
+  SELECT 
+    m.cliente_id,
+    COALESCE(c.nombre, '')   AS nombre,
+    COALESCE(c.apellido, '') AS apellido,
+    SUM(m.debe - m.haber)    AS saldo
+  FROM cc_movimientos m
+  LEFT JOIN clientes c ON c.id = m.cliente_id
+  WHERE m.gimnasio_id = ?
+  GROUP BY m.gimnasio_id, m.cliente_id
+  HAVING saldo > 0.009
+  ORDER BY saldo DESC
+";
+
+$stmt = $conexion->prepare($sql);
+if (!$stmt) {
+    exit('Error preparando consulta: ' . $conexion->error);
+}
+$stmt->bind_param('i', $gimnasio_id);
+$stmt->execute();
+$resultado = $stmt->get_result();
+
+function h($s){ return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); }
+function money($n){ return '$' . number_format((float)$n, 2, ',', '.'); }
 ?>
 <!DOCTYPE html>
 <html lang="es">
@@ -24,47 +44,16 @@ $resultado = $conexion->query("
     <title>Cuentas Corrientes</title>
     <link rel="stylesheet" href="estilo_unificado.css">
     <style>
-        body {
-            background-color: #000;
-            color: gold;
-            font-family: Arial, sans-serif;
-        }
-        .contenedor {
-            max-width: 900px;
-            margin: auto;
-            padding: 20px;
-        }
-        table {
-            width: 100%;
-            background-color: #111;
-            border-collapse: collapse;
-            margin-top: 20px;
-        }
-        th, td {
-            border: 1px solid gold;
-            padding: 10px;
-            text-align: center;
-        }
-        th {
-            background-color: #222;
-        }
-        .btn {
-            padding: 6px 12px;
-            font-weight: bold;
-            border: none;
-            border-radius: 5px;
-            cursor: pointer;
-            text-decoration: none;
-            margin: 2px;
-        }
-        .btn-pago {
-            background-color: green;
-            color: white;
-        }
-        .btn-eliminar {
-            background-color: red;
-            color: white;
-        }
+        body { background-color:#000; color:gold; font-family:Arial, sans-serif; }
+        .contenedor { max-width: 900px; margin:auto; padding:20px; }
+        table { width:100%; background:#111; border-collapse:collapse; margin-top:20px; }
+        th, td { border:1px solid gold; padding:10px; text-align:center; }
+        th { background:#222; }
+        .btn { padding:6px 12px; font-weight:700; border:none; border-radius:5px; cursor:pointer; text-decoration:none; margin:2px; display:inline-block; }
+        .btn-pago { background:green; color:#fff; }
+        .btn-eliminar { background:red; color:#fff; }
+        .muted { opacity:.7; }
+        .num { text-align:right; white-space:nowrap; }
     </style>
 </head>
 <body>
@@ -74,19 +63,23 @@ $resultado = $conexion->query("
     <table>
         <tr>
             <th>Cliente</th>
-            <th>Saldo</th>
+            <th class="num">Saldo</th>
             <th>Acción</th>
         </tr>
-        <?php while($fila = $resultado->fetch_assoc()): ?>
-        <tr>
-            <td><?= htmlspecialchars($fila['apellido'] . ', ' . $fila['nombre']) ?></td>
-            <td>$<?= number_format($fila['saldo'], 2) ?></td>
-            <td>
-                <a href="registrar_pago_cc.php?cliente_id=<?= $fila['cliente_id'] ?>" class="btn btn-pago">Registrar Pago</a>
-                <a href="eliminar_deuda_cc.php?cliente_id=<?= $fila['cliente_id'] ?>" class="btn btn-eliminar" onclick="return confirm('¿Estás seguro de eliminar la deuda de este cliente?')">Eliminar</a>
-            </td>
-        </tr>
-        <?php endwhile; ?>
+        <?php if (!$resultado || $resultado->num_rows === 0): ?>
+            <tr><td colspan="3" class="muted">Sin deudas para este gimnasio.</td></tr>
+        <?php else: ?>
+            <?php while($fila = $resultado->fetch_assoc()): ?>
+            <tr>
+                <td><?= h(trim($fila['apellido'].' '.$fila['nombre'])) ?></td>
+                <td class="num"><?= money($fila['saldo']) ?></td>
+                <td>
+                    <a href="cc_detalle.php?cliente_id=<?= (int)$fila['cliente_id'] ?>#pago" class="btn btn-pago">Registrar Pago</a>
+                    <a href="cc_detalle.php?cliente_id=<?= (int)$fila['cliente_id'] ?>" class="btn">Ver detalle</a>
+                </td>
+            </tr>
+            <?php endwhile; ?>
+        <?php endif; ?>
     </table>
 </div>
 </body>

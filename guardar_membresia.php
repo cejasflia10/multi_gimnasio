@@ -1,5 +1,5 @@
 <?php
-// guardar_membresia.php — versión negativa = deuda (compatible con ver_cuentas_corrientes.php)
+// guardar_membresia.php — registra deuda/saldo en cc_movimientos (DEBE/HABER)
 if (session_status() === PHP_SESSION_NONE) session_start();
 require __DIR__ . '/conexion.php';
 
@@ -25,19 +25,22 @@ $pago_transferencia = (float)($_POST['pago_transferencia'] ?? 0);
 $pago_debito        = (float)($_POST['pago_debito'] ?? 0);
 $pago_credito       = (float)($_POST['pago_credito'] ?? 0);
 
-// parte que el recepcionista decide mandar explícitamente a cuenta corriente
+// parte que el recepcionista manda explícitamente a Cuenta Corriente (DEBE)
 $pago_cc_manual     = (float)($_POST['pago_cuenta_corriente'] ?? 0);
 
 if ($cliente_id <= 0) die("Cliente inválido.");
 if ($plan_id    <= 0) die("Plan inválido.");
 
 /* ===== 2) Datos del plan ===== */
-$qPlan = $conexion->query("
+$qPlan = $conexion->prepare("
   SELECT precio, clases_disponibles, duracion_meses
   FROM planes
-  WHERE id = {$plan_id} AND gimnasio_id = {$gimnasio_id}
+  WHERE id = ? AND gimnasio_id = ?
 ");
-$plan = $qPlan ? $qPlan->fetch_assoc() : null;
+$qPlan->bind_param('ii', $plan_id, $gimnasio_id);
+$qPlan->execute();
+$plan = $qPlan->get_result()->fetch_assoc();
+$qPlan->close();
 if (!$plan) die("Plan no encontrado.");
 
 $precio_plan = (float)$plan['precio'];
@@ -56,14 +59,15 @@ if (!empty($adicionales) && is_array($adicionales)) {
   $adicionales_ids = array_map('intval', $adicionales);
   $ids_list = implode(',', $adicionales_ids);
   if ($ids_list !== '') {
-    $resAd = $conexion->query("
-      SELECT id, precio
-      FROM planes_adicionales
-      WHERE id IN ($ids_list) AND gimnasio_id = {$gimnasio_id}
-    ");
-    while ($r = $resAd->fetch_assoc()) {
+    $sqlAd = "SELECT id, precio FROM planes_adicionales WHERE id IN ($ids_list) AND gimnasio_id = ?";
+    $resAd = $conexion->prepare($sqlAd);
+    $resAd->bind_param('i', $gimnasio_id);
+    $resAd->execute();
+    $rs = $resAd->get_result();
+    while ($r = $rs->fetch_assoc()) {
       $total_adicionales += (float)$r['precio'];
     }
+    $resAd->close();
   }
 }
 
@@ -74,15 +78,11 @@ $total_final = round($total_bruto - ($total_bruto * ($descuento_pct / 100)), 2);
 /* ===== 5) Total abonado HOY (solo medios inmediatos) ===== */
 $total_abonado_hoy = round($pago_efectivo + $pago_transferencia + $pago_debito + $pago_credito, 2);
 
-/* ===== 6) Diferencia => deuda/saldo a favor =====
-   deuda_base = total_final - abonado_hoy
-   si se indicó "pago_cuenta_corriente", registrar SIEMPRE ese asiento por separado
-   y además calcular el remanente (dif) para otro asiento si corresponde.
+/* ===== 6) Diferencia respecto al total =====
+   dif = total_final - abonado_hoy
+   (si >0 falta pagar, si <0 sobra dinero a favor)
 */
 $dif = round($total_final - $total_abonado_hoy, 2);
-
-/* Para membresías guardamos el saldo con signo (negativo = deuda) */
-$saldo_cc_signed = 0.0; // lo ajustaremos al final
 
 /* Detalle de métodos pagados hoy (texto) */
 $metodos = [];
@@ -95,7 +95,7 @@ $metodo_pago = $metodos ? implode('|', $metodos) : 'Sin pagar ahora';
 try {
   $conexion->begin_transaction();
 
-  // 7.1) Membresía
+  // 7.1) Insertar Membresía
   $stmt = $conexion->prepare("
     INSERT INTO membresias
       (cliente_id, plan_id, fecha_inicio, fecha_vencimiento, clases_disponibles,
@@ -105,7 +105,7 @@ try {
   ");
   if (!$stmt) { throw new Exception("Prepare membresias: ".$conexion->error); }
 
-  // Por ahora saldo_cc = 0; tras asientos CC lo actualizamos si querés.
+  // saldo_cc se actualizará abajo con (debe - haber) real
   $tmp_saldo_cc = 0.0;
 
   $types = "iissiddddsddi";
@@ -116,10 +116,10 @@ try {
     $tmp_saldo_cc, $total_final, $gimnasio_id
   );
   if (!$stmt->execute()) { throw new Exception("Exec membresias: ".$stmt->error); }
-  $membresia_id = $stmt->insert_id;
+  $membresia_id = (int)$stmt->insert_id;
   $stmt->close();
 
-  // 7.2) Adicionales (ajusta el nombre si tu tabla es "membresias_adicionales")
+  // 7.2) Vincular adicionales (si corresponde)
   if (!empty($adicionales_ids)) {
     $stmtAd = $conexion->prepare("INSERT INTO membresia_adicionales (membresia_id, adicional_id) VALUES (?, ?)");
     if (!$stmtAd) { throw new Exception("Prepare adicionales: ".$conexion->error); }
@@ -131,55 +131,62 @@ try {
     $stmtAd->close();
   }
 
-  // 7.3) Cuenta Corriente
-  // a) asiento manual si cargaron "Cuenta Corriente" en el form
+  // ===== 7.3) Cuenta Corriente en cc_movimientos (DEBE/HABER) =====
+  $fecha_cc = date('Y-m-d H:i:s');
+  $debe_total  = 0.0;
+  $haber_total = 0.0;
+
+  // a) Asiento manual a CC (DEBE) si vino en el form
   if ($pago_cc_manual > 0.009) {
-    $fecha_cc = date('Y-m-d H:i:s');
-    $monto_cc = -$pago_cc_manual; // negativo = deuda
-    $desc_cc  = "Membresía #{$membresia_id} - cuenta corriente (manual)";
-
+    $concepto = "Membresía #{$membresia_id} - CC manual";
     $stmtCC = $conexion->prepare("
-      INSERT INTO cuentas_corrientes
-        (cliente_id, gimnasio_id, fecha, descripcion, monto)
-      VALUES (?, ?, ?, ?, ?)
+      INSERT INTO cc_movimientos (gimnasio_id, cliente_id, venta_id, fecha, concepto, debe, haber)
+      VALUES (?, ?, ?, ?, ?, ?, 0)
     ");
-    if (!$stmtCC) { throw new Exception("Prepare cta_cte manual: ".$conexion->error); }
-    $stmtCC->bind_param("iissd", $cliente_id, $gimnasio_id, $fecha_cc, $desc_cc, $monto_cc);
-    if (!$stmtCC->execute()) { throw new Exception("Exec cta_cte manual: ".$stmtCC->error); }
+    if (!$stmtCC) { throw new Exception("Prepare cc_movimientos (manual): ".$conexion->error); }
+    $stmtCC->bind_param("iiissd", $gimnasio_id, $cliente_id, $membresia_id, $fecha_cc, $concepto, $pago_cc_manual);
+    if (!$stmtCC->execute()) { throw new Exception("Exec cc_movimientos (manual): ".$stmtCC->error); }
     $stmtCC->close();
+    $debe_total += $pago_cc_manual;
 
-    // Descontamos del remanente para no duplicar
+    // ese manual forma parte del total adeudado; ya está contemplado en total_final
     $dif = round($dif - $pago_cc_manual, 2);
   }
 
-  // b) asiento por remanente (si todavía falta/sobra algo)
+  // b) Remanente: si falta pagar -> DEBE; si sobra -> HABER
   if (abs($dif) > 0.009) {
-    $fecha_cc = date('Y-m-d H:i:s');
-    $monto_cc = ($dif > 0) ? -$dif : abs($dif); // negativo si falta pagar, positivo si sobra
-    $desc_cc  = ($dif > 0)
-      ? "Membresía #{$membresia_id} - deuda (remanente)"
-      : "Membresía #{$membresia_id} - saldo a favor (remanente)";
-
-    $stmtCC2 = $conexion->prepare("
-      INSERT INTO cuentas_corrientes
-        (cliente_id, gimnasio_id, fecha, descripcion, monto)
-      VALUES (?, ?, ?, ?, ?)
-    ");
-    if (!$stmtCC2) { throw new Exception("Prepare cta_cte remanente: ".$conexion->error); }
-    $stmtCC2->bind_param("iissd", $cliente_id, $gimnasio_id, $fecha_cc, $desc_cc, $monto_cc);
-    if (!$stmtCC2->execute()) { throw new Exception("Exec cta_cte remanente: ".$stmtCC2->error); }
-    $stmtCC2->close();
+    if ($dif > 0) {
+      // Falta pagar: DEBE
+      $concepto = "Membresía #{$membresia_id} - deuda (remanente)";
+      $stmtCC2 = $conexion->prepare("
+        INSERT INTO cc_movimientos (gimnasio_id, cliente_id, venta_id, fecha, concepto, debe, haber)
+        VALUES (?, ?, ?, ?, ?, ?, 0)
+      ");
+      if (!$stmtCC2) { throw new Exception("Prepare cc_movimientos (remanente debe): ".$conexion->error); }
+      $stmtCC2->bind_param("iiissd", $gimnasio_id, $cliente_id, $membresia_id, $fecha_cc, $concepto, $dif);
+      if (!$stmtCC2->execute()) { throw new Exception("Exec cc_movimientos (remanente debe): ".$stmtCC2->error); }
+      $stmtCC2->close();
+      $debe_total += $dif;
+    } else {
+      // Sobra dinero: HABER
+      $haber = abs($dif);
+      $concepto = "Membresía #{$membresia_id} - saldo a favor (remanente)";
+      $stmtCC3 = $conexion->prepare("
+        INSERT INTO cc_movimientos (gimnasio_id, cliente_id, venta_id, fecha, concepto, debe, haber)
+        VALUES (?, ?, ?, ?, ?, 0, ?)
+      ");
+      if (!$stmtCC3) { throw new Exception("Prepare cc_movimientos (remanente haber): ".$conexion->error); }
+      $stmtCC3->bind_param("iiissd", $gimnasio_id, $cliente_id, $membresia_id, $fecha_cc, $concepto, $haber);
+      if (!$stmtCC3->execute()) { throw new Exception("Exec cc_movimientos (remanente haber): ".$stmtCC3->error); }
+      $stmtCC3->close();
+      $haber_total += $haber;
+    }
   }
 
-  // 7.4) Actualizar saldo_cc en membresías con el total que quedó (con signo)
-  // saldo_cc_signed: si dif>0 ó hubo manual => negativo (deuda); si dif<0 => positivo
-  // Lo recomputamos: saldo final en CC = (asiento manual negativo) + (remanente con signo)
-  $saldo_final_cc = 0.0;
-  if ($pago_cc_manual > 0.009) $saldo_final_cc += -$pago_cc_manual;
-  if (abs($dif) > 0.009)       $saldo_final_cc += ($dif > 0 ? -$dif : abs($dif));
-
+  // 7.4) Actualizar saldo_cc en membresías como (DEBE - HABER)
+  $saldo_cc = round($debe_total - $haber_total, 2); // >0 deuda, <0 a favor
   $stmtUpd = $conexion->prepare("UPDATE membresias SET saldo_cc = ? WHERE id = ? AND gimnasio_id = ?");
-  $stmtUpd->bind_param("dii", $saldo_final_cc, $membresia_id, $gimnasio_id);
+  $stmtUpd->bind_param("dii", $saldo_cc, $membresia_id, $gimnasio_id);
   $stmtUpd->execute();
   $stmtUpd->close();
 
@@ -190,5 +197,5 @@ try {
 } catch (Throwable $e) {
   $conexion->rollback();
   http_response_code(500);
-  echo "Error al guardar la membresía: ".$e->getMessage();
+  echo "Error al guardar la membresía: ".htmlspecialchars($e->getMessage());
 }
