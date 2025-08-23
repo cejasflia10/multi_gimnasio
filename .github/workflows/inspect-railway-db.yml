@@ -1,0 +1,26 @@
+name: Inspect Railway DB
+
+on:
+  workflow_dispatch:
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install MySQL client
+        run: sudo apt-get update && sudo apt-get install -y mysql-client
+      - name: Show DB info
+        env:
+          MYSQLHOST: ${{ secrets.MYSQL_HOST }}
+          MYSQLPORT: ${{ secrets.MYSQL_PORT }}
+          MYSQLUSER: ${{ secrets.MYSQL_USER }}
+          MYSQLPASSWORD: ${{ secrets.MYSQL_PASSWORD }}
+          MYSQLDATABASE: ${{ secrets.MYSQL_DB }}
+        run: |
+          echo "== Server Version =="
+          mysql --protocol=TCP \
+            -h $MYSQLHOST -P $MYSQLPORT \
+            -u $MYSQLUSER -p$MYSQLPASSWORD \
+            --ssl-mode=REQUIRED \
+            -e "SELECT VERSION(); SHOW DATABASES(); USE $MYSQLDATABASE; SHOW TABLES;"
