@@ -1,9 +1,9 @@
 <?php
-/* ================= DEBUG (podés desactivar en producción) ================= */
+/* ================= DEBUG (desactivar en producción si querés) ================= */
 ini_set('display_errors', 1);
 ini_set('display_startup_errors', 1);
 error_reporting(E_ALL);
-/* ========================================================================== */
+/* ============================================================================== */
 
 if (session_status() === PHP_SESSION_NONE) session_start();
 require_once __DIR__ . '/conexion.php';
@@ -18,25 +18,9 @@ if (!$cliente_id || !$gimnasio_id) {
   exit;
 }
 
-/* ---------- Helpers (SIN type-hints para compatibilidad) ---------- */
+/* ---------- Helpers ---------- */
 function h($s){ return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); }
 function num($n, $dec=1){ return number_format((float)$n, $dec, ',', '.'); }
-
-function db_has_table($db, $t){
-  $t = $db->real_escape_string($t);
-  $res = @$db->query("SHOW TABLES LIKE '{$t}'");
-  return ($res && $res->num_rows > 0);
-}
-function db_has_col($db, $t, $c){
-  $t = $db->real_escape_string($t);
-  $c = $db->real_escape_string($c);
-  $res = @$db->query("SHOW COLUMNS FROM `{$t}` LIKE '{$c}'");
-  return ($res && $res->num_rows > 0);
-}
-function pick_col($db, $t, $cands){
-  foreach ($cands as $c) { if (db_has_col($db,$t,$c)) return $c; }
-  return null;
-}
 
 /* ---------- Cliente ---------- */
 $st = $conexion->prepare("SELECT * FROM clientes WHERE id=? AND gimnasio_id=? LIMIT 1");
@@ -49,34 +33,31 @@ if (!$cliente) {
   echo "<p style='color:red; padding:20px;'>⚠️ No se encontró el cliente.</p>";
   exit;
 }
-$nombre_cliente = trim((isset($cliente['apellido'])?$cliente['apellido']:'').' '.(isset($cliente['nombre'])?$cliente['nombre']:''));
+$nombre_cliente = trim(($cliente['apellido'] ?? '').' '.($cliente['nombre'] ?? ''));
 
 /* Altura -> metros (acepta altura_cm o altura) */
-$altura_raw = isset($cliente['altura_cm']) ? $cliente['altura_cm'] : (isset($cliente['altura']) ? $cliente['altura'] : null);
+$altura_raw = $cliente['altura_cm'] ?? ($cliente['altura'] ?? null);
 $altura_m = ($altura_raw && (float)$altura_raw > 0)
   ? ((float)$altura_raw > 3 ? ((float)$altura_raw / 100.0) : (float)$altura_raw)
   : 1.70;
 
 /* ---------- Peso de referencia (último progreso si existe) ---------- */
 $peso_ref = null;
-if (db_has_table($conexion,'progreso_cliente')) {
-  $pc_fecha = pick_col($conexion,'progreso_cliente',array('fecha','created_at','fecha_registro','dia'));
-  $pc_peso  = pick_col($conexion,'progreso_cliente',array('peso_despues','peso_fin','peso_post','peso'));
-  $pc_cli   = pick_col($conexion,'progreso_cliente',array('cliente_id','id_cliente'));
-  $pc_gym   = pick_col($conexion,'progreso_cliente',array('gimnasio_id','id_gimnasio'));
-
-  if ($pc_peso && $pc_cli && $pc_gym) {
-    $sql = "SELECT `$pc_peso` AS p FROM `progreso_cliente` WHERE `$pc_cli`=? AND `$pc_gym`=? ";
-    if ($pc_fecha) $sql .= "ORDER BY `$pc_fecha` DESC ";
-    elseif (db_has_col($conexion,'progreso_cliente','id')) $sql .= "ORDER BY `id` DESC ";
-    $sql .= "LIMIT 1";
-    $st = $conexion->prepare($sql);
-    $st->bind_param("ii", $cliente_id, $gimnasio_id);
-    $st->execute();
-    $r = $st->get_result()->fetch_assoc();
-    if ($r && isset($r['p'])) $peso_ref = (float)$r['p'];
-    $st->close();
-  }
+$resTmp = $conexion->query("SHOW TABLES LIKE 'progreso_cliente'");
+if ($resTmp && $resTmp->num_rows) {
+  // intentamos columnas más comunes
+  $st = $conexion->prepare("
+    SELECT COALESCE(peso_despues, peso_fin, peso_post, peso) AS p
+    FROM progreso_cliente
+    WHERE (cliente_id=? OR id_cliente=?) AND (gimnasio_id=? OR id_gimnasio=?)
+    ORDER BY COALESCE(fecha, created_at, fecha_registro, dia, id) DESC
+    LIMIT 1
+  ");
+  $st->bind_param("iiii", $cliente_id, $cliente_id, $gimnasio_id, $gimnasio_id);
+  $st->execute();
+  $r = $st->get_result()->fetch_assoc();
+  if ($r && isset($r['p']) && (float)$r['p']>0) $peso_ref = (float)$r['p'];
+  $st->close();
 }
 if (!$peso_ref || $peso_ref <= 0) {
   $peso_ref = isset($cliente['peso']) ? (float)$cliente['peso'] : 70.0;
@@ -84,8 +65,8 @@ if (!$peso_ref || $peso_ref <= 0) {
 
 /* ---------- Objetivos ---------- */
 $imc = ($altura_m > 0) ? round($peso_ref / ($altura_m*$altura_m), 1) : 0.0;
-$objetivo = strtolower(trim(isset($_GET['objetivo']) ? $_GET['objetivo'] : ''));
-if (!in_array($objetivo, array('bajar peso','mantener','subir peso'), true)) {
+$objetivo = strtolower(trim($_GET['objetivo'] ?? ''));
+if (!in_array($objetivo, ['bajar peso','mantener','subir peso'], true)) {
   if     ($imc >= 25)  $objetivo = 'bajar peso';
   elseif ($imc < 18.5) $objetivo = 'subir peso';
   else                 $objetivo = 'mantener';
@@ -96,7 +77,7 @@ $proteinas_obj = (int)round($peso_ref * $prot_gkg);
 $kcal_base = (int)round($peso_ref * 30);
 $kcal_obj  = $kcal_base + (($objetivo === 'subir peso') ? +300 : (($objetivo === 'bajar peso') ? -400 : 0));
 
-/* ---------- Gemini (API Key que pasaste) ---------- */
+/* ---------- Gemini (API Key tuya) ---------- */
 $apiKey = 'AIzaSyDVMv4gliTqbrHqdgNcql7P8eP8jQL7Iwo';
 
 $resultado_modelo = '';
@@ -104,6 +85,7 @@ $error_modelo = '';
 $nombre_detectado = 'Comida detectada';
 $kcal_detectadas  = 0;
 
+/* ---------- Procesar imagen ---------- */
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['imagen_base64'])) {
   $base64 = (string)$_POST['imagen_base64'];
   $mime   = (stripos($base64, 'image/png') !== false) ? 'image/png' : 'image/jpeg';
@@ -113,26 +95,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['imagen_base64'])) {
     $error_modelo = "⚠️ cURL no está habilitado en el servidor. Activá la extensión php-curl.";
   } else {
     $endpoint = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=".$apiKey;
-    $json_payload = json_encode(array(
-      "contents" => array(array(
-        "parts" => array(
-          array("inline_data" => array("mime_type" => $mime, "data" => $payload_b64)),
-          array("text" => "En español: indica qué comida es y su valor nutricional. Devuelve una sola oración con el nombre y las calorías aproximadas (kcal).")
-        )
-      )),
-      "generationConfig" => array(
-        "temperature" => 0.4,
-        "maxOutputTokens" => 150
-      )
-    ));
+    $json_payload = json_encode([
+      "contents" => [[
+        "parts" => [
+          ["inline_data" => ["mime_type" => $mime, "data" => $payload_b64]],
+          ["text" => "En español: indica qué comida es y su valor nutricional. Devuelve una sola oración con el nombre y las calorías aproximadas (kcal)."]
+        ]
+      ]],
+      "generationConfig" => ["temperature" => 0.4, "maxOutputTokens" => 150]
+    ]);
 
     $ch = curl_init($endpoint);
-    curl_setopt_array($ch, array(
+    curl_setopt_array($ch, [
       CURLOPT_RETURNTRANSFER => true,
-      CURLOPT_HTTPHEADER     => array('Content-Type: application/json'),
+      CURLOPT_HTTPHEADER     => ['Content-Type: application/json'],
       CURLOPT_POSTFIELDS     => $json_payload,
       CURLOPT_TIMEOUT        => 25
-    ));
+    ]);
     $resp = curl_exec($ch);
     $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
     $err  = curl_error($ch);
@@ -144,37 +123,34 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['imagen_base64'])) {
       $data = json_decode($resp, true);
       if ($code === 200 && isset($data['candidates'][0]['content']['parts'][0]['text'])) {
         $resultado_modelo = trim($data['candidates'][0]['content']['parts'][0]['text']);
-        if (preg_match('/(\d{2,5})\s?k?cal/i', $resultado_modelo, $m)) {
-          $kcal_detectadas = (int)$m[1];
-        }
+        if (preg_match('/(\d{2,5})\s?k?cal/i', $resultado_modelo, $m)) $kcal_detectadas = (int)$m[1];
         if (preg_match('/^(.{3,80}?)(?:\s+(?:contiene|tiene|aprox|aprox\.|≈))/iu', $resultado_modelo, $n)) {
           $nombre_detectado = trim($n[1]);
         } elseif (preg_match('/^([A-ZÁÉÍÓÚÑa-záéíóúñ ]{3,80})/u', $resultado_modelo, $n2)) {
           $nombre_detectado = trim($n2[1]);
         }
       } else {
-        $error_text = (isset($data['error']['message']) ? $data['error']['message'] : 'Respuesta inesperada de Gemini');
+        $error_text = $data['error']['message'] ?? 'Respuesta inesperada de Gemini';
         $error_modelo = "⚠️ No se pudo procesar la imagen (HTTP {$code}). ".$error_text;
       }
     }
   }
 }
 
-/* ---------- Autodetección de tabla/columnas ---------- */
-$rc_table = null;
-foreach (array('registro_comidas','comidas','registro_dietas') as $tb) {
-  if (db_has_table($conexion,$tb)) { $rc_table = $tb; break; }
-}
-if (!$rc_table) $rc_table = 'registro_comidas';
-
-$cId     = pick_col($conexion,$rc_table,array('id','comida_id','registro_id'));
-$cFecha  = pick_col($conexion,$rc_table,array('fecha','fecha_registro','created_at'));
-$cNombre = pick_col($conexion,$rc_table,array('comida','alimento','nombre','descripcion'));
-$cPorc   = pick_col($conexion,$rc_table,array('porciones','cantidad','porcion'));
-$cKcal   = pick_col($conexion,$rc_table,array('calorias','kcal','cal'));
-$cTotal  = pick_col($conexion,$rc_table,array('total_calorias','calorias_total','kcal_total','total_kcal'));
-$cCli    = pick_col($conexion,$rc_table,array('cliente_id','id_cliente'));
-$cGym    = pick_col($conexion,$rc_table,array('gimnasio_id','id_gimnasio'));
+/* =============================================================================
+   FORZAMOS TABLA ESTÁNDAR registro_comidas (y la creamos si no existe)
+   ========================================================================== */
+$conexion->query("CREATE TABLE IF NOT EXISTS registro_comidas (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  cliente_id INT NOT NULL,
+  gimnasio_id INT NOT NULL,
+  fecha DATE NOT NULL,
+  comida VARCHAR(255) NOT NULL,
+  porciones DECIMAL(6,2) NOT NULL,
+  calorias DECIMAL(8,2) NOT NULL,
+  total_calorias DECIMAL(10,2) NOT NULL,
+  INDEX idx_cli_gym_fecha (cliente_id, gimnasio_id, fecha)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;");
 
 /* ---------- Guardar comida ---------- */
 $mensaje_guardado = '';
@@ -183,120 +159,63 @@ if (isset($_POST['guardar']) && !empty($_POST['nombre']) && !empty($_POST['porci
   $porc   = (float)$_POST['porciones'];
   $kcal   = (float)$_POST['calorias'];
   $total  = $porc * $kcal;
+  $hoy_sql = date('Y-m-d');
 
-  if (!db_has_table($conexion,$rc_table) || $rc_table === 'registro_comidas') {
-    $conexion->query("CREATE TABLE IF NOT EXISTS registro_comidas (
-      id INT AUTO_INCREMENT PRIMARY KEY,
-      cliente_id INT NOT NULL,
-      gimnasio_id INT NOT NULL,
-      fecha DATE NOT NULL,
-      comida VARCHAR(255) NOT NULL,
-      porciones DECIMAL(6,2) NOT NULL,
-      calorias DECIMAL(8,2) NOT NULL,
-      total_calorias DECIMAL(10,2) NOT NULL,
-      INDEX idx_cli_gym_fecha (cliente_id, gimnasio_id, fecha)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;");
-    $rc_table = 'registro_comidas';
-    $cId='id'; $cFecha='fecha'; $cNombre='comida'; $cPorc='porciones'; $cKcal='calorias';
-    $cTotal='total_calorias'; $cCli='cliente_id'; $cGym='gimnasio_id';
-  }
+  $sql = "INSERT INTO registro_comidas
+            (cliente_id, gimnasio_id, fecha, comida, porciones, calorias, total_calorias)
+          VALUES (?, ?, ?, ?, ?, ?, ?)";
+  $st = $conexion->prepare($sql);
+  // 2 ints, 1 string(fecha), 1 string(comida), 3 doubles
+  $st->bind_param("iissddd", $cliente_id, $gimnasio_id, $hoy_sql, $nombre, $porc, $kcal, $total);
 
-  if ($cNombre && (($cPorc && $cKcal) || $cTotal)) {
-    $cols = array(); $qs = array(); $types=''; $vals=array();
-
-    if ($cCli)   { $cols[]="`$cCli`";   $qs[]='?';        $types.='i'; $vals[]=$cliente_id; }
-    if ($cGym)   { $cols[]="`$cGym`";   $qs[]='?';        $types.='i'; $vals[]=$gimnasio_id; }
-    if ($cFecha) { $cols[]="`$cFecha`"; $qs[]='CURDATE()'; }
-    $cols[]="`$cNombre`"; $qs[]='?'; $types.='s'; $vals[]=$nombre;
-
-    if ($cPorc)  { $cols[]="`$cPorc`";  $qs[]='?'; $types.='d'; $vals[]=$porc; }
-    if ($cKcal)  { $cols[]="`$cKcal`";  $qs[]='?'; $types.='d'; $vals[]=$kcal; }
-    if ($cTotal) { $cols[]="`$cTotal`"; $qs[]='?'; $types.='d'; $vals[]=$total; }
-
-    $sql = "INSERT INTO `{$rc_table}` (".implode(',',$cols).") VALUES (".implode(',',$qs).")";
-    $st = $conexion->prepare($sql);
-    if ($types!=='') { $st->bind_param($types, ...$vals); }
-    if ($st->execute()) $mensaje_guardado = "✅ Comida registrada correctamente.";
-    $st->close();
-  } else {
-    $mensaje_guardado = "⚠️ No se pudo registrar: faltan columnas mínimas en la tabla.";
-  }
+  if ($st->execute()) $mensaje_guardado = "✅ Comida registrada correctamente.";
+  else                $mensaje_guardado = "⚠️ No se pudo registrar: ".$st->error;
+  $st->close();
 }
 
-/* ---------- Totales del día ---------- */
+/* ---------- Totales y listado del día ---------- */
 try { $tz = new DateTimeZone('America/Argentina/San_Luis'); }
-catch(Exception $e){ $tz = new DateTimeZone('America/Argentina/Buenos_Aires'); }
+catch(Throwable $e){ $tz = new DateTimeZone('America/Argentina/Buenos_Aires'); }
 $hoy = (new DateTime('today', $tz))->format('Y-m-d');
 
 $consumidas_hoy = 0;
-if ($cNombre) {
-  if     ($cTotal)          { $exprTotal = "`$cTotal`"; }
-  elseif ($cPorc && $cKcal) { $exprTotal = "(`$cPorc` * `$cKcal`)"; }
-  else                      { $exprTotal = "0"; }
+$st = $conexion->prepare("SELECT COALESCE(SUM(total_calorias),0) AS t
+                          FROM registro_comidas
+                          WHERE cliente_id=? AND gimnasio_id=? AND fecha=?");
+$st->bind_param("iis", $cliente_id, $gimnasio_id, $hoy);
+$st->execute();
+$r = $st->get_result()->fetch_assoc();
+$consumidas_hoy = (int)($r['t'] ?? 0);
+$st->close();
 
-  $sql = "SELECT COALESCE(SUM($exprTotal),0) AS t FROM `{$rc_table}` WHERE 1";
-  $types=''; $vals=array();
-  if ($cCli)   { $sql.=" AND `$cCli`=?";   $types.='i'; $vals[]=$cliente_id; }
-  if ($cGym)   { $sql.=" AND `$cGym`=?";   $types.='i'; $vals[]=$gimnasio_id; }
-  if ($cFecha) { $sql.=" AND `$cFecha`=?"; $types.='s'; $vals[]=$hoy; }
+$comidas_hoy = [];
+$st = $conexion->prepare("SELECT id, comida, porciones, calorias, total_calorias
+                          FROM registro_comidas
+                          WHERE cliente_id=? AND gimnasio_id=? AND fecha=?
+                          ORDER BY id DESC LIMIT 10");
+$st->bind_param("iis", $cliente_id, $gimnasio_id, $hoy);
+$st->execute();
+$res = $st->get_result();
+while ($row = $res->fetch_assoc()) { $comidas_hoy[] = $row; }
+$st->close();
 
-  $st = $conexion->prepare($sql);
-  if ($types!=='') $st->bind_param($types, ...$vals);
-  $st->execute();
-  $r = $st->get_result()->fetch_assoc();
-  $consumidas_hoy = (int)($r && isset($r['t']) ? $r['t'] : 0);
-  $st->close();
-}
-
-/* Quemadas hoy (si existe progreso_cliente) */
+/* Quemadas hoy (opcional desde progreso_cliente) */
 $quemadas_hoy = 0;
-if (db_has_table($conexion, 'progreso_cliente')) {
-  $cFechaPC = pick_col($conexion, 'progreso_cliente', array('fecha','created_at'));
-  $cCalPC   = pick_col($conexion, 'progreso_cliente', array('calorias_estimadas','calorias_quemadas','kcal'));
-  $cCliPC   = pick_col($conexion, 'progreso_cliente', array('cliente_id','id_cliente'));
-  $cGymPC   = pick_col($conexion, 'progreso_cliente', array('gimnasio_id','id_gimnasio'));
-
-  if ($cFechaPC && $cCalPC && $cCliPC && $cGymPC) {
-    $sqlQ = "SELECT COALESCE(SUM(`$cCalPC`),0) AS t FROM `progreso_cliente` WHERE `$cCliPC`=? AND `$cGymPC`=? AND `$cFechaPC`=?";
-    $st = $conexion->prepare($sqlQ);
-    $st->bind_param("iis", $cliente_id, $gimnasio_id, $hoy);
-    $st->execute();
+$resTmp = $conexion->query("SHOW TABLES LIKE 'progreso_cliente'");
+if ($resTmp && $resTmp->num_rows) {
+  $st = $conexion->prepare("
+    SELECT COALESCE(SUM(COALESCE(calorias_estimadas,calorias_quemadas,kcal)),0) AS t
+    FROM progreso_cliente
+    WHERE (cliente_id=? OR id_cliente=?) AND (gimnasio_id=? OR id_gimnasio=?) AND (fecha=? OR created_at=?)
+  ");
+  $st->bind_param("iiiiss", $cliente_id, $cliente_id, $gimnasio_id, $gimnasio_id, $hoy, $hoy);
+  if ($st->execute()) {
     $r = $st->get_result()->fetch_assoc();
-    $quemadas_hoy = (int)($r && isset($r['t']) ? $r['t'] : 0);
-    $st->close();
+    if ($r && isset($r['t'])) $quemadas_hoy = (int)$r['t'];
   }
-}
-
-/* Listado de hoy */
-$comidas_hoy = array();
-if ($cNombre) {
-  $parts = array();
-  $parts[] = $cNombre ? "`$cNombre` AS comida" : "'(sin nombre)' AS comida";
-  $parts[] = $cPorc   ? "`$cPorc` AS porciones" : "NULL AS porciones";
-  $parts[] = $cKcal   ? "`$cKcal` AS calorias"  : "NULL AS calorias";
-  if     ($cTotal)             $parts[] = "`$cTotal` AS total_calorias";
-  elseif ($cPorc && $cKcal)    $parts[] = "(`$cPorc` * `$cKcal`) AS total_calorias";
-  else                         $parts[] = "NULL AS total_calorias";
-  if ($cId) $parts[]="`$cId` AS id";
-
-  $sql = "SELECT ".implode(", ",$parts)." FROM `{$rc_table}` WHERE 1";
-  $types=''; $vals=array();
-  if ($cCli)   { $sql.=" AND `$cCli`=?";   $types.='i'; $vals[]=$cliente_id; }
-  if ($cGym)   { $sql.=" AND `$cGym`=?";   $types.='i'; $vals[]=$gimnasio_id; }
-  if ($cFecha) { $sql.=" AND `$cFecha`=?"; $types.='s'; $vals[]=$hoy; }
-  if     ($cId)    $sql.=" ORDER BY `$cId` DESC";
-  elseif ($cFecha) $sql.=" ORDER BY `$cFecha` DESC";
-  $sql.=" LIMIT 10";
-
-  $st = $conexion->prepare($sql);
-  if ($types!=='') $st->bind_param($types, ...$vals);
-  $st->execute();
-  $res = $st->get_result();
-  while ($r = $res->fetch_assoc()) $comidas_hoy[] = $r;
   $st->close();
 }
 
-/* Estado */
 $balance_neto = $consumidas_hoy - $quemadas_hoy;
 $estado_neto  = ($balance_neto > 250) ? 'Superávit' : (($balance_neto < -250) ? 'Déficit' : 'Equilibrado');
 ?>
@@ -365,6 +284,7 @@ $estado_neto  = ($balance_neto > 250) ? 'Superávit' : (($balance_neto < -250) ?
   </section>
 
   <div class="row">
+    <!-- Cámara -->
     <section class="card">
       <h3 style="margin:0 0 6px">📸 Cámara</h3>
       <div id="camStatus" class="muted" style="margin-bottom:8px">Listo. Hacé clic en “Habilitar cámara”.</div>
@@ -384,6 +304,7 @@ $estado_neto  = ($balance_neto > 250) ? 'Superávit' : (($balance_neto < -250) ?
       </form>
     </section>
 
+    <!-- Resultado + registro manual -->
     <section class="card">
       <h3 style="margin:0 0 6px">🔎 Resultado</h3>
       <p style="margin:6px 0"><strong>Cliente:</strong> <?= h($nombre_cliente) ?></p>
@@ -423,6 +344,7 @@ $estado_neto  = ($balance_neto > 250) ? 'Superávit' : (($balance_neto < -250) ?
     </section>
   </div>
 
+  <!-- Lista del día -->
   <section class="card" style="margin-top:12px; text-align:left">
     <h3 style="margin:0 0 6px">🍽️ Comidas de hoy</h3>
     <table>
@@ -439,9 +361,9 @@ $estado_neto  = ($balance_neto > 250) ? 'Superávit' : (($balance_neto < -250) ?
           <?php foreach ($comidas_hoy as $c): ?>
             <tr>
               <td><?= h($c['comida']) ?></td>
-              <td><?= isset($c['porciones']) ? num($c['porciones'],2) : '-' ?></td>
-              <td><?= isset($c['calorias']) ? num($c['calorias'],0).' kcal' : '-' ?></td>
-              <td><strong><?= isset($c['total_calorias']) ? num($c['total_calorias'],0).' kcal' : '-' ?></strong></td>
+              <td><?= num($c['porciones'],2) ?></td>
+              <td><?= num($c['calorias'],0) ?> kcal</td>
+              <td><strong><?= num($c['total_calorias'],0) ?> kcal</strong></td>
             </tr>
           <?php endforeach; ?>
         <?php else: ?>
@@ -466,27 +388,16 @@ $estado_neto  = ($balance_neto > 250) ? 'Superávit' : (($balance_neto < -250) ?
   var stream = null;
   var videoReady = false;
 
-  function setStatus(msg, ok){
-    if (ok === void 0) ok = false;
-    camStatus.textContent = msg;
-    camStatus.style.color = ok ? '#22c55e' : '#a0a7b4';
-  }
-  function setError(msg){
-    camStatus.textContent = msg;
-    camStatus.style.color = '#ff6b6b';
-  }
+  function setStatus(msg, ok){ camStatus.textContent = msg; camStatus.style.color = ok ? '#22c55e' : '#a0a7b4'; }
+  function setError(msg){ camStatus.textContent = msg; camStatus.style.color = '#ff6b6b'; }
 
   var isSecure = (location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1');
-  if (!isSecure) {
-    setError('⚠️ Para usar la cámara necesitás HTTPS o entrar por http://localhost');
-  } else {
-    setStatus('Listo. Hacé clic en “Habilitar cámara”.');
-  }
+  if (!isSecure) setError('⚠️ Para usar la cámara necesitás HTTPS o entrar por http://localhost');
+  else setStatus('Listo. Hacé clic en “Habilitar cámara”.');
 
   btnEnable.addEventListener('click', function(){
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-      setError('Tu navegador no soporta cámara. Usá “Subir imagen”.');
-      return;
+      setError('Tu navegador no soporta cámara. Usá “Subir imagen”.'); return;
     }
     setStatus('Solicitando permisos…');
     navigator.mediaDevices.getUserMedia({
@@ -501,26 +412,17 @@ $estado_neto  = ($balance_neto > 250) ? 'Superávit' : (($balance_neto < -250) ?
           videoReady = true;
           btnShot.disabled = false;
           setStatus('Cámara lista ✅', true);
-        }).catch(function(err){
-          setError('No se pudo reproducir el video: ' + err.message);
-        });
+        }).catch(function(err){ setError('No se pudo reproducir el video: ' + err.message); });
       };
     }).catch(function(err){
-      if (err && err.name === 'NotAllowedError') {
-        setError('Permiso de cámara denegado. Activá los permisos del navegador o usá “Subir imagen”.');
-      } else if (err && err.name === 'NotFoundError') {
-        setError('No se encontró ninguna cámara. Probá con “Subir imagen”.');
-      } else {
-        setError('Error iniciando cámara: ' + (err && err.message ? err.message : err));
-      }
+      if (err && err.name === 'NotAllowedError') setError('Permiso de cámara denegado. Activá los permisos o usá “Subir imagen”.');
+      else if (err && err.name === 'NotFoundError') setError('No se encontró ninguna cámara. Probá con “Subir imagen”.');
+      else setError('Error iniciando cámara: ' + (err && err.message ? err.message : err));
     });
   });
 
   btnShot.addEventListener('click', function(){
-    if (!videoReady || !video.videoWidth) {
-      setError('La cámara aún no está lista. Esperá unos segundos y probá de nuevo.');
-      return;
-    }
+    if (!videoReady || !video.videoWidth) { setError('La cámara aún no está lista. Probá de nuevo.'); return; }
     canvas.width  = video.videoWidth;
     canvas.height = video.videoHeight;
     var ctx = canvas.getContext('2d');
@@ -546,7 +448,7 @@ $estado_neto  = ($balance_neto > 250) ? 'Superávit' : (($balance_neto < -250) ?
   });
 
   window.addEventListener('beforeunload', function(){
-    if (stream) { stream.getTracks().forEach(function(t){ t.stop(); }); }
+    if (stream) stream.getTracks().forEach(function(t){ t.stop(); });
   });
 })();
 </script>
