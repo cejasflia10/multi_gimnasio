@@ -164,14 +164,8 @@ $proteinas_obj = (int)round($peso_ref * $prot_gkg);
 $kcal_base = (int)round($peso_ref * 30);
 $kcal_obj  = $kcal_base + (($objetivo === 'subir peso') ? +300 : (($objetivo === 'bajar peso') ? -400 : 0));
 
-/* ---------- Gemini (API Key por entorno o archivo local) ---------- */
-/* Si existe config_local.php (no versionarlo) permite $GEMINI_API_KEY */
-if (is_readable(__DIR__ . '/config_local.php')) {
-  include __DIR__ . '/config_local.php';
-}
-$apiKey = getenv('GEMINI_API_KEY')
-       ?: ($_SERVER['GEMINI_API_KEY'] ?? '')
-       ?: (isset($GEMINI_API_KEY) ? (string)$GEMINI_API_KEY : '');
+/* ---------- Gemini (API Key HARD-CODED, colgada) ---------- */
+$apiKey = 'AIzaSyDVMv4gliTqbrHqdgNcql7P8eP8jQL7Iwo'; // <-- TU CLAVE AQUÍ
 
 $resultado_modelo = '';
 $error_modelo = '';
@@ -189,7 +183,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['imagen_base64'])) {
   $payload_b64 = preg_replace('#^data:image/[^;]+;base64,#', '', $base64);
 
   if (!$apiKey) {
-    $error_modelo = "⚠️ Falta configurar GEMINI_API_KEY en el entorno del servidor.";
+    $error_modelo = "⚠️ Falta configurar GEMINI_API_KEY en el servidor.";
   } elseif (!function_exists('curl_init')) {
     $error_modelo = "⚠️ cURL no está habilitado en el servidor. Activá la extensión php-curl.";
   } else {
