@@ -9,6 +9,19 @@ if (session_status() === PHP_SESSION_NONE) session_start();
 require_once __DIR__ . '/conexion.php';
 @include __DIR__ . '/menu_cliente.php';
 
+/* ---------- Conexión y charset ---------- */
+if (!isset($conexion) || !($conexion instanceof mysqli)) {
+  http_response_code(500);
+  echo "<div style='color:#ff6b6b; padding:16px; text-align:center'>❌ No hay conexión a la base de datos.</div>";
+  exit;
+}
+if (function_exists('mysqli_report')) { mysqli_report(MYSQLI_REPORT_OFF); }
+@$conexion->set_charset('utf8mb4');
+
+/* ---------- Helpers ---------- */
+function h($s){ return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); }
+function num($n, $dec=1){ return number_format((float)$n, $dec, ',', '.'); }
+
 /* ---------- Datos de sesión ---------- */
 $cliente_id  = isset($_SESSION['cliente_id'])  ? (int)$_SESSION['cliente_id']  : 0;
 $gimnasio_id = isset($_SESSION['gimnasio_id']) ? (int)$_SESSION['gimnasio_id'] : 0;
@@ -18,26 +31,26 @@ if (!$cliente_id || !$gimnasio_id) {
   exit;
 }
 
-/* ---------- Helpers ---------- */
-function h($s){ return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); }
-function num($n, $dec=1){ return number_format((float)$n, $dec, ',', '.'); }
+/* ---------- Cliente (sin get_result) ---------- */
+$apellido = $nombre = '';
+$altura_cm = $altura = $peso_cli = null;
 
-/* ---------- Cliente ---------- */
-$st = $conexion->prepare("SELECT * FROM clientes WHERE id=? AND gimnasio_id=? LIMIT 1");
+$st = $conexion->prepare("SELECT apellido, nombre, altura_cm, altura, peso FROM clientes WHERE id=? AND gimnasio_id=? LIMIT 1");
 $st->bind_param("ii", $cliente_id, $gimnasio_id);
 $st->execute();
-$cliente = $st->get_result()->fetch_assoc();
+$st->bind_result($apellido, $nombre, $altura_cm, $altura, $peso_cli);
+$found = $st->fetch();
 $st->close();
 
-if (!$cliente) {
+if (!$found) {
   echo "<p style='color:red; padding:20px;'>⚠️ No se encontró el cliente.</p>";
   exit;
 }
-$nombre_cliente = trim(($cliente['apellido'] ?? '').' '.($cliente['nombre'] ?? ''));
+$nombre_cliente = trim(($apellido ?? '') . ' ' . ($nombre ?? ''));
 
 /* Altura -> metros (acepta altura_cm o altura) */
-$altura_raw = $cliente['altura_cm'] ?? ($cliente['altura'] ?? null);
-$altura_m = ($altura_raw && (float)$altura_raw > 0)
+$altura_raw = $altura_cm ?? $altura;
+$altura_m = ($altura_raw !== null && (float)$altura_raw > 0)
   ? ((float)$altura_raw > 3 ? ((float)$altura_raw / 100.0) : (float)$altura_raw)
   : 1.70;
 
@@ -45,22 +58,22 @@ $altura_m = ($altura_raw && (float)$altura_raw > 0)
 $peso_ref = null;
 $resTmp = $conexion->query("SHOW TABLES LIKE 'progreso_cliente'");
 if ($resTmp && $resTmp->num_rows) {
-  // intentamos columnas más comunes
-  $st = $conexion->prepare("
+  $sql = "
     SELECT COALESCE(peso_despues, peso_fin, peso_post, peso) AS p
     FROM progreso_cliente
     WHERE (cliente_id=? OR id_cliente=?) AND (gimnasio_id=? OR id_gimnasio=?)
     ORDER BY COALESCE(fecha, created_at, fecha_registro, dia, id) DESC
     LIMIT 1
-  ");
+  ";
+  $st = $conexion->prepare($sql);
   $st->bind_param("iiii", $cliente_id, $cliente_id, $gimnasio_id, $gimnasio_id);
   $st->execute();
-  $r = $st->get_result()->fetch_assoc();
-  if ($r && isset($r['p']) && (float)$r['p']>0) $peso_ref = (float)$r['p'];
+  $st->bind_result($p_tmp);
+  if ($st->fetch() && (float)$p_tmp > 0) $peso_ref = (float)$p_tmp;
   $st->close();
 }
 if (!$peso_ref || $peso_ref <= 0) {
-  $peso_ref = isset($cliente['peso']) ? (float)$cliente['peso'] : 70.0;
+  $peso_ref = isset($peso_cli) && (float)$peso_cli > 0 ? (float)$peso_cli : 70.0;
 }
 
 /* ---------- Objetivos ---------- */
@@ -77,24 +90,27 @@ $proteinas_obj = (int)round($peso_ref * $prot_gkg);
 $kcal_base = (int)round($peso_ref * 30);
 $kcal_obj  = $kcal_base + (($objetivo === 'subir peso') ? +300 : (($objetivo === 'bajar peso') ? -400 : 0));
 
-/* ---------- Gemini (API Key tuya) ---------- */
-$apiKey = 'AIzaSyDVMv4gliTqbrHqdgNcql7P8eP8jQL7Iwo';
-
+/* ---------- Gemini (API Key por entorno) ---------- */
+$apiKey = getenv('GEMINI_API_KEY') ?: '';
 $resultado_modelo = '';
 $error_modelo = '';
 $nombre_detectado = 'Comida detectada';
 $kcal_detectadas  = 0;
 
-/* ---------- Procesar imagen ---------- */
+/* ---------- Procesar imagen con Gemini ---------- */
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['imagen_base64'])) {
   $base64 = (string)$_POST['imagen_base64'];
   $mime   = (stripos($base64, 'image/png') !== false) ? 'image/png' : 'image/jpeg';
   $payload_b64 = preg_replace('#^data:image/[^;]+;base64,#', '', $base64);
 
-  if (!function_exists('curl_init')) {
+  if (!$apiKey) {
+    $error_modelo = "⚠️ Falta configurar GEMINI_API_KEY en el entorno del servidor.";
+  } elseif (!function_exists('curl_init')) {
     $error_modelo = "⚠️ cURL no está habilitado en el servidor. Activá la extensión php-curl.";
   } else {
+    // Podés cambiar a gemini-1.5-pro si querés más calidad (más costo).
     $endpoint = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=".$apiKey;
+
     $json_payload = json_encode([
       "contents" => [[
         "parts" => [
@@ -103,7 +119,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['imagen_base64'])) {
         ]
       ]],
       "generationConfig" => ["temperature" => 0.4, "maxOutputTokens" => 150]
-    ]);
+    ], JSON_UNESCAPED_UNICODE);
 
     $ch = curl_init($endpoint);
     curl_setopt_array($ch, [
@@ -154,23 +170,26 @@ $conexion->query("CREATE TABLE IF NOT EXISTS registro_comidas (
 
 /* ---------- Guardar comida ---------- */
 $mensaje_guardado = '';
-if (isset($_POST['guardar']) && !empty($_POST['nombre']) && !empty($_POST['porciones']) && !empty($_POST['calorias'])) {
+if (isset($_POST['guardar']) && isset($_POST['nombre'], $_POST['porciones'], $_POST['calorias'])) {
   $nombre = trim((string)$_POST['nombre']);
-  $porc   = (float)$_POST['porciones'];
-  $kcal   = (float)$_POST['calorias'];
-  $total  = $porc * $kcal;
-  $hoy_sql = date('Y-m-d');
+  $porc   = is_numeric($_POST['porciones']) ? (float)$_POST['porciones'] : 0;
+  $kcal   = is_numeric($_POST['calorias'])  ? (float)$_POST['calorias']  : 0;
 
-  $sql = "INSERT INTO registro_comidas
-            (cliente_id, gimnasio_id, fecha, comida, porciones, calorias, total_calorias)
-          VALUES (?, ?, ?, ?, ?, ?, ?)";
-  $st = $conexion->prepare($sql);
-  // 2 ints, 1 string(fecha), 1 string(comida), 3 doubles
-  $st->bind_param("iissddd", $cliente_id, $gimnasio_id, $hoy_sql, $nombre, $porc, $kcal, $total);
+  if ($nombre !== '' && $porc > 0 && $kcal > 0) {
+    $total  = $porc * $kcal;
+    $hoy_sql = date('Y-m-d');
 
-  if ($st->execute()) $mensaje_guardado = "✅ Comida registrada correctamente.";
-  else                $mensaje_guardado = "⚠️ No se pudo registrar: ".$st->error;
-  $st->close();
+    $sql = "INSERT INTO registro_comidas
+              (cliente_id, gimnasio_id, fecha, comida, porciones, calorias, total_calorias)
+            VALUES (?, ?, ?, ?, ?, ?, ?)";
+    $st = $conexion->prepare($sql);
+    $st->bind_param("iissddd", $cliente_id, $gimnasio_id, $hoy_sql, $nombre, $porc, $kcal, $total);
+    if ($st->execute()) $mensaje_guardado = "✅ Comida registrada correctamente.";
+    else                $mensaje_guardado = "⚠️ No se pudo registrar: ".$st->error;
+    $st->close();
+  } else {
+    $mensaje_guardado = "⚠️ Datos inválidos para registrar la comida.";
+  }
 }
 
 /* ---------- Totales y listado del día ---------- */
@@ -178,16 +197,18 @@ try { $tz = new DateTimeZone('America/Argentina/San_Luis'); }
 catch(Throwable $e){ $tz = new DateTimeZone('America/Argentina/Buenos_Aires'); }
 $hoy = (new DateTime('today', $tz))->format('Y-m-d');
 
-$consumidas_hoy = 0;
+/* Ingeridas hoy (SUM) */
+$consumidas_hoy = 0.0;
 $st = $conexion->prepare("SELECT COALESCE(SUM(total_calorias),0) AS t
                           FROM registro_comidas
                           WHERE cliente_id=? AND gimnasio_id=? AND fecha=?");
 $st->bind_param("iis", $cliente_id, $gimnasio_id, $hoy);
 $st->execute();
-$r = $st->get_result()->fetch_assoc();
-$consumidas_hoy = (int)($r['t'] ?? 0);
+$st->bind_result($t_ing);
+if ($st->fetch()) $consumidas_hoy = (float)$t_ing;
 $st->close();
 
+/* Listado de comidas (últimas 10) */
 $comidas_hoy = [];
 $st = $conexion->prepare("SELECT id, comida, porciones, calorias, total_calorias
                           FROM registro_comidas
@@ -195,12 +216,20 @@ $st = $conexion->prepare("SELECT id, comida, porciones, calorias, total_calorias
                           ORDER BY id DESC LIMIT 10");
 $st->bind_param("iis", $cliente_id, $gimnasio_id, $hoy);
 $st->execute();
-$res = $st->get_result();
-while ($row = $res->fetch_assoc()) { $comidas_hoy[] = $row; }
+$st->bind_result($cid, $ccomida, $cporc, $ckcal, $ctotal);
+while ($st->fetch()) {
+  $comidas_hoy[] = [
+    'id' => $cid,
+    'comida' => $ccomida,
+    'porciones' => (float)$cporc,
+    'calorias' => (float)$ckcal,
+    'total_calorias' => (float)$ctotal,
+  ];
+}
 $st->close();
 
 /* Quemadas hoy (opcional desde progreso_cliente) */
-$quemadas_hoy = 0;
+$quemadas_hoy = 0.0;
 $resTmp = $conexion->query("SHOW TABLES LIKE 'progreso_cliente'");
 if ($resTmp && $resTmp->num_rows) {
   $st = $conexion->prepare("
@@ -209,14 +238,13 @@ if ($resTmp && $resTmp->num_rows) {
     WHERE (cliente_id=? OR id_cliente=?) AND (gimnasio_id=? OR id_gimnasio=?) AND (fecha=? OR created_at=?)
   ");
   $st->bind_param("iiiiss", $cliente_id, $cliente_id, $gimnasio_id, $gimnasio_id, $hoy, $hoy);
-  if ($st->execute()) {
-    $r = $st->get_result()->fetch_assoc();
-    if ($r && isset($r['t'])) $quemadas_hoy = (int)$r['t'];
-  }
+  $st->execute();
+  $st->bind_result($t_quem);
+  if ($st->fetch()) $quemadas_hoy = (float)$t_quem;
   $st->close();
 }
 
-$balance_neto = $consumidas_hoy - $quemadas_hoy;
+$balance_neto = (float)$consumidas_hoy - (float)$quemadas_hoy;
 $estado_neto  = ($balance_neto > 250) ? 'Superávit' : (($balance_neto < -250) ? 'Déficit' : 'Equilibrado');
 ?>
 <!doctype html>
@@ -269,14 +297,14 @@ $estado_neto  = ($balance_neto > 250) ? 'Superávit' : (($balance_neto < -250) ?
   <section class="card" style="margin-bottom:12px; text-align:left">
     <h3 style="margin:0 0 8px">📅 Hoy</h3>
     <div class="grid4">
-      <div class="kpi">Ingeridas<b><?= (int)$consumidas_hoy ?> kcal</b></div>
-      <div class="kpi">Quemadas<b><?= (int)$quemadas_hoy ?> kcal</b></div>
-      <div class="kpi">Balance neto<b><?= (int)($consumidas_hoy - $quemadas_hoy) ?> kcal</b></div>
+      <div class="kpi">Ingeridas<b><?= (int)round($consumidas_hoy) ?> kcal</b></div>
+      <div class="kpi">Quemadas<b><?= (int)round($quemadas_hoy) ?> kcal</b></div>
+      <div class="kpi">Balance neto<b><?= (int)round($balance_neto) ?> kcal</b></div>
       <div class="kpi">Estado<b><?= h($estado_neto) ?></b></div>
     </div>
     <div style="margin-top:10px">
       <div class="muted" style="display:flex; justify-content:space-between">
-        <span>Progreso de ingesta</span><span><?= (int)$consumidas_hoy ?> / <?= (int)$kcal_obj ?> kcal</span>
+        <span>Progreso de ingesta</span><span><?= (int)round($consumidas_hoy) ?> / <?= (int)$kcal_obj ?> kcal</span>
       </div>
       <?php $pct = max(0, min(100, $kcal_obj>0 ? round($consumidas_hoy*100/$kcal_obj) : 0)); ?>
       <div class="progress"><span style="width:<?= $pct ?>%"></span></div>
