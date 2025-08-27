@@ -164,8 +164,15 @@ $proteinas_obj = (int)round($peso_ref * $prot_gkg);
 $kcal_base = (int)round($peso_ref * 30);
 $kcal_obj  = $kcal_base + (($objetivo === 'subir peso') ? +300 : (($objetivo === 'bajar peso') ? -400 : 0));
 
-/* ---------- Gemini (API Key por entorno) ---------- */
-$apiKey = getenv('GEMINI_API_KEY') ?: '';
+/* ---------- Gemini (API Key por entorno o archivo local) ---------- */
+/* Si existe config_local.php (no versionarlo) permite $GEMINI_API_KEY */
+if (is_readable(__DIR__ . '/config_local.php')) {
+  include __DIR__ . '/config_local.php';
+}
+$apiKey = getenv('GEMINI_API_KEY')
+       ?: ($_SERVER['GEMINI_API_KEY'] ?? '')
+       ?: (isset($GEMINI_API_KEY) ? (string)$GEMINI_API_KEY : '');
+
 $resultado_modelo = '';
 $error_modelo = '';
 $nombre_detectado = 'Comida detectada';
@@ -186,7 +193,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['imagen_base64'])) {
   } elseif (!function_exists('curl_init')) {
     $error_modelo = "⚠️ cURL no está habilitado en el servidor. Activá la extensión php-curl.";
   } else {
-    $endpoint = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=".$apiKey;
+    // Modelo actualizado y uso de API key por HEADER (X-goog-api-key)
+    $endpoint = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent";
 
     $prompt = "Analiza la imagen de comida y devuelve SOLO un JSON minificado (sin texto extra) con este esquema:
 {
@@ -210,7 +218,10 @@ Responde únicamente el JSON, sin backticks, sin explicación.";
     $ch = curl_init($endpoint);
     curl_setopt_array($ch, [
       CURLOPT_RETURNTRANSFER => true,
-      CURLOPT_HTTPHEADER     => ['Content-Type: application/json'],
+      CURLOPT_HTTPHEADER     => [
+        'Content-Type: application/json',
+        'X-goog-api-key: ' . $apiKey
+      ],
       CURLOPT_POSTFIELDS     => $json_payload,
       CURLOPT_TIMEOUT        => 25
     ]);
