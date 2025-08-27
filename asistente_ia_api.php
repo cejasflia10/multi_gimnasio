@@ -22,6 +22,28 @@ if (function_exists('mysqli_report')) { mysqli_report(MYSQLI_REPORT_OFF); }
 function h($s){ return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); }
 function num($n, $dec=1){ return number_format((float)$n, $dec, ',', '.'); }
 
+/* Evita bind_param() sobre bool y muestra el error SQL si el prepare falla */
+function prepare_or_fail(mysqli $db, string $sql, string $ctx){
+  $stmt = $db->prepare($sql);
+  if (!$stmt) {
+    echo "<div style='color:#ff6b6b; padding:14px; font:14px/1.3 monospace'>
+            <b>⚠️ Error SQL en $ctx</b><br>Consulta: ".h($sql)."<br>MySQL: ".h($db->error)."
+          </div>";
+    exit;
+  }
+  return $stmt;
+}
+/* Normaliza números: "12.345,67" | "150,5" | "1234.56" */
+function n_in($v): float {
+  $s = trim((string)$v);
+  if ($s==='') return 0.0;
+  $s = str_replace(["\xC2\xA0",' '], '', $s);
+  $hasC = strpos($s, ',')!==false; $hasD = strpos($s, '.')!==false;
+  if ($hasC && $hasD){ $s = str_replace('.','',$s); $s = str_replace(',', '.', $s); }
+  elseif ($hasC){ $s = str_replace(',', '.', $s); }
+  return (float)$s;
+}
+
 /* ---------- Datos de sesión ---------- */
 $cliente_id  = isset($_SESSION['cliente_id'])  ? (int)$_SESSION['cliente_id']  : 0;
 $gimnasio_id = isset($_SESSION['gimnasio_id']) ? (int)$_SESSION['gimnasio_id'] : 0;
@@ -35,7 +57,7 @@ if (!$cliente_id || !$gimnasio_id) {
 $apellido = $nombre = '';
 $altura_cm = $altura = $peso_cli = null;
 
-$st = $conexion->prepare("SELECT apellido, nombre, altura_cm, altura, peso FROM clientes WHERE id=? AND gimnasio_id=? LIMIT 1");
+$st = prepare_or_fail($conexion, "SELECT apellido, nombre, altura_cm, altura, peso FROM clientes WHERE id=? AND gimnasio_id=? LIMIT 1", 'cliente_select');
 $st->bind_param("ii", $cliente_id, $gimnasio_id);
 $st->execute();
 $st->bind_result($apellido, $nombre, $altura_cm, $altura, $peso_cli);
@@ -65,7 +87,7 @@ if ($resTmp && $resTmp->num_rows) {
     ORDER BY COALESCE(fecha, created_at, fecha_registro, dia, id) DESC
     LIMIT 1
   ";
-  $st = $conexion->prepare($sql);
+  $st = prepare_or_fail($conexion, $sql, 'peso_ref_select');
   $st->bind_param("iiii", $cliente_id, $cliente_id, $gimnasio_id, $gimnasio_id);
   $st->execute();
   $st->bind_result($p_tmp);
@@ -99,7 +121,7 @@ $kcal_detectadas  = 0;
 $sug_porcion_cant = null;   // número (ej: 150)
 $sug_porcion_uni  = null;   // 'g' | 'ml' | 'unidad'
 $kcal_por_100g    = null;   // si viene
-$gem_json_bruto   = '';     // para debug en front si querés
+$gem_json_bruto   = '';     // para debug
 
 /* ---------- Procesar imagen con Gemini ---------- */
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['imagen_base64'])) {
@@ -119,9 +141,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['imagen_base64'])) {
     $prompt = "Analiza la imagen de comida y devuelve SOLO un JSON minificado (sin texto extra) con este esquema:
 {
   \"nombre\": string,
-  \"kcal_por_porcion\": number,    // calorías aproximadas por porción sugerida
+  \"kcal_por_porcion\": number,
   \"porcion_sugerida\": { \"cantidad\": number, \"unidad\": \"g\"|\"ml\"|\"unidad\" },
-  \"kcal_por_100g\": number        // opcional, si aplica
+  \"kcal_por_100g\": number
 }
 Responde únicamente el JSON, sin backticks, sin explicación.";
 
@@ -153,7 +175,12 @@ Responde únicamente el JSON, sin backticks, sin explicación.";
       $data = json_decode($resp, true);
       if ($code === 200 && isset($data['candidates'][0]['content']['parts'][0]['text'])) {
         $texto = trim($data['candidates'][0]['content']['parts'][0]['text']);
+        // Quitar posibles ```json ... ``` o markdown que rompen json_decode
+        $texto = preg_replace('/^```(?:json)?/i', '', $texto);
+        $texto = preg_replace('/```$/', '', $texto);
+        $texto = trim($texto);
         $gem_json_bruto = $texto;
+
         $parsed = json_decode($texto, true);
 
         if (is_array($parsed)) {
@@ -201,8 +228,8 @@ $conexion->query("CREATE TABLE IF NOT EXISTS registro_comidas (
 $mensaje_guardado = '';
 if (isset($_POST['guardar']) && isset($_POST['nombre'], $_POST['porciones'], $_POST['calorias'])) {
   $nombre = trim((string)$_POST['nombre']);
-  $porc   = is_numeric($_POST['porciones']) ? (float)$_POST['porciones'] : 0;
-  $kcal   = is_numeric($_POST['calorias'])  ? (float)$_POST['calorias']  : 0;
+  $porc   = n_in($_POST['porciones']);
+  $kcal   = n_in($_POST['calorias']);
 
   if ($nombre !== '' && $porc > 0 && $kcal > 0) {
     $total  = $porc * $kcal;
@@ -211,7 +238,7 @@ if (isset($_POST['guardar']) && isset($_POST['nombre'], $_POST['porciones'], $_P
     $sql = "INSERT INTO registro_comidas
               (cliente_id, gimnasio_id, fecha, comida, porciones, calorias, total_calorias)
             VALUES (?, ?, ?, ?, ?, ?, ?)";
-    $st = $conexion->prepare($sql);
+    $st = prepare_or_fail($conexion, $sql, 'insert_registro_comidas');
     $st->bind_param("iissddd", $cliente_id, $gimnasio_id, $hoy_sql, $nombre, $porc, $kcal, $total);
     if ($st->execute()) $mensaje_guardado = "✅ Comida registrada correctamente.";
     else                $mensaje_guardado = "⚠️ No se pudo registrar: ".$st->error;
@@ -228,9 +255,9 @@ $hoy = (new DateTime('today', $tz))->format('Y-m-d');
 
 /* Ingeridas hoy (SUM) */
 $consumidas_hoy = 0.0;
-$st = $conexion->prepare("SELECT COALESCE(SUM(total_calorias),0) AS t
+$st = prepare_or_fail($conexion, "SELECT COALESCE(SUM(total_calorias),0) AS t
                           FROM registro_comidas
-                          WHERE cliente_id=? AND gimnasio_id=? AND fecha=?");
+                          WHERE cliente_id=? AND gimnasio_id=? AND fecha=?", 'sum_ingestas');
 $st->bind_param("iis", $cliente_id, $gimnasio_id, $hoy);
 $st->execute();
 $st->bind_result($t_ing);
@@ -239,10 +266,10 @@ $st->close();
 
 /* Listado de comidas (últimas 10) */
 $comidas_hoy = [];
-$st = $conexion->prepare("SELECT id, comida, porciones, calorias, total_calorias
+$st = prepare_or_fail($conexion, "SELECT id, comida, porciones, calorias, total_calorias
                           FROM registro_comidas
                           WHERE cliente_id=? AND gimnasio_id=? AND fecha=?
-                          ORDER BY id DESC LIMIT 10");
+                          ORDER BY id DESC LIMIT 10", 'listado_hoy');
 $st->bind_param("iis", $cliente_id, $gimnasio_id, $hoy);
 $st->execute();
 $st->bind_result($cid, $ccomida, $cporc, $ckcal, $ctotal);
@@ -261,11 +288,11 @@ $st->close();
 $quemadas_hoy = 0.0;
 $resTmp = $conexion->query("SHOW TABLES LIKE 'progreso_cliente'");
 if ($resTmp && $resTmp->num_rows) {
-  $st = $conexion->prepare("
+  $st = prepare_or_fail($conexion, "
     SELECT COALESCE(SUM(COALESCE(calorias_estimadas,calorias_quemadas,kcal)),0) AS t
     FROM progreso_cliente
-    WHERE (cliente_id=? OR id_cliente=?) AND (gimnasio_id=? OR id_gimnasio=?) AND (fecha=? OR created_at=?)
-  ");
+    WHERE (cliente_id=? OR id_cliente=?) AND (gimnasio_id=? OR id_gimnasio=?) AND (DATE(fecha)=? OR DATE(created_at)=?)
+  ", 'sum_quemadas');
   $st->bind_param("iiiiss", $cliente_id, $cliente_id, $gimnasio_id, $gimnasio_id, $hoy, $hoy);
   $st->execute();
   $st->bind_result($t_quem);
@@ -515,7 +542,7 @@ $estado_neto  = ($balance_neto > 250) ? 'Superávit' : (($balance_neto < -250) ?
     var base64 = canvas.toDataURL('image/jpeg', 0.92);
     imgB64.value = base64;
     formEnviar.style.display = 'block';
-    formEnviar.scrollIntoView({ behavior: 'smooth' });
+    if (formEnviar.scrollIntoView) formEnviar.scrollIntoView({ behavior: 'smooth' });
     setStatus('Foto capturada. Podés “Enviar imagen”.', true);
   });
 
@@ -526,7 +553,7 @@ $estado_neto  = ($balance_neto > 250) ? 'Superávit' : (($balance_neto < -250) ?
     reader.onload = function(){
       imgB64.value = reader.result;
       formEnviar.style.display = 'block';
-      formEnviar.scrollIntoView({ behavior:'smooth' });
+      if (formEnviar.scrollIntoView) formEnviar.scrollIntoView({ behavior:'smooth' });
       setStatus('Imagen cargada. Podés “Enviar imagen”.', true);
     };
     reader.readAsDataURL(file);
@@ -544,25 +571,22 @@ $estado_neto  = ($balance_neto > 250) ? 'Superávit' : (($balance_neto < -250) ?
   var campoPorciones = document.getElementById('campoPorciones');
   var campoKcal = document.getElementById('campoKcal');
 
-  // Valores provenientes del servidor (sugerencia Gemini)
   var sugPorcionCant = <?= json_encode($sug_porcion_cant) ?>;
   var sugPorcionUni  = <?= json_encode($sug_porcion_uni) ?>;
   var kcalPorPorcion = <?= json_encode($kcal_detectadas) ?>;
   var kcal100g       = <?= json_encode($kcal_por_100g) ?>;
   var nombreDetect   = <?= json_encode($nombre_detectado) ?>;
 
-  // Si hay sugerencia, mostrarla como default en el selector
   if (sugPorcionUni) unidad.value = sugPorcionUni;
   if (sugPorcionCant) cant.placeholder = String(sugPorcionCant);
 
   function aplicarSugerencia() {
-    // 1) Nombre detectado
     if (nombreDetect && !campoNombre.value) campoNombre.value = nombreDetect;
 
     var cantidad = parseFloat(cant.value || sugPorcionCant || 0);
     var u = unidad.value || 'g';
 
-    // Caso A: tengo kcal/porción + porción sugerida -> escalar porciones
+    // A) kcal/porción + porción sugerida -> escalar porciones
     if (kcalPorPorcion && sugPorcionCant && u === (sugPorcionUni || u)) {
       var porciones = cantidad > 0 ? (cantidad / sugPorcionCant) : 1;
       if (!isFinite(porciones) || porciones <= 0) porciones = 1;
@@ -570,23 +594,20 @@ $estado_neto  = ($balance_neto > 250) ? 'Superávit' : (($balance_neto < -250) ?
       campoKcal.value = parseInt(kcalPorPorcion, 10);
       return;
     }
-
-    // Caso B: tengo kcal/100g y unidad g/ml -> calcular calorías para esa cantidad
+    // B) kcal/100g y unidad g/ml -> calcular cal/porción para esa cantidad
     if (kcal100g && (u === 'g' || u === 'ml') && cantidad > 0) {
       var kcalTotal = (kcal100g * (cantidad / 100.0));
       campoPorciones.value = "1.00";
       campoKcal.value = Math.max(1, Math.round(kcalTotal));
       return;
     }
-
-    // Fallback: si sólo hay kcal por porción, seteo 1 porción con ese valor
+    // C) fallback
     if (kcalPorPorcion) {
       campoPorciones.value = "1.00";
       campoKcal.value = parseInt(kcalPorPorcion, 10);
       return;
     }
   }
-
   if (btnAplicar) btnAplicar.addEventListener('click', aplicarSugerencia);
 })();
 </script>
