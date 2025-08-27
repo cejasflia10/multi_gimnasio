@@ -96,6 +96,10 @@ $resultado_modelo = '';
 $error_modelo = '';
 $nombre_detectado = 'Comida detectada';
 $kcal_detectadas  = 0;
+$sug_porcion_cant = null;   // número (ej: 150)
+$sug_porcion_uni  = null;   // 'g' | 'ml' | 'unidad'
+$kcal_por_100g    = null;   // si viene
+$gem_json_bruto   = '';     // para debug en front si querés
 
 /* ---------- Procesar imagen con Gemini ---------- */
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['imagen_base64'])) {
@@ -111,14 +115,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['imagen_base64'])) {
     // Podés cambiar a gemini-1.5-pro si querés más calidad (más costo).
     $endpoint = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=".$apiKey;
 
+    // Le pedimos JSON ESTRICTO.
+    $prompt = "Analiza la imagen de comida y devuelve SOLO un JSON minificado (sin texto extra) con este esquema:
+{
+  \"nombre\": string,
+  \"kcal_por_porcion\": number,    // calorías aproximadas por porción sugerida
+  \"porcion_sugerida\": { \"cantidad\": number, \"unidad\": \"g\"|\"ml\"|\"unidad\" },
+  \"kcal_por_100g\": number        // opcional, si aplica
+}
+Responde únicamente el JSON, sin backticks, sin explicación.";
+
     $json_payload = json_encode([
       "contents" => [[
         "parts" => [
           ["inline_data" => ["mime_type" => $mime, "data" => $payload_b64]],
-          ["text" => "En español: indica qué comida es y su valor nutricional. Devuelve una sola oración con el nombre y las calorías aproximadas (kcal)."]
+          ["text" => $prompt]
         ]
       ]],
-      "generationConfig" => ["temperature" => 0.4, "maxOutputTokens" => 150]
+      "generationConfig" => ["temperature" => 0.2, "maxOutputTokens" => 180]
     ], JSON_UNESCAPED_UNICODE);
 
     $ch = curl_init($endpoint);
@@ -138,12 +152,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['imagen_base64'])) {
     } else {
       $data = json_decode($resp, true);
       if ($code === 200 && isset($data['candidates'][0]['content']['parts'][0]['text'])) {
-        $resultado_modelo = trim($data['candidates'][0]['content']['parts'][0]['text']);
-        if (preg_match('/(\d{2,5})\s?k?cal/i', $resultado_modelo, $m)) $kcal_detectadas = (int)$m[1];
-        if (preg_match('/^(.{3,80}?)(?:\s+(?:contiene|tiene|aprox|aprox\.|≈))/iu', $resultado_modelo, $n)) {
-          $nombre_detectado = trim($n[1]);
-        } elseif (preg_match('/^([A-ZÁÉÍÓÚÑa-záéíóúñ ]{3,80})/u', $resultado_modelo, $n2)) {
-          $nombre_detectado = trim($n2[1]);
+        $texto = trim($data['candidates'][0]['content']['parts'][0]['text']);
+        $gem_json_bruto = $texto;
+        $parsed = json_decode($texto, true);
+
+        if (is_array($parsed)) {
+          // Modo JSON estricto
+          $nombre_detectado = isset($parsed['nombre']) ? (string)$parsed['nombre'] : $nombre_detectado;
+          if (isset($parsed['kcal_por_porcion'])) $kcal_detectadas = (int)round((float)$parsed['kcal_por_porcion']);
+          if (isset($parsed['kcal_por_100g']))    $kcal_por_100g   = (float)$parsed['kcal_por_100g'];
+          if (isset($parsed['porcion_sugerida']['cantidad'])) $sug_porcion_cant = (float)$parsed['porcion_sugerida']['cantidad'];
+          if (isset($parsed['porcion_sugerida']['unidad']))   $sug_porcion_uni  = strtolower((string)$parsed['porcion_sugerida']['unidad']);
+          $resultado_modelo = "Detectado: {$nombre_detectado}. kcal/porción aprox: {$kcal_detectadas}".($sug_porcion_cant? " | Porción sugerida: {$sug_porcion_cant} ".h($sug_porcion_uni):"");
+        } else {
+          // Fallback a texto libre (regex)
+          $resultado_modelo = $texto;
+          if (preg_match('/(\d{2,5})\s?k?cal/i', $texto, $m)) $kcal_detectadas = (int)$m[1];
+          if (preg_match('/^(.{3,80}?)(?:\s+(?:contiene|tiene|aprox|aprox\.|≈))/iu', $texto, $n)) {
+            $nombre_detectado = trim($n[1]);
+          } elseif (preg_match('/^([A-ZÁÉÍÓÚÑa-záéíóúñ ]{3,80})/u', $texto, $n2)) {
+            $nombre_detectado = trim($n2[1]);
+          }
         }
       } else {
         $error_text = $data['error']['message'] ?? 'Respuesta inesperada de Gemini';
@@ -281,6 +310,8 @@ $estado_neto  = ($balance_neto > 250) ? 'Superávit' : (($balance_neto < -250) ?
     input[type="number"], input[type="text"]{ width:100%; padding:10px; border-radius:12px; border:1px solid var(--border); background:#1a1d24; color:#fff; }
     .form-mini{ display:grid; gap:8px; grid-template-columns: 1fr 1fr; margin-top:8px }
     .form-mini .full{ grid-column: 1 / -1; }
+    .hint{ color:#94a3b8; font-size:12px; }
+    .pill-info{ display:inline-block; margin:2px 4px; padding:2px 8px; background:#0f1118; border:1px solid var(--border); border-radius:999px; font-size:12px; color:#cbd5e1; }
   </style>
 </head>
 <body>
@@ -332,34 +363,60 @@ $estado_neto  = ($balance_neto > 250) ? 'Superávit' : (($balance_neto < -250) ?
       </form>
     </section>
 
-    <!-- Resultado + registro manual -->
+    <!-- Resultado + registro -->
     <section class="card">
       <h3 style="margin:0 0 6px">🔎 Resultado</h3>
       <p style="margin:6px 0"><strong>Cliente:</strong> <?= h($nombre_cliente) ?></p>
-      <?php if ($resultado_modelo): ?>
-        <p><?= nl2br(h($resultado_modelo)) ?></p>
+
+      <?php if ($resultado_modelo || $gem_json_bruto): ?>
+        <div style="margin:8px 0">
+          <span class="pill-info">🍽️ <?= h($nombre_detectado) ?></span>
+          <?php if ($kcal_detectadas): ?><span class="pill-info">🔥 <?= (int)$kcal_detectadas ?> kcal/porción</span><?php endif; ?>
+          <?php if ($sug_porcion_cant): ?><span class="pill-info">🥄 Porción sugerida: <?= num($sug_porcion_cant,0) ?> <?= h($sug_porcion_uni ?: 'unidad') ?></span><?php endif; ?>
+          <?php if ($kcal_por_100g): ?><span class="pill-info">⚖️ <?= num($kcal_por_100g,0) ?> kcal/100g</span><?php endif; ?>
+        </div>
       <?php elseif ($error_modelo): ?>
         <p style="color:#ff6b6b"><?= h($error_modelo) ?></p>
       <?php else: ?>
         <p class="muted">Tomá una foto o subí una imagen para analizar la comida.</p>
       <?php endif; ?>
 
+      <!-- Bloque: Lo que consumiste -->
+      <div class="form-mini" style="margin-top:8px">
+        <div class="full">
+          <label>Cantidad consumida <span class="hint">(opcional — usa la sugerencia o ajustá)</span></label>
+        </div>
+        <div>
+          <input type="number" id="cantConsumida" min="1" step="1" placeholder="Ej: 150">
+        </div>
+        <div>
+          <select id="unidadConsumida">
+            <option value="g">g</option>
+            <option value="ml">ml</option>
+            <option value="unidad">unidad</option>
+          </select>
+        </div>
+        <div class="full" style="text-align:right">
+          <button type="button" id="btnAplicarSugerencia" class="btn">Usar sugerencia</button>
+        </div>
+      </div>
+
       <hr style="border-color:#222">
 
-      <h4 style="margin:6px 0">💾 Registrar manualmente</h4>
-      <form method="POST" class="form-mini" autocomplete="off">
+      <h4 style="margin:6px 0">💾 Registrar</h4>
+      <form method="POST" class="form-mini" autocomplete="off" id="formGuardar">
         <input type="hidden" name="guardar" value="1">
         <div class="full">
           <label>Comida</label>
-          <input type="text" name="nombre" placeholder="Ej: Ensalada de pollo" value="<?= h($nombre_detectado) ?>" required>
+          <input type="text" id="campoNombre" name="nombre" placeholder="Ej: Ensalada de pollo" value="<?= h($nombre_detectado) ?>" required>
         </div>
         <div>
           <label>Porciones</label>
-          <input type="number" name="porciones" min="0.1" step="0.1" value="1" required>
+          <input type="number" id="campoPorciones" name="porciones" min="0.1" step="0.1" value="1" required>
         </div>
         <div>
           <label>Calorías por porción</label>
-          <input type="number" name="calorias" min="1" step="1" value="<?= (int)$kcal_detectadas ?>" required>
+          <input type="number" id="campoKcal" name="calorias" min="1" step="1" value="<?= (int)$kcal_detectadas ?>" required>
         </div>
         <div class="full" style="text-align:right">
           <button type="submit" class="btn btn-primary">Guardar comida</button>
@@ -478,6 +535,59 @@ $estado_neto  = ($balance_neto > 250) ? 'Superávit' : (($balance_neto < -250) ?
   window.addEventListener('beforeunload', function(){
     if (stream) stream.getTracks().forEach(function(t){ t.stop(); });
   });
+
+  // ======== Lógica "escaneo" aplicado al formulario ========
+  var btnAplicar = document.getElementById('btnAplicarSugerencia');
+  var cant = document.getElementById('cantConsumida');
+  var unidad = document.getElementById('unidadConsumida');
+  var campoNombre = document.getElementById('campoNombre');
+  var campoPorciones = document.getElementById('campoPorciones');
+  var campoKcal = document.getElementById('campoKcal');
+
+  // Valores provenientes del servidor (sugerencia Gemini)
+  var sugPorcionCant = <?= json_encode($sug_porcion_cant) ?>;
+  var sugPorcionUni  = <?= json_encode($sug_porcion_uni) ?>;
+  var kcalPorPorcion = <?= json_encode($kcal_detectadas) ?>;
+  var kcal100g       = <?= json_encode($kcal_por_100g) ?>;
+  var nombreDetect   = <?= json_encode($nombre_detectado) ?>;
+
+  // Si hay sugerencia, mostrarla como default en el selector
+  if (sugPorcionUni) unidad.value = sugPorcionUni;
+  if (sugPorcionCant) cant.placeholder = String(sugPorcionCant);
+
+  function aplicarSugerencia() {
+    // 1) Nombre detectado
+    if (nombreDetect && !campoNombre.value) campoNombre.value = nombreDetect;
+
+    var cantidad = parseFloat(cant.value || sugPorcionCant || 0);
+    var u = unidad.value || 'g';
+
+    // Caso A: tengo kcal/porción + porción sugerida -> escalar porciones
+    if (kcalPorPorcion && sugPorcionCant && u === (sugPorcionUni || u)) {
+      var porciones = cantidad > 0 ? (cantidad / sugPorcionCant) : 1;
+      if (!isFinite(porciones) || porciones <= 0) porciones = 1;
+      campoPorciones.value = porciones.toFixed(2);
+      campoKcal.value = parseInt(kcalPorPorcion, 10);
+      return;
+    }
+
+    // Caso B: tengo kcal/100g y unidad g/ml -> calcular calorías para esa cantidad
+    if (kcal100g && (u === 'g' || u === 'ml') && cantidad > 0) {
+      var kcalTotal = (kcal100g * (cantidad / 100.0));
+      campoPorciones.value = "1.00";
+      campoKcal.value = Math.max(1, Math.round(kcalTotal));
+      return;
+    }
+
+    // Fallback: si sólo hay kcal por porción, seteo 1 porción con ese valor
+    if (kcalPorPorcion) {
+      campoPorciones.value = "1.00";
+      campoKcal.value = parseInt(kcalPorPorcion, 10);
+      return;
+    }
+  }
+
+  if (btnAplicar) btnAplicar.addEventListener('click', aplicarSugerencia);
 })();
 </script>
 </body>
