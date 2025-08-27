@@ -43,6 +43,31 @@ function n_in($v): float {
   elseif ($hasC){ $s = str_replace(',', '.', $s); }
   return (float)$s;
 }
+/* ¿Existe la columna? */
+function hcol(mysqli $db, string $table, string $col): bool {
+  $table = $db->real_escape_string($table);
+  $col   = $db->real_escape_string($col);
+  $res = $db->query("SHOW COLUMNS FROM `{$table}` LIKE '{$col}'");
+  return ($res && $res->num_rows>0);
+}
+/* Devuelve lista de columnas existentes de un set (con o sin backticks) */
+function existing_cols(mysqli $db, string $table, array $cands, bool $ticks=true): array {
+  $out = [];
+  foreach ($cands as $c) if (hcol($db,$table,$c)) $out[] = $ticks ? ("`$c`") : $c;
+  return $out;
+}
+/* Devuelve la primera columna existente de un set (o null) */
+function first_col(mysqli $db, string $table, array $cands, bool $ticks=true): ?string {
+  $e = existing_cols($db,$table,$cands,$ticks);
+  return $e ? $e[0] : null;
+}
+/* bind_param con cantidad variable */
+function bind_params(mysqli_stmt $stmt, string $types, array &$vars){
+  $params = [];
+  $params[] = &$types;
+  foreach ($vars as $k => $v) { $params[] = &$vars[$k]; }
+  return call_user_func_array([$stmt, 'bind_param'], $params);
+}
 
 /* ---------- Datos de sesión ---------- */
 $cliente_id  = isset($_SESSION['cliente_id'])  ? (int)$_SESSION['cliente_id']  : 0;
@@ -53,14 +78,34 @@ if (!$cliente_id || !$gimnasio_id) {
   exit;
 }
 
-/* ---------- Cliente (sin get_result) ---------- */
+/* ---------- Cliente (SELECT dinámico según columnas existentes) ---------- */
+$cols = ['apellido','nombre'];                 // básicas
+$has_altura_cm = hcol($conexion,'clientes','altura_cm');
+$has_altura    = hcol($conexion,'clientes','altura');
+$has_peso      = hcol($conexion,'clientes','peso');
+
+if ($has_altura_cm) $cols[] = 'altura_cm';
+if ($has_altura)    $cols[] = 'altura';
+if ($has_peso)      $cols[] = 'peso';
+
+$sqlCliente = "SELECT ".implode(', ', $cols)." FROM clientes WHERE id=? AND gimnasio_id=? LIMIT 1";
+$st = prepare_or_fail($conexion, $sqlCliente, 'cliente_select');
+$st->bind_param("ii", $cliente_id, $gimnasio_id);
+
+/* variables para bind_result dinámico */
 $apellido = $nombre = '';
 $altura_cm = $altura = $peso_cli = null;
 
-$st = prepare_or_fail($conexion, "SELECT apellido, nombre, altura_cm, altura, peso FROM clientes WHERE id=? AND gimnasio_id=? LIMIT 1", 'cliente_select');
-$st->bind_param("ii", $cliente_id, $gimnasio_id);
+$binds = [];
+foreach ($cols as $c) {
+  if     ($c==='apellido') $binds[] = &$apellido;
+  elseif ($c==='nombre')   $binds[] = &$nombre;
+  elseif ($c==='altura_cm')$binds[] = &$altura_cm;
+  elseif ($c==='altura')   $binds[] = &$altura;
+  elseif ($c==='peso')     $binds[] = &$peso_cli;
+}
 $st->execute();
-$st->bind_result($apellido, $nombre, $altura_cm, $altura, $peso_cli);
+call_user_func_array([$st,'bind_result'], $binds);
 $found = $st->fetch();
 $st->close();
 
@@ -70,29 +115,36 @@ if (!$found) {
 }
 $nombre_cliente = trim(($apellido ?? '') . ' ' . ($nombre ?? ''));
 
-/* Altura -> metros (acepta altura_cm o altura) */
+/* Altura -> metros (acepta altura_cm o altura si existen) */
 $altura_raw = $altura_cm ?? $altura;
 $altura_m = ($altura_raw !== null && (float)$altura_raw > 0)
   ? ((float)$altura_raw > 3 ? ((float)$altura_raw / 100.0) : (float)$altura_raw)
   : 1.70;
 
-/* ---------- Peso de referencia (último progreso si existe) ---------- */
+/* ---------- Peso de referencia (dinámico en progreso_cliente) ---------- */
 $peso_ref = null;
 $resTmp = $conexion->query("SHOW TABLES LIKE 'progreso_cliente'");
 if ($resTmp && $resTmp->num_rows) {
-  $sql = "
-    SELECT COALESCE(peso_despues, peso_fin, peso_post, peso) AS p
-    FROM progreso_cliente
-    WHERE (cliente_id=? OR id_cliente=?) AND (gimnasio_id=? OR id_gimnasio=?)
-    ORDER BY COALESCE(fecha, created_at, fecha_registro, dia, id) DESC
-    LIMIT 1
-  ";
-  $st = prepare_or_fail($conexion, $sql, 'peso_ref_select');
-  $st->bind_param("iiii", $cliente_id, $cliente_id, $gimnasio_id, $gimnasio_id);
-  $st->execute();
-  $st->bind_result($p_tmp);
-  if ($st->fetch() && (float)$p_tmp > 0) $peso_ref = (float)$p_tmp;
-  $st->close();
+  $pesoCols = existing_cols($conexion, 'progreso_cliente', ['peso_despues','peso_fin','peso_post','peso']);
+  $dateCol  = first_col($conexion, 'progreso_cliente', ['fecha','created_at','fecha_registro','dia','id']) ?: '`id`';
+  $cliCol   = first_col($conexion, 'progreso_cliente', ['cliente_id','id_cliente']);
+  $gymCol   = first_col($conexion, 'progreso_cliente', ['gimnasio_id','id_gimnasio']);
+
+  if (!empty($pesoCols)) {
+    $selPeso = 'COALESCE('.implode(', ', $pesoCols).') AS p';
+    $conds = []; $types=''; $vars=[];
+    if ($cliCol) { $conds[] = "$cliCol = ?"; $types.='i'; $vars[] = $cliente_id; }
+    if ($gymCol) { $conds[] = "$gymCol = ?"; $types.='i'; $vars[] = $gimnasio_id; }
+    $sql = "SELECT $selPeso FROM `progreso_cliente`".
+           ( $conds ? (' WHERE '.implode(' AND ', $conds)) : '' ).
+           " ORDER BY $dateCol DESC LIMIT 1";
+    $st = prepare_or_fail($conexion, $sql, 'peso_ref_select');
+    if ($types) bind_params($st, $types, $vars);
+    $st->execute();
+    $st->bind_result($p_tmp);
+    if ($st->fetch() && (float)$p_tmp > 0) $peso_ref = (float)$p_tmp;
+    $st->close();
+  }
 }
 if (!$peso_ref || $peso_ref <= 0) {
   $peso_ref = isset($peso_cli) && (float)$peso_cli > 0 ? (float)$peso_cli : 70.0;
@@ -134,10 +186,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['imagen_base64'])) {
   } elseif (!function_exists('curl_init')) {
     $error_modelo = "⚠️ cURL no está habilitado en el servidor. Activá la extensión php-curl.";
   } else {
-    // Podés cambiar a gemini-1.5-pro si querés más calidad (más costo).
     $endpoint = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=".$apiKey;
 
-    // Le pedimos JSON ESTRICTO.
     $prompt = "Analiza la imagen de comida y devuelve SOLO un JSON minificado (sin texto extra) con este esquema:
 {
   \"nombre\": string,
@@ -175,7 +225,7 @@ Responde únicamente el JSON, sin backticks, sin explicación.";
       $data = json_decode($resp, true);
       if ($code === 200 && isset($data['candidates'][0]['content']['parts'][0]['text'])) {
         $texto = trim($data['candidates'][0]['content']['parts'][0]['text']);
-        // Quitar posibles ```json ... ``` o markdown que rompen json_decode
+        // limpia posibles ```json ... ```
         $texto = preg_replace('/^```(?:json)?/i', '', $texto);
         $texto = preg_replace('/```$/', '', $texto);
         $texto = trim($texto);
@@ -184,7 +234,6 @@ Responde únicamente el JSON, sin backticks, sin explicación.";
         $parsed = json_decode($texto, true);
 
         if (is_array($parsed)) {
-          // Modo JSON estricto
           $nombre_detectado = isset($parsed['nombre']) ? (string)$parsed['nombre'] : $nombre_detectado;
           if (isset($parsed['kcal_por_porcion'])) $kcal_detectadas = (int)round((float)$parsed['kcal_por_porcion']);
           if (isset($parsed['kcal_por_100g']))    $kcal_por_100g   = (float)$parsed['kcal_por_100g'];
@@ -192,7 +241,7 @@ Responde únicamente el JSON, sin backticks, sin explicación.";
           if (isset($parsed['porcion_sugerida']['unidad']))   $sug_porcion_uni  = strtolower((string)$parsed['porcion_sugerida']['unidad']);
           $resultado_modelo = "Detectado: {$nombre_detectado}. kcal/porción aprox: {$kcal_detectadas}".($sug_porcion_cant? " | Porción sugerida: {$sug_porcion_cant} ".h($sug_porcion_uni):"");
         } else {
-          // Fallback a texto libre (regex)
+          // Fallback a texto libre
           $resultado_modelo = $texto;
           if (preg_match('/(\d{2,5})\s?k?cal/i', $texto, $m)) $kcal_detectadas = (int)$m[1];
           if (preg_match('/^(.{3,80}?)(?:\s+(?:contiene|tiene|aprox|aprox\.|≈))/iu', $texto, $n)) {
@@ -210,19 +259,52 @@ Responde únicamente el JSON, sin backticks, sin explicación.";
 }
 
 /* =============================================================================
-   FORZAMOS TABLA ESTÁNDAR registro_comidas (y la creamos si no existe)
+   REGISTRO_COMIDAS: mapeo dinámico de columnas + fallback de creación
    ========================================================================== */
-$conexion->query("CREATE TABLE IF NOT EXISTS registro_comidas (
-  id INT AUTO_INCREMENT PRIMARY KEY,
-  cliente_id INT NOT NULL,
-  gimnasio_id INT NOT NULL,
-  fecha DATE NOT NULL,
-  comida VARCHAR(255) NOT NULL,
-  porciones DECIMAL(6,2) NOT NULL,
-  calorias DECIMAL(8,2) NOT NULL,
-  total_calorias DECIMAL(10,2) NOT NULL,
-  INDEX idx_cli_gym_fecha (cliente_id, gimnasio_id, fecha)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;");
+$tbl = 'registro_comidas';
+$rc = [
+  'id'     => first_col($conexion,$tbl,['id']),
+  'cli'    => first_col($conexion,$tbl,['cliente_id','id_cliente']),
+  'gym'    => first_col($conexion,$tbl,['gimnasio_id','id_gimnasio']),
+  'fecha'  => first_col($conexion,$tbl,['fecha','dia','fecha_registro','created_at']),
+  'nombre' => first_col($conexion,$tbl,['comida','alimento','descripcion','nombre']),
+  'porc'   => first_col($conexion,$tbl,['porciones','cantidad','cant']),
+  'kcal'   => first_col($conexion,$tbl,['calorias','kcal','cal_porcion']),
+  'total'  => first_col($conexion,$tbl,['total_calorias','kcal_total','total_kcal','total'])
+];
+
+/* Si la tabla NO existe en absoluto, la creamos con el estándar */
+$resTabla = $conexion->query("SHOW TABLES LIKE '{$tbl}'");
+if (!$resTabla || !$resTabla->num_rows) {
+  $conexion->query("CREATE TABLE IF NOT EXISTS registro_comidas (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    cliente_id INT NOT NULL,
+    gimnasio_id INT NOT NULL,
+    fecha DATE NOT NULL,
+    comida VARCHAR(255) NOT NULL,
+    porciones DECIMAL(6,2) NOT NULL,
+    calorias DECIMAL(8,2) NOT NULL,
+    total_calorias DECIMAL(10,2) NOT NULL,
+    INDEX idx_cli_gym_fecha (cliente_id, gimnasio_id, fecha)
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;");
+  // Remapea después de crear:
+  $rc = [
+    'id'     => '`id`',
+    'cli'    => '`cliente_id`',
+    'gym'    => '`gimnasio_id`',
+    'fecha'  => '`fecha`',
+    'nombre' => '`comida`',
+    'porc'   => '`porciones`',
+    'kcal'   => '`calorias`',
+    'total'  => '`total_calorias`'
+  ];
+}
+
+/* Verificación mínima para poder operar */
+if (!$rc['cli'] || !$rc['gym'] || !$rc['fecha']) {
+  echo "<div style='color:#ff6b6b; padding:12px'>⚠️ La tabla '{$tbl}' no tiene columnas de relación (cliente/gimnasio/fecha). No se puede continuar.</div>";
+  exit;
+}
 
 /* ---------- Guardar comida ---------- */
 $mensaje_guardado = '';
@@ -232,14 +314,23 @@ if (isset($_POST['guardar']) && isset($_POST['nombre'], $_POST['porciones'], $_P
   $kcal   = n_in($_POST['calorias']);
 
   if ($nombre !== '' && $porc > 0 && $kcal > 0) {
-    $total  = $porc * $kcal;
+    $total   = $porc * $kcal;
     $hoy_sql = date('Y-m-d');
 
-    $sql = "INSERT INTO registro_comidas
-              (cliente_id, gimnasio_id, fecha, comida, porciones, calorias, total_calorias)
-            VALUES (?, ?, ?, ?, ?, ?, ?)";
-    $st = prepare_or_fail($conexion, $sql, 'insert_registro_comidas');
-    $st->bind_param("iissddd", $cliente_id, $gimnasio_id, $hoy_sql, $nombre, $porc, $kcal, $total);
+    // Armamos columnas/valores dinámicos según existan
+    $cols = [$rc['cli'], $rc['gym'], $rc['fecha']];
+    $vals = ["?","?","?"];
+    $types = "iis";
+    $data = [$cliente_id, $gimnasio_id, $hoy_sql];
+
+    if ($rc['nombre']){ $cols[]=$rc['nombre']; $vals[]="?"; $types.="s"; $data[]=$nombre; }
+    if ($rc['porc'])  { $cols[]=$rc['porc'];   $vals[]="?"; $types.="d"; $data[]=$porc; }
+    if ($rc['kcal'])  { $cols[]=$rc['kcal'];   $vals[]="?"; $types.="d"; $data[]=$kcal; }
+    if ($rc['total']) { $cols[]=$rc['total'];  $vals[]="?"; $types.="d"; $data[]=$total; }
+
+    $sql = "INSERT INTO `{$tbl}` (".implode(',', $cols).") VALUES (".implode(',', $vals).")";
+    $st = prepare_or_fail($conexion, $sql, 'insert_registro_comidas_dyn');
+    bind_params($st, $types, $data);
     if ($st->execute()) $mensaje_guardado = "✅ Comida registrada correctamente.";
     else                $mensaje_guardado = "⚠️ No se pudo registrar: ".$st->error;
     $st->close();
@@ -253,51 +344,83 @@ try { $tz = new DateTimeZone('America/Argentina/San_Luis'); }
 catch(Throwable $e){ $tz = new DateTimeZone('America/Argentina/Buenos_Aires'); }
 $hoy = (new DateTime('today', $tz))->format('Y-m-d');
 
-/* Ingeridas hoy (SUM) */
+/* Ingeridas hoy (SUM) — si no existe columna de total, calculamos por SQL */
 $consumidas_hoy = 0.0;
-$st = prepare_or_fail($conexion, "SELECT COALESCE(SUM(total_calorias),0) AS t
-                          FROM registro_comidas
-                          WHERE cliente_id=? AND gimnasio_id=? AND fecha=?", 'sum_ingestas');
-$st->bind_param("iis", $cliente_id, $gimnasio_id, $hoy);
-$st->execute();
-$st->bind_result($t_ing);
-if ($st->fetch()) $consumidas_hoy = (float)$t_ing;
-$st->close();
+if ($rc['total']) {
+  $sqlSum = "SELECT COALESCE(SUM({$rc['total']}),0) AS t FROM `{$tbl}` WHERE {$rc['cli']}=? AND {$rc['gym']}=? AND DATE({$rc['fecha']})=?";
+  $st = prepare_or_fail($conexion, $sqlSum, 'sum_ingestas_totalcol');
+  $st->bind_param("iis", $cliente_id, $gimnasio_id, $hoy);
+} elseif ($rc['porc'] && $rc['kcal']) {
+  $sqlSum = "SELECT COALESCE(SUM({$rc['porc']}*{$rc['kcal']}),0) AS t FROM `{$tbl}` WHERE {$rc['cli']}=? AND {$rc['gym']}=? AND DATE({$rc['fecha']})=?";
+  $st = prepare_or_fail($conexion, $sqlSum, 'sum_ingestas_calc');
+  $st->bind_param("iis", $cliente_id, $gimnasio_id, $hoy);
+} else {
+  $st = null;
+}
+if ($st){
+  $st->execute();
+  $st->bind_result($t_ing);
+  if ($st->fetch()) $consumidas_hoy = (float)$t_ing;
+  $st->close();
+}
 
-/* Listado de comidas (últimas 10) */
-$comidas_hoy = [];
-$st = prepare_or_fail($conexion, "SELECT id, comida, porciones, calorias, total_calorias
-                          FROM registro_comidas
-                          WHERE cliente_id=? AND gimnasio_id=? AND fecha=?
-                          ORDER BY id DESC LIMIT 10", 'listado_hoy');
+/* Listado de comidas (últimas 10) — construimos SELECT con alias fijos para pintar la tabla */
+$selectCols = [];
+$selectCols[] = $rc['id'] ?: 'NULL AS `id`';
+if ($rc['nombre']) $selectCols[] = "{$rc['nombre']} AS `nombre`"; else $selectCols[] = "'' AS `nombre`";
+if ($rc['porc'])   $selectCols[] = "{$rc['porc']} AS `porciones`"; else $selectCols[] = "NULL AS `porciones`";
+if ($rc['kcal'])   $selectCols[] = "{$rc['kcal']} AS `kcal`"; else $selectCols[] = "NULL AS `kcal`";
+if ($rc['total'])  $selectCols[] = "{$rc['total']} AS `total`";
+elseif ($rc['porc'] && $rc['kcal']) $selectCols[] = "({$rc['porc']}*{$rc['kcal']}) AS `total`";
+else $selectCols[] = "NULL AS `total`";
+
+$sqlList = "SELECT ".implode(', ', $selectCols)."
+            FROM `{$tbl}`
+            WHERE {$rc['cli']}=? AND {$rc['gym']}=? AND DATE({$rc['fecha']})=?
+            ORDER BY ".($rc['id'] ?: $rc['fecha'])." DESC
+            LIMIT 10";
+$st = prepare_or_fail($conexion, $sqlList, 'listado_hoy');
 $st->bind_param("iis", $cliente_id, $gimnasio_id, $hoy);
 $st->execute();
-$st->bind_result($cid, $ccomida, $cporc, $ckcal, $ctotal);
+$st->bind_result($cid, $cname, $cporc, $ckcal, $ctotal);
+
+$comidas_hoy = [];
 while ($st->fetch()) {
   $comidas_hoy[] = [
     'id' => $cid,
-    'comida' => $ccomida,
-    'porciones' => (float)$cporc,
-    'calorias' => (float)$ckcal,
-    'total_calorias' => (float)$ctotal,
+    'comida' => $cname,
+    'porciones' => $cporc !== null ? (float)$cporc : 0,
+    'calorias' => $ckcal !== null ? (float)$ckcal : 0,
+    'total_calorias' => $ctotal !== null ? (float)$ctotal : 0,
   ];
 }
 $st->close();
 
-/* Quemadas hoy (opcional desde progreso_cliente) */
+/* Quemadas hoy (dinámico por columnas en progreso_cliente) */
 $quemadas_hoy = 0.0;
 $resTmp = $conexion->query("SHOW TABLES LIKE 'progreso_cliente'");
 if ($resTmp && $resTmp->num_rows) {
-  $st = prepare_or_fail($conexion, "
-    SELECT COALESCE(SUM(COALESCE(calorias_estimadas,calorias_quemadas,kcal)),0) AS t
-    FROM progreso_cliente
-    WHERE (cliente_id=? OR id_cliente=?) AND (gimnasio_id=? OR id_gimnasio=?) AND (DATE(fecha)=? OR DATE(created_at)=?)
-  ", 'sum_quemadas');
-  $st->bind_param("iiiiss", $cliente_id, $cliente_id, $gimnasio_id, $gimnasio_id, $hoy, $hoy);
-  $st->execute();
-  $st->bind_result($t_quem);
-  if ($st->fetch()) $quemadas_hoy = (float)$t_quem;
-  $st->close();
+  $calCols = existing_cols($conexion, 'progreso_cliente', ['calorias_estimadas','calorias_quemadas','kcal']);
+  $dateCol = first_col($conexion, 'progreso_cliente', ['fecha','created_at','fecha_registro','dia','id']);
+  $cliCol  = first_col($conexion, 'progreso_cliente', ['cliente_id','id_cliente']);
+  $gymCol  = first_col($conexion, 'progreso_cliente', ['gimnasio_id','id_gimnasio']);
+
+  if (!empty($calCols)) {
+    $sumExpr = 'COALESCE('.implode(', ', $calCols).',0)';
+    $conds   = []; $types=''; $vars=[];
+    if ($cliCol) { $conds[] = "$cliCol = ?"; $types.='i'; $vars[]=$cliente_id; }
+    if ($gymCol) { $conds[] = "$gymCol = ?"; $types.='i'; $vars[]=$gimnasio_id; }
+    if ($dateCol){ $conds[] = "DATE($dateCol) = ?"; $types.='s'; $vars[]=$hoy; }
+
+    $sql = "SELECT COALESCE(SUM($sumExpr),0) AS t FROM `progreso_cliente`".
+           ( $conds ? (' WHERE '.implode(' AND ', $conds)) : '' );
+    $st = prepare_or_fail($conexion, $sql, 'sum_quemadas');
+    if ($types) bind_params($st, $types, $vars);
+    $st->execute();
+    $st->bind_result($t_quem);
+    if ($st->fetch()) $quemadas_hoy = (float)$t_quem;
+    $st->close();
+  }
 }
 
 $balance_neto = (float)$consumidas_hoy - (float)$quemadas_hoy;
