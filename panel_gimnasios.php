@@ -40,25 +40,58 @@ $conexion->query("
 
 /* ---------- Acciones POST ---------- */
 
-/* Registrar pago + extender vencimiento (seguro ante '0000-00-00') */
-if (isset($_POST['act']) && $_POST['act']==='registrar_pago') {
-  $gymId   = (int)($_POST['gimnasio_id'] ?? 0);
-  $fecha   = trim($_POST['fecha_pago'] ?? date('Y-m-d'));
-  $monto   = (float)($_POST['monto'] ?? 0);
-  $metodo  = trim($_POST['metodo'] ?? 'Transferencia');
-  $ref     = trim($_POST['referencia'] ?? '');
-  $meses   = max(0, (int)($_POST['meses'] ?? 1));
-  $obs     = trim($_POST['observaciones'] ?? '');
+/* Registrar pago + extender vencimiento (robusto y seguro ante '0000-00-00') */
+if (isset($_POST['act']) && $_POST['act'] === 'registrar_pago') {
+  // Normalizaciones / validaciones
+  $gymId = (int)($_POST['gimnasio_id'] ?? 0);
 
-  if ($gymId>0 && $meses>=0) {
-    // Insertamos pago
-    $st = $conexion->prepare("INSERT INTO gimnasios_pagos (gimnasio_id, fecha_pago, monto, metodo, referencia, meses, observaciones) VALUES (?,?,?,?,?,?,?)");
-    $st->bind_param('isdssis', $gymId, $fecha, $monto, $metodo, $ref, $meses, $obs);
-    $st->execute();
-    $st->close();
+  // Fecha: si no viene válida YYYY-MM-DD, usar hoy
+  $fecha_raw = trim($_POST['fecha_pago'] ?? '');
+  $fecha = preg_match('/^\d{4}-\d{2}-\d{2}$/', $fecha_raw) ? $fecha_raw : date('Y-m-d');
 
-    // Extender fecha_vencimiento: base segura (NULL o '0000-00-00' => hoy)
-    $sql = "
+  // Monto: acepta "1.234,56", "1234,56" o "1234.56"
+  $monto_raw = trim($_POST['monto'] ?? '0');
+  $monto_norm = str_replace(['.', ','], ['', '.'], $monto_raw);
+  if (!is_numeric($monto_norm)) { $monto_norm = '0'; }
+  $monto = (float)$monto_norm;
+
+  $metodo = trim($_POST['metodo'] ?? 'Transferencia');
+  $ref    = trim($_POST['referencia'] ?? '');
+  $meses  = (int)($_POST['meses'] ?? 1); if ($meses < 0) $meses = 0;
+  $obs    = trim($_POST['observaciones'] ?? '');
+
+  if ($gymId <= 0) {
+    $_SESSION['flash_err'] = "❌ Gimnasio inválido (ID vacío).";
+    header("Location: panel_gimnasios.php"); exit;
+  }
+  if ($monto < 0) {
+    $_SESSION['flash_err'] = "❌ Monto inválido.";
+    header("Location: panel_gimnasios.php"); exit;
+  }
+
+  // Insert pago
+  $stmt = $conexion->prepare("
+    INSERT INTO gimnasios_pagos
+      (gimnasio_id, fecha_pago, monto, metodo, referencia, meses, observaciones)
+    VALUES (?,?,?,?,?,?,?)
+  ");
+  if (!$stmt) {
+    $_SESSION['flash_err'] = "❌ No se pudo preparar INSERT pago: ".$conexion->error;
+    header("Location: panel_gimnasios.php"); exit;
+  }
+  if (!$stmt->bind_param('isdssis', $gymId, $fecha, $monto, $metodo, $ref, $meses, $obs)) {
+    $_SESSION['flash_err'] = "❌ Error bind_param INSERT pago: ".$stmt->error;
+    $stmt->close(); header("Location: panel_gimnasios.php"); exit;
+  }
+  if (!$stmt->execute() || $stmt->affected_rows <= 0) {
+    $_SESSION['flash_err'] = "❌ No se insertó el pago: ".$stmt->error;
+    $stmt->close(); header("Location: panel_gimnasios.php"); exit;
+  }
+  $stmt->close();
+
+  // Extender fecha_vencimiento si corresponde (evita 0000-00-00 con STR_TO_DATE + NULLIF(CONCAT...))
+  if ($meses > 0) {
+    $sqlUp = "
       UPDATE gimnasios
       SET fecha_vencimiento = DATE_ADD(
         CASE
@@ -72,15 +105,23 @@ if (isset($_POST['act']) && $_POST['act']==='registrar_pago') {
       )
       WHERE id = ?
     ";
-    $st2 = $conexion->prepare($sql);
-    $st2->bind_param('ii', $meses, $gymId);
-    $st2->execute();
+    $st2 = $conexion->prepare($sqlUp);
+    if (!$st2) {
+      $_SESSION['flash_err'] = "⚠️ Pago guardado, pero no se pudo actualizar vencimiento: ".$conexion->error;
+      header("Location: panel_gimnasios.php"); exit;
+    }
+    if (!$st2->bind_param('ii', $meses, $gymId)) {
+      $_SESSION['flash_err'] = "⚠️ Pago guardado, error bind_param en UPDATE de vencimiento: ".$st2->error;
+      $st2->close(); header("Location: panel_gimnasios.php"); exit;
+    }
+    if (!$st2->execute()) {
+      $_SESSION['flash_err'] = "⚠️ Pago guardado, pero falló UPDATE de vencimiento: ".$st2->error;
+      $st2->close(); header("Location: panel_gimnasios.php"); exit;
+    }
     $st2->close();
-
-    $_SESSION['flash_ok'] = "✅ Pago registrado y vencimiento actualizado" . ($meses>0 ? " (+{$meses} mes/es)" : "");
-  } else {
-    $_SESSION['flash_err'] = "❌ Datos inválidos para registrar pago.";
   }
+
+  $_SESSION['flash_ok'] = "✅ Pago registrado".($meses>0 ? " y vencimiento +{$meses} mes/es" : "");
   header("Location: panel_gimnasios.php"); exit;
 }
 
@@ -282,7 +323,7 @@ if (!$listado) { die("Error al listar: ".$conexion->error); }
   .btn.red{background:#3a1212}
   .btn.gold{background:#503000}
   form.inline{display:inline}
-  form input, form select, form textarea{width:100%;padding:8px;border-radius:8px;border:1px solid var(--line);background:#111;color:#var(--fg);margin:4px 0}
+  form input, form select, form textarea{width:100%;padding:8px;border-radius:8px;border:1px solid var(--line);background:#111;color:var(--fg);margin:4px 0}
   .row{display:grid;grid-template-columns:1fr 1fr;gap:8px}
   @media (max-width:980px){
     .grid{grid-template-columns:repeat(2,1fr)}
@@ -425,7 +466,7 @@ if (!$listado) { die("Error al listar: ".$conexion->error); }
                     <label>Fecha</label>
                     <input type="date" name="fecha_pago" value="<?= date('Y-m-d') ?>">
                     <label>Monto</label>
-                    <input type="number" step="0.01" name="monto" placeholder="0.00">
+                    <input type="text" name="monto" placeholder="0,00">
                     <label>Método</label>
                     <select name="metodo">
                       <option>Transferencia</option>
