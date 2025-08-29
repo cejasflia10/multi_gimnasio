@@ -1,8 +1,9 @@
 <?php
 if (session_status() === PHP_SESSION_NONE) session_start();
 require_once __DIR__ . '/conexion.php';
+require_once __DIR__ . '/permiso.php'; // <- para _perm_map()
 
-// ===== Helpers =====
+/* ===== Helpers ===== */
 function h($s){ return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); }
 function money($n){ return number_format((float)$n, 2, ',', '.'); }
 function to_safe_date(?string $s): ?string {
@@ -12,18 +13,33 @@ function to_safe_date(?string $s): ?string {
 }
 function months_diff_dates(?string $old, ?string $new): int {
     if (!$old || !$new) return 0;
-    try {
-        $d1 = new DateTime($old);
-        $d2 = new DateTime($new);
-    } catch (Exception $e) { return 0; }
+    try { $d1 = new DateTime($old); $d2 = new DateTime($new); } catch (Exception $e) { return 0; }
     $inv = ($d2 < $d1) ? -1 : 1;
     $diff = $d1->diff($d2);
-    $months = (int)$diff->y * 12 + (int)$diff->m;
-    // si hay diferencia de días, dejamos el entero de meses (sin redondear el día)
-    return $months * $inv;
+    return ((int)$diff->y * 12 + (int)$diff->m) * $inv;
 }
 
-// ===== Asegurar tabla de pagos =====
+/* ===== Crear índice solo si no existe (evita error en recargas) ===== */
+function ensure_unique_index(mysqli $db, string $table, string $index, string $colsDef): void {
+    $sql = "SELECT COUNT(*) c
+            FROM information_schema.statistics
+            WHERE table_schema = DATABASE()
+              AND table_name = ?
+              AND index_name = ?";
+    if ($st = $db->prepare($sql)) {
+        $st->bind_param('ss', $table, $index);
+        if ($st->execute()) {
+            $r = $st->get_result()->fetch_assoc();
+            if ((int)$r['c'] === 0) {
+                $db->query("ALTER TABLE {$table} ADD UNIQUE KEY {$index} ({$colsDef})");
+            }
+        }
+        $st->close();
+    }
+}
+ensure_unique_index($conexion, 'gimnasios_permisos', 'uq_gym_feature', 'gimnasio_id, feature');
+
+/* ===== Asegurar tabla de pagos (historial) ===== */
 $conexion->query("
   CREATE TABLE IF NOT EXISTS gimnasios_pagos (
     id INT AUTO_INCREMENT PRIMARY KEY,
@@ -39,30 +55,27 @@ $conexion->query("
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 ");
 
-// ===== Gimnasio actual =====
+/* ===== Gimnasio actual ===== */
 $gimnasio_id = isset($_GET['id']) ? (int)$_GET['id'] : (int)($_SESSION['gimnasio_id'] ?? 0);
 if ($gimnasio_id <= 0) { exit("❌ Acceso denegado."); }
 
 $mensaje = '';
 
-// ===== Cargar planes (lista + mapa) =====
+/* ===== Cargar planes ===== */
 $planes_rs = $conexion->query("SELECT id, nombre FROM planes_gimnasio ORDER BY nombre");
 if (!$planes_rs) { exit('Error cargando planes: '.$conexion->error); }
-$planes_list = [];
-$planes_map  = [];
-while ($row = $planes_rs->fetch_assoc()) {
-    $planes_list[] = $row;
-    $planes_map[(int)$row['id']] = $row['nombre'];
-}
+$planes_list = []; $planes_map  = [];
+while ($row = $planes_rs->fetch_assoc()) { $planes_list[] = $row; $planes_map[(int)$row['id']] = $row['nombre']; }
 $planes_rs->free();
 
-// ===== Datos actuales del gimnasio =====
+/* ===== Datos del gimnasio ===== */
 $gimnasio = $conexion->query("SELECT * FROM gimnasios WHERE id = {$gimnasio_id} LIMIT 1")->fetch_assoc();
 if (!$gimnasio) { exit("❌ Gimnasio no encontrado."); }
 $plan_id_actual = (int)($gimnasio['plan_id'] ?? 0);
 
-// ===== Utilidades permisos =====
+/* ===== Utilidades permisos ===== */
 function seed_permisos_from_plan(mysqli $db, int $plan_id, int $gimnasio_id): void {
+    if ($plan_id <= 0) return;
     $sql = "
         INSERT INTO gimnasios_permisos (gimnasio_id, feature, enabled)
         SELECT ?, pp.feature, pp.enabled
@@ -70,22 +83,19 @@ function seed_permisos_from_plan(mysqli $db, int $plan_id, int $gimnasio_id): vo
         WHERE pp.plan_id = ?
         ON DUPLICATE KEY UPDATE enabled = VALUES(enabled)
     ";
-    if ($st = $db->prepare($sql)) {
-        $st->bind_param('ii', $gimnasio_id, $plan_id);
-        $st->execute();
-        $st->close();
-    }
+    if ($st = $db->prepare($sql)) { $st->bind_param('ii', $gimnasio_id, $plan_id); $st->execute(); $st->close(); }
 }
 
 /**
- * Devuelve: [ feature => [ 'plan_enabled' => 0/1, 'gym_enabled' => 0/1|null, 'effective' => 0/1 ] ]
+ * Devuelve: [ feature => ['plan_enabled'=>0/1|null, 'gym_enabled'=>0/1|null, 'effective'=>0/1] ]
+ * Siempre asegura las features base del mapa (_perm_map), p.ej. 'membresias'.
  */
 function get_features_for_gym(mysqli $db, int $plan_id, int $gimnasio_id): array {
     $plan_id = (int)$plan_id; $gimnasio_id = (int)$gimnasio_id;
     $data = [];
     $sql = "
         SELECT f.feature,
-               COALESCE(pp.enabled, 0) AS plan_enabled,
+               pp.enabled AS plan_enabled,
                gp.enabled AS gym_enabled,
                COALESCE(gp.enabled, pp.enabled, 0) AS effective
         FROM (
@@ -101,41 +111,74 @@ function get_features_for_gym(mysqli $db, int $plan_id, int $gimnasio_id): array
     ";
     if ($rs = $db->query($sql)) {
         while ($r = $rs->fetch_assoc()) {
-            $data[$r['feature']] = [
-                'plan_enabled' => (int)$r['plan_enabled'],
-                'gym_enabled'  => is_null($r['gym_enabled']) ? null : (int)$r['gym_enabled'],
+            $feat = $r['feature'];
+            $data[$feat] = [
+                'plan_enabled' => is_null($r['plan_enabled']) ? null : (int)$r['plan_enabled'],
+                'gym_enabled'  => is_null($r['gym_enabled'])  ? null : (int)$r['gym_enabled'],
                 'effective'    => (int)$r['effective'],
             ];
         }
         $rs->free();
     }
+
+    // Asegurar features base del sistema (incluye membresias)
+    if (function_exists('_perm_map')) {
+        $base = array_unique(array_values(_perm_map()));
+        foreach ($base as $feat) {
+            if (!isset($data[$feat])) {
+                $data[$feat] = ['plan_enabled'=>null, 'gym_enabled'=>null, 'effective'=>0];
+            }
+        }
+    }
+    ksort($data);
     return $data;
 }
 
-function save_gym_perms(mysqli $db, int $gimnasio_id, array $all_features, array $posted_perms): void {
-    $sql = "REPLACE INTO gimnasios_permisos (gimnasio_id, feature, enabled) VALUES (?, ?, ?)";
-    $st = $db->prepare($sql);
-    foreach ($all_features as $feature => $_) {
-        $enabled = isset($posted_perms[$feature]) ? 1 : 0;
-        $st->bind_param('isi', $gimnasio_id, $feature, $enabled);
-        $st->execute();
+/**
+ * Guarda overrides:
+ * - Borra overrides existentes del gimnasio
+ * - Inserta SOLO las features tildadas como enabled=1
+ */
+function save_gym_perms(mysqli $db, int $gimnasio_id, array $checked_features): void {
+    $db->begin_transaction();
+    try {
+        $del = $db->prepare("DELETE FROM gimnasios_permisos WHERE gimnasio_id = ?");
+        $del->bind_param('i', $gimnasio_id);
+        if (!$del->execute()) throw new Exception($del->error);
+        $del->close();
+
+        if (!empty($checked_features)) {
+            $ins = $db->prepare("INSERT INTO gimnasios_permisos (gimnasio_id, feature, enabled) VALUES (?,?,1)
+                                 ON DUPLICATE KEY UPDATE enabled = VALUES(enabled)");
+            foreach ($checked_features as $f) {
+                $f = substr(trim((string)$f), 0, 64);
+                $ins->bind_param('is', $gimnasio_id, $f);
+                if (!$ins->execute()) throw new Exception($ins->error);
+            }
+            $ins->close();
+        }
+
+        $db->commit();
+    } catch (Throwable $e) {
+        $db->rollback();
+        throw $e;
     }
-    $st->close();
 }
+
 function reset_to_plan(mysqli $db, int $gimnasio_id, int $plan_id): void {
     $db->query("DELETE FROM gimnasios_permisos WHERE gimnasio_id = {$gimnasio_id}");
     seed_permisos_from_plan($db, $plan_id, $gimnasio_id);
 }
 
-// ===== Guardado / Renovación / Permisos =====
+/* ===== Guardado / Renovación / Permisos ===== */
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
-    // 0) Datos originales para auditar cambios
+    // 0) Datos originales
     $orig = $conexion->query("SELECT plan_id, fecha_vencimiento FROM gimnasios WHERE id = {$gimnasio_id}")->fetch_assoc();
     $orig_plan_id = (int)($orig['plan_id'] ?? 0);
     $orig_fv_safe = to_safe_date($orig['fecha_vencimiento'] ?? null);
 
-    // 1) Guardar datos del gimnasio (perfíl + plan + fecha)
+    // 1) Guardar datos del gimnasio
     if (isset($_POST['save_gym'])) {
         $nombre = trim($_POST['nombre'] ?? '');
         $direccion = trim($_POST['direccion'] ?? '');
@@ -163,11 +206,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             ");
             $stmt->bind_param("sssssssii", $nombre, $direccion, $cuit, $telefono, $email, $fecha_vencimiento_in, $usuario, $plan_id_new, $gimnasio_id);
         }
-        $stmt->execute();
-        $stmt->close();
+        $stmt->execute(); $stmt->close();
 
-        // === AUDITORÍA EN PANEL ===
-        // a) Cambio de plan
+        // Auditoría cambio de plan
         if ($plan_id_new !== $orig_plan_id) {
             $ref = "Plan: ".($planes_map[$orig_plan_id] ?? $orig_plan_id)." → ".($planes_map[$plan_id_new] ?? $plan_id_new);
             $stmt = $conexion->prepare("
@@ -175,15 +216,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 VALUES (?, CURDATE(), 0, 'Cambio de plan', ?, 0, 'Edición en perfil')
             ");
             $stmt->bind_param('is', $gimnasio_id, $ref);
-            $stmt->execute();
-            $stmt->close();
+            $stmt->execute(); $stmt->close();
 
-            // Opcional: sembrar permisos base del nuevo plan
+            // Sembrar permisos del nuevo plan
             seed_permisos_from_plan($conexion, $plan_id_new, $gimnasio_id);
             $plan_id_actual = $plan_id_new;
         }
 
-        // b) Cambio manual de fecha de vencimiento
+        // Auditoría cambio fecha de vencimiento
         $new_fv_safe = $fecha_vencimiento_in ?: null;
         $delta_meses = months_diff_dates($orig_fv_safe, $new_fv_safe);
         if ($delta_meses !== 0) {
@@ -193,12 +233,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 VALUES (?, CURDATE(), 0, 'Ajuste vencimiento', ?, ?, 'Edición en perfil')
             ");
             $stmt->bind_param('isi', $gimnasio_id, $ref, $delta_meses);
-            $stmt->execute();
-            $stmt->close();
+            $stmt->execute(); $stmt->close();
         }
 
         // Logo
-        if (isset($_FILES['logo']) && $_FILES['logo']['error'] === UPLOAD_ERR_OK) {
+        if (isset($_FILES['logo']) && isset($_FILES['logo']['name']) && $_FILES['logo']['error'] === UPLOAD_ERR_OK) {
             $tmp = $_FILES['logo']['tmp_name'];
             if (!is_dir(__DIR__.'/logos')) mkdir(__DIR__.'/logos', 0777, true);
             $safeName = preg_replace('/[^a-zA-Z0-9._-]/', '_', basename($_FILES['logo']['name']));
@@ -206,20 +245,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if (move_uploaded_file($tmp, __DIR__.'/'.$nombre_archivo)) {
                 $stmt = $conexion->prepare("UPDATE gimnasios SET logo = ? WHERE id = ?");
                 $stmt->bind_param('si', $nombre_archivo, $gimnasio_id);
-                $stmt->execute();
-                $stmt->close();
+                $stmt->execute(); $stmt->close();
             }
         }
 
         $mensaje = "✅ Datos actualizados.";
-        // Refrescar datos
+        // Refrescar
         $gimnasio = $conexion->query("SELECT * FROM gimnasios WHERE id = {$gimnasio_id} LIMIT 1")->fetch_assoc();
         $plan_id_actual = (int)($gimnasio['plan_id'] ?? 0);
     }
 
-    // 2) Renovación desde esta pantalla (registra pago + extiende vencimiento)
+    // 2) Renovación (pago + extender vencimiento)
     if (isset($_POST['renovar'])) {
-        // normalizar monto (admite "1.234,56")
         $monto_raw = trim($_POST['monto'] ?? '0');
         $monto_norm = str_replace(['.', ','], ['', '.'], $monto_raw);
         if (!is_numeric($monto_norm)) $monto_norm = '0';
@@ -231,21 +268,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $fecha_pago = to_safe_date($_POST['fecha_pago'] ?? '') ?: date('Y-m-d');
         $obs    = trim($_POST['observaciones'] ?? '');
 
-        // Insert pago
         $st = $conexion->prepare("INSERT INTO gimnasios_pagos (gimnasio_id, fecha_pago, monto, metodo, referencia, meses, observaciones) VALUES (?,?,?,?,?,?,?)");
         $st->bind_param('isdssis', $gimnasio_id, $fecha_pago, $monto, $metodo, $ref, $meses, $obs);
-        $st->execute();
-        $st->close();
+        $st->execute(); $st->close();
 
-        // Extender fecha_vencimiento de forma segura (como en el panel)
         $sqlUp = "
           UPDATE gimnasios
           SET fecha_vencimiento = DATE_ADD(
             CASE
-              WHEN COALESCE(
-                     STR_TO_DATE(NULLIF(CONCAT(fecha_vencimiento),'0000-00-00'),'%Y-%m-%d'),
-                     DATE('1000-01-01')
-                   ) < CURDATE()
+              WHEN COALESCE(STR_TO_DATE(NULLIF(CONCAT(fecha_vencimiento),'0000-00-00'),'%Y-%m-%d'), DATE('1000-01-01')) < CURDATE()
                 THEN CURDATE()
               ELSE STR_TO_DATE(NULLIF(CONCAT(fecha_vencimiento),'0000-00-00'),'%Y-%m-%d')
             END, INTERVAL ? MONTH
@@ -254,38 +285,37 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         ";
         $st2 = $conexion->prepare($sqlUp);
         $st2->bind_param('ii', $meses, $gimnasio_id);
-        $st2->execute();
-        $st2->close();
+        $st2->execute(); $st2->close();
 
         $mensaje = "✅ Renovación registrada (+{$meses} mes/es).";
-        // Refrescar datos
         $gimnasio = $conexion->query("SELECT * FROM gimnasios WHERE id = {$gimnasio_id} LIMIT 1")->fetch_assoc();
         $plan_id_actual = (int)($gimnasio['plan_id'] ?? 0);
     }
 
-    // 3) Guardar permisos manuales (overrides)
+    // 3) Guardar permisos (overrides)
     if (isset($_POST['save_perms'])) {
-        $plan_id = (int)($_POST['plan_id_ref'] ?? $plan_id_actual);
-        $features = get_features_for_gym($conexion, $plan_id, $gimnasio_id);
-        $all_features = array_keys($features);
+        // Features checkeadas (override=1)
         $posted = (array)($_POST['permisos'] ?? []);
+        $checked = [];
+        foreach ($posted as $feat => $v) { $checked[] = substr(trim((string)$feat), 0, 64); }
 
-        $posted_map = [];
-        foreach ($posted as $feat => $on) { $posted_map[$feat] = 1; }
-
-        save_gym_perms($conexion, $gimnasio_id, array_flip($all_features), $posted_map);
-        $mensaje = "✅ Permisos actualizados para el gimnasio.";
+        try {
+            save_gym_perms($conexion, $gimnasio_id, $checked);
+            $mensaje = "✅ Permisos actualizados para el gimnasio.";
+        } catch (Throwable $e) {
+            $mensaje = "❌ Error guardando permisos: ".$e->getMessage();
+        }
     }
 
-    // 4) Resetear a los permisos del plan
+    // 4) Resetear a permisos del plan
     if (isset($_POST['sync_plan'])) {
-        $plan_id = (int)($_POST['plan_id_ref'] ?? $plan_id_actual);
+        $plan_id = (int)($gimnasio['plan_id'] ?? $plan_id_actual);
         reset_to_plan($conexion, $gimnasio_id, $plan_id);
         $mensaje = "✅ Permisos sincronizados con el plan (overrides limpiados).";
     }
 }
 
-// ===== Features actuales (después de cualquier POST) =====
+/* ===== Features actuales (después de cualquier POST) ===== */
 $features = get_features_for_gym($conexion, $plan_id_actual, $gimnasio_id);
 ?>
 <!DOCTYPE html>
@@ -310,15 +340,18 @@ $features = get_features_for_gym($conexion, $plan_id_actual, $gimnasio_id);
   th{background:#222;color:#fff}
   .hint{color:#aaa;font-size:12px}
   .pill{display:inline-block;padding:2px 8px;border-radius:999px;font-size:12px;margin-left:8px;background:#222;color:#ccc}
+  .chip{display:inline-block;padding:2px 6px;border-radius:6px;font-size:11px;border:1px solid #333;margin-left:6px}
+  .chip.on{background:#10341f;color:#b7f7cf;border-color:#1e7f56}
+  .chip.off{background:#321313;color:#ffc2c2;border-color:#7f1e1e}
 </style>
 </head>
 <body>
 
 <h2 style="text-align:center;">✏️ Editar Datos del Gimnasio</h2>
-<?php if ($mensaje): ?><div class="mensaje"><?= $mensaje ?></div><?php endif; ?>
+<?php if (!empty($mensaje)): ?><div class="mensaje"><?= h($mensaje) ?></div><?php endif; ?>
 
 <div class="card">
-  <!-- ===== Form datos básicos ===== -->
+  <!-- Datos básicos -->
   <form method="POST" enctype="multipart/form-data">
     <div class="row">
       <div>
@@ -374,11 +407,10 @@ $features = get_features_for_gym($conexion, $plan_id_actual, $gimnasio_id);
   </form>
 </div>
 
-<!-- ===== Renovación rápida desde aquí ===== -->
+<!-- Renovación -->
 <div class="card" style="margin-top:24px">
   <h3>🔁 Renovación / Registro de pago</h3>
-  <div class="hint">Esto registrará el pago en el panel y extenderá el vencimiento del gimnasio.</div>
-
+  <div class="hint">Esto registrará el pago y extenderá el vencimiento del gimnasio.</div>
   <form method="POST">
     <div class="row">
       <div>
@@ -388,10 +420,7 @@ $features = get_features_for_gym($conexion, $plan_id_actual, $gimnasio_id);
         <input type="text" name="monto" placeholder="0,00">
         <label>Método</label>
         <select name="metodo">
-          <option>Transferencia</option>
-          <option>Efectivo</option>
-          <option>Débito</option>
-          <option>Crédito</option>
+          <option>Transferencia</option><option>Efectivo</option><option>Débito</option><option>Crédito</option>
         </select>
       </div>
       <div>
@@ -407,10 +436,10 @@ $features = get_features_for_gym($conexion, $plan_id_actual, $gimnasio_id);
   </form>
 </div>
 
-<!-- ===== Panel de permisos por feature ===== -->
+<!-- Permisos -->
 <div class="card" style="margin-top:24px">
   <h3>🔒 Permisos por función (afecta acceso y visibilidad en menú)</h3>
-  <div class="hint">Si un feature está <b>deshabilitado</b>, se bloqueará el acceso a su página y se <b>ocultará en el menú</b>.</div>
+  <div class="hint">Si un feature está deshabilitado, se bloqueará el acceso y se ocultará en el menú.</div>
 
   <form method="POST">
     <input type="hidden" name="plan_id_ref" value="<?= (int)$plan_id_actual ?>">
@@ -418,34 +447,37 @@ $features = get_features_for_gym($conexion, $plan_id_actual, $gimnasio_id);
       <thead>
         <tr>
           <th style="width:40%">Feature</th>
-          <th style="width:20%">Según Plan</th>
+          <th style="width:20%">Plan</th>
           <th style="width:20%">Override Gimnasio</th>
           <th style="width:20%">Efectivo</th>
         </tr>
       </thead>
       <tbody>
         <?php
-          $features = get_features_for_gym($conexion, $plan_id_actual, $gimnasio_id);
-          if (empty($features)):
+          $featuresTable = $features; // evitar shadowing
+          if (empty($featuresTable)):
         ?>
           <tr><td colspan="4">No hay features definidos para este plan/gimnasio.</td></tr>
         <?php else: ?>
-          <?php foreach ($features as $feat => $info): ?>
+          <?php foreach ($featuresTable as $feat => $info): ?>
             <?php
-              $plan_on = (int)$info['plan_enabled'] === 1;
-              $gym_override = $info['gym_enabled']; // null => usa plan
-              $eff = (int)$info['effective'] === 1;
+              $plan_on = (isset($info['plan_enabled']) && (int)$info['plan_enabled'] === 1);
+              $gym_override = $info['gym_enabled']; // null|0|1
+              $eff = ((int)$info['effective'] === 1);
+
+              // Checkbox: SOLO override=1 → marcado
+              $checked = ($gym_override === 1);
+
+              // Chips informativos
+              $chipPlan = is_null($info['plan_enabled'])
+                ? '<span class="chip">Plan: —</span>'
+                : '<span class="chip '.($plan_on?'on':'off').'">Plan: '.($plan_on?'ON':'OFF').'</span>';
+              $chipEff  = '<span class="chip '.($eff?'on':'off').'">Efectivo: '.($eff?'ON':'OFF').'</span>';
             ?>
             <tr>
               <td>
-                <label for="f_<?= h($feat) ?>" style="display:block;font-weight:bold">
-                  <?= h($feat) ?>
-                </label>
-                <?php if (is_null($gym_override)): ?>
-                  <span class="pill">Usando Plan</span>
-                <?php else: ?>
-                  <span class="pill">Override</span>
-                <?php endif; ?>
+                <label for="f_<?= h($feat) ?>" style="display:block;font-weight:bold"><?= h($feat) ?></label>
+                <?= $chipPlan ?> <?= $chipEff ?>
               </td>
               <td><?= $plan_on ? '✅ On' : '🚫 Off' ?></td>
               <td>
@@ -453,8 +485,8 @@ $features = get_features_for_gym($conexion, $plan_id_actual, $gimnasio_id);
                        id="f_<?= h($feat) ?>"
                        name="permisos[<?= h($feat) ?>]"
                        value="1"
-                       <?= $eff ? 'checked' : '' ?>>
-                <div class="hint">Dejar destildado = Off</div>
+                       <?= $checked ? 'checked' : '' ?>>
+                <div class="hint">Tildado = Override ON (activa aunque el plan no lo traiga).</div>
               </td>
               <td><?= $eff ? '🟢 Habilitado' : '🔴 Bloqueado' ?></td>
             </tr>
