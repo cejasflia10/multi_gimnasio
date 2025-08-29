@@ -1,166 +1,362 @@
 <?php
 if (session_status() === PHP_SESSION_NONE) session_start();
-include 'conexion.php';
+header('Cache-Control: no-store, no-cache, must-revalidate');
+require_once __DIR__ . '/conexion.php';
 
-date_default_timezone_set('America/Argentina/Buenos_Aires');
-$hoy = date('Y-m-d');
+date_default_timezone_set('America/Argentina/San_Luis');
+$hoy         = date('Y-m-d');
 $hora_actual = date('H:i:s');
-$advertencia = "";
-$activar_sonido = false;
 
-$gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
+$advertencia    = "";
+$tipo_resultado = "";   // "ok" | "alerta"
+$gimnasio_id    = (int)($_SESSION['gimnasio_id'] ?? 0);
 
-// Datos del gimnasio
-$info = $conexion->query("SELECT nombre, logo FROM gimnasios WHERE id = $gimnasio_id")->fetch_assoc();
-$nombre_gimnasio = $info['nombre'] ?? 'Gimnasio';
-$logo_gimnasio = $info['logo'] ?? 'logo.png';
+// ===== Datos del gimnasio =====
+$nombre_gimnasio = 'Gimnasio';
+$logo_gimnasio   = 'logo.png';
+if ($gimnasio_id > 0) {
+    $res = $conexion->query("SELECT nombre, logo FROM gimnasios WHERE id = {$gimnasio_id} LIMIT 1");
+    if ($res && $row = $res->fetch_assoc()) {
+        if (!empty($row['nombre'])) $nombre_gimnasio = $row['nombre'];
+        if (!empty($row['logo']))   $logo_gimnasio   = $row['logo'];
+    }
+}
 
-// Procesar código
-if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST["codigo"])) {
-    $codigo = trim($_POST["codigo"]);
+// ===== Lógica principal empaquetada (profesores / clientes) =====
+function procesar_codigo(mysqli $db, int $gymId, string $codigo, string $hoy, string $hora_actual): array {
+    $mensaje = "";
+    $tipo    = "ok"; // "ok" o "alerta"
 
-    $prof_stmt = $conexion->prepare("SELECT id, apellido, nombre FROM profesores WHERE dni = ? AND gimnasio_id = ?");
-    $prof_stmt->bind_param("si", $codigo, $gimnasio_id);
+    // ---- Profesor por DNI ----
+    $prof_stmt = $db->prepare("SELECT id, apellido, nombre FROM profesores WHERE dni = ? AND gimnasio_id = ?");
+    $prof_stmt->bind_param("si", $codigo, $gymId);
     $prof_stmt->execute();
-    $prof_result = $prof_stmt->get_result();
+    $prof = $prof_stmt->get_result()->fetch_assoc();
+    $prof_stmt->close();
 
-    if ($prof_result->num_rows > 0) {
-        $prof = $prof_result->fetch_assoc();
-        $prof_id = $prof['id'];
-        $nombre_prof = $prof['apellido'] . ' ' . $prof['nombre'];
+    if ($prof) {
+        $prof_id     = (int)$prof['id'];
+        $nombre_prof = trim(($prof['apellido'] ?? '') . ' ' . ($prof['nombre'] ?? ''));
 
-        $check_asistencia = $conexion->query("
-            SELECT id, hora_entrada, hora_salida 
-            FROM asistencias_profesores 
-            WHERE profesor_id = $prof_id AND fecha = '$hoy' AND gimnasio_id = $gimnasio_id 
-            ORDER BY id DESC 
+        $q = $db->query("
+            SELECT id, hora_entrada, hora_salida
+            FROM asistencias_profesores
+            WHERE profesor_id = {$prof_id}
+              AND fecha = '{$db->real_escape_string($hoy)}'
+              AND gimnasio_id = {$gymId}
+            ORDER BY id DESC
             LIMIT 1
         ");
-
-        if ($check_asistencia && $check_asistencia->num_rows > 0) {
-            $registro = $check_asistencia->fetch_assoc();
-            if (empty($registro['hora_salida'])) {
-                $conexion->query("UPDATE asistencias_profesores SET hora_salida = '$hora_actual' WHERE id = {$registro['id']}");
-                $advertencia = "✅ Salida registrada para $nombre_prof a las $hora_actual.";
+        if ($q && $r = $q->fetch_assoc()) {
+            if (empty($r['hora_salida'])) {
+                $db->query("UPDATE asistencias_profesores
+                            SET hora_salida = '{$db->real_escape_string($hora_actual)}'
+                            WHERE id = {$r['id']} LIMIT 1");
+                $mensaje = "✅ Salida registrada para {$nombre_prof} a las {$hora_actual}.";
             } else {
-                $conexion->query("INSERT INTO asistencias_profesores (profesor_id, fecha, hora_entrada, gimnasio_id, hora) VALUES ($prof_id, '$hoy', '$hora_actual', $gimnasio_id, '$hora_actual')");
-                $advertencia = "✅ Nuevo ingreso registrado para $nombre_prof a las $hora_actual.";
+                $db->query("INSERT INTO asistencias_profesores (profesor_id, fecha, hora_entrada, gimnasio_id, hora)
+                            VALUES ({$prof_id}, '{$db->real_escape_string($hoy)}', '{$db->real_escape_string($hora_actual)}', {$gymId}, '{$db->real_escape_string($hora_actual)}')");
+                $mensaje = "✅ Nuevo ingreso registrado para {$nombre_prof} a las {$hora_actual}.";
             }
         } else {
-            $conexion->query("INSERT INTO asistencias_profesores (profesor_id, fecha, hora_entrada, gimnasio_id, hora) VALUES ($prof_id, '$hoy', '$hora_actual', $gimnasio_id, '$hora_actual')");
-            $advertencia = "✅ Ingreso registrado para $nombre_prof a las $hora_actual.";
+            $db->query("INSERT INTO asistencias_profesores (profesor_id, fecha, hora_entrada, gimnasio_id, hora)
+                        VALUES ({$prof_id}, '{$db->real_escape_string($hoy)}', '{$db->real_escape_string($hora_actual)}', {$gymId}, '{$db->real_escape_string($hora_actual)}')");
+            $mensaje = "✅ Ingreso registrado para {$nombre_prof} a las {$hora_actual}.";
         }
+        return [$mensaje, $tipo]; // ok
+    }
 
+    // ---- Cliente por DNI ----
+    $stmt = $db->prepare("SELECT id FROM clientes WHERE dni = ? AND gimnasio_id = ?");
+    $stmt->bind_param("si", $codigo, $gymId);
+    $stmt->execute();
+    $cliente = $stmt->get_result()->fetch_assoc();
+    $stmt->close();
+
+    if ($cliente) {
+        $id_cliente = (int)$cliente['id'];
+
+        $stmt2 = $db->prepare("SELECT clases_disponibles, fecha_vencimiento
+                               FROM membresias
+                               WHERE cliente_id = ? AND gimnasio_id = ?
+                               ORDER BY fecha_vencimiento DESC
+                               LIMIT 1");
+        $stmt2->bind_param("ii", $id_cliente, $gymId);
+        $stmt2->execute();
+        $membresia = $stmt2->get_result()->fetch_assoc();
+        $stmt2->close();
+
+        if ($membresia) {
+            $clases      = (int)$membresia['clases_disponibles'];
+            $vencimiento = $membresia['fecha_vencimiento'];
+
+            if ($clases > 0 && $vencimiento >= $hoy) {
+                $db->query("INSERT INTO asistencias (cliente_id, fecha, hora, gimnasio_id)
+                            VALUES ({$id_cliente}, '{$db->real_escape_string($hoy)}', '{$db->real_escape_string($hora_actual)}', {$gymId})");
+                $db->query("UPDATE membresias
+                            SET clases_disponibles = clases_disponibles - 1
+                            WHERE cliente_id = {$id_cliente}
+                              AND fecha_vencimiento = '{$db->real_escape_string($vencimiento)}'
+                              AND gimnasio_id = {$gymId}
+                            LIMIT 1");
+                $mensaje = "✅ Asistencia registrada para cliente a las {$hora_actual}.";
+                $tipo    = "ok";
+            } else {
+                $mensaje = "❌ ¡Membresía vencida o sin clases disponibles!";
+                $tipo    = "alerta";
+            }
+        } else {
+            $mensaje = "❌ ¡El cliente no tiene membresía registrada!";
+            $tipo    = "alerta";
+        }
     } else {
-        $stmt = $conexion->prepare("SELECT id FROM clientes WHERE dni = ? AND gimnasio_id = ?");
-        $stmt->bind_param("si", $codigo, $gimnasio_id);
-        $stmt->execute();
-        $resultado = $stmt->get_result();
+        $mensaje = "❌ ¡Cliente/Profesor no encontrado!";
+        $tipo    = "alerta";
+    }
 
-        if ($cliente = $resultado->fetch_assoc()) {
-            $id_cliente = $cliente['id'];
+    return [$mensaje, $tipo];
+}
 
-            $stmt2 = $conexion->prepare("SELECT clases_disponibles, fecha_vencimiento FROM membresias WHERE cliente_id = ? AND gimnasio_id = ? ORDER BY fecha_vencimiento DESC LIMIT 1");
-            $stmt2->bind_param("ii", $id_cliente, $gimnasio_id);
-            $stmt2->execute();
-            $resultado2 = $stmt2->get_result();
+// ===== Respuesta AJAX =====
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['codigo']) && isset($_GET['ajax'])) {
+    $codigo = trim((string)$_POST['codigo']);
+    header('Content-Type: application/json; charset=utf-8');
 
-            if ($membresia = $resultado2->fetch_assoc()) {
-                $clases = (int)$membresia['clases_disponibles'];
-                $vencimiento = $membresia['fecha_vencimiento'];
+    if ($gimnasio_id <= 0 || $codigo === '') {
+        echo json_encode(['ok' => false, 'mensaje' => '❌ Acceso denegado o código vacío.', 'tipo' => 'alerta', 'sonido' => true]);
+        exit;
+    }
 
-                if ($clases > 0 && $vencimiento >= $hoy) {
-                    $conexion->query("INSERT INTO asistencias (cliente_id, fecha, hora, gimnasio_id) VALUES ($id_cliente, '$hoy', '$hora_actual', $gimnasio_id)");
-                    $conexion->query("UPDATE membresias SET clases_disponibles = clases_disponibles - 1 WHERE cliente_id = $id_cliente AND fecha_vencimiento = '$vencimiento' AND gimnasio_id = $gimnasio_id");
-                    $advertencia = "✅ Asistencia registrada para cliente a las $hora_actual.";
-                } else {
-                    $advertencia = "❌ ¡Membresía vencida o sin clases disponibles!";
-                    $activar_sonido = true;
-                }
-            } else {
-                $advertencia = "❌ ¡El cliente no tiene membresía registrada!";
-                $activar_sonido = true;
-            }
-        } else {
-            $advertencia = "❌ ¡Cliente no encontrado!";
-            $activar_sonido = true;
-        }
+    [$advertencia, $tipo_resultado] = procesar_codigo($conexion, $gimnasio_id, $codigo, $hoy, $hora_actual);
+    echo json_encode([
+        'ok'      => true,
+        'mensaje' => $advertencia,
+        'tipo'    => $tipo_resultado,                  // "ok" | "alerta"
+        'sonido'  => ($tipo_resultado === 'alerta'),   // compat con boolean anterior
+    ]);
+    exit;
+}
+
+// ===== Flujo no-AJAX (primera carga o submit directo) =====
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['codigo'])) {
+    $codigo = trim((string)$_POST['codigo']);
+    if ($gimnasio_id > 0 && $codigo !== '') {
+        [$advertencia, $tipo_resultado] = procesar_codigo($conexion, $gimnasio_id, $codigo, $hoy, $hora_actual);
+    } else {
+        $advertencia    = '❌ Acceso denegado o código vacío.';
+        $tipo_resultado = 'alerta';
     }
 }
 ?>
-
 <!DOCTYPE html>
 <html lang="es">
 <head>
-    
-    <meta charset="UTF-8">
-    <title>Registro de Asistencia</title>
-    <link rel="stylesheet" href="estilo_unificado.css">
-    <style>
-        body { background-color: #111; color: gold; }
-        .contenedor { padding: 20px; }
-        .encabezado { display: flex; justify-content: space-between; align-items: center; }
-        .encabezado h1 { font-size: 28px; margin: 0; }
-        input[type="text"] { font-size: 20px; padding: 10px; width: 100%; margin: 10px 0; }
-        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-        table th, table td { border: 1px solid #444; padding: 8px; text-align: center; }
-        .advertencia {
-            font-size: 18px; margin: 15px 0;
-            color: <?= $activar_sonido ? 'red' : 'lime' ?>;
-        }
-    </style>
-    <script>
-        function actualizarListados() {
-            fetch('ajax_ingresos_profesores.php')
-                .then(res => res.text())
-                .then(html => document.getElementById('tabla_profesores').innerHTML = html);
+  <meta charset="UTF-8" />
+  <title>Registro de Asistencia</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="stylesheet" href="estilo_unificado.css">
+  <style>
+    :root { --bg:#111; --fg:#ffd700; --ok:#7CFC00; --err:#ff5757; --muted:#444; }
+    * { box-sizing: border-box }
+    body { margin:0; background:var(--bg); color:var(--fg); font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial; }
+    .contenedor { padding: 16px; max-width: 1100px; margin: 0 auto; }
+    .encabezado { display:flex; justify-content:space-between; align-items:center; gap:12px; }
+    .encabezado h1 { margin:0; font-size: clamp(18px, 4vw, 28px); letter-spacing:.5px; }
+    .clock { font-size: clamp(12px, 2.5vw, 14px); opacity:.8 }
 
-            fetch('ajax_ingresos_clientes.php')
-                .then(res => res.text())
-                .then(html => document.getElementById('tabla_clientes').innerHTML = html);
-        }
+    .scan { margin: 14px 0; }
+    .scan input[type="text"]{
+      font-size: clamp(18px, 4.5vw, 22px);
+      line-height: 1.2;
+      padding: 14px 16px;
+      width: 100%;
+      border: 1px solid var(--muted);
+      border-radius: 12px;
+      outline: none;
+      background:#000; color: var(--fg);
+      min-height: 52px;
+    }
 
-        setInterval(actualizarListados, 10000);
-        window.onload = actualizarListados;
-    </script>
+    /* Tablas en contenedor scrollable para móvil */
+    .table-wrap{
+      background:#0e0e0e;
+      border:1px solid #1f1f1f;
+      border-radius: 12px;
+      overflow: auto;                   /* clave en móvil */
+      -webkit-overflow-scrolling: touch;
+    }
+    table{ width:100%; border-collapse: collapse; min-width: 520px; }
+    thead th{ background:#1a1a1a; position: sticky; top: 0; z-index: 1; }
+    table th, table td{
+      border-bottom: 1px solid #1f1f1f;
+      padding: clamp(8px, 2.2vw, 12px);
+      text-align: center;
+      font-size: clamp(13px, 3.3vw, 15px);
+      white-space: nowrap;
+    }
+
+    .advertencia{ font-size: clamp(16px, 3.8vw, 18px); margin: 12px 0; }
+    .advertencia.ok{ color: var(--ok); }
+    .advertencia.err{ color: var(--err); }
+
+    .row{ display:grid; grid-template-columns: 1fr; gap:16px; }
+    @media (min-width: 900px){ .row{ grid-template-columns: 1fr 1fr; gap:24px; } }
+
+    @media (max-width: 599px){
+      .contenedor{ padding: 12px; }
+      img[alt="logo"]{ height: 56px; }
+    }
+  </style>
+  <script>
+    let polling = null;
+
+    function actualizarListados() {
+      fetch('ajax_ingresos_profesores.php', {cache: 'no-store'})
+        .then(res => res.text())
+        .then(html => { const t = document.getElementById('tabla_profesores'); if (t) t.innerHTML = html; })
+        .catch(()=>{});
+
+      fetch('ajax_ingresos_clientes.php', {cache: 'no-store'})
+        .then(res => res.text())
+        .then(html => { const t = document.getElementById('tabla_clientes'); if (t) t.innerHTML = html; })
+        .catch(()=>{});
+    }
+
+    function tickClock(){
+      const el = document.getElementById('clock');
+      if (!el) return;
+      const now = new Date();
+      const pad = n => String(n).padStart(2,'0');
+      el.textContent = `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
+    }
+
+    function focusInput(){
+      const i = document.getElementById('codigo');
+      if (i) i.focus({preventScroll:true});
+    }
+
+    function enviarCodigo(e){
+      e.preventDefault();
+      const inp = document.getElementById('codigo');
+      const val = (inp.value || '').trim();
+      if (!val) { focusInput(); return; }
+
+      const fd = new FormData();
+      fd.append('codigo', val);
+
+      fetch('?ajax=1', { method: 'POST', body: fd })
+        .then(r => r.json())
+        .then(j => {
+          const adv = document.getElementById('adv');
+          if (j && adv) {
+            adv.textContent = j.mensaje || '';
+            const clase = (j.tipo === 'alerta' || j.sonido) ? 'err' : 'ok';
+            adv.className = 'advertencia ' + clase;
+          }
+
+          // Sonidos (ok y alerta). Requiere interacción previa (el submit cuenta).
+          const okAudio     = document.getElementById('snd-ok');
+          const alertaAudio = document.getElementById('snd-alerta');
+
+          if (j && (j.tipo === 'ok') && okAudio) {
+            okAudio.currentTime = 0;
+            okAudio.play().catch(()=>{});
+          }
+          if (j && (j.tipo === 'alerta' || j.sonido) && alertaAudio) {
+            alertaAudio.currentTime = 0;
+            alertaAudio.play().catch(()=>{});
+          }
+
+          inp.value = '';
+          focusInput();
+          actualizarListados();
+        })
+        .catch(()=>{
+          const adv = document.getElementById('adv');
+          if (adv) {
+            adv.textContent = '⚠️ Error enviando el código. Revisá la conexión.';
+            adv.className = 'advertencia err';
+          }
+        });
+    }
+
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden) {
+        actualizarListados();
+        focusInput();
+      }
+    });
+
+    window.addEventListener('load', () => {
+      tickClock();
+      setInterval(tickClock, 1000);
+      focusInput();
+
+      actualizarListados();
+      polling = setInterval(actualizarListados, 10000);
+
+      const form = document.getElementById('form-scan');
+      if (form) form.addEventListener('submit', enviarCodigo);
+
+      // mantener foco para lector de barras
+      document.addEventListener('click', (e) => {
+        const t = e.target;
+        if (!(t instanceof HTMLInputElement) && !(t instanceof HTMLTextAreaElement)) {
+          focusInput();
+        }
+      });
+    });
+  </script>
 </head>
 <body>
-    <div class="contenedor">
-        <div class="encabezado">
-            <img src="<?= $logo_gimnasio ?>" height="70">
-            <h1><?= strtoupper($nombre_gimnasio) ?></h1>
-        </div>
+  <div class="contenedor">
+    <div class="encabezado">
+      <img src="<?= htmlspecialchars($logo_gimnasio) ?>" height="70" alt="logo">
+      <div>
+        <h1><?= strtoupper(htmlspecialchars($nombre_gimnasio)) ?></h1>
+        <div class="clock">Hora: <span id="clock"></span></div>
+      </div>
+    </div>
 
-<!-- Botones de acción -->
-<div style="margin: 15px 0; display: flex; gap: 10px;">
-    <a href="agregar_cliente.php" style="padding: 10px 15px; background: dodgerblue; color: white; text-decoration: none; font-weight: bold; border-radius: 5px;">➕ Agregar Cliente</a>
-    <a href="nueva_membresia.php" style="padding: 10px 15px; background: limegreen; color: black; text-decoration: none; font-weight: bold; border-radius: 5px;">🏋️ Nueva Membresía</a>
-    <a href="ver_membresias.php" style="padding: 10px 15px; background: orange; color: black; text-decoration: none; font-weight: bold; borde-r-radius: 5px;">♻️ Ver Membresía</a>
-</div>
+    <form id="form-scan" class="scan" method="POST" action="">
+      <input id="codigo" name="codigo" type="text" inputmode="numeric" autocomplete="off" placeholder="Ingresar DNI..." autofocus>
+    </form>
 
-        <form method="POST" action="">
-            <input type="text" name="codigo" autofocus placeholder="Ingresar DNI...">
-        </form>
+    <?php if ($advertencia): ?>
+      <div id="adv" class="advertencia <?= ($tipo_resultado === 'alerta') ? 'err' : 'ok' ?>"><?= htmlspecialchars($advertencia) ?></div>
+    <?php else: ?>
+      <div id="adv" class="advertencia" style="min-height: 24px;"></div>
+    <?php endif; ?>
 
-        <?php if ($advertencia): ?>
-            <div class="advertencia"><?= $advertencia ?></div>
-        <?php endif; ?>
+    <!-- Sonidos -->
+    <audio id="snd-ok" preload="auto">
+      <source src="ok.mp3" type="audio/mpeg">
+    </audio>
+    <audio id="snd-alerta" preload="auto">
+      <source src="alerta.mp3" type="audio/mpeg">
+    </audio>
 
-        <?php if ($activar_sonido): ?>
-            <audio autoplay><source src="alerta.mp3" type="audio/mpeg"></audio>
-        <?php endif; ?>
-
+    <div class="row">
+      <section>
         <h2>👨‍🏫 Profesores Hoy</h2>
-        <table>
+        <div class="table-wrap">
+          <table>
             <thead><tr><th>Apellido</th><th>Ingreso</th><th>Salida</th></tr></thead>
             <tbody id="tabla_profesores"></tbody>
-        </table>
+          </table>
+        </div>
+      </section>
 
+      <section>
         <h2>🏋️ Clientes Hoy</h2>
-        <table>
+        <div class="table-wrap">
+          <table>
             <thead><tr><th>Apellido</th><th>Hora</th><th>Clases</th><th>Vencimiento</th></tr></thead>
             <tbody id="tabla_clientes"></tbody>
-        </table>
+          </table>
+        </div>
+      </section>
     </div>
+  </div>
 </body>
 </html>
