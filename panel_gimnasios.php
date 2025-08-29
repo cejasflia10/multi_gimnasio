@@ -7,7 +7,9 @@ ini_set('display_errors', 1);
 if (session_status() === PHP_SESSION_NONE) session_start();
 
 require_once __DIR__.'/conexion.php';
-@include __DIR__.'/menu_horizontal.php'; // opcional
+require_once __DIR__.'/permiso.php';   // << protección por permisos
+guardia_permiso();                     // exige feature 'panel_gimnasio'
+@include __DIR__.'/menu_horizontal.php'; // opcional (si tu menú es un include plano)
 
 /* ---------- Conexión ---------- */
 if (!isset($conexion) || !($conexion instanceof mysqli)) {

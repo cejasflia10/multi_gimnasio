@@ -1,9 +1,24 @@
 <?php
 if (session_status() === PHP_SESSION_NONE) { session_start(); }
+
+/* Intenta cargar permisos; si no existe, no rompe */
 @require_once __DIR__ . '/permiso.php';
-/* Fallback por si no cargaste permiso.php aún */
+
+/* Refresca SIEMPRE los permisos si hay gimnasio en sesión (evita cache viejo) */
+if (function_exists('refresh_permissions') && !empty($_SESSION['gimnasio_id'])) {
+  refresh_permissions((int)$_SESSION['gimnasio_id']);
+}
+
+/* Wrapper de permisos para el menú:
+   - Admin ve todo.
+   - Si existe has_feature() (de permiso.php), la usamos.
+   - Si no existe, devolvemos true para no esconder el menú por error.
+*/
 if (!function_exists('has_perm')) {
-  function has_perm(string $f): bool { return true; }
+  function has_perm(string $feature): bool {
+    if (!empty($_SESSION['rol']) && $_SESSION['rol'] === 'admin') return true;
+    return function_exists('has_feature') ? has_feature($feature) : true;
+  }
 }
 ?>
 <!DOCTYPE html>
@@ -20,23 +35,28 @@ if (!function_exists('has_perm')) {
     body{margin:0;background:var(--bg);color:var(--fg);font-family:Arial,Helvetica,sans-serif}
 
     .menu-toggle{
-      display:none;background:var(--brand);color:var(--fg);font-size:20px;padding:10px;text-align:center;cursor:pointer
+      display:none;background:var(--brand);color:var(--fg);
+      font-size:20px;padding:10px;text-align:center;cursor:pointer
     }
 
     .menu-horizontal{
-      background:var(--brand);display:flex;flex-wrap:wrap;justify-content:flex-start;padding:6px 10px;position:relative;z-index:1000
+      background:var(--brand);display:flex;flex-wrap:wrap;justify-content:flex-start;
+      padding:6px 10px;position:relative;z-index:1000
     }
     .menu-horizontal > .dropdown{position:relative}
     .menu-horizontal > .dropdown > a,
     .menu-horizontal > a{
-      color:var(--fg);text-decoration:none;font-weight:bold;padding:10px 14px;display:inline-block;border-radius:6px
+      color:var(--fg);text-decoration:none;font-weight:bold;padding:10px 14px;
+      display:inline-block;border-radius:6px
     }
 
     .dropdown-content{
-      display:none;position:absolute;background:var(--drop);min-width:220px;z-index:1100;border:1px solid var(--border);border-radius:8px;overflow:hidden
+      display:none;position:absolute;background:var(--drop);min-width:220px;z-index:1100;
+      border:1px solid var(--border);border-radius:8px;overflow:hidden
     }
     .dropdown-content a{
-      display:block;padding:10px 12px;border-bottom:1px solid var(--line);color:var(--fg);text-decoration:none
+      display:block;padding:10px 12px;border-bottom:1px solid var(--line);
+      color:var(--fg);text-decoration:none
     }
     .dropdown:hover .dropdown-content{display:block}
 
@@ -71,6 +91,18 @@ if (!function_exists('has_perm')) {
 <div class="menu-toggle" onclick="toggleMenu()">☰ Menú</div>
 
 <nav class="menu-horizontal" id="menu-principal">
+  <!-- PANEL GIMNASIO -->
+  <?php if (has_perm('panel_gimnasio')): ?>
+  <div class="dropdown">
+    <a href="#">🏢 Panel Gimnasio</a>
+    <div class="dropdown-content">
+      <a href="panel_gimnasios.php">Dashboard</a>
+      <a href="agregar_gimnasio.php">Agregar Gimnasio</a>
+      <a href="renovar_gimnasio.php">Renovar Plan</a>
+    </div>
+  </div>
+  <?php endif; ?>
+
   <!-- CLIENTES -->
   <?php if (has_perm('clientes')): ?>
   <div class="dropdown">
@@ -82,7 +114,8 @@ if (!function_exists('has_perm')) {
   </div>
   <?php endif; ?>
 
-  <!-- MEMBRESÍAS (siempre visible; si querés, podés colgarlo de un feature más adelante) -->
+  <!-- MEMBRESÍAS -->
+  <?php if (has_perm('membresias')): ?>
   <div class="dropdown">
     <a href="#">📅 Membresías</a>
     <div class="dropdown-content">
@@ -93,8 +126,10 @@ if (!function_exists('has_perm')) {
       <a href="adicionales.php">Adicionales</a>
     </div>
   </div>
+  <?php endif; ?>
 
-  <!-- PAGOS (siempre visible; podés colgarlo de un feature si querés limitarlo) -->
+  <!-- PAGOS -->
+  <?php if (has_perm('pagos')): ?>
   <div class="dropdown">
     <a href="#">💳 Pagos</a>
     <div class="dropdown-content">
@@ -105,6 +140,7 @@ if (!function_exists('has_perm')) {
       <a href="gastos.php">Gastos</a>
     </div>
   </div>
+  <?php endif; ?>
 
   <!-- ASISTENCIAS -->
   <?php if (has_perm('asistencias')): ?>
@@ -157,6 +193,20 @@ if (!function_exists('has_perm')) {
     <div class="dropdown-content">
       <a href="cliente_acceso.php">Panel</a>
       <a href="panel_configuracion.php">Panel Configuración</a>
+    </div>
+  </div>
+  <?php endif; ?>
+
+  <!-- EVENTOS -->
+  <?php if (has_perm('eventos_panel')): ?>
+  <div class="dropdown">
+    <a href="#">🎪 Eventos</a>
+    <div class="dropdown-content">
+      <a href="panel_eventos.php">Panel de Eventos</a>
+      <a href="login_evento.php">Acceso a Panel</a>
+      <?php if (has_perm('eventos')): ?>
+        <a href="eventos_publicos.php">Eventos Públicos</a>
+      <?php endif; ?>
     </div>
   </div>
   <?php endif; ?>

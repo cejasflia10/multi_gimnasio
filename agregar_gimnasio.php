@@ -1,13 +1,28 @@
 <?php
-/* ================= DEBUG (desactivar en producción si querés) ================= */
+/* ================= DEBUG DURO (desactivar cuando quede OK) ================= */
 error_reporting(E_ALL);
 ini_set('display_errors', 1);
-/* ============================================================================== */
+register_shutdown_function(function () {
+  $e = error_get_last();
+  if ($e && in_array($e['type'], [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR])) {
+    http_response_code(500);
+    echo "<pre style='background:#200;color:#fdd;padding:12px;white-space:pre-wrap'>".
+         "🔥 FATAL: {$e['message']}\nArchivo: {$e['file']}:{$e['line']}\n</pre>";
+  }
+});
+/* ========================================================================== */
 
 if (session_status() === PHP_SESSION_NONE) session_start();
 
 require_once __DIR__ . '/conexion.php';
-@include __DIR__ . '/menu_horizontal.php'; // opcional, no rompe si no existe
+require_once __DIR__ . '/permiso.php';     // 🔒 permisos
+guardia_permiso();                         // exige feature 'panel_gimnasio'
+
+// Si querés trazar, probá con ?debug=1
+if (isset($_GET['debug'])) { echo "<div style='background:#333;color:#fff;padding:6px'>Pasé guardia_permiso()</div>"; }
+
+// (Opcional) Menú — dejalo al final si te tira errores, o úsalo así:
+@include __DIR__ . '/menu_horizontal.php';
 
 /* ---------- Conexión y charset ---------- */
 if (!isset($conexion) || !($conexion instanceof mysqli)) {
@@ -19,11 +34,13 @@ if (function_exists('mysqli_report')) { mysqli_report(MYSQLI_REPORT_OFF); }
 
 /* ---------- Helpers ---------- */
 function h($s){ return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); }
-
-/**
- * Copia los permisos base del plan hacia gimnasios_permisos para el gimnasio dado.
- * Si el plan no tiene features definidos, no falla (simplemente no inserta nada).
- */
+/** Devuelve fecha YYYY-MM-DD válida o NULL (para evitar 0000-00-00) */
+function ymd_or_null(?string $s): ?string {
+  $s = trim((string)$s);
+  if ($s === '' || $s === '0000-00-00') return null;
+  return preg_match('/^\d{4}-\d{2}-\d{2}$/', $s) ? $s : null;
+}
+/** Copia permisos base del plan hacia el gimnasio */
 function seed_permisos_from_plan(mysqli $db, int $plan_id, int $gimnasio_id): void {
   $sql = "
     INSERT INTO gimnasios_permisos (gimnasio_id, feature, enabled)
@@ -47,7 +64,7 @@ $planes_data = [];
 while ($p = $planes->fetch_assoc()) {
   $planes_data[(int)$p['id']] = [
     'nombre' => $p['nombre'],
-    'precio' => (float)$p['precio'],
+    'precio' => is_null($p['precio']) ? 0.0 : (float)$p['precio'],
   ];
 }
 $planes->free();
@@ -67,11 +84,20 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && !isset($_POST['sync_plan_gym_id']))
   $telefono          = trim($_POST["telefono"]          ?? '');
   $email             = trim($_POST["email"]             ?? '');
 
-  $fecha_inicio      = trim($_POST["fecha_inicio"]      ?? '');
-  $fecha_vencimiento = trim($_POST["fecha_vencimiento"] ?? '');
-  $monto_plan        = (float)($_POST["monto_plan"]     ?? 0);
+  $fecha_inicio      = ymd_or_null($_POST["fecha_inicio"]      ?? '');
+  $fecha_vencimiento = ymd_or_null($_POST["fecha_vencimiento"] ?? '');
+
+  $plan_id           = (int)($_POST["plan_id"] ?? 0);
+
+  // Monto (acepta 1.234,56 / 1234,56 / 1234.56). Si es 0, toma precio del plan.
+  $monto_raw         = trim($_POST["monto_plan"] ?? '');
+  $monto_norm        = str_replace(['.', ','], ['', '.'], $monto_raw);
+  $monto_plan        = is_numeric($monto_norm) ? (float)$monto_norm : 0.0;
+  if ($monto_plan <= 0 && $plan_id > 0 && isset($planes_data[$plan_id])) {
+    $monto_plan = (float)$planes_data[$plan_id]['precio'];
+  }
+
   $forma_pago        = trim($_POST["forma_pago"]        ?? '');
-  $plan_id           = (int)  ($_POST["plan_id"]        ?? 0);
 
   $usuario           = trim($_POST["usuario"]           ?? '');
   $email_usuario     = trim($_POST["email_usuario"]     ?? $email); // fallback al email del gym
@@ -103,7 +129,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && !isset($_POST['sync_plan_gym_id']))
     } else {
       $existe_usuario->close();
 
-      // Insertar gimnasio
+      // Insertar gimnasio (fechas pueden ser NULL)
       $stmt = $conexion->prepare("
         INSERT INTO gimnasios 
           (nombre, direccion, telefono, email, fecha_inicio, fecha_vencimiento, monto_plan, forma_pago, plan_id, alias, cuit, estado, nota_admin, mensaje_alumno, redes_sociales) 
@@ -150,6 +176,9 @@ if (isset($_GET['eliminar'])) {
 
   // Limpiar permisos asociados (si no hay FK ON DELETE CASCADE)
   $conexion->query("DELETE FROM gimnasios_permisos WHERE gimnasio_id = {$id}");
+  // Opcional: limpiar historial de pagos y usuarios del gym (si corresponde a tu lógica)
+  // $conexion->query("DELETE FROM gimnasios_pagos WHERE gimnasio_id = {$id}");
+  // $conexion->query("DELETE FROM usuarios WHERE gimnasio_id = {$id}");
 
   if ($conexion->query("DELETE FROM gimnasios WHERE id = {$id}")) {
     $mensaje = "<p style='color:#22c55e;'>Gimnasio eliminado correctamente.</p>";
@@ -190,7 +219,6 @@ if (isset($_POST['sync_plan_gym_id'])) {
       $st->close();
     }
 
-    // Refrescar caché si la función existe
     if (function_exists('refresh_permissions')) {
       refresh_permissions($gymId);
     }
@@ -222,7 +250,7 @@ if (!$resultado) die("Error al listar gimnasios: " . $conexion->error);
     body{background:#000;color:gold;font-family:Arial,Helvetica,sans-serif;margin:0;padding:16px}
     h2{margin:12px 0}
     table{border-collapse:collapse;width:100%}
-    th,td{border:1px solid #999;padding:8px}
+    th,td{border:1px solid #999;padding:8px;vertical-align:top}
     th{background:#444;color:#fff}
     .btn{padding:4px 8px;background:#666;color:#fff;text-decoration:none;margin-right:5px;border-radius:3px}
     .btn:hover{background:#999}
@@ -320,7 +348,7 @@ if (!$resultado) die("Error al listar gimnasios: " . $conexion->error);
         <td><?= h($fila["nombre"]) ?></td>
         <td><?= h($fila["email"]) ?></td>
         <td><?= h($fila["telefono"]) ?></td>
-        <td><?= $fila["fecha_inicio"] ? h($fila["fecha_inicio"]) : '-' ?></td>
+        <td><?= !empty($fila["fecha_inicio"]) ? h($fila["fecha_inicio"]) : '-' ?></td>
         <td><?= (!empty($fila["fecha_vencimiento"]) && $fila["fecha_vencimiento"]!='0000-00-00') ? date('d/m/Y', strtotime($fila["fecha_vencimiento"])) : 'Sin fecha' ?></td>
         <td>$<?= number_format((float)$fila["monto_plan"], 2, ',', '.') ?></td>
         <td><?= h($fila["forma_pago"] ?? 'No especificado') ?></td>
