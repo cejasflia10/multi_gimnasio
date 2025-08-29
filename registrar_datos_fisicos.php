@@ -9,7 +9,6 @@ function err($s){ return "<div style='margin:10px 0;padding:10px;border-radius:8
 function ok($s){ return "<div style='margin:10px 0;padding:10px;border-radius:8px;border:1px solid #1e7f56;background:#052b18;color:#b7f7cf'>✅ ".h($s)."</div>"; }
 function toFloat($s){ $s=str_replace(['.',','],['','.'],$s); return is_numeric($s)?(float)$s:null; }
 function bmi($pesoKg, $alturaCm){ if ($pesoKg<=0 || $alturaCm<=0) return null; $m=$alturaCm/100.0; if($m<=0) return null; return round($pesoKg/($m*$m),2); }
-
 /** kcal = MET * 3.5 * pesoKg * min / 200 (ACSM) */
 function kcal_estimadas(?float $pesoKg, ?string $intensidad, ?int $min){
   if (!$pesoKg || !$min || $pesoKg<=0 || $min<=0) return null;
@@ -131,6 +130,7 @@ if ($target_cliente_id <= 0) {
         @media (max-width:700px){ .row{grid-template-columns:1fr} }
       </style>
     </head><body>
+      <?php if (is_file(__DIR__.'/menu_profesor.php')) { include __DIR__.'/menu_profesor.php'; } ?>
       <div class="card">
         <h2>🔎 Buscar cliente por DNI</h2>
         <?= $mensaje ?>
@@ -182,7 +182,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
         (cliente_id, fecha, peso, altura, talle_remera, talle_pantalon, talle_calzado, patologias, tipo_diabetes, medicaciones, observaciones, intensidad, duracion_min, gasto_calorico_kcal)
         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
       ");
-      /* Para evitar errores de conteo de tipos en distintas versiones, bindeamos todo como string */
+      /* Bind como string para máxima compatibilidad */
       $st->bind_param(
         'ssssssssssssss',
         $cid, $fch, $ps, $alt, $rem, $pant, $calz, $pat, $td, $med, $ob, $int, $dur, $kc
@@ -213,7 +213,6 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
               UPDATE datos_fisicos
               SET peso=?, altura=?, talle_remera=?, talle_pantalon=?, talle_calzado=?, patologias=?, tipo_diabetes=?, medicaciones=?, observaciones=?, intensidad=?, duracion_min=?, gasto_calorico_kcal=?
               WHERE id=? AND cliente_id=?");
-            /* Igual estrategia: todo como string */
             $st->bind_param('ssssssssssssss',
               $ps, $alt, $rem, $pant, $calz, $pat, $td, $med, $ob, $int, $dur, $kc, $idu, $clid
             );
@@ -352,6 +351,15 @@ if ($is_prof && isset($_GET['edit'])) {
   </script>
 </head>
 <body>
+
+<?php
+// === MENÚS RESTAURADOS ===
+// Menú general si existe:
+if (is_file(__DIR__.'/menu_horizontal.php')) { include __DIR__.'/menu_horizontal.php'; }
+// Menú específico de profesores (solo si es profe/admin y el archivo existe):
+if ($is_prof && is_file(__DIR__.'/menu_profesor.php')) { include __DIR__.'/menu_profesor.php'; }
+?>
+
 <div class="wrap">
 
   <div class="card">

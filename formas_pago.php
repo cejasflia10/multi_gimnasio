@@ -34,6 +34,8 @@ $cantidades = $_POST['cantidad'] ?? [];
       .totales{display:flex;justify-content:space-between;align-items:center}
       .aviso{color:#ef4444;margin-top:6px}
       .ok{color:#22c55e}
+      button{padding:10px 14px;border-radius:10px;border:1px solid #334155;background:#1e293b;color:#fff;cursor:pointer}
+      button:hover{background:#243143}
     </style>
 </head>
 <body>
@@ -47,15 +49,27 @@ $cantidades = $_POST['cantidad'] ?? [];
       </div>
     </div>
 
-    <form method="POST" action="guardar_venta_productos.php" onsubmit="return validarPago();">
+    <!-- IFRAME oculto: recibe la respuesta con el comprobante -->
+    <iframe name="dl_iframe" style="display:none" title="descarga"></iframe>
+
+    <form id="fpago" method="POST" action="guardar_venta_productos.php" target="dl_iframe" onsubmit="return previoSubmit();">
         <!-- Datos ocultos -->
         <input type="hidden" name="cliente_id" value="<?= $cliente_id ?>">
         <input type="hidden" name="cliente_temporal" value="<?= $cliente_temporal ?>">
         <input type="hidden" name="total_original" id="total_original_val" value="<?= $total ?>">
         <input type="hidden" name="tipo_venta" value="<?= h($tipo_venta) ?>">
         <input type="hidden" name="gimnasio_id" value="<?= $gimnasio_id ?>">
+
+        <!-- Totales calculados que necesita el backend -->
         <input type="hidden" name="total_con_descuento" id="total_con_descuento" value="<?= $total ?>">
+        <input type="hidden" name="descuento_porcentaje" id="descuento_porcentaje" value="0">
+        <input type="hidden" name="pagado_total" id="pagado_total" value="0">
+        <input type="hidden" name="saldo_cuenta_corriente" id="saldo_cuenta_corriente" value="0">
         <input type="hidden" name="vuelto" id="vuelto" value="0">
+        <!-- Señal para que el backend sepa que abrimos comprobante en iframe -->
+        <input type="hidden" name="modo_descarga" value="iframe">
+        <!-- Señal de a dónde volver (por si querés usarla en el backend) -->
+        <input type="hidden" name="redir_after" value="ventas_productos_mod.php">
 
         <?php
         for ($i = 0; $i < count($productos); $i++) {
@@ -87,9 +101,9 @@ $cantidades = $_POST['cantidad'] ?? [];
           <input type="number" id="pago_credito" name="pago_credito" placeholder="💳 Crédito" step="0.01" min="0" oninput="recalcularCCyVuelto()">
         </div>
 
-        <!-- Cuenta corriente se calcula; no editable -->
+        <!-- Cuenta corriente visible (readonly) -->
         <label for="pago_cuenta_corriente">📒 Cuenta Corriente (Deuda generada)</label>
-        <input type="number" id="pago_cuenta_corriente" name="pago_cuenta_corriente" step="0.01" min="0" value="0" readonly>
+        <input type="number" id="pago_cuenta_corriente" step="0.01" min="0" value="0" readonly>
 
         <div class="info">
           <div class="totales">
@@ -112,46 +126,48 @@ $cantidades = $_POST['cantidad'] ?? [];
         </div>
 
         <br>
-        <button type="submit">✅ Finalizar y Generar Factura</button>
+        <button type="submit">✅ Finalizar y Generar Comprobante</button>
+        <div class="muted" id="msg_post" style="display:none;margin-top:8px">Generando comprobante… te redirigimos a Ventas.</div>
     </form>
 </div>
 
 <script>
 function toNumber(v){
-  const x = parseFloat(v);
+  const x = parseFloat(String(v).replace(',', '.'));
   return isNaN(x) ? 0 : x;
 }
 
-function actualizarPagadoCCVuelto(total){
+function valoresPagos(){
   const ef   = toNumber(document.getElementById('pago_efectivo').value);
   const trf  = toNumber(document.getElementById('pago_transferencia').value);
   const deb  = toNumber(document.getElementById('pago_debito').value);
   const cred = toNumber(document.getElementById('pago_credito').value);
+  const pagado = +(ef + trf + deb + cred).toFixed(2);
+  return {ef, trf, deb, cred, pagado};
+}
 
-  const pagado = ef + trf + deb + cred;
+function actualizarUIyHidden(total){
+  const {pagado} = valoresPagos();
   let restante = +(total - pagado).toFixed(2);
+  if (Math.abs(restante) < 0.01) restante = 0; // tolerancia
 
-  // Si resta, va a cuenta corriente. Si sobra, es vuelto (CC = 0)
   let cc = 0, vuelto = 0;
+  if (restante > 0) { cc = restante; vuelto = 0; }
+  else if (restante < 0) { cc = 0; vuelto = Math.abs(restante); }
 
-  if (restante > 0) {
-    cc = restante;
-    vuelto = 0;
-  } else if (restante < 0) {
-    cc = 0;
-    vuelto = Math.abs(restante);
-  }
-
-  // Actualiza UI
-  document.getElementById('pagado_ahora').textContent = pagado.toFixed(2);
-  document.getElementById('cc_a_generar').textContent = cc.toFixed(2);
-  document.getElementById('pago_cuenta_corriente').value = cc.toFixed(2);
-
-  document.getElementById('vuelto').value = vuelto.toFixed(2);
+  // UI
+  document.getElementById('pagado_ahora').textContent   = pagado.toFixed(2);
+  document.getElementById('cc_a_generar').textContent   = cc.toFixed(2);
+  document.getElementById('pago_cuenta_corriente').value= cc.toFixed(2);
   document.getElementById('vuelto_mostrar').textContent = vuelto.toFixed(2);
   document.getElementById('seccion_vuelto').style.display = (vuelto > 0.009) ? 'flex' : 'none';
 
-  // Mensaje de validación suave
+  // HIDDEN para backend
+  document.getElementById('pagado_total').value          = pagado.toFixed(2);
+  document.getElementById('saldo_cuenta_corriente').value= cc.toFixed(2);
+  document.getElementById('vuelto').value                = vuelto.toFixed(2);
+
+  // Aviso
   const aviso = document.getElementById('aviso_validacion');
   if (vuelto > 0.009) {
     aviso.style.display = 'block';
@@ -168,34 +184,43 @@ function recalcularTotal() {
     const total_desc = +(original - (original * (desc / 100))).toFixed(2);
 
     document.getElementById('total_descuento').textContent = total_desc.toFixed(2);
-    document.getElementById('total_con_descuento').value = total_desc.toFixed(2);
+    document.getElementById('total_con_descuento').value   = total_desc.toFixed(2);
+    document.getElementById('descuento_porcentaje').value  = desc.toFixed(0);
 
-    actualizarPagadoCCVuelto(total_desc);
+    actualizarUIyHidden(total_desc);
 }
 
 function recalcularCCyVuelto(){
     const total = toNumber(document.getElementById('total_con_descuento').value);
-    actualizarPagadoCCVuelto(total);
+    actualizarUIyHidden(total);
 }
 
 function validarPago() {
-    const total = toNumber(document.getElementById('total_con_descuento').value);
-    const pagado = toNumber(document.getElementById('pagado_ahora').textContent);
-    const cc = toNumber(document.getElementById('pago_cuenta_corriente').value);
+    const total  = toNumber(document.getElementById('total_con_descuento').value);
+    const pagado = toNumber(document.getElementById('pagado_total').value);
+    const cc     = toNumber(document.getElementById('saldo_cuenta_corriente').value);
     const vuelto = toNumber(document.getElementById('vuelto').value);
 
-    // Reglas:
-    // 1) CC nunca negativa (garantizado por cálculo)
-    // 2) Si hay vuelto, no se cargará a CC (ya está en 0)
-    // 3) Pagado + CC == Total (tolerancia)
+    // pagado + cc - vuelto == total (con tolerancia)
     const suma = +(pagado + cc - vuelto).toFixed(2);
-    const ok = Math.abs(suma - total) <= 0.01;
+    return Math.abs(suma - total) <= 0.01;
+}
 
-    if (!ok) {
-        alert("⚠️ La suma de pagos + cuenta corriente debe coincidir con el total.");
-        return false;
-    }
-    return true;
+function previoSubmit(){
+  // recalcular por si algo quedó pendiente
+  recalcularCCyVuelto();
+  if (!validarPago()){
+    alert("⚠️ La suma de pagos + cuenta corriente debe coincidir con el total.");
+    return false;
+  }
+
+  // Mensaje y redirección automática a Ventas
+  document.getElementById('msg_post').style.display = 'block';
+  setTimeout(function(){
+    window.location.href = 'ventas_productos_mod.php?ok=1';
+  }, 1100);
+
+  return true; // enviamos al iframe (descarga comprobante)
 }
 
 // Inicializa cálculos al cargar
