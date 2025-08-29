@@ -65,8 +65,6 @@ CREATE TABLE IF NOT EXISTS datos_fisicos (
   INDEX (cliente_id), INDEX (fecha)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 ");
-
-/* Si la tabla ya existía y le faltan columnas nuevas, agrégalas */
 function ensure_col(mysqli $db, string $table, string $col, string $def){
   $q = $db->query("SHOW COLUMNS FROM `{$table}` LIKE '{$col}'");
   if ($q && $q->num_rows === 0) { $db->query("ALTER TABLE `{$table}` ADD `{$col}` {$def}"); }
@@ -76,7 +74,7 @@ ensure_col($conexion, 'datos_fisicos', 'intensidad', "ENUM('leve','moderado','in
 ensure_col($conexion, 'datos_fisicos', 'duracion_min', "INT NULL");
 ensure_col($conexion, 'datos_fisicos', 'gasto_calorico_kcal', "INT NULL");
 
-/* Recursos compartidos (dietas, entrenos en casa, recomendaciones) */
+/* Recursos compartidos */
 $conexion->query("
 CREATE TABLE IF NOT EXISTS cliente_recursos (
   id INT AUTO_INCREMENT PRIMARY KEY,
@@ -95,56 +93,109 @@ CREATE TABLE IF NOT EXISTS cliente_recursos (
 [$rol, $cliente_id_sesion, $gym_id] = resolver_identidad();
 $is_prof = in_array($rol, ['profesor','admin'], true);
 $mensaje  = '';
+$coincidencias = [];   // ← para listar resultados cuando hay más de uno
 
 /* ================= Resolver cliente objetivo ================= */
 $target_cliente_id = 0;
+
 if ($is_prof) {
   if (isset($_GET['cliente'])) {
     $target_cliente_id = max(0,(int)$_GET['cliente']);
-  } elseif (isset($_POST['buscar_dni'])) {
-    $dni = trim($_POST['buscar_dni']);
-    if ($dni !== '') {
-      if ($gym_id>0) { $st=$conexion->prepare("SELECT id FROM clientes WHERE dni=? AND gimnasio_id=? LIMIT 1"); $st->bind_param('si',$dni,$gym_id); }
-      else           { $st=$conexion->prepare("SELECT id FROM clientes WHERE dni=? LIMIT 1"); $st->bind_param('s',$dni); }
-      $st->execute(); $row=$st->get_result()->fetch_assoc(); $st->close();
-      if ($row) { header("Location: ".$_SERVER['PHP_SELF']."?cliente=".$row['id']); exit; }
-      else { $mensaje .= err("No se encontró cliente con DNI {$dni}".($gym_id?" en este gimnasio.":".")); }
+  } elseif (isset($_POST['buscar']) || isset($_POST['buscar_dni'])) {
+    // ACEPTA DNI (numérico) O APELLIDO/NOMBRE (texto)
+    $term = trim((string)($_POST['buscar'] ?? $_POST['buscar_dni'] ?? ''));
+    if ($term !== '') {
+      $soloDigitos = preg_replace('/\D+/', '', $term);
+      if ($soloDigitos !== '' && $soloDigitos === $term) {
+        // === Búsqueda por DNI exacto ===
+        if ($gym_id>0) {
+          $st=$conexion->prepare("SELECT id, apellido, nombre, dni FROM clientes WHERE dni=? AND gimnasio_id=? LIMIT 1");
+          $st->bind_param('si',$term,$gym_id);
+        } else {
+          $st=$conexion->prepare("SELECT id, apellido, nombre, dni FROM clientes WHERE dni=? LIMIT 1");
+          $st->bind_param('s',$term);
+        }
+        $st->execute(); $row=$st->get_result()->fetch_assoc(); $st->close();
+        if ($row) { header("Location: ".$_SERVER['PHP_SELF']."?cliente=".$row['id']); exit; }
+        else { $mensaje .= err("No se encontró cliente con DNI {$term}".($gym_id?" en este gimnasio.":".")); }
+      } else {
+        // === Búsqueda por texto: apellido/nombre (y deja ver DNI) ===
+        $like = '%'.$conexion->real_escape_string($term).'%';
+        if ($gym_id>0) {
+          $st = $conexion->prepare("SELECT id, apellido, nombre, dni FROM clientes WHERE gimnasio_id=? AND (apellido LIKE ? OR nombre LIKE ?) ORDER BY apellido, nombre LIMIT 50");
+          $st->bind_param('iss',$gym_id,$like,$like);
+        } else {
+          $st = $conexion->prepare("SELECT id, apellido, nombre, dni FROM clientes WHERE (apellido LIKE ? OR nombre LIKE ?) ORDER BY apellido, nombre LIMIT 50");
+          $st->bind_param('ss',$like,$like);
+        }
+        $st->execute(); $rs=$st->get_result();
+        while($r=$rs->fetch_assoc()){ $coincidencias[]=$r; }
+        $st->close();
+
+        if (count($coincidencias) === 1) {
+          header("Location: ".$_SERVER['PHP_SELF']."?cliente=".$coincidencias[0]['id']); exit;
+        }
+        if (count($coincidencias) === 0) {
+          $mensaje .= err("No se encontraron clientes para “{$term}”.");
+        }
+      }
     }
   }
 } else {
   $target_cliente_id = (int)$cliente_id_sesion;
 }
 
-if ($target_cliente_id <= 0) {
-  if ($is_prof) {
-    ?>
-    <!DOCTYPE html>
-    <html lang="es"><head>
-      <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-      <title>Datos físicos - Buscar cliente</title>
-      <style>
-        body{background:#000;color:gold;font-family:Arial;margin:0;padding:24px}
-        .card{max-width:640px;margin:24px auto;background:#111;padding:18px;border-radius:12px;border:1px solid #222}
-        input,button{padding:10px;border-radius:8px;border:1px solid #333;background:#1a1a1a;color:gold}
-        .row{display:grid;grid-template-columns:1fr auto;gap:8px}
-        @media (max-width:700px){ .row{grid-template-columns:1fr} }
-      </style>
-    </head><body>
-      <?php if (is_file(__DIR__.'/menu_profesor.php')) { include __DIR__.'/menu_profesor.php'; } ?>
-      <div class="card">
-        <h2>🔎 Buscar cliente por DNI</h2>
-        <?= $mensaje ?>
-        <form method="POST">
-          <div class="row">
-            <input type="text" name="buscar_dni" inputmode="numeric" placeholder="DNI del cliente..." autofocus>
-            <button type="submit">Buscar</button>
-          </div>
-        </form>
-      </div>
-    </body></html><?php
-    exit;
-  }
-  echo err('Acceso denegado. Falta identificar al cliente en la sesión.');
+/* ======= Si aún no hay cliente, mostrar buscador ======= */
+if ($target_cliente_id <= 0 && empty($_GET['cliente'])) {
+  ?>
+  <!DOCTYPE html>
+  <html lang="es"><head>
+    <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Datos físicos - Buscar cliente</title>
+    <style>
+      body{background:#000;color:gold;font-family:Arial;margin:0;padding:24px}
+      .card{max-width:760px;margin:24px auto;background:#111;padding:18px;border-radius:12px;border:1px solid #222}
+      input,button{padding:10px;border-radius:8px;border:1px solid #333;background:#1a1a1a;color:gold}
+      .row{display:grid;grid-template-columns:1fr auto;gap:8px}
+      @media (max-width:700px){ .row{grid-template-columns:1fr} }
+      table{width:100%;border-collapse:collapse;margin-top:12px}
+      th,td{border:1px solid #222;padding:8px}
+      th{background:#141824}
+      a.btn{display:inline-block;padding:6px 10px;border:1px solid #333;border-radius:8px;color:#fff;text-decoration:none;background:#1a1f2b}
+      a.btn:hover{background:#21293a}
+      .muted{color:#a0a7b4;font-size:12px}
+    </style>
+  </head><body>
+    <?php if (is_file(__DIR__.'/menu_profesor.php')) { include __DIR__.'/menu_profesor.php'; } ?>
+    <div class="card">
+      <h2>🔎 Buscar cliente (DNI o Apellido)</h2>
+      <?= $mensaje ?>
+      <form method="POST">
+        <div class="row">
+          <input type="text" name="buscar" placeholder="Escribí DNI (solo números) o Apellido..." autofocus>
+          <button type="submit">Buscar</button>
+        </div>
+        <div class="muted" style="margin-top:6px">Tip: también podés escribir parte del <b>nombre</b>.</div>
+      </form>
+
+      <?php if (!empty($coincidencias)): ?>
+        <h3 style="margin-top:16px">Coincidencias</h3>
+        <table>
+          <thead><tr><th>Apellido y Nombre</th><th>DNI</th><th>Acción</th></tr></thead>
+          <tbody>
+            <?php foreach ($coincidencias as $c): ?>
+              <tr>
+                <td><?= h(($c['apellido']??'').' '.($c['nombre']??'')) ?></td>
+                <td><?= h($c['dni'] ?? '') ?></td>
+                <td><a class="btn" href="<?= h($_SERVER['PHP_SELF'].'?cliente='.$c['id']) ?>">Seleccionar</a></td>
+              </tr>
+            <?php endforeach; ?>
+          </tbody>
+        </table>
+      <?php endif; ?>
+    </div>
+  </body></html>
+  <?php
   exit;
 }
 
@@ -182,7 +233,6 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
         (cliente_id, fecha, peso, altura, talle_remera, talle_pantalon, talle_calzado, patologias, tipo_diabetes, medicaciones, observaciones, intensidad, duracion_min, gasto_calorico_kcal)
         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
       ");
-      /* Bind como string para máxima compatibilidad */
       $st->bind_param(
         'ssssssssssssss',
         $cid, $fch, $ps, $alt, $rem, $pant, $calz, $pat, $td, $med, $ob, $int, $dur, $kc
@@ -353,10 +403,7 @@ if ($is_prof && isset($_GET['edit'])) {
 <body>
 
 <?php
-// === MENÚS RESTAURADOS ===
-// Menú general si existe:
 if (is_file(__DIR__.'/menu_horizontal.php')) { include __DIR__.'/menu_horizontal.php'; }
-// Menú específico de profesores (solo si es profe/admin y el archivo existe):
 if ($is_prof && is_file(__DIR__.'/menu_profesor.php')) { include __DIR__.'/menu_profesor.php'; }
 ?>
 
@@ -370,7 +417,7 @@ if ($is_prof && is_file(__DIR__.'/menu_profesor.php')) { include __DIR__.'/menu_
       </div>
       <?php if ($is_prof): ?>
         <form method="POST" style="display:flex;gap:8px;align-items:center">
-          <input type="text" name="buscar_dni" placeholder="Buscar otro DNI..." inputmode="numeric">
+          <input type="text" name="buscar" placeholder="Buscar por DNI o Apellido..." inputmode="text">
           <button class="btn" type="submit">Buscar</button>
         </form>
       <?php endif; ?>
