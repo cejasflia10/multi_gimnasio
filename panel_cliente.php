@@ -1,5 +1,5 @@
 <?php
-// panel_cliente.php — versión moderna y responsive (sin dependencias externas)
+// panel_cliente.php — versión moderna + PROMOS "flash"
 if (session_status() === PHP_SESSION_NONE) session_start();
 require_once __DIR__ . '/conexion.php';
 
@@ -11,7 +11,18 @@ if ($cliente_id === 0 || $gimnasio_id === 0) {
     exit;
 }
 
-// ====== Validar cliente ======
+/* ===== Helpers ===== */
+function h($s){ return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); }
+function col_exists(mysqli $db, string $table, string $col): bool {
+  $t = $db->real_escape_string($table);
+  $c = $db->real_escape_string($col);
+  $sql = "SELECT 1 FROM information_schema.COLUMNS
+          WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME='{$t}' AND COLUMN_NAME='{$c}' LIMIT 1";
+  $rs = $db->query($sql);
+  return $rs && $rs->num_rows > 0;
+}
+
+/* ===== Validar cliente ===== */
 $cliente = null;
 if ($stmt = $conexion->prepare("SELECT * FROM clientes WHERE id=? AND gimnasio_id=? LIMIT 1")) {
     $stmt->bind_param("ii", $cliente_id, $gimnasio_id);
@@ -24,7 +35,7 @@ if (!$cliente) {
     exit;
 }
 
-// ====== Completar Datos Físicos (si faltan) ======
+/* ===== Completar Datos Físicos (si faltan) ===== */
 if ((int)($cliente['datos_completos'] ?? 0) === 0) {
     $mensaje = "";
     if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['guardar_datos_fisicos'])) {
@@ -59,7 +70,6 @@ if ((int)($cliente['datos_completos'] ?? 0) === 0) {
             $mensaje = "❌ Error interno al preparar el guardado.";
         }
     }
-    // ====== Vista de completar datos (UI moderna) ======
     ?>
     <!doctype html>
     <html lang="es">
@@ -85,7 +95,7 @@ if ((int)($cliente['datos_completos'] ?? 0) === 0) {
         <form class="card" method="POST" autocomplete="off">
           <h2>📋 Completar Datos Físicos</h2>
           <p>Completá tus medidas y observaciones para personalizar tus entrenamientos.</p>
-          <?php if (!empty($mensaje)): ?><div class="msg"><?= htmlspecialchars($mensaje) ?></div><?php endif; ?>
+          <?php if (!empty($mensaje)): ?><div class="msg"><?= h($mensaje) ?></div><?php endif; ?>
           <input type="hidden" name="guardar_datos_fisicos" value="1" />
           <label>Peso (kg)</label><input name="peso" required />
           <label>Altura (cm)</label><input name="altura" required />
@@ -104,18 +114,14 @@ if ((int)($cliente['datos_completos'] ?? 0) === 0) {
     exit;
 }
 
-// ====== Helpers ======
-function h($s){ return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); }
-
-// ====== Datos panel ======
+/* ===== Datos base para panel ===== */
 $cliente_nombre = trim(($cliente['apellido'] ?? '').' '.($cliente['nombre'] ?? ''));
 $tz   = new DateTimeZone('America/Argentina/San_Luis');
 $hoyD = new DateTime('today', $tz);
 $hoy  = $hoyD->format('Y-m-d');
-
 $fecha_filtro = isset($_GET['fecha']) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $_GET['fecha']) ? $_GET['fecha'] : $hoy;
 
-// ====== Membresía (vigente o última) ======
+/* ===== Membresía ===== */
 $membresia = null;
 if ($stmtM1 = $conexion->prepare("
   SELECT clases_disponibles, fecha_vencimiento
@@ -142,9 +148,9 @@ if (!$membresia && $stmtM2 = $conexion->prepare("
   $stmtM2->close();
 }
 
-// ====== Foto cliente (base64 o archivo) ======
+/* ===== Foto ===== */
 $foto_url = '';
-if (!empty($cliente['foto_base64']) && str_starts_with((string)$cliente['foto_base64'], 'data:image')) {
+if (!empty($cliente['foto_base64']) && strpos((string)$cliente['foto_base64'], 'data:image') === 0) {
   $foto_url = $cliente['foto_base64'];
 } else {
   $f = trim((string)($cliente['foto'] ?? ''));
@@ -153,7 +159,7 @@ if (!empty($cliente['foto_base64']) && str_starts_with((string)$cliente['foto_ba
   else $foto_url = "fotos_clientes/default.png";
 }
 
-// ====== Alerta membresía (condición: <=2 clases o <=3 días) ======
+/* ===== Alertas membresía ===== */
 $alerta_membresia_html = '';
 if ($membresia) {
   $clases    = max(0, (int)($membresia['clases_disponibles'] ?? 0));
@@ -182,6 +188,87 @@ if ($membresia) {
   </div>';
 }
 
+/* ===== PROMOCIONES: cargar promos vigentes para este gimnasio ===== */
+$promos = [];
+$hasCols = [
+  'gimnasio_id' => col_exists($conexion,'promociones','gimnasio_id'),
+  'titulo'      => col_exists($conexion,'promociones','titulo'),
+  'descripcion' => col_exists($conexion,'promociones','descripcion'),
+  'imagen_url'  => col_exists($conexion,'promociones','imagen_url') || col_exists($conexion,'promociones','imagen'),
+  'link_url'    => col_exists($conexion,'promociones','link_url'),
+  'color_fondo' => col_exists($conexion,'promociones','color_fondo'),
+  'color_texto' => col_exists($conexion,'promociones','color_texto'),
+  'fecha_inicio'=> col_exists($conexion,'promociones','fecha_inicio'),
+  'fecha_fin'   => col_exists($conexion,'promociones','fecha_fin'),
+  'prioridad'   => col_exists($conexion,'promociones','prioridad'),
+  'activo'      => col_exists($conexion,'promociones','activo'),
+];
+
+$colsSelect = ['id'];
+foreach (['titulo','descripcion','link_url','color_fondo','color_texto'] as $c) {
+  if ($hasCols[$c]) $colsSelect[] = $c;
+}
+if ($hasCols['imagen_url']) {
+  // Si no existe imagen_url pero sí 'imagen', la seleccionamos como imagen_url con alias
+  if (!col_exists($conexion,'promociones','imagen_url') && col_exists($conexion,'promociones','imagen')) {
+    $colsSelect[] = "imagen AS imagen_url";
+  } else {
+    $colsSelect[] = "imagen_url";
+  }
+}
+if ($hasCols['fecha_inicio']) $colsSelect[] = 'fecha_inicio';
+if ($hasCols['fecha_fin'])    $colsSelect[] = 'fecha_fin';
+if ($hasCols['prioridad'])    $colsSelect[] = 'prioridad';
+if ($hasCols['activo'])       $colsSelect[] = 'activo';
+if ($hasCols['gimnasio_id'])  $colsSelect[] = 'gimnasio_id';
+
+$select = implode(',', $colsSelect);
+$where  = [];
+if ($hasCols['gimnasio_id']) $where[] = "gimnasio_id = {$gimnasio_id}";
+if ($hasCols['activo'])      $where[] = "activo = 1";
+if ($hasCols['fecha_inicio'])$where[] = "(fecha_inicio IS NULL OR fecha_inicio <= '{$hoy}')";
+if ($hasCols['fecha_fin'])   $where[] = "(fecha_fin IS NULL OR fecha_fin >= '{$hoy}')";
+
+$order = "ORDER BY ";
+$orderParts = [];
+if ($hasCols['activo'])    $orderParts[] = "activo DESC";
+if ($hasCols['prioridad']) $orderParts[] = "prioridad DESC";
+if ($hasCols['fecha_fin']) $orderParts[] = "fecha_fin DESC";
+$orderParts[] = "id DESC";
+$order .= implode(', ', $orderParts);
+
+$sqlPromos = "SELECT {$select} FROM promociones ".
+             (empty($where) ? "" : ("WHERE ".implode(' AND ', $where)." ")).$order;
+
+$rsP = $conexion->query($sqlPromos);
+if ($rsP) {
+  while($p = $rsP->fetch_assoc()){
+    // Normalizar colores por si faltan
+    if (empty($p['color_fondo'])) $p['color_fondo'] = '#111111';
+    if (empty($p['color_texto'])) $p['color_texto'] = '#FFD700';
+
+    // Resolver imagen: si trae ruta relativa, buscar en /promos/
+    $img = trim((string)($p['imagen_url'] ?? ''));
+    if ($img !== '') {
+      if (preg_match('#^https?://#i', $img)) {
+        // url absoluta: ok
+      } else {
+        $localPath = __DIR__ . '/promos/' . $img;
+        if (is_file($localPath)) {
+          $img = 'promos/' . rawurlencode($img);
+        } else {
+          // si guardaron "promo1.jpg" en la BD pero el archivo no está, no rompemos
+          $img = '';
+        }
+      }
+    }
+    $p['imagen_resuelta'] = $img;
+    $promos[] = $p;
+  }
+  $rsP->free();
+}
+
+/* ===== Menú cliente ===== */
 include __DIR__ . '/menu_cliente.php';
 ?>
 <!doctype html>
@@ -227,10 +314,69 @@ include __DIR__ . '/menu_cliente.php';
     .res-list{ list-style:none; padding:0; margin:0; display:grid; gap:10px }
     .res-item{ padding:12px; border-radius:14px; border:1px solid var(--border); background:#0f1115; }
     .muted{ color:var(--muted) }
+
+    /* ===== PROMOS ===== */
+    .promos-wrap{ position:relative; margin:16px 0 6px; }
+    .promo-banner{
+      position:relative; overflow:hidden; border-radius:18px; border:1px solid var(--border);
+      display:flex; align-items:center; gap:16px; padding:14px;
+      min-height:120px;
+      animation: pulseFlash 1.6s infinite;
+    }
+    @keyframes pulseFlash {
+      0%{ box-shadow: 0 0 0 0 rgba(245,197,66,.35) }
+      70%{ box-shadow: 0 0 0 12px rgba(245,197,66,0) }
+      100%{ box-shadow: 0 0 0 0 rgba(245,197,66,0) }
+    }
+    .promo-img{ width:120px; height:120px; object-fit:cover; border-radius:12px; border:1px solid var(--border) }
+    .promo-content{ flex:1 1 auto }
+    .promo-title{ margin:0 0 6px; font-size:18px; font-weight:800 }
+    .promo-desc{ margin:0; color:#d8dee9; opacity:.85; font-size:14px }
+    .promo-cta{ margin-left:auto; }
+    .promo-cta a{ display:inline-block; padding:10px 14px; border-radius:12px; font-weight:800; text-decoration:none; }
+    .promos-dots{ display:flex; gap:6px; justify-content:center; margin-top:8px }
+    .promos-dots .dot{ width:8px; height:8px; border-radius:50%; background:#ffffff33 }
+    .promos-dots .dot.active{ background:#fff }
+    @media (max-width:720px){
+      .promo-banner{ flex-direction:column; align-items:flex-start; }
+      .promo-img{ width:100%; height:160px }
+      .promo-cta{ width:100% }
+      .promo-cta a{ width:100%; text-align:center }
+    }
   </style>
 </head>
 <body>
   <div class="container">
+
+    <!-- ===== Promociones (Flash) arriba de todo si hay promos ===== -->
+    <?php if (!empty($promos)): ?>
+      <section class="promos-wrap">
+        <div id="promo-slide" class="promo-banner" style="background: <?= h($promos[0]['color_fondo']) ?>; color: <?= h($promos[0]['color_texto']) ?>">
+          <?php if (!empty($promos[0]['imagen_resuelta'])): ?>
+            <img class="promo-img" src="<?= h($promos[0]['imagen_resuelta']) ?>" alt="<?= h($promos[0]['titulo'] ?? 'Promo') ?>">
+          <?php endif; ?>
+          <div class="promo-content">
+            <h3 class="promo-title"><?= h($promos[0]['titulo'] ?? 'Promoción') ?></h3>
+            <?php if (!empty($promos[0]['descripcion'])): ?>
+              <p class="promo-desc"><?= nl2br(h($promos[0]['descripcion'])) ?></p>
+            <?php endif; ?>
+          </div>
+          <?php if (!empty($promos[0]['link_url'])): ?>
+            <div class="promo-cta">
+              <a href="<?= h($promos[0]['link_url']) ?>" target="_blank" rel="noopener"
+                 style="background:#fff;color:#111;border:0">Ver más</a>
+            </div>
+          <?php endif; ?>
+        </div>
+        <?php if (count($promos) > 1): ?>
+          <div class="promos-dots" id="promo-dots">
+            <?php foreach ($promos as $i=>$p): ?>
+              <div class="dot <?= $i===0?'active':'' ?>"></div>
+            <?php endforeach; ?>
+          </div>
+        <?php endif; ?>
+      </section>
+    <?php endif; ?>
 
     <!-- Encabezado -->
     <section class="glass header">
@@ -277,7 +423,7 @@ include __DIR__ . '/menu_cliente.php';
         </div>
       </article>
 
-      <!-- Reservas del día (con filtro) -->
+      <!-- Reservas del día -->
       <article class="glass card">
         <h2>📋 Reservas del día</h2>
         <form class="filter" method="GET">
@@ -287,7 +433,7 @@ include __DIR__ . '/menu_cliente.php';
         <ul id="contenedor-reservas" class="res-list"><li class="muted">Cargando reservas...</li></ul>
       </article>
 
-      <!-- Novedades / anuncios -->
+      <!-- Novedades -->
       <article class="glass card col-span-2">
         <h2>Novedades</h2>
         <p class="muted">Sumá aquí promos, anuncios o recordatorios para el cliente.</p>
@@ -297,6 +443,47 @@ include __DIR__ . '/menu_cliente.php';
   </div>
 
   <script>
+  // ======== Slider simple de Promos ========
+  (function(){
+    const promos = <?= json_encode($promos, JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES) ?>;
+    if (!Array.isArray(promos) || promos.length === 0) return;
+
+    const slide = document.getElementById('promo-slide');
+    const dots  = document.getElementById('promo-dots')?.querySelectorAll('.dot') || [];
+    let idx = 0;
+    const render = (i) => {
+      const p = promos[i];
+      if (!p || !slide) return;
+      slide.style.background = p.color_fondo || '#111111';
+      slide.style.color      = p.color_texto || '#FFD700';
+
+      let html = '';
+      if (p.imagen_resuelta) {
+        html += `<img class="promo-img" src="${p.imagen_resuelta}" alt="${(p.titulo||'Promo').replace(/"/g,'&quot;')}">`;
+      }
+      html += `<div class="promo-content">
+        <h3 class="promo-title">${p.titulo ? p.titulo : 'Promoción'}</h3>`;
+      if (p.descripcion) {
+        html += `<p class="promo-desc">${p.descripcion.replace(/\n/g,'<br>')}</p>`;
+      }
+      html += `</div>`;
+      if (p.link_url) {
+        html += `<div class="promo-cta"><a href="${p.link_url}" target="_blank" rel="noopener" style="background:#fff;color:#111;border:0">Ver más</a></div>`;
+      }
+      slide.innerHTML = html;
+
+      if (dots.length) {
+        dots.forEach((d,di)=> d.classList.toggle('active', di===i));
+      }
+    };
+
+    render(0);
+    if (promos.length > 1) {
+      setInterval(()=>{ idx = (idx+1) % promos.length; render(idx); }, 6000);
+    }
+  })();
+
+  // ======== Reservas del día (AJAX) ========
   document.addEventListener('DOMContentLoaded', () => {
     const ulReservas = document.getElementById('contenedor-reservas');
     const fecha = '<?= h($fecha_filtro) ?>';

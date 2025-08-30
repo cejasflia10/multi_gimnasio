@@ -166,6 +166,8 @@ if (!function_exists('has_perm')) {
       <a href="ventas_indumentaria.php">Ventas Indumentaria</a>
       <a href="ver_productos.php">Ver Productos</a>
       <a href="ver_facturas.php">Ver Facturas</a>
+      <a href="promociones_admin.php" class="<?= active(['promociones_admin.php']) ?>">Promociones</a>
+
     </div>
   </div>
   <?php endif; ?>
