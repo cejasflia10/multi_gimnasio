@@ -7,7 +7,16 @@ require_once __DIR__.'/conexion.php';
 function h($s){ return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); }
 function err($s){ return "<div style='margin:10px 0;padding:10px;border-radius:8px;border:1px solid #7f1e1e;background:#2b0505;color:#ffb4b4'>❌ ".h($s)."</div>"; }
 function ok($s){ return "<div style='margin:10px 0;padding:10px;border-radius:8px;border:1px solid #1e7f56;background:#052b18;color:#b7f7cf'>✅ ".h($s)."</div>"; }
-function toFloat($s){ $s=str_replace(['.',','],['','.'],$s); return is_numeric($s)?(float)$s:null; }
+/* Convierte “72,5” -> 72.5 y “72.5” -> 72.5 (borra separador de miles) */
+function toFloat($s){
+  $s = trim((string)$s);
+  if ($s==='') return null;
+  // quitar separador de miles tipo 1.234,56 o 1,234.56
+  $s = preg_replace('/(?<=\d)[\.,](?=\d{3}(?:\D|$))/', '', $s);
+  // cambiar coma decimal por punto
+  $s = str_replace(',', '.', $s);
+  return is_numeric($s) ? (float)$s : null;
+}
 function bmi($pesoKg, $alturaCm){ if ($pesoKg<=0 || $alturaCm<=0) return null; $m=$alturaCm/100.0; if($m<=0) return null; return round($pesoKg/($m*$m),2); }
 /** kcal = MET * 3.5 * pesoKg * min / 200 (ACSM) */
 function kcal_estimadas(?float $pesoKg, ?string $intensidad, ?int $min){
@@ -93,7 +102,7 @@ CREATE TABLE IF NOT EXISTS cliente_recursos (
 [$rol, $cliente_id_sesion, $gym_id] = resolver_identidad();
 $is_prof = in_array($rol, ['profesor','admin'], true);
 $mensaje  = '';
-$coincidencias = [];   // ← para listar resultados cuando hay más de uno
+$coincidencias = [];   // para listados manuales si se usa el POST fallback
 
 /* ================= Resolver cliente objetivo ================= */
 $target_cliente_id = 0;
@@ -102,12 +111,11 @@ if ($is_prof) {
   if (isset($_GET['cliente'])) {
     $target_cliente_id = max(0,(int)$_GET['cliente']);
   } elseif (isset($_POST['buscar']) || isset($_POST['buscar_dni'])) {
-    // ACEPTA DNI (numérico) O APELLIDO/NOMBRE (texto)
+    // Fallback por si usan el botón Buscar (no live)
     $term = trim((string)($_POST['buscar'] ?? $_POST['buscar_dni'] ?? ''));
     if ($term !== '') {
       $soloDigitos = preg_replace('/\D+/', '', $term);
       if ($soloDigitos !== '' && $soloDigitos === $term) {
-        // === Búsqueda por DNI exacto ===
         if ($gym_id>0) {
           $st=$conexion->prepare("SELECT id, apellido, nombre, dni FROM clientes WHERE dni=? AND gimnasio_id=? LIMIT 1");
           $st->bind_param('si',$term,$gym_id);
@@ -119,8 +127,7 @@ if ($is_prof) {
         if ($row) { header("Location: ".$_SERVER['PHP_SELF']."?cliente=".$row['id']); exit; }
         else { $mensaje .= err("No se encontró cliente con DNI {$term}".($gym_id?" en este gimnasio.":".")); }
       } else {
-        // === Búsqueda por texto: apellido/nombre (y deja ver DNI) ===
-        $like = '%'.$conexion->real_escape_string($term).'%';
+        $like = "%{$term}%";
         if ($gym_id>0) {
           $st = $conexion->prepare("SELECT id, apellido, nombre, dni FROM clientes WHERE gimnasio_id=? AND (apellido LIKE ? OR nombre LIKE ?) ORDER BY apellido, nombre LIMIT 50");
           $st->bind_param('iss',$gym_id,$like,$like);
@@ -145,7 +152,7 @@ if ($is_prof) {
   $target_cliente_id = (int)$cliente_id_sesion;
 }
 
-/* ======= Si aún no hay cliente, mostrar buscador ======= */
+/* ======= Si aún no hay cliente, mostrar buscador con LIVE SEARCH ======= */
 if ($target_cliente_id <= 0 && empty($_GET['cliente'])) {
   ?>
   <!DOCTYPE html>
@@ -155,9 +162,7 @@ if ($target_cliente_id <= 0 && empty($_GET['cliente'])) {
     <style>
       body{background:#000;color:gold;font-family:Arial;margin:0;padding:24px}
       .card{max-width:760px;margin:24px auto;background:#111;padding:18px;border-radius:12px;border:1px solid #222}
-      input,button{padding:10px;border-radius:8px;border:1px solid #333;background:#1a1a1a;color:gold}
-      .row{display:grid;grid-template-columns:1fr auto;gap:8px}
-      @media (max-width:700px){ .row{grid-template-columns:1fr} }
+      input{padding:10px;border-radius:8px;border:1px solid #333;background:#1a1a1a;color:gold;width:100%}
       table{width:100%;border-collapse:collapse;margin-top:12px}
       th,td{border:1px solid #222;padding:8px}
       th{background:#141824}
@@ -166,34 +171,73 @@ if ($target_cliente_id <= 0 && empty($_GET['cliente'])) {
       .muted{color:#a0a7b4;font-size:12px}
     </style>
   </head><body>
-    <?php if (is_file(__DIR__.'/menu_profesor.php')) { include __DIR__.'/menu_profesor.php'; } ?>
+    <?php if ($is_prof && is_file(__DIR__.'/menu_profesor.php')) { include __DIR__.'/menu_profesor.php'; } ?>
     <div class="card">
-      <h2>🔎 Buscar cliente (DNI o Apellido)</h2>
-      <?= $mensaje ?>
-      <form method="POST">
-        <div class="row">
-          <input type="text" name="buscar" placeholder="Escribí DNI (solo números) o Apellido..." autofocus>
-          <button type="submit">Buscar</button>
-        </div>
-        <div class="muted" style="margin-top:6px">Tip: también podés escribir parte del <b>nombre</b>.</div>
-      </form>
-
-      <?php if (!empty($coincidencias)): ?>
-        <h3 style="margin-top:16px">Coincidencias</h3>
-        <table>
-          <thead><tr><th>Apellido y Nombre</th><th>DNI</th><th>Acción</th></tr></thead>
-          <tbody>
-            <?php foreach ($coincidencias as $c): ?>
-              <tr>
-                <td><?= h(($c['apellido']??'').' '.($c['nombre']??'')) ?></td>
-                <td><?= h($c['dni'] ?? '') ?></td>
-                <td><a class="btn" href="<?= h($_SERVER['PHP_SELF'].'?cliente='.$c['id']) ?>">Seleccionar</a></td>
-              </tr>
-            <?php endforeach; ?>
-          </tbody>
-        </table>
-      <?php endif; ?>
+      <h2>🔎 Buscar cliente (en vivo)</h2>
+      <div class="muted">Escribí <b>DNI</b>, <b>apellido</b> o <b>nombre</b>. Resultados al instante.</div>
+      <input id="liveSearch" type="text" placeholder="Ej: 30123456 o 'Gomez' o 'Juan'..." autofocus>
+      <div id="liveResults" class="muted" style="margin-top:10px">Comenzá a escribir…</div>
     </div>
+
+    <script>
+      (function(){
+        const inp  = document.getElementById('liveSearch');
+        const box  = document.getElementById('liveResults');
+        let t = null;
+
+        function esc(s){ return (s||'').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m])); }
+
+        function renderRows(rows){
+          if (!rows || rows.length===0){
+            box.innerHTML = '<div class="muted">Sin resultados.</div>';
+            return;
+          }
+          let html = '<table><thead><tr><th>Apellido y Nombre</th><th>DNI</th><th>Acción</th></tr></thead><tbody>';
+          rows.forEach(r=>{
+            const nom = esc((r.apellido||'')+' '+(r.nombre||''));
+            html += `<tr>
+              <td>${nom}</td>
+              <td>${esc(r.dni||'')}</td>
+              <td><a class="btn" href="?cliente=${r.id}">Seleccionar</a></td>
+            </tr>`;
+          });
+          html += '</tbody></table>';
+          box.innerHTML = html;
+        }
+
+        async function buscar(term){
+          if (!term || term.trim()===''){ box.innerHTML='Comenzá a escribir…'; return; }
+          try{
+            const res  = await fetch('buscar_clientes_ajax.php?q='+encodeURIComponent(term));
+            const text = await res.text(); // leemos texto para poder mostrar errores HTML si los hay
+            try { 
+              const data = JSON.parse(text);
+              renderRows(Array.isArray(data)?data:[]);
+            } catch(e){
+              box.innerHTML = '<div style="color:#ff6b6b">Error al buscar.<br><small>Respuesta no válida del servidor:</small><pre style="white-space:pre-wrap;max-height:180px;overflow:auto;border:1px solid #400;padding:6px;border-radius:6px">'+esc(text.slice(0,1500))+'</pre></div>';
+            }
+          }catch(e){
+            box.innerHTML = '<div style="color:#ff6b6b">Error de red.</div>';
+          }
+        }
+
+        inp.addEventListener('input', ()=>{ clearTimeout(t); t = setTimeout(()=>buscar(inp.value), 250); });
+
+        // Enter abre el 1º resultado si existe
+        inp.addEventListener('keydown', async (ev)=>{
+          if (ev.key==='Enter'){
+            ev.preventDefault();
+            try{
+              const res = await fetch('buscar_clientes_ajax.php?q='+encodeURIComponent(inp.value));
+              const data = await res.json();
+              if (Array.isArray(data) && data.length>0){
+                window.location = '?cliente='+data[0].id;
+              }
+            }catch(_){}
+          }
+        });
+      })();
+    </script>
   </body></html>
   <?php
   exit;
@@ -234,11 +278,11 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
       ");
       $st->bind_param(
-        'ssssssssssssss',
+        'isssssssssssss',
         $cid, $fch, $ps, $alt, $rem, $pant, $calz, $pat, $td, $med, $ob, $int, $dur, $kc
       );
-      $cid = (string)$target_cliente_id;
-      $fch = (string)$fecha_in;
+      $cid = (int)$target_cliente_id;
+      $fch = $fecha_in;
       $ps  = isset($peso)   ? (string)$peso   : null;
       $alt = isset($altura) ? (string)$altura : null;
       $rem = $remera; $pant=$pantalon; $calz=$calzado; $pat=$patologias; $td=$tipo_diab; $med=$medic; $ob=$obs; $int=$intensidad;
@@ -263,7 +307,8 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
               UPDATE datos_fisicos
               SET peso=?, altura=?, talle_remera=?, talle_pantalon=?, talle_calzado=?, patologias=?, tipo_diabetes=?, medicaciones=?, observaciones=?, intensidad=?, duracion_min=?, gasto_calorico_kcal=?
               WHERE id=? AND cliente_id=?");
-            $st->bind_param('ssssssssssssss',
+            $st->bind_param(
+              'ssssssssssssii',
               $ps, $alt, $rem, $pant, $calz, $pat, $td, $med, $ob, $int, $dur, $kc, $idu, $clid
             );
             $ps  = isset($peso)   ? (string)$peso   : null;
@@ -271,8 +316,8 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
             $rem = $remera; $pant=$pantalon; $calz=$calzado; $pat=$patologias; $td=$tipo_diab; $med=$medic; $ob=$obs; $int=$intensidad;
             $dur = isset($duracion) ? (string)$duracion : null;
             $kc  = isset($kcal) ? (string)$kcal : null;
-            $idu = (string)$id_upd;
-            $clid= (string)$target_cliente_id;
+            $idu = $id_upd;
+            $clid= (int)$target_cliente_id;
 
             if ($st->execute()) { $mensaje .= ok('Registro actualizado.'); }
             else { $mensaje .= err('Error al actualizar.'); }
@@ -457,7 +502,7 @@ if ($is_prof && is_file(__DIR__.'/menu_profesor.php')) { include __DIR__.'/menu_
 
   <?php if (!empty($historial)): ?>
     <div class="card">
-      <h3 style="margin-top:0">📌 Último registro</h3>
+      <h3 style="margin-top:0)">📌 Último registro</h3>
       <div class="grid">
         <div>
           <div>Peso: <b><?= h($ultimo['peso'] ?? '—') ?> kg</b></div>
