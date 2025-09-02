@@ -16,28 +16,47 @@ if (!isset($conexion) || !($conexion instanceof mysqli)) {
 if (function_exists('mysqli_report')) { mysqli_report(MYSQLI_REPORT_OFF); }
 @$conexion->set_charset('utf8mb4');
 
+/* ================= Helpers ================= */
 function h($s){ return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); }
 function money($n){ return number_format((float)$n, 2, ',', '.'); }
 
-/* índices únicos para upserts */
-$conexion->query("ALTER TABLE plan_permisos ADD UNIQUE KEY uq_plan_feature (plan_id, feature)");
-$conexion->query("ALTER TABLE gimnasios_permisos ADD UNIQUE KEY uq_gym_feature (gimnasio_id, feature)");
+/* ====== Utilidades seguras de esquema ====== */
+function ensure_unique_index(mysqli $db, string $table, string $indexName, array $cols): void {
+  $t = $db->real_escape_string($table);
+  $i = $db->real_escape_string($indexName);
+  $exists = false;
+  if ($res = $db->query("SHOW INDEX FROM `$t` WHERE Key_name = '$i'")) {
+    $exists = ($res->num_rows > 0);
+    $res->free();
+  }
+  if (!$exists) {
+    $colsEsc = array_map(fn($c)=>"`".str_replace("`","``",$c)."`", $cols);
+    @ $db->query("ALTER TABLE `$t` ADD UNIQUE KEY `$i` (".implode(',', $colsEsc).")");
+  }
+}
 
-/* historial pagos (por si falta) */
-$conexion->query("
-  CREATE TABLE IF NOT EXISTS gimnasios_pagos (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    gimnasio_id INT NOT NULL,
-    fecha_pago DATE NOT NULL,
-    monto DECIMAL(12,2) NOT NULL DEFAULT 0,
-    metodo VARCHAR(32) NOT NULL DEFAULT 'Transferencia',
-    referencia VARCHAR(128) DEFAULT NULL,
-    meses INT NOT NULL DEFAULT 1,
-    observaciones TEXT,
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    INDEX (gimnasio_id)
-  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-");
+function ensure_gimnasios_pagos_table(mysqli $db): void {
+  @ $db->query("
+    CREATE TABLE IF NOT EXISTS gimnasios_pagos (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      gimnasio_id INT NOT NULL,
+      fecha_pago DATE NOT NULL,
+      monto DECIMAL(12,2) NOT NULL DEFAULT 0,
+      metodo VARCHAR(32) NOT NULL DEFAULT 'Transferencia',
+      referencia VARCHAR(128) DEFAULT NULL,
+      meses INT NOT NULL DEFAULT 1,
+      observaciones TEXT,
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      INDEX (gimnasio_id),
+      INDEX (fecha_pago)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+  ");
+}
+
+/* ====== Asegurar índices/tablas sin romper en cada carga ====== */
+ensure_unique_index($conexion, 'plan_permisos',      'uq_plan_feature', ['plan_id','feature']);
+ensure_unique_index($conexion, 'gimnasios_permisos', 'uq_gym_feature',  ['gimnasio_id','feature']);
+ensure_gimnasios_pagos_table($conexion);
 
 /* ===== Acciones ===== */
 if (isset($_POST['act']) && $_POST['act'] === 'registrar_pago') {
@@ -46,6 +65,7 @@ if (isset($_POST['act']) && $_POST['act'] === 'registrar_pago') {
   $fecha = preg_match('/^\d{4}-\d{2}-\d{2}$/', $fecha_raw) ? $fecha_raw : date('Y-m-d');
 
   $monto_raw = trim($_POST['monto'] ?? '0');
+  // Normaliza: "1.234,56" -> "1234.56"
   $monto_norm = str_replace(['.', ','], ['', '.'], $monto_raw);
   if (!is_numeric($monto_norm)) { $monto_norm = '0'; }
   $monto = (float)$monto_norm;
@@ -58,39 +78,43 @@ if (isset($_POST['act']) && $_POST['act'] === 'registrar_pago') {
   if ($gymId <= 0) { $_SESSION['flash_err']="❌ Gimnasio inválido."; header("Location: panel_gimnasios.php"); exit; }
   if ($monto < 0)  { $_SESSION['flash_err']="❌ Monto inválido.";   header("Location: panel_gimnasios.php"); exit; }
 
-  $stmt = $conexion->prepare("
-    INSERT INTO gimnasios_pagos (gimnasio_id, fecha_pago, monto, metodo, referencia, meses, observaciones)
-    VALUES (?,?,?,?,?,?,?)
-  ");
-  if (!$stmt || !$stmt->bind_param('isdssis', $gymId, $fecha, $monto, $metodo, $ref, $meses, $obs) || !$stmt->execute()) {
-    $_SESSION['flash_err'] = "❌ No se pudo guardar el pago: ".($stmt?$stmt->error:$conexion->error);
-    if ($stmt) $stmt->close();
-    header("Location: panel_gimnasios.php"); exit;
-  }
-  $stmt->close();
+  $conexion->begin_transaction();
+  try {
+    $stmt = $conexion->prepare("
+      INSERT INTO gimnasios_pagos (gimnasio_id, fecha_pago, monto, metodo, referencia, meses, observaciones)
+      VALUES (?,?,?,?,?,?,?)
+    ");
+    if (!$stmt) throw new Exception("Prep pagos: ".$conexion->error);
+    // tipos: i s d s s i s
+    if (!$stmt->bind_param('isdssis', $gymId, $fecha, $monto, $metodo, $ref, $meses, $obs)) throw new Exception("Bind pagos: ".$stmt->error);
+    if (!$stmt->execute()) throw new Exception("Exec pagos: ".$stmt->error);
+    $stmt->close();
 
-  if ($meses > 0) {
-    $sqlUp = "
-      UPDATE gimnasios
-      SET fecha_vencimiento = DATE_ADD(
-        CASE
-          WHEN COALESCE(STR_TO_DATE(NULLIF(CONCAT(fecha_vencimiento),'0000-00-00'),'%Y-%m-%d'), DATE('1000-01-01')) < CURDATE()
-            THEN CURDATE()
-          ELSE STR_TO_DATE(NULLIF(CONCAT(fecha_vencimiento),'0000-00-00'),'%Y-%m-%d')
-        END, INTERVAL ? MONTH
-      )
-      WHERE id = ?
-    ";
-    $st2 = $conexion->prepare($sqlUp);
-    if (!$st2 || !$st2->bind_param('ii', $meses, $gymId) || !$st2->execute()) {
-      $_SESSION['flash_err'] = "⚠️ Pago guardado, pero no se pudo actualizar vencimiento: ".($st2?$st2->error:$conexion->error);
-      if ($st2) $st2->close();
-      header("Location: panel_gimnasios.php"); exit;
+    if ($meses > 0) {
+      $sqlUp = "
+        UPDATE gimnasios
+        SET fecha_vencimiento = DATE_ADD(
+          CASE
+            WHEN COALESCE(STR_TO_DATE(NULLIF(CONCAT(fecha_vencimiento),'0000-00-00'),'%Y-%m-%d'), DATE('1000-01-01')) < CURDATE()
+              THEN CURDATE()
+            ELSE STR_TO_DATE(NULLIF(CONCAT(fecha_vencimiento),'0000-00-00'),'%Y-%m-%d')
+          END, INTERVAL ? MONTH
+        )
+        WHERE id = ?
+      ";
+      $st2 = $conexion->prepare($sqlUp);
+      if (!$st2) throw new Exception("Prep venc: ".$conexion->error);
+      if (!$st2->bind_param('ii', $meses, $gymId)) throw new Exception("Bind venc: ".$st2->error);
+      if (!$st2->execute()) throw new Exception("Exec venc: ".$st2->error);
+      $st2->close();
     }
-    $st2->close();
-  }
 
-  $_SESSION['flash_ok'] = "✅ Pago registrado".($meses>0 ? " y vencimiento +{$meses} mes/es" : "");
+    $conexion->commit();
+    $_SESSION['flash_ok'] = "✅ Pago registrado".($meses>0 ? " y vencimiento +{$meses} mes/es" : "");
+  } catch (Throwable $e) {
+    $conexion->rollback();
+    $_SESSION['flash_err'] = "❌ No se pudo guardar: ".h($e->getMessage());
+  }
   header("Location: panel_gimnasios.php"); exit;
 }
 
@@ -116,7 +140,11 @@ if (isset($_POST['act']) && $_POST['act']==='sync_plan') {
     $st->execute(); $st->bind_result($planId); $st->fetch(); $st->close();
   }
   if ($gymId>0 && $planId>0) {
-    $conexion->query("DELETE FROM gimnasios_permisos WHERE gimnasio_id = {$gymId}");
+    // Limpiar overrides y copiar plan
+    if (!$conexion->query("DELETE FROM gimnasios_permisos WHERE gimnasio_id = {$gymId}")) {
+      $_SESSION['flash_err'] = "❌ No se pudo limpiar overrides: ".$conexion->error;
+      header("Location: panel_gimnasios.php"); exit;
+    }
     $sql = "
       INSERT INTO gimnasios_permisos (gimnasio_id, feature, enabled)
       SELECT ?, pp.feature, pp.enabled
@@ -133,12 +161,7 @@ if (isset($_POST['act']) && $_POST['act']==='sync_plan') {
   header("Location: panel_gimnasios.php"); exit;
 }
 
-/* ===== Guardar overrides (TRI-ESTADO) =====
-   state[feature] = inherit | on | off
-   - inherit: sin fila (usa plan)
-   - on:      override enabled=1
-   - off:     override enabled=0 (bloquea aunque el plan esté en 1)
-*/
+/* ===== Guardar overrides (TRI-ESTADO) ===== */
 if (isset($_POST['act']) && $_POST['act']==='save_perms') {
   $gymId = (int)($_POST['gimnasio_id'] ?? 0);
   $state = isset($_POST['state']) && is_array($_POST['state']) ? $_POST['state'] : [];
@@ -155,7 +178,6 @@ if (isset($_POST['act']) && $_POST['act']==='save_perms') {
 
   $conexion->begin_transaction();
   try {
-    // borrar TODAS las filas del gym y reinsertar lo que corresponda
     $del = $conexion->prepare("DELETE FROM gimnasios_permisos WHERE gimnasio_id=?");
     $del->bind_param('i', $gymId);
     if (!$del->execute()) throw new Exception($del->error);
@@ -164,8 +186,8 @@ if (isset($_POST['act']) && $_POST['act']==='save_perms') {
     $ins = $conexion->prepare("INSERT INTO gimnasios_permisos (gimnasio_id, feature, enabled) VALUES (?,?,?)
                                ON DUPLICATE KEY UPDATE enabled=VALUES(enabled)");
     foreach ($clean as $f => $v) {
-      if ($v === 'inherit') continue;             // sin fila → hereda plan
-      $en = ($v === 'on') ? 1 : 0;                // on/off explícito
+      if ($v === 'inherit') continue;
+      $en = ($v === 'on') ? 1 : 0;
       $ins->bind_param('isi', $gymId, $f, $en);
       if (!$ins->execute()) throw new Exception($ins->error);
     }
@@ -195,19 +217,51 @@ $planes_rs = $conexion->query("SELECT id, nombre FROM planes_gimnasio ORDER BY n
 $planes_map = [];
 if ($planes_rs) { while ($r = $planes_rs->fetch_assoc()) { $planes_map[(int)$r['id']] = $r['nombre']; } $planes_rs->free(); }
 
-/* KPIs */
+/* ============ KPIs (por fecha real) ============ */
 $metrics = ['activos'=>0,'vencidos'=>0,'suspendidos'=>0,'por_vencer15'=>0,'pagos30'=>0.0,'feat_on'=>0];
-$cntRs = $conexion->query("SELECT estado, COUNT(*) c FROM gimnasios GROUP BY estado");
-if ($cntRs) { while ($r=$cntRs->fetch_assoc()) { $metrics[$r['estado']] = (int)$r['c']; } $cntRs->free(); }
-$pvRs = $conexion->query("
+
+/* Suspendidos (por estado explícito) */
+if ($r = $conexion->query("SELECT COUNT(*) c FROM gimnasios WHERE estado='suspendido'")) {
+  if ($row = $r->fetch_assoc()) $metrics['suspendidos'] = (int)$row['c'];
+  $r->free();
+}
+
+/* Activos por fecha (no suspendidos) */
+$activosSql = "
   SELECT COUNT(*) c
   FROM gimnasios
-  WHERE STR_TO_DATE(NULLIF(CONCAT(fecha_vencimiento),'0000-00-00'),'%Y-%m-%d') IS NOT NULL
+  WHERE estado <> 'suspendido'
+    AND STR_TO_DATE(NULLIF(CONCAT(fecha_vencimiento),'0000-00-00'),'%Y-%m-%d') IS NOT NULL
+    AND STR_TO_DATE(NULLIF(CONCAT(fecha_vencimiento),'0000-00-00'),'%Y-%m-%d') >= CURDATE()
+";
+/* Vencidos por fecha (no suspendidos) */
+$vencidosSql = "
+  SELECT COUNT(*) c
+  FROM gimnasios
+  WHERE estado <> 'suspendido'
+    AND STR_TO_DATE(NULLIF(CONCAT(fecha_vencimiento),'0000-00-00'),'%Y-%m-%d') IS NOT NULL
+    AND STR_TO_DATE(NULLIF(CONCAT(fecha_vencimiento),'0000-00-00'),'%Y-%m-%d') < CURDATE()
+";
+/* Por vencer en 15 días (no suspendidos) */
+$porVencerSql = "
+  SELECT COUNT(*) c
+  FROM gimnasios
+  WHERE estado <> 'suspendido'
+    AND STR_TO_DATE(NULLIF(CONCAT(fecha_vencimiento),'0000-00-00'),'%Y-%m-%d') IS NOT NULL
     AND DATEDIFF(STR_TO_DATE(NULLIF(CONCAT(fecha_vencimiento),'0000-00-00'),'%Y-%m-%d'), CURDATE()) BETWEEN 0 AND 15
-");
-if ($pvRs && $row=$pvRs->fetch_assoc()) { $metrics['por_vencer15'] = (int)$row['c']; $pvRs->free(); }
-$pgRs = $conexion->query("SELECT COALESCE(SUM(monto),0) s FROM gimnasios_pagos WHERE fecha_pago >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)");
-if ($pgRs && $row=$pgRs->fetch_assoc()) { $metrics['pagos30'] = (float)$row['s']; $pgRs->free(); }
+";
+foreach ([['activos',$activosSql], ['vencidos',$vencidosSql], ['por_vencer15',$porVencerSql]] as [$k,$sqlTmp]) {
+  if ($res = $conexion->query($sqlTmp)) {
+    if ($row = $res->fetch_assoc()) $metrics[$k] = (int)$row['c'];
+    $res->free();
+  }
+}
+
+/* Pagos últimos 30 días */
+if ($pgRs = $conexion->query("SELECT COALESCE(SUM(monto),0) s FROM gimnasios_pagos WHERE fecha_pago >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)")) {
+  if ($row=$pgRs->fetch_assoc()) $metrics['pagos30'] = (float)$row['s'];
+  $pgRs->free();
+}
 
 /* KPI de feature efectiva ON */
 $featCountEsc = $conexion->real_escape_string($featCount);
@@ -219,10 +273,12 @@ $kpiSql = "
     LEFT JOIN gimnasios_permisos gp ON gp.gimnasio_id = g.id AND gp.feature = '{$featCountEsc}'
   ) x WHERE en = 1
 ";
-$kpiRs = $conexion->query($kpiSql);
-if ($kpiRs && $r=$kpiRs->fetch_assoc()) { $metrics['feat_on'] = (int)$r['c']; $kpiRs->free(); }
+if ($kpiRs = $conexion->query($kpiSql)) {
+  if ($r=$kpiRs->fetch_assoc()) $metrics['feat_on'] = (int)$r['c'];
+  $kpiRs->free();
+}
 
-/* Listado */
+/* ============ Listado ============ */
 $where = [];
 if ($q !== '') { $qesc = $conexion->real_escape_string($q); $where[] = "(g.nombre LIKE '%{$qesc}%' OR g.email LIKE '%{$qesc}%' OR g.telefono LIKE '%{$qesc}%')"; }
 if (in_array($estadoF, ['activo','vencido','suspendido'], true)) { $where[] = "g.estado = '".$conexion->real_escape_string($estadoF)."'"; }
@@ -241,11 +297,29 @@ $sql = "
     p.nombre AS nombre_plan,
     STR_TO_DATE(NULLIF(CONCAT(g.fecha_vencimiento),'0000-00-00'),'%Y-%m-%d') AS fv_date,
     DATEDIFF(STR_TO_DATE(NULLIF(CONCAT(g.fecha_vencimiento),'0000-00-00'),'%Y-%m-%d'), CURDATE()) AS dias_restantes,
-    (SELECT COALESCE(SUM(monto),0) FROM gimnasios_pagos gp WHERE gp.gimnasio_id = g.id) AS total_pagado
+    /* Pagos acumulados históricos */
+    (SELECT COALESCE(SUM(monto),0) FROM gimnasios_pagos gp WHERE gp.gimnasio_id = g.id) AS total_pagado,
+    /* Último pago */
+    (SELECT MAX(fecha_pago) FROM gimnasios_pagos gp2 WHERE gp2.gimnasio_id = g.id) AS ultima_fecha_pago,
+    /* Pagos últimos 12 meses */
+    (SELECT COALESCE(SUM(monto),0) FROM gimnasios_pagos gp3 
+      WHERE gp3.gimnasio_id = g.id AND gp3.fecha_pago >= DATE_SUB(CURDATE(), INTERVAL 12 MONTH)
+    ) AS pagos_12m,
+    /* Estado computado por fecha (prioriza suspendido) */
+    CASE
+      WHEN g.estado = 'suspendido' THEN 'suspendido'
+      WHEN STR_TO_DATE(NULLIF(CONCAT(g.fecha_vencimiento),'0000-00-00'),'%Y-%m-%d') IS NULL THEN 'vencido'
+      WHEN STR_TO_DATE(NULLIF(CONCAT(g.fecha_vencimiento),'0000-00-00'),'%Y-%m-%d') < CURDATE() THEN 'vencido'
+      ELSE 'activo'
+    END AS estado_computado
   FROM gimnasios g
   LEFT JOIN planes_gimnasio p ON p.id = g.plan_id
   {$cond}
-  ORDER BY (g.estado='activo') DESC, (fv_date IS NULL), fv_date ASC, g.nombre ASC
+  ORDER BY 
+    (estado_computado='activo') DESC,
+    (fv_date IS NULL), 
+    fv_date ASC, 
+    g.nombre ASC
 ";
 $listado = $conexion->query($sql);
 if (!$listado) { die("Error al listar: ".$conexion->error); }
@@ -278,8 +352,10 @@ function fetch_effective_enable(mysqli $db, int $gymId, int $planId): array {
     }
   }
   $st->close();
-  foreach (array_values(_perm_map()) as $feat) {
-    if (!isset($eff[$feat])) $eff[$feat] = ['effective'=>0,'plan'=>null,'override'=>null];
+  if (function_exists('_perm_map')) {
+    foreach (array_values(_perm_map()) as $feat) {
+      if (!isset($eff[$feat])) $eff[$feat] = ['effective'=>0,'plan'=>null,'override'=>null];
+    }
   }
   ksort($eff);
   return $eff;
@@ -385,10 +461,11 @@ function fetch_effective_enable(mysqli $db, int $gymId, int $planId): array {
       <option value="30" <?= $porvF===30?'selected':''; ?>>≤ 30 días</option>
     </select>
     <select name="feat_count" title="Feature para KPI (efectiva)">
-      <?php $allFeatures = array_unique(array_values(_perm_map())); sort($allFeatures);
-      foreach ($allFeatures as $F): ?>
-        <option value="<?= h($F) ?>" <?= $featCount===$F?'selected':''; ?>>KPI: <?= h($F) ?></option>
-      <?php endforeach; ?>
+      <?php if (function_exists('_perm_map')) { $allFeatures = array_unique(array_values(_perm_map())); sort($allFeatures);
+        foreach ($allFeatures as $F): ?>
+          <option value="<?= h($F) ?>" <?= $featCount===$F?'selected':''; ?>>KPI: <?= h($F) ?></option>
+        <?php endforeach;
+      } ?>
       <option value="membresias" <?= $featCount==='membresias'?'selected':''; ?>>KPI: membresias</option>
     </select>
     <div style="grid-column:1 / -1">
@@ -407,7 +484,9 @@ function fetch_effective_enable(mysqli $db, int $gymId, int $planId): array {
         <th>Estado</th>
         <th>Vencimiento</th>
         <th>Contacto</th>
-        <th>Pagado (hist.)</th>
+        <th>Pagos (hist.)</th>
+        <th>Último pago</th>
+        <th>Pagos 12m</th>
         <th>Acciones</th>
       </tr>
     </thead>
@@ -425,19 +504,24 @@ function fetch_effective_enable(mysqli $db, int $gymId, int $planId): array {
           else                    { $pill = '<span class="pill ok">'.$dias.'d</span>'; }
         }
 
-        $planId = (int)($g['plan_id'] ?? 0);
-        $gymId  = (int)$g['id'];
-        $effMap = fetch_effective_enable($conexion, $gymId, $planId); // feature => [effective,plan,override]
+        $estComp = $g['estado_computado'] ?? ($g['estado'] ?? '');
+        $al_dia  = ($estComp==='activo' && $dias !== null && $dias >= 0);
+        $planId  = (int)($g['plan_id'] ?? 0);
+        $gymId   = (int)$g['id'];
+        $effMap  = fetch_effective_enable($conexion, $gymId, $planId);
       ?>
       <tr>
         <td>
           <div style="font-weight:bold"><?= h($g['nombre']) ?></div>
-          <div style="color:#bbb; font-size:12px">Alias: <?= h($g['alias'] ?? '—') ?> | CUIT: <?= h($g['cuit'] ?? '—') ?></div>
+          <div style="color:#bbb; font-size:12px">
+            Alias: <?= h($g['alias'] ?? '—') ?> | CUIT: <?= h($g['cuit'] ?? '—') ?>
+            <?= $al_dia ? '<span class="chip on">Al día</span>' : '<span class="chip off">Con deuda/por vencer</span>' ?>
+          </div>
         </td>
         <td><?= h($g['nombre_plan'] ?? '—') ?></td>
         <td>
-          <?php $est = $g['estado'] ?? ''; $badge = $est==='activo' ? 'ok' : ($est==='vencido' ? 'bad' : 'warn'); ?>
-          <span class="pill <?= $badge ?>"><?= h(ucfirst($est ?: '—')) ?></span>
+          <?php $badge = $estComp==='activo' ? 'ok' : ($estComp==='vencido' ? 'bad' : 'warn'); ?>
+          <span class="pill <?= $badge ?>"><?= h(ucfirst($estComp ?: '—')) ?></span>
         </td>
         <td><div><?= $vencTxt ?></div><div><?= $pill ?></div></td>
         <td>
@@ -445,7 +529,9 @@ function fetch_effective_enable(mysqli $db, int $gymId, int $planId): array {
           <div style="color:#bbb"><?= h($g['telefono'] ?? '—') ?></div>
         </td>
         <td>$<?= money($g['total_pagado']) ?></td>
-        <td style="min-width:340px">
+        <td><?= $g['ultima_fecha_pago'] ? h(date('d/m/Y', strtotime($g['ultima_fecha_pago']))) : '—' ?></td>
+        <td>$<?= money($g['pagos_12m']) ?></td>
+        <td style="min-width:360px">
           <details>
             <summary>⚙️ Acciones</summary>
             <div class="card" style="margin-top:8px">
@@ -510,12 +596,9 @@ function fetch_effective_enable(mysqli $db, int $gymId, int $planId): array {
                         $pln = $meta['plan'];        // null|0|1
                         $ovr = $meta['override'];    // null|0|1
                         $eff = $meta['effective'];   // 0|1
-
-                        // valor seleccionado del select
                         $selected = 'inherit';
                         if ($ovr === 1) $selected = 'on';
                         if ($ovr === 0) $selected = 'off';
-
                         $chipPlan = is_null($pln) ? '<span class="chip">Plan: —</span>' : ('<span class="chip '.($pln? 'on':'off').'">Plan: '.($pln?'ON':'OFF').'</span>');
                         $chipEff  = '<span class="chip '.($eff? 'on':'off').'">Efectivo: '.($eff?'ON':'OFF').'</span>';
                     ?>
