@@ -34,5 +34,18 @@
       "target": "portable",
       "icon": "resources/icono.ico"
     }
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/cejasflia10/multi_gimnasio.git"
+  },
+  "keywords": [],
+  "bugs": {
+    "url": "https://github.com/cejasflia10/multi_gimnasio/issues"
+  },
+  "homepage": "https://github.com/cejasflia10/multi_gimnasio#readme",
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^5.1.0"
   }
 }

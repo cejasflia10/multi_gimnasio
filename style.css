@@ -1,227 +1,258 @@
-html, body {
-    margin: 0;
-    padding: 0;
-    overflow: hidden;
-    height: 100%;
-    background-color: #000;
-    color: gold;
-    font-family: Arial, sans-serif;
+/* =========================
+   Variables & Reset
+========================= */
+:root{
+  --bg:#000;
+  --fg:gold;
+  --fg-alt:#fff;
+  --pri:#d4af37;          /* hover de botón (golden) */
+  --accent:#a00;
+  --card:#111;
+  --line:#222;
+  --line-strong:#333;
+  --sidebar-w:260px;
+
+  --red:#c62828;
+  --blue:#1565c0;
 }
 
-body {
-    margin: 0;
-    background-color: #000;
-    color: gold;
-    font-family: Arial, sans-serif;
+*{ box-sizing:border-box }
+html, body{
+  margin:0;
+  padding:0;
+  height:100%;
+  background-color:var(--bg);
+  color:var(--fg);
+  font-family:Arial, Helvetica, sans-serif;
+  overflow-x:hidden;
 }
 
-.sidebar {
-    width: 260px;
-    position: fixed;
-    top: 0;
-    left: 0;
-    background-color: #111;
-    height: 100%;
-    padding-top: 20px;
+/* Accesibilidad foco */
+a:focus, button:focus, input:focus, select:focus{
+  outline:2px dashed var(--fg);
+  outline-offset:2px;
 }
 
-.sidebar h2 {
-    text-align: center;
-    color: gold;
-    margin-bottom: 20px;
+/* =========================
+   Layout
+========================= */
+.sidebar{
+  width:var(--sidebar-w);
+  position:fixed;
+  inset:0 auto 0 0;      /* top:0; right:auto; bottom:0; left:0 */
+  background-color:var(--card);
+  padding:20px 0;
+  border-right:1px solid var(--line);
+}
+.sidebar h2{
+  text-align:center;
+  color:var(--fg);
+  margin:0 16px 20px;
+  font-size:18px;
+  font-weight:700;
+}
+.sidebar a{
+  display:block;
+  color:var(--fg);
+  text-decoration:none;
+  padding:12px 20px;
+  transition:background .25s ease;
+}
+.sidebar a:hover{ background-color:#1a1a1a; }
+
+.contenido{
+  margin-left:calc(var(--sidebar-w) + 10px);
+  padding:20px;
+  max-width:900px;
 }
 
-.sidebar a {
-    display: block;
-    color: gold;
-    text-decoration: none;
-    padding: 12px 20px;
-    transition: background 0.3s;
+/* =========================
+   Tipografía & Formularios
+========================= */
+h2{
+  text-align:center;
+  margin:0 0 16px 0;
+  color:var(--fg);
 }
 
-.sidebar a:hover {
-    background-color: #222;
+form label{
+  display:block;
+  margin:15px 0 5px;
+  color:var(--fg);
+}
+form input, form select{
+  width:100%;
+  padding:10px;
+  margin-bottom:15px;
+  background:var(--card);
+  border:1px solid var(--fg);
+  color:var(--fg-alt);
+  border-radius:5px;
+}
+form button{
+  padding:10px 20px;
+  background-color:var(--fg);
+  color:#000;
+  border:0;
+  border-radius:5px;
+  cursor:pointer;
+  font-weight:bold;
+  transition:background .2s ease;
+}
+form button:hover{ background-color:var(--pri); }
+
+/* =========================
+   Tablas
+========================= */
+.tabla-responsive{ overflow-x:auto; }
+
+table{
+  width:100%;
+  border-collapse:collapse;
+  background:var(--card);
+  margin-top:20px;
+  min-width:640px; /* ayuda en móviles con scroll horizontal */
+}
+table th, table td{
+  border:1px solid var(--line-strong);
+  padding:10px;
+  color:var(--fg-alt);
+  text-align:left;
+  vertical-align:middle;
+}
+table th{
+  background-color:#1a1a1a;
+  color:var(--fg);
+  font-weight:700;
 }
 
-.contenido {
-    margin-left: 270px;
-    padding: 20px;
-    max-width: 900px;
+/* =========================
+   Footer móvil (barra app)
+========================= */
+.mobile-footer{
+  position:fixed;
+  bottom:0; left:0; right:0;
+  background-color:var(--bg);
+  border-top:2px solid var(--fg);
+  display:none;           /* visible sólo en móviles */
+  justify-content:space-around;
+  padding:6px 0;
+  z-index:1000;
+}
+.mobile-footer a{
+  color:var(--fg);
+  text-decoration:none;
+  font-size:11px;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+}
+.mobile-footer i{
+  font-size:16px;
+  margin-bottom:2px;
 }
 
-h2 {
-    text-align: center;
-    margin-top: 0;
-    color: gold;
+/* =========================
+   Cronómetro / Rincones
+========================= */
+.cronometro-box{
+  display:flex;
+  justify-content:space-between;
+  align-items:stretch;
+  margin:40px auto;
+  max-width:900px;
+  gap:12px;
+}
+.rincón{
+  flex:1;
+  display:flex;
+  flex-direction:column;
+  justify-content:center;
+  align-items:center;
+  font-size:24px;
+  font-weight:bold;
+  padding:20px;
+  min-height:200px;
+  border-radius:8px;
+}
+.rojo{ background-color:var(--red); color:#fff; }
+.azul{ background-color:var(--blue); color:#fff; }
+.nombre{
+  font-size:20px;
+  margin-top:10px;
+  color:var(--fg);
+  text-align:center;
 }
 
-form label {
-    display: block;
-    margin-top: 15px;
-    margin-bottom: 5px;
-    color: gold;
+/* =========================
+   Modal genérico (p/ captura)
+========================= */
+.overlay{
+  position:fixed;
+  inset:0;
+  background:rgba(0,0,0,.72);
+  display:none;
+  align-items:center;
+  justify-content:center;
+  z-index:9999;
+}
+.overlay.show{ display:flex; }
+.modal{
+  width:min(720px,95vw);
+  background:#0b0b0b;
+  border:1px solid var(--line);
+  border-radius:12px;
+  box-shadow:0 10px 30px rgba(0,0,0,.5);
+  padding:16px;
+  color:#ddd;
+}
+.modal h2{
+  margin:0 0 8px 0;
+  font-size:20px;
+  color:#fff;
+}
+.actions{
+  display:flex;
+  justify-content:flex-end;
+  gap:8px;
+  margin-top:12px;
+}
+.btn-sec{
+  background:#333;
+  color:#ddd;
+  border:none;
+  border-radius:6px;
+  padding:8px 10px;
+  cursor:pointer;
+  font-weight:bold;
 }
 
-form input, form select {
-    width: 100%;
-    padding: 10px;
-    margin-bottom: 15px;
-    background: #111;
-    border: 1px solid gold;
-    color: white;
-    border-radius: 5px;
-}
-
-form button {
-    padding: 10px 20px;
-    background-color: gold;
-    color: #000;
-    border: none;
-    border-radius: 5px;
-    cursor: pointer;
-    font-weight: bold;
-}
-
-form button:hover {
-    background-color: #d4af37;
-}
-
-.tabla-responsive {
-    overflow-x: auto;
-}
-
-table {
-    width: 100%;
-    border-collapse: collapse;
-    background: #111;
-    margin-top: 20px;
-}
-
-table th, table td {
-    border: 1px solid #333;
-    padding: 10px;
-    color: white;
-    text-align: left;
-}
-
-table th {
-    background-color: #222;
-    color: gold;
-}
-
-@media (max-width: 768px) {
-    .sidebar {
-        width: 100%;
-        height: auto;
-        position: relative;
-    }
-
-    .contenido {
-        margin-left: 0;
-        padding: 10px;
-    }
-
-    table {
-        font-size: 14px;
-    }
-}
-
-/* Móviles */
-@media (max-width: 768px) {
-    .contenido {
-        margin-left: 0 !important;
-        padding: 10px;
-    }
-
-    .card {
-        width: 100%;
-    }
-
-    table {
-        min-width: 100%;
-        font-size: 14px;
-    }
-
-    .mobile-footer {
-        position: fixed;
-        bottom: 0;
-        left: 0;
-        width: 100%;
-        background-color: #000;
-        border-top: 2px solid gold;
-        display: flex;
-        justify-content: space-around;
-        padding: 6px 0;
-        z-index: 1000;
-    }
-
-    .mobile-footer a {
-        color: gold;
-        text-decoration: none;
-        font-size: 11px;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-    }
-
-    .mobile-footer i {
-        font-size: 16px;
-        margin-bottom: 2px;
-    }
-}
-/* Oculta el menú superior en celulares */
-@media (max-width: 768px) {
-  .menu-pc {
-    display: none !important;
+/* =========================
+   Responsive
+========================= */
+/* Móviles y tablets */
+@media (max-width: 768px){
+  .sidebar{
+    width:100%;
+    height:auto;
+    position:relative;
+    border-right:0;
+    border-bottom:1px solid var(--line);
   }
-}
-
-/* Opcional: muestra el menú app en celulares */
-@media (max-width: 768px) {
-  .mobile-footer {
-    display: flex !important;
+  .contenido{
+    margin-left:0 !important;
+    padding:10px;
+    max-width:100%;
   }
+  table{ font-size:14px; min-width:100%; }
+  .mobile-footer{ display:flex !important; }
+  .menu-pc{ display:none !important; }
+  .cronometro-box{ flex-direction:column; }
 }
 
-@media (min-width: 769px) {
-  .mobile-footer {
-    display: none !important;
-  }
-}
-.cronometro-box {
-    display: flex;
-    justify-content: space-between;
-    align-items: stretch; /* 🔹 Esto hace que tengan la misma altura */
-    margin: 40px auto;
-    max-width: 900px;
-}
-
-.rincón {
-    flex: 1; /* 🔹 Ambos rincones ocuparán el mismo espacio */
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    align-items: center;
-    font-size: 24px;
-    font-weight: bold;
-    padding: 20px;
-    min-height: 200px; /* 🔹 Garantiza que ambos tengan la misma altura */
-    box-sizing: border-box;
-}
-
-.rojo {
-    background-color: #c62828; /* 🔹 Rojo uniforme */
-    color: white;
-}
-
-.azul {
-    background-color: #1565c0; /* 🔹 Azul uniforme */
-    color: white;
-}
-
-.nombre {
-    font-size: 20px;
-    margin-top: 10px;
-    color: gold;
-    text-align: center;
+/* =========================
+   Preferencias del usuario
+========================= */
+@media (prefers-reduced-motion: reduce){
+  *{ animation-duration:0.001ms !important; animation-iteration-count:1 !important; transition-duration:0.001ms !important; }
 }
