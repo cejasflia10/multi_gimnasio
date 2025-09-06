@@ -5,6 +5,13 @@ require_once __DIR__.'/conexion.php';
 /* ===== Helpers ===== */
 function post($k){ return isset($_POST[$k]) ? trim((string)$_POST[$k]) : ''; }
 function toIntOrNull($v){ return ($v==='' || !is_numeric($v)) ? null : (int)$v; }
+function has_col(mysqli $db, string $table, string $col): bool {
+  $t=$db->real_escape_string($table); $c=$db->real_escape_string($col);
+  $sql="SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS
+        WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='{$t}' AND COLUMN_NAME='{$c}' LIMIT 1";
+  if ($r=$db->query($sql)) { $ok=(bool)$r->num_rows; $r->close(); return $ok; }
+  return false;
+}
 function save_upload(string $field, int $evento_id): ?string {
   if (!isset($_FILES[$field]) || ($_FILES[$field]['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) return null;
   $tmp  = $_FILES[$field]['tmp_name'];
@@ -17,16 +24,17 @@ function save_upload(string $field, int $evento_id): ?string {
   if (!@move_uploaded_file($tmp, $dest)) return null;
   return 'uploads/evento_' . $evento_id . '/' . basename($dest);
 }
+
 /* ===== FK helpers ===== */
 function fk_first_id(mysqli $db, string $table): ?int {
-  $res = $db->query("SELECT id FROM {$table} ORDER BY id ASC LIMIT 1");
+  $res = $db->query("SELECT id FROM `{$table}` ORDER BY id ASC LIMIT 1");
   if ($res && $row = $res->fetch_assoc()) return (int)$row['id'];
   return null;
 }
 function fk_ensure_id(mysqli $db, string $table, ?int $id): ?int {
   $id = $id ?? 0;
   if ($id > 0) {
-    if ($st = $db->prepare("SELECT 1 FROM {$table} WHERE id = ? LIMIT 1")) {
+    if ($st = $db->prepare("SELECT 1 FROM `{$table}` WHERE id = ? LIMIT 1")) {
       $st->bind_param('i', $id);
       $st->execute();
       $ok = ($r = $st->get_result()) && $r->num_rows > 0;
@@ -36,33 +44,76 @@ function fk_ensure_id(mysqli $db, string $table, ?int $id): ?int {
   }
   return fk_first_id($db, $table);
 }
-/* ===== Duplicado por (evento_id, dni) ===== */
+
+/* ===== Duplicado por (evento_id, dni) (robusto si faltan columnas) ===== */
 function existe_dni_evento(mysqli $db, int $evento_id, string $dni): bool {
-  $sql = "SELECT 1 FROM competidores_evento WHERE evento_id=? AND dni=? LIMIT 1";
-  $st = $db->prepare($sql);
-  $st->bind_param('is', $evento_id, $dni);
+  $t = 'competidores_evento';
+  $hasDni  = has_col($db,$t,'dni');
+  $hasEid  = has_col($db,$t,'evento_id');
+  if (!$hasDni) return false; // si no hay columna DNI no podemos validar duplicado
+  if ($hasEid) {
+    $sql = "SELECT 1 FROM `{$t}` WHERE evento_id=? AND dni=? LIMIT 1";
+    $st = $db->prepare($sql);
+    if (!$st) return false;
+    $st->bind_param('is', $evento_id, $dni);
+  } else {
+    $sql = "SELECT 1 FROM `{$t}` WHERE dni=? LIMIT 1";
+    $st = $db->prepare($sql);
+    if (!$st) return false;
+    $st->bind_param('s', $dni);
+  }
   $st->execute();
   $r = $st->get_result();
   $existe = $r && $r->num_rows > 0;
   $st->close();
   return $existe;
 }
-/* ===== Inserción ===== */
+
+/* ===== Inserción segura: solo columnas existentes ===== */
 function insertar_competidor(mysqli $db, array $row): bool {
-  $sql = "INSERT INTO competidores_evento
-    (evento_id, apellido, nombre, dni, fecha_nacimiento, edad, escuela_nombre, escuela_logo, foto_competidor,
-     modalidad_id, disciplina_id, categoria_tecnica_id, division_id, categoria_peso_id, pago_inscripcion)
-    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
-  $st = $db->prepare($sql);
+  $t = 'competidores_evento';
+  $cols = []; $vals = []; $types = '';
+
+  // columnas candidatas (agregá acá si tu tabla tiene más)
+  $cands = [
+    'evento_id'           => 'i',
+    'apellido'            => 's',
+    'nombre'              => 's',
+    'dni'                 => 's',
+    'fecha_nacimiento'    => 's',
+    'edad'                => 's', // si tu columna es INT podés poner 'i' y castear arriba
+    'sexo'                => 's',
+    'escuela_nombre'      => 's',
+    'escuela_logo'        => 's',
+    'foto_competidor'     => 's',
+    'pago_inscripcion'    => 's', // DECIMAL/NUMERIC igual enlaza bien como string
+    'modalidad_id'        => 's',
+    'disciplina_id'       => 's',
+    'categoria_tecnica_id'=> 's',
+    'division_id'         => 's',
+    'categoria_peso_id'   => 's',
+  ];
+
+  foreach ($cands as $c => $tp) {
+    if (has_col($db, $t, $c)) {
+      $cols[]  = "`$c`";
+      $vals[]  = $row[$c] ?? null;
+      $types  .= $tp;
+    }
+  }
+
+  if (!$cols) { http_response_code(500); exit('❌ No hay columnas compatibles en competidores_evento.'); }
+
+  $ph = rtrim(str_repeat('?,', count($cols)), ',');
+  $sql = "INSERT INTO `{$t}` (".implode(',', $cols).") VALUES ($ph)";
+  $st  = $db->prepare($sql);
   if (!$st) { http_response_code(500); exit('❌ SQL prepare: '.$db->error); }
-  $types = 'i' . str_repeat('s', 14);
-  if (!$st->bind_param(
-    $types,
-    $row['evento_id'], $row['apellido'], $row['nombre'], $row['dni'], $row['fecha'],
-    $row['edad'], $row['escuela_nombre'], $row['escuela_logo'], $row['foto_competidor'],
-    $row['modalidad_id'], $row['disciplina_id'], $row['categoria_tecnica_id'],
-    $row['division_id'], $row['categoria_peso_id'], $row['pago_inscripcion']
-  )) { http_response_code(500); exit('❌ bind: '.$st->error); }
+
+  // bind por referencia
+  $bind = [$types];
+  foreach ($vals as $k => $v) { $bind[] = &$vals[$k]; }
+  call_user_func_array([$st,'bind_param'],$bind);
+
   if (!$st->execute()) { http_response_code(500); exit('❌ exec(insert): '.$st->error); }
   $st->close();
   return true;
@@ -84,14 +135,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   @$conexion->set_charset('utf8mb4');
 
   $evento_id = (int)($_POST['evento_id'] ?? $_SESSION['evento_id_actual'] ?? 0);
-  if ($evento_id <= 0) { $_SESSION['flash_error']='Falta evento_id. Abrí el formulario desde el evento.'; header('Location: agregar_competidor_evento.php'); exit; }
+  if ($evento_id <= 0) {
+    $_SESSION['flash_error']='Falta evento_id. Abrí el formulario desde el evento.';
+    header('Location: agregar_competidor_evento.php?evento_id='.$evento_id_ctx);
+    exit;
+  }
 
   $apellido  = post('apellido');
   $nombre    = post('nombre');
-  $dni       = post('dni');
+  $dni       = preg_replace('/\D+/', '', post('dni')); // SOLO dígitos
   $fecha_nac = post('fecha_nacimiento');
   $edad      = toIntOrNull(post('edad'));
+  $sexo      = post('sexo');
   $escuela_nombre = post('escuela_nombre');
+  $pago_inscripcion = post('pago_inscripcion'); if ($pago_inscripcion === '') $pago_inscripcion = '0.00';
 
   // IDs del bloque principal
   $modalidad_id_in         = toIntOrNull(post('modalidad_id'));
@@ -100,18 +157,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   $division_id_in          = toIntOrNull(post('division_id'));
   $categoria_peso_id_in    = toIntOrNull(post('categoria_peso_id'));
 
-  $pago_inscripcion = post('pago_inscripcion'); if ($pago_inscripcion === '') $pago_inscripcion = '0.00';
-
-  if ($apellido === '' || $nombre === '' || $dni === '') { $_SESSION['flash_error']='Apellido, Nombre y DNI son obligatorios.'; header('Location: agregar_competidor_evento.php'); exit; }
-  if ($fecha_nac !== '' && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $fecha_nac)) { $_SESSION['flash_error']='Fecha de nacimiento inválida (YYYY-MM-DD).'; header('Location: agregar_competidor_evento.php'); exit; }
+  if ($apellido === '' || $nombre === '' || $dni === '') {
+    $_SESSION['flash_error']='Apellido, Nombre y DNI son obligatorios.';
+    header('Location: agregar_competidor_evento.php?evento_id='.$evento_id);
+    exit;
+  }
+  if ($fecha_nac !== '' && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $fecha_nac)) {
+    $_SESSION['flash_error']='Fecha de nacimiento inválida (YYYY-MM-DD).';
+    header('Location: agregar_competidor_evento.php?evento_id='.$evento_id);
+    exit;
+  }
 
   // ❗ BLOQUEO POR DNI (por evento)
   if (existe_dni_evento($conexion, $evento_id, $dni)) {
     $_SESSION['flash_error'] = 'Ese DNI ya está inscripto en este evento.';
-    header('Location: agregar_competidor_evento.php'); exit;
+    header('Location: agregar_competidor_evento.php?evento_id='.$evento_id);
+    exit;
   }
 
-  // FKs seguros
+  // FKs seguros (si las tablas no existen, devolverán null)
   $modalidad_id         = fk_ensure_id($conexion, 'modalidades_evento',         $modalidad_id_in);
   $disciplina_id        = fk_ensure_id($conexion, 'disciplinas_evento',         $disciplina_id_in);
   $categoria_tecnica_id = fk_ensure_id($conexion, 'categorias_tecnicas_evento', $categoria_tecnica_id_in);
@@ -122,32 +186,34 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   $escuela_logo    = save_upload('escuela_logo', $evento_id);
   $foto_competidor = save_upload('foto_competidor', $evento_id);
 
+  // Mapa de valores (algunos pueden no existir en tu tabla; insertar_competidor filtra)
   $row = [
-    'evento_id' => (int)$evento_id,
-    'apellido'  => $apellido,
-    'nombre'    => $nombre,
-    'dni'       => $dni,
-    'fecha'     => ($fecha_nac !== '') ? $fecha_nac : null,
-    'edad'      => isset($edad) ? (string)$edad : null,
-    'escuela_nombre'   => ($escuela_nombre !== '') ? $escuela_nombre : null,
-    'escuela_logo'     => $escuela_logo ?: null,
-    'foto_competidor'  => $foto_competidor ?: null,
-    'modalidad_id'        => $modalidad_id !== null ? (string)$modalidad_id : null,
-    'disciplina_id'       => $disciplina_id !== null ? (string)$disciplina_id : null,
-    'categoria_tecnica_id'=> $categoria_tecnica_id !== null ? (string)$categoria_tecnica_id : null,
-    'division_id'         => $division_id !== null ? (string)$division_id : null,
-    'categoria_peso_id'   => $categoria_peso_id !== null ? (string)$categoria_peso_id : null,
-    'pago_inscripcion'    => (string)$pago_inscripcion,
+    'evento_id'            => (int)$evento_id,
+    'apellido'             => $apellido,
+    'nombre'               => $nombre,
+    'dni'                  => $dni,
+    'fecha_nacimiento'     => ($fecha_nac !== '') ? $fecha_nac : null,
+    'edad'                 => isset($edad) ? (string)$edad : null,
+    'sexo'                 => $sexo !== '' ? $sexo : null,
+    'escuela_nombre'       => ($escuela_nombre !== '') ? $escuela_nombre : null,
+    'escuela_logo'         => $escuela_logo ?: null,
+    'foto_competidor'      => $foto_competidor ?: null,
+    'pago_inscripcion'     => (string)$pago_inscripcion,
+    'modalidad_id'         => $modalidad_id !== null ? (string)$modalidad_id : null,
+    'disciplina_id'        => $disciplina_id !== null ? (string)$disciplina_id : null,
+    'categoria_tecnica_id' => $categoria_tecnica_id !== null ? (string)$categoria_tecnica_id : null,
+    'division_id'          => $division_id !== null ? (string)$division_id : null,
+    'categoria_peso_id'    => $categoria_peso_id !== null ? (string)$categoria_peso_id : null,
   ];
-  insertar_competidor($conexion, $row);
 
+  insertar_competidor($conexion, $row);
   header('Location: ver_competidores_evento.php?evento_id='.(int)$evento_id);
   exit;
 }
 
 /* ===== Vista (GET) ===== */
 $evento_id = $evento_id_ctx;
-include __DIR__.'/menu_eventos.php';
+@include __DIR__.'/menu_eventos.php';
 ?>
 <!DOCTYPE html>
 <html lang="es">
@@ -188,7 +254,7 @@ include __DIR__.'/menu_eventos.php';
     <form action="" method="POST" enctype="multipart/form-data" id="form_comp">
       <input type="hidden" name="evento_id" id="evento_id" value="<?= $evento_presente ? htmlspecialchars((string)$evento_id, ENT_QUOTES, 'UTF-8') : '' ?>">
 
-      <fieldset <?= !$evento_presente?'disabled':'' ?>>
+      <fieldset <?= !$evento_presente?'disabled':'' ?>}>
         <legend>Datos personales</legend>
         <div class="grid">
           <div>
@@ -201,7 +267,7 @@ include __DIR__.'/menu_eventos.php';
           </div>
           <div>
             <label>DNI</label>
-            <input type="text" name="dni" id="dni" required>
+            <input type="text" name="dni" id="dni" required inputmode="numeric" pattern="\d+">
             <div id="dni_msg" class="warn"></div>
           </div>
           <div>
@@ -239,7 +305,7 @@ include __DIR__.'/menu_eventos.php';
         </div>
       </fieldset>
 
-      <fieldset <?= !$evento_presente?'disabled':'' ?>>
+      <fieldset <?= !$evento_presente?'disabled':'' ?>}>
         <legend>Inscripción</legend>
         <div class="row">
           <div>
@@ -291,6 +357,7 @@ include __DIR__.'/menu_eventos.php';
 
       <p style="margin-top:12px;">
         <button type="submit" class="btn-principal" id="btn_submit" <?= (!$evento_presente?'disabled':'') ?>>✅ Guardar Competidor</button>
+        <a href="ver_competidores_evento.php?evento_id=<?= (int)$evento_id ?>" class="btn-principal" style="background:#607d8b">↩ Volver al listado</a>
       </p>
     </form>
   </div>
@@ -343,6 +410,7 @@ include __DIR__.'/menu_eventos.php';
       }
     } catch(e) { console.error(e); }
   }
+  dniInput?.addEventListener('input', e => { e.target.value = (e.target.value||'').replace(/\D+/g,''); });
   dniInput?.addEventListener('blur', validarDNI);
   dniInput?.addEventListener('change', validarDNI);
   </script>
