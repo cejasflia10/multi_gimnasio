@@ -7,7 +7,7 @@
    ========================================================================= */
 if (session_status() === PHP_SESSION_NONE) session_start();
 
-/* (Opcional) Guardia de sesión */
+/* Guardia de sesión con return_to */
 if (empty($_SESSION['evento_usuario_id'])) {
   $return_to = $_SERVER['REQUEST_URI'] ?? 'ver_tipos_entrada.php';
   header('Location: login_evento.php?return_to=' . urlencode($return_to));
@@ -202,23 +202,22 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
       // Unicidad (nombre vs slug) según índice
       list($nombreOK, $slugOK, $uniqueOnSlug, $hasSlug) = ensure_unique_nombre_y_slug($conexion, $evento_id, $nombre);
 
-      // Armado dinámico de columnas y placeholders (OJO: 7 campos al final)
+      // Armado dinámico de columnas y placeholders (7 campos extra)
       $cols  = "`evento_id`,`nombre`";
       $ph    = "?,?";
       $types = "is";
       $args  = [$evento_id, $nombreOK];
 
-      if ($hasSlug) { // si existe la columna, guardamos el slug
+      if ($hasSlug) {
         $cols  .= ",`nombre_slug`";
         $ph    .= ",?";
         $types .= "s";
         $args[] = $slugOK;
       }
 
-      // Estos son SIEMPRE 7 columnas extra
       $cols  .= ",`precio`,`stock_disponible`,`stock_total`,`max_por_compra`,`visible`,`canal`,`etapa`";
-      $ph    .= ",?,?,?,?,?,?,?";             // ← 7 placeholders (fix del bug)
-      $types .= "siiiiss";                     // precio(s), stock(i), total(i), max(i), visible(i), canal(s), etapa(s)
+      $ph    .= ",?,?,?,?,?,?,?";
+      $types .= "siiiiss";
       $args[] = $precio;
       $args[] = $stock;
       $args[] = $stock_total;
@@ -230,14 +229,9 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
       $sql="INSERT INTO `tickets_tipos` ($cols) VALUES ($ph)";
       $st = stmt_or_error($conexion->prepare($sql), $sql, $flash_err);
       if (!$st) throw new Exception('No se pudo preparar INSERT.');
-
-      $bind = [$types];
-      foreach($args as $k=>$_){ $bind[]=&$args[$k]; }
+      $bind = [$types]; foreach($args as $k=>$_){ $bind[]=&$args[$k]; }
       call_user_func_array([$st,'bind_param'],$bind);
-
-      if(!$st->execute()){
-        throw new Exception('Exec INSERT: '.$conexion->error);
-      }
+      if(!$st->execute()){ throw new Exception('Exec INSERT: '.$conexion->error); }
       $st->close();
       $flash_ok='Tipo de entrada creado'.($nombreOK!==$nombre?' como “'.h($nombreOK).'”':'').'.';
     }
@@ -260,7 +254,6 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
       if($id<=0) throw new Exception('ID inválido.');
       if($nombre==='') throw new Exception('El nombre es obligatorio.');
 
-      // Unicidad (ajustar nombre/slug si choca)
       list($nombreOK, $slugOK, $uniqueOnSlug, $hasSlug) = ensure_unique_nombre_y_slug($conexion, $evento_id, $nombre);
 
       if ($hasSlug) {
@@ -269,7 +262,6 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
               WHERE `id`=? AND `evento_id`=?";
         $st = stmt_or_error($conexion->prepare($sql), $sql, $flash_err);
         if (!$st) throw new Exception('No se pudo preparar UPDATE.');
-        // tipos: s s s i i i i s s i i
         $st->bind_param('sssiiiissii', $nombreOK, $slugOK, $precio, $stock, $stock_total, $maxxc, $visible, $canal, $etapa, $id, $evento_id);
       } else {
         $sql="UPDATE `tickets_tipos`
@@ -277,7 +269,6 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
               WHERE `id`=? AND `evento_id`=?";
         $st = stmt_or_error($conexion->prepare($sql), $sql, $flash_err);
         if (!$st) throw new Exception('No se pudo preparar UPDATE.');
-        // tipos: s s i i i i s s i i
         $st->bind_param('ssiiiissii', $nombreOK, $precio, $stock, $stock_total, $maxxc, $visible, $canal, $etapa, $id, $evento_id);
       }
 
@@ -293,7 +284,9 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
       // Bloqueo si hay tickets emitidos
       $sqlC="SELECT COUNT(*) c FROM `tickets` WHERE `tipo_id`=?";
       $stc = stmt_or_error($conexion->prepare($sqlC), $sqlC, $flash_err);
-      if ($stc){ $stc->bind_param('i',$id); $stc->execute(); $rc=$stc->get_result()->fetch_assoc(); $stc->close();
+      if ($stc){
+        $stc->bind_param('i',$id); $stc->execute();
+        $rc=$stc->get_result()->fetch_assoc(); $stc->close();
         if ((int)($rc['c'] ?? 0) > 0) throw new Exception('No se puede eliminar: existen tickets emitidos de este tipo.');
       }
 
@@ -311,8 +304,8 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
 }
 
 /* -------- Cargar tipos -------- */
-$hasUpdated    = has_col($conexion,'tickets_tipos','updated_at');
-$selUpdated    = $hasUpdated ? "`updated_at`" : "NULL AS `updated_at`";
+$hasUpdated = has_col($conexion,'tickets_tipos','updated_at');
+$selUpdated = $hasUpdated ? "`updated_at`" : "NULL AS `updated_at`";
 
 $sqlList = "SELECT `id`,`nombre`,`precio`,`stock_disponible`,`stock_total`,`max_por_compra`,`visible`,`canal`,`etapa`, $selUpdated
             FROM `tickets_tipos` WHERE `evento_id`=? ORDER BY `precio` ASC, `id` ASC";
@@ -323,45 +316,80 @@ if (!$st) {
 } else {
   $st->bind_param('i',$evento_id); $st->execute(); $tipos=$st->get_result()->fetch_all(MYSQLI_ASSOC); $st->close();
 }
-
 ?>
 <!doctype html>
 <html lang="es">
 <head>
   <meta charset="utf-8">
   <title>Configurar entradas — <?= h($evento['titulo']) ?></title>
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <style>
     :root{
-      --bg:#0b1115; --card:#0f1720; --bd:#1f2a33; --tx:#e6eef4; --mut:#9ecbff; --btn:#0e7ad1;
+      --bg:#0a0a0a; --fg:#e6eef4; --mut:#9ecbff; --brand:#d4af37;
+      --card:#0f1720; --bd:#1f2a33; --line:#222;
       --okbg:#0f251b; --okbd:#164b31; --oktx:#b6f3d1; --badbg:#2a1414; --badbd:#5e2626; --badt:#ffb4b4;
     }
-    body{margin:0;background:var(--bg);color:var(--tx);font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Helvetica,Arial,sans-serif}
+    html,body{margin:0;background:var(--bg);color:var(--fg);font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Helvetica,Arial,sans-serif}
+    a{color:var(--brand);text-decoration:none}
+    a:focus,button:focus,input:focus,select:focus{outline:2px dashed var(--brand); outline-offset:2px}
+
     .wrap{max-width:1100px;margin:18px auto;padding:16px}
     .card{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:14px}
     .grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
     @media(max-width:980px){.grid{grid-template-columns:1fr}}
-    .btn{display:inline-block;padding:10px 14px;border-radius:10px;border:1px solid #27455c;background:var(--btn);color:#fff;text-decoration:none;cursor:pointer}
-    .btn.gray{background:#1b2836;border-color:#2b3c4f}
-    input,select{width:100%;padding:10px;border-radius:10px;border:1px solid #263341;background:#111a24;color:var(--tx)}
-    table{width:100%;border-collapse:collapse}
-    th,td{border-bottom:1px solid #1c2a36;padding:8px;text-align:left}
-    th{color:var(--mut)}
+    .btn{display:inline-flex;align-items:center;gap:.45rem;padding:.58rem .9rem;border-radius:10px;border:1px solid var(--line);background:#151515;color:var(--brand);text-decoration:none;font-weight:600;cursor:pointer}
+    .btn.gray{background:#1b2836;border-color:#2b3c4f;color:#ddd}
+    .btn.primary{background:#0e7ad1;border-color:#27455c;color:#fff}
+    input,select{
+      width:100%;padding:.56rem .7rem;border-radius:10px;border:1px solid var(--line);background:#111a24;color:var(--fg)
+    }
+
+    /* Tabla desktop */
+    .table-wrap{overflow:auto;border:1px solid var(--bd);border-radius:12px}
+    table{width:100%;border-collapse:collapse;min-width:980px}
+    thead th{
+      position:sticky; top:0; background:#121212; color:var(--brand);
+      text-align:left; padding:.7rem .65rem; border-bottom:1px solid var(--bd); z-index:1;
+    }
+    td{padding:.6rem .65rem;border-bottom:1px solid var(--bd);vertical-align:middle}
+    .pill{display:inline-block;padding:.25rem .6rem;border-radius:999px;border:1px solid #3b3b3b;font-size:.85rem;color:#ddd}
+
+    /* Cards mobile */
+    @media (max-width: 820px){
+      .table-wrap{border:0}
+      table{border-collapse:separate;border-spacing:0 12px;min-width:0}
+      thead{display:none}
+      tbody tr{
+        display:block;background:var(--card);border:1px solid var(--bd);
+        border-radius:14px;padding:10px 10px 6px;
+      }
+      tbody td{
+        display:flex;justify-content:space-between;gap:12px;
+        padding:.55rem .3rem;border-bottom:0;font-size:.98rem;
+      }
+      tbody td::before{content:attr(data-label); color:var(--mut); min-width:42%}
+      td[data-key="id"]{display:block;font-weight:700}
+      td[data-key="id"]::before{content:"#"}
+      td[data-key="acciones"]{display:flex;gap:8px;flex-wrap:wrap}
+      .btn{flex:1 1 48%}
+    }
+
     .ok{margin:10px 0;padding:10px;border-radius:10px;background:var(--okbg);border:1px solid var(--okbd);color:var(--oktx)}
     .bad{margin:10px 0;padding:10px;border-radius:10px;background:var(--badbg);border:1px solid var(--badbd);color:var(--badt)}
-    .pill{display:inline-block;padding:4px 8px;border-radius:999px;border:1px solid #3b4b5a;font-size:12px}
   </style>
 </head>
 <body>
   <div class="wrap">
     <?php @include __DIR__.'/menu_eventos.php'; ?>
 
-    <div style="margin-bottom:10px">
+    <div style="margin-bottom:10px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
       <a class="btn gray" href="ver_evento.php?id=<?= (int)$evento_id ?>">← Volver al evento</a>
+      <span class="pill">Evento #<?= (int)$evento_id ?></span>
+      <span class="pill"><?= h($evento['titulo']) ?></span>
+      <?php if(!empty($evento['fecha'])): ?><span class="pill"><?= h($evento['fecha']) ?></span><?php endif; ?>
     </div>
 
     <h2 style="margin:0 0 6px">🎟️ Configurar tipos de entradas — <?= h($evento['titulo']) ?></h2>
-    <div class="pill">Evento #<?= (int)$evento_id ?></div>
     <?php if($flash_ok): ?><div class="ok"><?= $flash_ok ?></div><?php endif; ?>
     <?php if($flash_err): ?><div class="bad"><?= $flash_err ?></div><?php endif; ?>
 
@@ -382,15 +410,15 @@ if (!$st) {
           </div>
           <div>
             <label>Stock disponible</label>
-            <input type="number" name="stock" min="0" step="1" value="0">
+            <input type="number" name="stock" min="0" step="1" value="0" inputmode="numeric">
           </div>
           <div>
             <label>Stock total (capacidad)</label>
-            <input type="number" name="stock_total" min="0" step="1" placeholder="Si lo dejás vacío usa el stock disponible">
+            <input type="number" name="stock_total" min="0" step="1" placeholder="Si lo dejás vacío usa el stock disponible" inputmode="numeric">
           </div>
           <div>
             <label>Máx. por compra</label>
-            <input type="number" name="max_por_compra" min="0" step="1" value="10">
+            <input type="number" name="max_por_compra" min="0" step="1" value="10" inputmode="numeric">
           </div>
           <div>
             <label>Canal</label>
@@ -417,7 +445,7 @@ if (!$st) {
           </div>
         </div>
         <div style="margin-top:10px">
-          <button class="btn" type="submit">Crear tipo</button>
+          <button class="btn primary" type="submit">Crear tipo</button>
         </div>
       </form>
     </div>
@@ -425,7 +453,7 @@ if (!$st) {
     <!-- Listado y edición inline -->
     <div class="card" style="margin-top:12px">
       <h3 style="margin:0 0 8px">Tipos existentes</h3>
-      <div style="overflow-x:auto">
+      <div class="table-wrap" role="region" aria-label="Tipos existentes" tabindex="0">
         <table>
           <thead>
             <tr>
@@ -447,47 +475,54 @@ if (!$st) {
           $tipos = $tipos ?? [];
           if(!$tipos): ?>
             <tr><td colspan="11" style="color:#9ecbff">No hay tipos cargados.</td></tr>
-          <?php else: foreach($tipos as $t): ?>
+          <?php else: foreach($tipos as $t):
+            $rowId = (int)$t['id'];
+            $updFormId = "upd-".$rowId;
+            $delFormId = "del-".$rowId;
+          ?>
+            <!-- Formularios “desacoplados” para HTML válido -->
+            <form id="<?= $updFormId ?>" method="post" action="">
+              <input type="hidden" name="accion" value="actualizar">
+              <input type="hidden" name="evento_id" value="<?= (int)$evento_id ?>">
+              <input type="hidden" name="id" value="<?= $rowId ?>">
+            </form>
+            <form id="<?= $delFormId ?>" method="post" action="" onsubmit="return confirm('¿Eliminar este tipo?');">
+              <input type="hidden" name="accion" value="eliminar">
+              <input type="hidden" name="evento_id" value="<?= (int)$evento_id ?>">
+              <input type="hidden" name="id" value="<?= $rowId ?>">
+            </form>
+
             <tr>
-              <form method="post" action="">
-                <input type="hidden" name="accion" value="actualizar">
-                <input type="hidden" name="evento_id" value="<?= (int)$evento_id ?>">
-                <input type="hidden" name="id" value="<?= (int)$t['id'] ?>">
-                <td><?= (int)$t['id'] ?></td>
-                <td><input name="nombre" value="<?= h($t['nombre']) ?>"></td>
-                <td><input name="precio" value="<?= h(number_format((float)$t['precio'],2,'.','')) ?>" inputmode="decimal"></td>
-                <td><input type="number" name="stock" min="0" step="1" value="<?= (int)$t['stock_disponible'] ?>"></td>
-                <td><input type="number" name="stock_total" min="0" step="1" value="<?= (int)$t['stock_total'] ?>"></td>
-                <td><input type="number" name="max_por_compra" min="0" step="1" value="<?= (int)$t['max_por_compra'] ?>"></td>
-                <td>
-                  <select name="canal">
-                    <?php $cvals=['todos'=>'Todos','online'=>'Online','taquilla'=>'Taquilla','fisica'=>'Física (preventa)'];
-                    foreach($cvals as $cv=>$lbl): ?>
-                      <option value="<?= $cv ?>" <?= $t['canal']===$cv?'selected':''; ?>><?= $lbl ?></option>
-                    <?php endforeach; ?>
-                  </select>
-                </td>
-                <td>
-                  <select name="etapa">
-                    <?php $evals=['general'=>'General','preventa'=>'Preventa','anticipada'=>'Anticipada','puerta'=>'Puerta'];
-                    foreach($evals as $ev=>$lbl): ?>
-                      <option value="<?= $ev ?>" <?= $t['etapa']===$ev?'selected':''; ?>><?= $lbl ?></option>
-                    <?php endforeach; ?>
-                </td>
-                <td style="text-align:center">
-                  <input type="checkbox" name="visible" <?= ((int)$t['visible']===1?'checked':'') ?>>
-                </td>
-                <td><small class="pill"><?= !empty($t['updated_at']) ? h((string)$t['updated_at']) : '-' ?></small></td>
-                <td style="white-space:nowrap">
-                  <button class="btn" type="submit">💾 Guardar</button>
-              </form>
-                  <form method="post" action="" style="display:inline" onsubmit="return confirm('¿Eliminar este tipo?');">
-                    <input type="hidden" name="accion" value="eliminar">
-                    <input type="hidden" name="evento_id" value="<?= (int)$evento_id ?>">
-                    <input type="hidden" name="id" value="<?= (int)$t['id'] ?>">
-                    <button class="btn gray" type="submit">🗑️ Eliminar</button>
-                  </form>
-                </td>
+              <td data-key="id" data-label="#"><?= $rowId ?></td>
+              <td data-label="Nombre"><input form="<?= $updFormId ?>" name="nombre" value="<?= h($t['nombre']) ?>"></td>
+              <td data-label="Precio"><input form="<?= $updFormId ?>" name="precio" value="<?= h(number_format((float)$t['precio'],2,'.','')) ?>" inputmode="decimal"></td>
+              <td data-label="Stock disp."><input form="<?= $updFormId ?>" type="number" name="stock" min="0" step="1" value="<?= (int)$t['stock_disponible'] ?>" inputmode="numeric"></td>
+              <td data-label="Stock total"><input form="<?= $updFormId ?>" type="number" name="stock_total" min="0" step="1" value="<?= (int)$t['stock_total'] ?>" inputmode="numeric"></td>
+              <td data-label="Máx/compra"><input form="<?= $updFormId ?>" type="number" name="max_por_compra" min="0" step="1" value="<?= (int)$t['max_por_compra'] ?>" inputmode="numeric"></td>
+              <td data-label="Canal">
+                <select form="<?= $updFormId ?>" name="canal">
+                  <?php $cvals=['todos'=>'Todos','online'=>'Online','taquilla'=>'Taquilla','fisica'=>'Física (preventa)'];
+                  foreach($cvals as $cv=>$lbl): ?>
+                    <option value="<?= $cv ?>" <?= $t['canal']===$cv?'selected':''; ?>><?= $lbl ?></option>
+                  <?php endforeach; ?>
+                </select>
+              </td>
+              <td data-label="Etapa">
+                <select form="<?= $updFormId ?>" name="etapa">
+                  <?php $evals=['general'=>'General','preventa'=>'Preventa','anticipada'=>'Anticipada','puerta'=>'Puerta'];
+                  foreach($evals as $evv=>$lbl): ?>
+                    <option value="<?= $evv ?>" <?= $t['etapa']===$evv?'selected':''; ?>><?= $lbl ?></option>
+                  <?php endforeach; ?>
+                </select>
+              </td>
+              <td data-label="Visible" style="text-align:center">
+                <input form="<?= $updFormId ?>" type="checkbox" name="visible" <?= ((int)$t['visible']===1?'checked':'') ?>>
+              </td>
+              <td data-label="Actualizado"><small class="pill"><?= !empty($t['updated_at']) ? h((string)$t['updated_at']) : '-' ?></small></td>
+              <td data-key="acciones" data-label="Acciones" style="white-space:nowrap;display:flex;gap:8px;flex-wrap:wrap">
+                <button class="btn primary" type="submit" form="<?= $updFormId ?>">💾 Guardar</button>
+                <button class="btn gray" type="submit" form="<?= $delFormId ?>">🗑️ Eliminar</button>
+              </td>
             </tr>
           <?php endforeach; endif; ?>
           </tbody>
@@ -495,10 +530,10 @@ if (!$st) {
       </div>
     </div>
 
-    <div style="margin-top:12px">
+    <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">
       <a class="btn gray" href="ver_evento.php?id=<?= (int)$evento_id ?>">← Volver al evento</a>
       <a class="btn" href="ver_ventas_evento.php?evento_id=<?= (int)$evento_id ?>">📊 Ventas</a>
-      <a class="btn" href="evento.php?id=<?= (int)$evento_id ?>" target="_blank">👀 Vista pública</a>
+      <a class="btn" href="evento.php?id=<?= (int)$evento_id ?>" target="_blank" rel="noopener">👀 Vista pública</a>
     </div>
   </div>
 </body>

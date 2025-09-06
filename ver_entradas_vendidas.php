@@ -1,6 +1,6 @@
 <?php
 /* ============================================================
-   ver_entradas_vendidas.php — Listado y gestión de tickets por evento
+   ver_entradas_vendidas.php — Listado y gestión de tickets por evento (responsive)
    Requiere login módulo eventos (evento_usuario_id)
    GET: evento_id (obligatorio), q, estado, usado, tipo_id, export=csv
    POST acciones: usar / revertir (marca uso del ticket)
@@ -21,13 +21,22 @@ if (function_exists('mysqli_report')) { mysqli_report(MYSQLI_REPORT_OFF); }
 @$conexion->set_charset('utf8mb4');
 
 /* Helpers */
-function h($s){ return htmlspecialchars((string)$s, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'); }
+if (!function_exists('h')) {
+  function h($s){ return htmlspecialchars((string)$s, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'); }
+}
 function has_col(mysqli $db, string $t, string $c): bool {
   $t=$db->real_escape_string($t); $c=$db->real_escape_string($c);
   $sql="SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS
         WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='{$t}' AND COLUMN_NAME='{$c}' LIMIT 1";
   if ($r=$db->query($sql)) { $ok=(bool)$r->num_rows; $r->close(); return $ok; }
   return false;
+}
+/* Helper para bind dinámico compatible con PHP 7/8 */
+function bind_all_params(mysqli_stmt $st, string $types, array &$vals): bool {
+  $params = [];
+  $params[] = &$types;
+  foreach ($vals as $k => &$v) { $params[] = &$v; }
+  return call_user_func_array([$st,'bind_param'], $params);
 }
 
 /* Evento */
@@ -136,13 +145,12 @@ if (!$st) {
   http_response_code(500);
   exit("SQL prepare error: ".h($conexion->error)."<br><small>$sql</small>");
 }
-$refs = []; $refs[]=&$bindTy; foreach($bindVl as $k=>$v){ $refs[]=&$bindVl[$k]; }
-call_user_func_array([$st,'bind_param'],$refs);
+bind_all_params($st, $bindTy, $bindVl);
 $st->execute(); $res = $st->get_result();
 $rows = $res ? $res->fetch_all(MYSQLI_ASSOC) : [];
 $st->close();
 
-/* Totales usados/no usados rápidos (para indicadores) */
+/* Totales usados/no usados (sobre resultados filtrados) */
 $counts = ['todos'=>0,'usados'=>0,'libres'=>0];
 if ($rows) {
   $counts['todos'] = count($rows);
@@ -157,7 +165,8 @@ if (isset($_GET['export']) && $_GET['export']==='csv') {
   fputcsv($out, ['TicketID','Code','Tipo','Precio','PedidoID','EstadoPedido','Origen','Comprador','Email','Usado','UsedAt','Gate','CreatedAt']);
   foreach($rows as $r){
     fputcsv($out, [
-      $r['id'], $r['code'], $r['tipo_nombre'], number_format((float)$r['precio'],2,'.',''),
+      $r['id'], $r['code'], $r['tipo_nombre'],
+      number_format((float)($r['precio'] ?? 0),2,'.',''),
       $r['pedido_id'], $r['pedido_estado'], $r['origen'],
       $r['comprador_nombre'], $r['comprador_email'],
       empty($r['used_at'])?'NO':'SI', $r['used_at'], $r['used_gate'] ?? '', $r['created_at']
@@ -172,29 +181,70 @@ if (isset($_GET['export']) && $_GET['export']==='csv') {
 <head>
   <meta charset="utf-8">
   <title>Entradas vendidas — <?= h($ev['titulo']) ?></title>
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <style>
     :root{
-      --bg:#0b1115; --card:#0f1720; --bd:#1f2a33; --tx:#e6eef4; --mut:#9ecbff;
-      --okbg:#0f251b; --okbd:#164b31; --oktx:#b6f3d1; --badbg:#2a1414; --badbd:#5e2626; --badt:#ffb4b4;
-      --btn:#0e7ad1;
+      --bg:#0a0a0a; --fg:#f6f6f6; --mut:#c9c9c9; --brand:#d4af37;
+      --card:#111; --bd:#222; --okbg:#0f251b; --okbd:#164b31; --oktx:#b6f3d1;
+      --badbg:#2a1414; --badbd:#5e2626; --badt:#ffb4b4;
     }
-    body{margin:0;background:var(--bg);color:var(--tx);font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Helvetica,Arial,sans-serif}
+    html,body{margin:0;background:var(--bg);color:var(--fg);font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Helvetica,Arial,sans-serif}
+    a{color:var(--brand);text-decoration:none}
+    a:focus{outline:2px dashed var(--brand); outline-offset:2px}
     .wrap{max-width:1200px;margin:18px auto;padding:16px}
+
     .card{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:14px}
-    .row{display:flex;gap:8px;flex-wrap:wrap}
-    .btn{display:inline-block;padding:8px 12px;border-radius:10px;border:1px solid #27455c;background:var(--btn);color:#fff;text-decoration:none;cursor:pointer}
-    .btn.gray{background:#1b2836;border-color:#2b3c4f}
-    .btn.red{background:#7a1f1f;border-color:#9a2b2b}
-    input,select{padding:8px 10px;border-radius:10px;border:1px solid #263341;background:#111a24;color:var(--tx)}
-    table{width:100%;border-collapse:collapse}
-    th,td{border-bottom:1px solid #1c2a36;padding:8px;text-align:left}
-    th{color:var(--mut)}
+    .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+    .btn{display:inline-flex;align-items:center;gap:.45rem;padding:.58rem .9rem;border-radius:10px;border:1px solid var(--bd);background:#151515;color:var(--brand);text-decoration:none;cursor:pointer;font-weight:600}
+    .btn.gray{background:#1b1b1b;color:#ddd}
+    .btn.red{background:#7a1f1f;color:#fff;border-color:#8f2a2a}
+    .pill{display:inline-block;padding:.25rem .6rem;border-radius:999px;border:1px solid #3b3b3b;font-size:.85rem;color:#ddd}
+    input,select{padding:.56rem .7rem;border-radius:10px;border:1px solid var(--bd);background:#101010;color:var(--fg)}
     .ok{margin:10px 0;padding:10px;border-radius:10px;background:var(--okbg);border:1px solid var(--okbd);color:var(--oktx)}
     .bad{margin:10px 0;padding:10px;border-radius:10px;background:var(--badbg);border:1px solid var(--badbd);color:var(--badt)}
-    .pill{display:inline-block;padding:4px 8px;border-radius:999px;border:1px solid #3b4b5a;font-size:12px}
+
+    /* ===== Tabla (desktop) ===== */
     .table-wrap{overflow:auto;border:1px solid var(--bd);border-radius:12px}
-    @media(max-width:900px){ .row>*, .row form{flex:1 1 100%} }
+    table{width:100%;border-collapse:collapse;min-width:900px}
+    thead th{
+      position:sticky; top:0; background:#121212; color:var(--brand);
+      text-align:left; padding:.7rem .65rem; border-bottom:1px solid var(--bd); z-index:1;
+    }
+    td{padding:.6rem .65rem;border-bottom:1px solid var(--bd);vertical-align:middle}
+    code{background:#000; padding:.15rem .35rem; border-radius:6px; border:1px solid #333}
+
+    @media(hover:hover){
+      tbody tr:hover{background:#101010}
+    }
+
+    /* ===== Cards (mobile) ===== */
+    @media (max-width: 860px){
+      .table-wrap{border:0}
+      table{border-collapse:separate;border-spacing:0 12px;min-width:0}
+      thead{display:none}
+      tbody tr{
+        display:block;background:var(--card);border:1px solid var(--bd);
+        border-radius:14px;padding:10px 10px 6px;
+      }
+      tbody td{
+        display:flex;justify-content:space-between;gap:12px;
+        padding:.55rem .3rem;border-bottom:0;font-size:.98rem;
+      }
+      tbody td::before{
+        content:attr(data-label); color:var(--mut); min-width:40%;
+      }
+      td[data-key="id"]{display:block;font-weight:700}
+      td[data-key="id"]::before{content:"Ticket #"}
+      td[data-key="acciones"]{display:flex;gap:8px;flex-wrap:wrap}
+      .btn{flex:1 1 48%}
+      .table-wrap{overflow:visible}
+    }
+
+    /* Form filtros responsive */
+    @media(max-width:900px){
+      .row>*, .row form{flex:1 1 100%}
+      .btn{width:auto}
+    }
   </style>
 </head>
 <body>
@@ -203,10 +253,10 @@ if (isset($_GET['export']) && $_GET['export']==='csv') {
 
     <div class="row" style="margin-bottom:10px">
       <a class="btn gray" href="ver_evento.php?id=<?= (int)$evento_id ?>">← Volver al evento</a>
-      <div class="pill">Evento #<?= (int)$evento_id ?></div>
-      <div class="pill">Total: <?= (int)$counts['todos'] ?></div>
-      <div class="pill">Usados: <?= (int)$counts['usados'] ?></div>
-      <div class="pill">Disponibles: <?= (int)$counts['libres'] ?></div>
+      <span class="pill">Evento #<?= (int)$evento_id ?></span>
+      <span class="pill">Total: <?= (int)$counts['todos'] ?></span>
+      <span class="pill">Usados: <?= (int)$counts['usados'] ?></span>
+      <span class="pill">Disponibles: <?= (int)$counts['libres'] ?></span>
     </div>
 
     <?php if($flash_ok): ?><div class="ok"><?= $flash_ok ?></div><?php endif; ?>
@@ -241,7 +291,7 @@ if (isset($_GET['export']) && $_GET['export']==='csv') {
         <a class="btn" href="?evento_id=<?= (int)$evento_id ?>&<?= http_build_query(['q'=>$q,'estado'=>$estado,'usado'=>$usado,'tipo_id'=>$tipo_id,'export'=>'csv']) ?>">⬇ Export CSV</a>
       </form>
 
-      <div class="table-wrap">
+      <div class="table-wrap" role="region" aria-label="Entradas vendidas" tabindex="0">
         <table>
           <thead>
             <tr>
@@ -257,19 +307,24 @@ if (isset($_GET['export']) && $_GET['export']==='csv') {
           </thead>
           <tbody>
           <?php if(!$rows): ?>
-            <tr><td colspan="8" style="color:#9ecbff">Sin resultados.</td></tr>
+            <tr><td colspan="8" style="color:#cfd7de">Sin resultados.</td></tr>
           <?php else: foreach($rows as $r): ?>
             <tr>
-              <td><?= (int)$r['id'] ?></td>
-              <td><?= h((string)($r['tipo_nombre'] ?? '—')) ?> <br><small>$<?= h(number_format((float)($r['precio'] ?? 0),2,'.','')) ?></small></td>
-              <td><code><?= h($r['code']) ?></code></td>
-              <td>#<?= (int)$r['pedido_id'] ?><br><small><?= h((string)$r['origen']) ?></small></td>
-              <td>
+              <td data-key="id" data-label="#"><?= (int)$r['id'] ?></td>
+              <td data-label="Tipo">
+                <?= h((string)($r['tipo_nombre'] ?? '—')) ?>
+                <br><small>$<?= h(number_format((float)($r['precio'] ?? 0),2,'.','')) ?></small>
+              </td>
+              <td data-label="Código"><code><?= h($r['code']) ?></code></td>
+              <td data-label="Pedido">
+                #<?= (int)$r['pedido_id'] ?><br><small><?= h((string)$r['origen']) ?></small>
+              </td>
+              <td data-label="Comprador">
                 <?= h($r['comprador_nombre']) ?><br>
                 <small><?= h($r['comprador_email']) ?></small>
               </td>
-              <td><span class="pill"><?= h($r['pedido_estado']) ?></span></td>
-              <td>
+              <td data-label="Estado"><span class="pill"><?= h($r['pedido_estado']) ?></span></td>
+              <td data-label="Uso">
                 <?php if (!empty($r['used_at'])): ?>
                   <span class="pill">USADO</span><br>
                   <small><?= h($r['used_at']) ?><?= $r['used_gate']? ' · '.h($r['used_gate']) : '' ?></small>
@@ -277,9 +332,9 @@ if (isset($_GET['export']) && $_GET['export']==='csv') {
                   <span class="pill">sin usar</span>
                 <?php endif; ?>
               </td>
-              <td style="white-space:nowrap">
-                <a class="btn" target="_blank" href="ticket_pdf.php?code=<?= urlencode($r['code']) ?>">📄 PDF</a>
-                <a class="btn gray" target="_blank" href="mi_entrada.php?code=<?= urlencode($r['code']) ?>">👁️ Ver</a>
+              <td data-key="acciones" data-label="Acciones" style="white-space:nowrap">
+                <a class="btn" target="_blank" rel="noopener" href="ticket_pdf.php?code=<?= urlencode($r['code']) ?>">📄 PDF</a>
+                <a class="btn gray" target="_blank" rel="noopener" href="mi_entrada.php?code=<?= urlencode($r['code']) ?>">👁️ Ver</a>
 
                 <?php if (empty($r['used_at'])): ?>
                   <form method="post" action="" style="display:inline">
