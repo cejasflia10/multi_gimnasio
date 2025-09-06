@@ -254,7 +254,7 @@ $evento_id = $evento_id_ctx;
     <form action="" method="POST" enctype="multipart/form-data" id="form_comp">
       <input type="hidden" name="evento_id" id="evento_id" value="<?= $evento_presente ? htmlspecialchars((string)$evento_id, ENT_QUOTES, 'UTF-8') : '' ?>">
 
-      <fieldset <?= !$evento_presente?'disabled':'' ?>}>
+      <fieldset <?= !$evento_presente?'disabled':'' ?>>
         <legend>Datos personales</legend>
         <div class="grid">
           <div>
@@ -305,7 +305,7 @@ $evento_id = $evento_id_ctx;
         </div>
       </fieldset>
 
-      <fieldset <?= !$evento_presente?'disabled':'' ?>}>
+      <fieldset <?= !$evento_presente?'disabled':'' ?>>
         <legend>Inscripción</legend>
         <div class="row">
           <div>
