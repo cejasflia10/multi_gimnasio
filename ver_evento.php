@@ -19,17 +19,18 @@ if (function_exists('mysqli_report')) { mysqli_report(MYSQLI_REPORT_OFF); }
 
 /* Helpers */
 function h($s){ return htmlspecialchars((string)$s, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'); }
-function is_youtube($url){ return stripos((string)$url, 'youtube.com') !== false || stripos((string)$url, 'youtu.be') !== false; }
+function is_youtube($url){ $u=(string)$url; return stripos($u,'youtube.com')!==false || stripos($u,'youtu.be')!==false; }
 function yt_embed($url){
-  $u = (string)$url;
-  if (strpos($u, 'watch?v=') !== false) return str_replace('watch?v=', 'embed/', $u);
-  if (stripos($u, 'youtu.be/') !== false) { $code = trim(parse_url($u, PHP_URL_PATH), '/'); return 'https://www.youtube.com/embed/'.$code; }
+  $u=(string)$url;
+  if (strpos($u,'watch?v=')!==false) return str_replace('watch?v=','embed/',$u);
+  if (stripos($u,'youtu.be/')!==false){ $code=trim(parse_url($u,PHP_URL_PATH),'/'); return 'https://www.youtube.com/embed/'.$code; }
   return $u;
 }
 function has_col(mysqli $db, string $table, string $col): bool {
   $t=$db->real_escape_string($table); $c=$db->real_escape_string($col);
-  $sql="SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='$t' AND COLUMN_NAME='$c' LIMIT 1";
-  if ($r=$db->query($sql)) { $ok=(bool)$r->num_rows; $r->close(); return $ok; } return false;
+  $sql="SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='{$t}' AND COLUMN_NAME='{$c}' LIMIT 1";
+  if ($r=$db->query($sql)) { $ok=(bool)$r->num_rows; $r->close(); return $ok; }
+  return false;
 }
 
 /* Resolver evento */
@@ -39,16 +40,25 @@ $evento_id = isset($_GET['id']) ? (int)$_GET['id'] : 0;
 if ($evento_id <= 0) {
   $rs = $conexion->query("SELECT id, titulo, fecha FROM eventos_deportivos ORDER BY fecha DESC");
   ?>
-  <!DOCTYPE html><html lang="es"><head>
+  <!DOCTYPE html>
+  <html lang="es">
+  <head>
     <meta charset="UTF-8"><title>Seleccionar evento</title>
     <link rel="stylesheet" href="estilo_unificado.css">
-    <style>.contenedor{max-width:900px;margin:22px auto}ul.eventos{list-style:none;padding:0}ul.eventos li{padding:.45rem 0;border-bottom:1px solid #e5e5e5}a.boton{display:inline-block;padding:.45rem .7rem;background:#111;color:gold;text-decoration:none;border-radius:6px}</style>
-  </head><body><div class="contenedor">
+    <style>
+      .contenedor{max-width:900px;margin:22px auto}
+      ul.eventos{list-style:none;padding:0}
+      ul.eventos li{padding:.45rem 0;border-bottom:1px solid #e5e5e5}
+      a.boton{display:inline-block;padding:.45rem .7rem;background:#111;color:gold;text-decoration:none;border-radius:6px}
+    </style>
+  </head>
+  <body>
+  <div class="contenedor">
     <?php @include __DIR__ . '/menu_eventos.php'; ?>
     <h2>📅 Elegí un evento</h2>
     <?php if ($rs && $rs->num_rows > 0): ?>
       <ul class="eventos">
-        <?php while($e = $rs->fetch_assoc()): ?>
+        <?php while($e=$rs->fetch_assoc()): ?>
           <li>
             <a class="boton" href="ver_evento.php?id=<?= (int)$e['id'] ?>">Ingresar</a>
             &nbsp; <?= h($e['fecha'] ?? '') ?> — <strong><?= h($e['titulo'] ?? '') ?></strong>
@@ -59,8 +69,11 @@ if ($evento_id <= 0) {
       <p>No hay eventos cargados.</p>
       <p><a class="boton" href="crear_evento.php">➕ Crear evento</a></p>
     <?php endif; ?>
-  </div></body></html>
-  <?php exit;
+  </div>
+  </body>
+  </html>
+  <?php
+  exit;
 }
 
 /* Traer datos del evento */
@@ -72,7 +85,8 @@ if (!$evento) { http_response_code(404); exit('⚠️ Evento no encontrado.'); }
 /* Guardar el evento actual en sesión */
 $_SESSION['evento_id_actual'] = (int)$evento['id'];
 
-/* Config de pagos del evento (alias, habilitaciones) */
+/* ====== CONFIG / MIGRACIONES SUAVES PARA MÓDULOS ====== */
+/* Config pagos del evento */
 $conexion->query("CREATE TABLE IF NOT EXISTS eventos_pagos_config (
   evento_id INT PRIMARY KEY,
   alias_bancario VARCHAR(120) NULL,
@@ -85,14 +99,26 @@ $conexion->query("CREATE TABLE IF NOT EXISTS eventos_pagos_config (
   FOREIGN KEY (evento_id) REFERENCES eventos_deportivos(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
+/* Pedidos: columnas usadas por compra/aprobación */
+if (!has_col($conexion,'pedidos','origen'))           { @$conexion->query("ALTER TABLE pedidos ADD COLUMN origen ENUM('online','taquilla') NOT NULL DEFAULT 'online' AFTER total"); }
+if (!has_col($conexion,'pedidos','metodo_pago'))      { @$conexion->query("ALTER TABLE pedidos ADD COLUMN metodo_pago VARCHAR(50) NULL AFTER origen"); }
+if (!has_col($conexion,'pedidos','alias_usado'))      { @$conexion->query("ALTER TABLE pedidos ADD COLUMN alias_usado VARCHAR(120) NULL AFTER metodo_pago"); }
+if (!has_col($conexion,'pedidos','cuenta_destino'))   { @$conexion->query("ALTER TABLE pedidos ADD COLUMN cuenta_destino VARCHAR(200) NULL AFTER alias_usado"); }
+if (!has_col($conexion,'pedidos','comprobante_path')) { @$conexion->query("ALTER TABLE pedidos ADD COLUMN comprobante_path VARCHAR(255) NULL AFTER cuenta_destino"); }
+if (!has_col($conexion,'pedidos','estado'))           { @$conexion->query("ALTER TABLE pedidos ADD COLUMN estado ENUM('pendiente','aprobado','pagado','rechazado','cancelado') NOT NULL DEFAULT 'pendiente' AFTER comprobante_path"); }
+if (!has_col($conexion,'pedidos','created_at'))       { @$conexion->query("ALTER TABLE pedidos ADD COLUMN created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP"); }
+
+/* Tickets: columnas para control de acceso/QR */
+if (!has_col($conexion,'tickets','qr_path'))   { @$conexion->query("ALTER TABLE tickets ADD COLUMN qr_path VARCHAR(255) NULL"); }
+if (!has_col($conexion,'tickets','used_at'))   { @$conexion->query("ALTER TABLE tickets ADD COLUMN used_at DATETIME NULL"); }
+if (!has_col($conexion,'tickets','used_by'))   { @$conexion->query("ALTER TABLE tickets ADD COLUMN used_by INT NULL"); }
+if (!has_col($conexion,'tickets','used_gate')) { @$conexion->query("ALTER TABLE tickets ADD COLUMN used_gate VARCHAR(60) NULL"); }
+
+/* Cargar config de pagos para las pills */
 $cfg = ['alias_bancario'=>null,'titular_banco'=>null,'banco_nombre'=>null,'habilitar_online'=>1,'habilitar_taquilla'=>1,'nota'=>null];
 $st=$conexion->prepare("SELECT * FROM eventos_pagos_config WHERE evento_id=?");
 $st->bind_param('i',$evento_id); $st->execute(); $r=$st->get_result(); if($r && $r->num_rows){ $cfg=$r->fetch_assoc(); } $st->close();
 
-/* Asegura columna origen en pedidos para separar online/taquilla */
-if (!has_col($conexion,'pedidos','origen')) {
-  @$conexion->query("ALTER TABLE pedidos ADD COLUMN origen ENUM('online','taquilla') NOT NULL DEFAULT 'online' AFTER total");
-}
 ?>
 <!DOCTYPE html>
 <html lang="es">
@@ -164,6 +190,7 @@ if (!has_col($conexion,'pedidos','origen')) {
         <div>
           <a class="btn" href="eventos_disponibles.php" target="_blank">🌐 Listado público</a>
           <a class="btn" href="evento.php?id=<?= (int)$evento['id'] ?>" target="_blank">👀 Vista pública de este evento</a>
+          <a class="btn" href="comprar_entradas.php?evento_id=<?= (int)$evento['id'] ?>" target="_blank">🧾 Comprar entradas (público)</a>
           <a class="btn sec" href="ver_tipos_entrada.php?evento_id=<?= (int)$evento['id'] ?>">⚙️ Tipos de entradas</a>
         </div>
       </div>
@@ -179,6 +206,12 @@ if (!has_col($conexion,'pedidos','origen')) {
           <a class="btn" href="vender_entrada.php?evento_id=<?= (int)$evento['id'] ?>">🛒 Vender en taquilla</a>
           <a class="btn" href="ver_entradas_vendidas.php?evento_id=<?= (int)$evento['id'] ?>">📥 Entradas vendidas</a>
           <a class="btn" href="ver_ventas_evento.php?evento_id=<?= (int)$evento['id'] ?>">📊 Ventas y rendición</a>
+        </div>
+
+        <!-- Accesos (QR) -->
+        <p style="margin-top:10px;"><strong>Accesos (QR)</strong></p>
+        <div>
+          <a class="btn" href="scan_tickets.php?evento_id=<?= (int)$evento['id'] ?>">🔎 Escanear tickets (QR)</a>
         </div>
 
         <!-- Formas de pago -->
