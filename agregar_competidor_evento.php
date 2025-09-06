@@ -2,6 +2,14 @@
 if (session_status() === PHP_SESSION_NONE) session_start();
 require_once __DIR__.'/conexion.php';
 
+/* ===== Seguridad conexión ===== */
+if (!isset($conexion) || !($conexion instanceof mysqli)) {
+  http_response_code(500);
+  exit('❌ No hay conexión a la base de datos.');
+}
+if (function_exists('mysqli_report')) { mysqli_report(MYSQLI_REPORT_OFF); }
+@$conexion->set_charset('utf8mb4');
+
 /* ===== Helpers ===== */
 function post($k){ return isset($_POST[$k]) ? trim((string)$_POST[$k]) : ''; }
 function toIntOrNull($v){ return ($v==='' || !is_numeric($v)) ? null : (int)$v; }
@@ -48,9 +56,9 @@ function fk_ensure_id(mysqli $db, string $table, ?int $id): ?int {
 /* ===== Duplicado por (evento_id, dni) (robusto si faltan columnas) ===== */
 function existe_dni_evento(mysqli $db, int $evento_id, string $dni): bool {
   $t = 'competidores_evento';
-  $hasDni  = has_col($db,$t,'dni');
-  $hasEid  = has_col($db,$t,'evento_id');
-  if (!$hasDni) return false; // si no hay columna DNI no podemos validar duplicado
+  $hasDni = has_col($db,$t,'dni');
+  $hasEid = has_col($db,$t,'evento_id');
+  if (!$hasDni) return false;
   if ($hasEid) {
     $sql = "SELECT 1 FROM `{$t}` WHERE evento_id=? AND dni=? LIMIT 1";
     $st = $db->prepare($sql);
@@ -74,42 +82,41 @@ function insertar_competidor(mysqli $db, array $row): bool {
   $t = 'competidores_evento';
   $cols = []; $vals = []; $types = '';
 
-  // columnas candidatas (agregá acá si tu tabla tiene más)
+  // Ajustá tipos si tu esquema difiere (p. ej. edad INT -> 'i')
   $cands = [
-    'evento_id'           => 'i',
-    'apellido'            => 's',
-    'nombre'              => 's',
-    'dni'                 => 's',
-    'fecha_nacimiento'    => 's',
-    'edad'                => 's', // si tu columna es INT podés poner 'i' y castear arriba
-    'sexo'                => 's',
-    'escuela_nombre'      => 's',
-    'escuela_logo'        => 's',
-    'foto_competidor'     => 's',
-    'pago_inscripcion'    => 's', // DECIMAL/NUMERIC igual enlaza bien como string
-    'modalidad_id'        => 's',
-    'disciplina_id'       => 's',
-    'categoria_tecnica_id'=> 's',
-    'division_id'         => 's',
-    'categoria_peso_id'   => 's',
+    'evento_id'            => 'i',
+    'apellido'             => 's',
+    'nombre'               => 's',
+    'dni'                  => 's',
+    'fecha_nacimiento'     => 's',
+    'edad'                 => 's',
+    'sexo'                 => 's',
+    'escuela_nombre'       => 's',
+    'escuela_logo'         => 's',
+    'foto_competidor'      => 's',
+    'pago_inscripcion'     => 's',
+    'modalidad_id'         => 's',
+    'disciplina_id'        => 's',
+    'categoria_tecnica_id' => 's',
+    'division_id'          => 's',
+    'categoria_peso_id'    => 's',
   ];
 
   foreach ($cands as $c => $tp) {
     if (has_col($db, $t, $c)) {
-      $cols[]  = "`$c`";
-      $vals[]  = $row[$c] ?? null;
-      $types  .= $tp;
+      $cols[] = "`$c`";
+      $vals[] = $row[$c] ?? null;
+      $types .= $tp;
     }
   }
 
   if (!$cols) { http_response_code(500); exit('❌ No hay columnas compatibles en competidores_evento.'); }
 
-  $ph = rtrim(str_repeat('?,', count($cols)), ',');
+  $ph  = rtrim(str_repeat('?,', count($cols)), ',');
   $sql = "INSERT INTO `{$t}` (".implode(',', $cols).") VALUES ($ph)";
   $st  = $db->prepare($sql);
   if (!$st) { http_response_code(500); exit('❌ SQL prepare: '.$db->error); }
 
-  // bind por referencia
   $bind = [$types];
   foreach ($vals as $k => $v) { $bind[] = &$vals[$k]; }
   call_user_func_array([$st,'bind_param'],$bind);
@@ -119,25 +126,41 @@ function insertar_competidor(mysqli $db, array $row): bool {
   return true;
 }
 
-/* ===== evento_id contextual ===== */
-$evento_id_get = isset($_GET['evento_id']) ? (int)$_GET['evento_id'] : 0;
-if ($evento_id_get > 0) { $_SESSION['evento_id_actual'] = $evento_id_get; }
-$evento_id_ses = isset($_SESSION['evento_id_actual']) ? (int)$_SESSION['evento_id_actual'] : 0;
-$evento_id_ctx = $evento_id_get > 0 ? $evento_id_get : $evento_id_ses;
+/* =========================================================
+   evento_id contextual (POST → GET → REFERER → SESSION)
+   ========================================================= */
+$evento_id_post = isset($_POST['evento_id']) && ctype_digit((string)$_POST['evento_id']) ? (int)$_POST['evento_id'] : 0;
+$evento_id_get  = isset($_GET['evento_id'])  && ctype_digit((string)$_GET['evento_id'])  ? (int)$_GET['evento_id']  : 0;
+$evento_id_ref  = 0;
+if (empty($evento_id_post) && empty($evento_id_get) && !empty($_SERVER['HTTP_REFERER'])) {
+  $ref = parse_url($_SERVER['HTTP_REFERER']);
+  if (!empty($ref['query'])) {
+    parse_str($ref['query'], $qref);
+    if (!empty($qref['evento_id']) && ctype_digit((string)$qref['evento_id'])) {
+      $evento_id_ref = (int)$qref['evento_id'];
+    }
+  }
+}
+
+/* Persistimos en sesión la primera fuente válida */
+if ($evento_id_post > 0) {
+  $_SESSION['evento_id_actual'] = $evento_id_post;
+} elseif ($evento_id_get > 0) {
+  $_SESSION['evento_id_actual'] = $evento_id_get;
+} elseif ($evento_id_ref > 0) {
+  $_SESSION['evento_id_actual'] = $evento_id_ref;
+}
+
+$evento_id_ctx = (int)($_SESSION['evento_id_actual'] ?? 0);
 $evento_presente = $evento_id_ctx > 0;
 
 /* ===== POST ===== */
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-  if (!isset($conexion) || !($conexion instanceof mysqli)) {
-    http_response_code(500); exit('❌ No hay conexión a la base de datos.');
-  }
-  if (function_exists('mysqli_report')) { mysqli_report(MYSQLI_REPORT_OFF); }
-  @$conexion->set_charset('utf8mb4');
+  $evento_id = $evento_id_ctx; // ya consolidado
 
-  $evento_id = (int)($_POST['evento_id'] ?? $_SESSION['evento_id_actual'] ?? 0);
   if ($evento_id <= 0) {
     $_SESSION['flash_error']='Falta evento_id. Abrí el formulario desde el evento.';
-    header('Location: agregar_competidor_evento.php?evento_id='.$evento_id_ctx);
+    header('Location: agregar_competidor_evento.php'.($evento_id_ctx>0?'?evento_id='.$evento_id_ctx:'')); // intenta volver con lo que tenga
     exit;
   }
 
@@ -150,7 +173,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   $escuela_nombre = post('escuela_nombre');
   $pago_inscripcion = post('pago_inscripcion'); if ($pago_inscripcion === '') $pago_inscripcion = '0.00';
 
-  // IDs del bloque principal
+  // IDs seleccionadas
   $modalidad_id_in         = toIntOrNull(post('modalidad_id'));
   $disciplina_id_in        = toIntOrNull(post('disciplina_id'));
   $categoria_tecnica_id_in = toIntOrNull(post('categoria_tecnica_id'));
@@ -168,14 +191,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     exit;
   }
 
-  // ❗ BLOQUEO POR DNI (por evento)
+  // Bloqueo por duplicado de DNI en el mismo evento
   if (existe_dni_evento($conexion, $evento_id, $dni)) {
     $_SESSION['flash_error'] = 'Ese DNI ya está inscripto en este evento.';
     header('Location: agregar_competidor_evento.php?evento_id='.$evento_id);
     exit;
   }
 
-  // FKs seguros (si las tablas no existen, devolverán null)
+  // FKs seguros (si las tablas no existen, devuelven null)
   $modalidad_id         = fk_ensure_id($conexion, 'modalidades_evento',         $modalidad_id_in);
   $disciplina_id        = fk_ensure_id($conexion, 'disciplinas_evento',         $disciplina_id_in);
   $categoria_tecnica_id = fk_ensure_id($conexion, 'categorias_tecnicas_evento', $categoria_tecnica_id_in);
@@ -186,14 +209,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   $escuela_logo    = save_upload('escuela_logo', $evento_id);
   $foto_competidor = save_upload('foto_competidor', $evento_id);
 
-  // Mapa de valores (algunos pueden no existir en tu tabla; insertar_competidor filtra)
+  // Valores (insertar_competidor filtra solo columnas existentes)
   $row = [
-    'evento_id'            => (int)$evento_id,
+    'evento_id'            => $evento_id,
     'apellido'             => $apellido,
     'nombre'               => $nombre,
     'dni'                  => $dni,
     'fecha_nacimiento'     => ($fecha_nac !== '') ? $fecha_nac : null,
-    'edad'                 => isset($edad) ? (string)$edad : null,
+    'edad'                 => isset($edad) ? (string)$edad : null, // cambia a INT si tu columna lo es
     'sexo'                 => $sexo !== '' ? $sexo : null,
     'escuela_nombre'       => ($escuela_nombre !== '') ? $escuela_nombre : null,
     'escuela_logo'         => $escuela_logo ?: null,
@@ -207,7 +230,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   ];
 
   insertar_competidor($conexion, $row);
-  header('Location: ver_competidores_evento.php?evento_id='.(int)$evento_id);
+  header('Location: ver_competidores_evento.php?evento_id='.$evento_id);
   exit;
 }
 
@@ -233,8 +256,8 @@ $evento_id = $evento_id_ctx;
     fieldset { border:1px solid #e3e3e3; border-radius:10px; padding:12px; margin-top:14px; }
     legend { font-weight:700; padding:0 6px; }
     .row { display:grid; grid-template-columns: repeat(2, 1fr); gap:12px; }
-    @media (max-width: 680px){ .row{ grid-template-columns: 1fr; } }
-    .btn-principal { display:inline-block; padding:10px 14px; border-radius:10px; background:#1e88e5; color:#fff; border:0; cursor:pointer; }
+    @media (max-width: 680px){ .row{ grid_template_columns: 1fr; } }
+    .btn-principal { display:inline-block; padding:10px 14px; border-radius:10px; background:#1e88e5; color:#fff; border:0; cursor:pointer; text-decoration:none; }
     .btn-principal[disabled]{ opacity:0.6; cursor:not-allowed; }
     .warn { color:#b26a00; font-size:13px; margin-top:6px; min-height:18px; }
   </style>
@@ -251,7 +274,8 @@ $evento_id = $evento_id_ctx;
       <div class="alert error">Falta evento_id. Abrí este formulario desde el listado del evento (botón “Agregar competidor”).</div>
     <?php endif; ?>
 
-    <form action="" method="POST" enctype="multipart/form-data" id="form_comp">
+    <!-- NOTA: el action incluye ?evento_id=... para que no se pierda en el POST -->
+    <form action="?evento_id=<?= (int)$evento_id ?>" method="POST" enctype="multipart/form-data" id="form_comp">
       <input type="hidden" name="evento_id" id="evento_id" value="<?= $evento_presente ? htmlspecialchars((string)$evento_id, ENT_QUOTES, 'UTF-8') : '' ?>">
 
       <fieldset <?= !$evento_presente?'disabled':'' ?>>
@@ -357,7 +381,9 @@ $evento_id = $evento_id_ctx;
 
       <p style="margin-top:12px;">
         <button type="submit" class="btn-principal" id="btn_submit" <?= (!$evento_presente?'disabled':'') ?>>✅ Guardar Competidor</button>
-        <a href="ver_competidores_evento.php?evento_id=<?= (int)$evento_id ?>" class="btn-principal" style="background:#607d8b">↩ Volver al listado</a>
+        <?php if ($evento_presente): ?>
+          <a href="ver_competidores_evento.php?evento_id=<?= (int)$evento_id ?>" class="btn-principal" style="background:#607d8b">↩ Volver al listado</a>
+        <?php endif; ?>
       </p>
     </form>
   </div>
