@@ -79,7 +79,6 @@ $titulo = $ev['titulo'] ?? ('Evento #'.$evento_id);
   .ok{background:var(--okbg);border:1px solid var(--okbd);color:var(--oktx);border-radius:10px;padding:10px}
   .bad{background:var(--badbg);border:1px solid var(--badbd);color:var(--badt);border-radius:10px;padding:10px}
 
-  /* Cards (mobile) para historial, si agregás tabla en el futuro */
   @media(max-width:580px){
     .btn{flex:1 1 48%}
   }
@@ -127,7 +126,7 @@ $titulo = $ev['titulo'] ?? ('Evento #'.$evento_id);
       <div class="log" id="log" aria-live="polite" aria-atomic="false"></div>
     </section>
 
-    <!-- Columna der: ayuda rápida -->
+    <!-- Columna der: ayuda -->
     <aside class="card">
       <h3 style="margin:0 0 6px">Consejos</h3>
       <ul style="margin:.2rem 0 0 1.2rem; line-height:1.5">
@@ -143,8 +142,8 @@ $titulo = $ev['titulo'] ?? ('Evento #'.$evento_id);
   </div>
 </div>
 
-<!-- ZXing browser library -->
-<script src="https://unpkg.com/@zxing/browser@latest"></script>
+<!-- ZXing UMD: expone window.ZXing -->
+<script src="https://cdn.jsdelivr.net/npm/@zxing/library@0.20.0/umd/index.min.js"></script>
 <script>
 const eventoId = <?= (int)$evento_id ?>;
 const $ = (q)=>document.querySelector(q);
@@ -204,7 +203,7 @@ async function loadCams(){
       camSel.appendChild(opt);
     });
     // Elegir la trasera si existe
-    const back = cams.find(d => /back|rear/i.test(d.label));
+    const back = cams.find(d => /back|rear|environment/i.test(d.label));
     if(back) camSel.value = back.deviceId;
   }catch(e){
     const opt = document.createElement('option');
@@ -215,30 +214,34 @@ async function loadCams(){
 
 /* Iniciar lectura */
 async function start(){
+  if (!window.ZXing || !ZXing.BrowserMultiFormatReader){
+    addLog('No se pudo iniciar la cámara: ZXing no se cargó.', false);
+    return;
+  }
   try{
     if(codeReader){ await stop(); }
     codeReader = new ZXing.BrowserMultiFormatReader();
     const deviceId = camSel.value || null;
-    controls = await codeReader.decodeFromVideoDevice(deviceId, video, async (res, err)=>{
+    controls = await codeReader.decodeFromVideoDevice(deviceId, video, (res, err)=>{
       if(res){
-        const txt = res.getText();
+        const txt = res.getText ? res.getText() : (res.text || '');
         handleScan(txt);
       }
     });
     // Guardar track para linterna
     const stream = video.srcObject;
     currentStreamTrack = stream ? stream.getVideoTracks()[0] : null;
-    // Intentar activar continuous autofocus
+    // Intentar autofocus continuo y torch
     if(currentStreamTrack && currentStreamTrack.getCapabilities){
       const caps = currentStreamTrack.getCapabilities();
       if(caps.focusMode && caps.focusMode.includes('continuous')){
-        await currentStreamTrack.applyConstraints({ advanced:[{ focusMode:'continuous' }] });
+        try{ await currentStreamTrack.applyConstraints({ advanced:[{ focusMode:'continuous' }] }); }catch(_){}
       }
-      // Si torch estaba ON y existe, restaurarlo
       if(torchOn && caps.torch){
-        await currentStreamTrack.applyConstraints({ advanced:[{ torch:true }] });
+        try{ await currentStreamTrack.applyConstraints({ advanced:[{ torch:true }] }); }catch(_){}
       }
     }
+    addLog('Cámara iniciada.', true);
   }catch(e){
     addLog('No se pudo iniciar la cámara: '+e, false);
   }
@@ -247,32 +250,34 @@ async function start(){
 /* Detener */
 async function stop(){
   try{
-    if(controls){ controls.stop(); controls=null; }
+    if(controls && controls.stop){ controls.stop(); controls=null; }
     if(codeReader){ codeReader.reset(); codeReader = null; }
     if(video.srcObject){
       video.srcObject.getTracks().forEach(t=>t.stop());
       video.srcObject = null;
     }
     currentStreamTrack = null;
+    addLog('Cámara detenida.', true);
   }catch(_){}
 }
 
 /* Linterna */
 async function toggleTorch(){
-  if(!currentStreamTrack || !currentStreamTrack.getCapabilities){ return; }
+  if(!currentStreamTrack || !currentStreamTrack.getCapabilities){ addLog('Primero iniciá la cámara.', false); return; }
   const caps = currentStreamTrack.getCapabilities();
   if(!caps.torch){ addLog('Este dispositivo no soporta linterna.', false); return; }
   torchOn = !torchOn;
   try{
     await currentStreamTrack.applyConstraints({ advanced:[{ torch: torchOn }] });
     torchBtn.setAttribute('aria-pressed', torchOn ? 'true' : 'false');
+    addLog('Linterna ' + (torchOn?'encendida':'apagada') + '.', true);
   }catch(e){
     torchOn = !torchOn; // revert
     addLog('No se pudo cambiar linterna: '+e, false);
   }
 }
 
-/* Normalizar extracción de code (acepta URLs ?code=XXX) */
+/* Extraer código (acepta URLs con ?code=XXX) */
 function extractCode(texto){
   let code = (texto||'').trim();
   try{
@@ -333,6 +338,9 @@ camSel.addEventListener('change', start);
 
 /* Init */
 (async ()=>{
+  if (location.protocol !== 'https:') {
+    addLog('Para usar la cámara necesitás abrir el sitio por HTTPS.', false);
+  }
   await loadCams();
 })();
 </script>

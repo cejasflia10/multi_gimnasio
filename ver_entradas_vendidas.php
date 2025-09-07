@@ -3,7 +3,7 @@
    ver_entradas_vendidas.php — Listado y gestión de tickets por evento (responsive)
    Requiere login módulo eventos (evento_usuario_id)
    GET: evento_id (obligatorio), q, estado, usado, tipo_id, export=csv
-   POST acciones: usar / revertir / set_estado (habilitar, pagado, rechazar)
+   POST acciones: usar / revertir / set_estado (habilitar, pagado, rechazar, pendiente, cancelado) / eliminar_ticket
    ============================================================ */
 if (session_status() === PHP_SESSION_NONE) session_start();
 
@@ -36,10 +36,7 @@ function bind_all_params(mysqli_stmt $st, string $types, array &$vals): bool {
   return call_user_func_array([$st,'bind_param'], $params);
 }
 function redirect_self(int $evento_id): void {
-  // PRG: volvemos a la misma vista con solo evento_id y filtros básicos actuales
-  $qs = [
-    'evento_id' => $evento_id,
-  ];
+  $qs = ['evento_id' => $evento_id];
   foreach (['q','estado','usado','tipo_id'] as $k) {
     if (isset($_GET[$k]) && $_GET[$k] !== '') { $qs[$k] = $_GET[$k]; }
   }
@@ -63,12 +60,30 @@ if (!has_col($conexion,'tickets','used_at'))   { @$conexion->query("ALTER TABLE 
 if (!has_col($conexion,'tickets','used_by'))   { @$conexion->query("ALTER TABLE tickets ADD COLUMN used_by INT NULL"); }
 if (!has_col($conexion,'tickets','used_gate')) { @$conexion->query("ALTER TABLE tickets ADD COLUMN used_gate VARCHAR(60) NULL"); }
 
+/* Asegurar que pedidos.estado acepte todos los estados usados (incluye 'pagado') */
+$col = $conexion->query("SELECT COLUMN_TYPE FROM INFORMATION_SCHEMA.COLUMNS
+  WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='pedidos' AND COLUMN_NAME='estado'");
+$col = $col ? $col->fetch_assoc() : null;
+if ($col) {
+  $type = strtolower((string)$col['COLUMN_TYPE']); // ej: enum('pendiente','aprobado',...)
+  $estados = ["'pendiente'","'aprobado'","'pagado'","'rechazado'","'cancelado'"];
+  foreach ($estados as $e) {
+    if (strpos($type, $e) === false) {
+      @ $conexion->query("ALTER TABLE `pedidos`
+        MODIFY `estado` ENUM('pendiente','aprobado','pagado','rechazado','cancelado')
+        NOT NULL DEFAULT 'pendiente'");
+      break;
+    }
+  }
+}
+
 /* ===== Acciones (POST) ===== */
 $flash_ok=''; $flash_err='';
 if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
   $accion = $_POST['accion'] ?? '';
   $uid    = (int)($_SESSION['evento_usuario_id'] ?? 0);
 
+  /* usar / revertir (marcar uso del ticket) */
   if ($accion === 'usar' || $accion === 'revertir') {
     $code = trim((string)($_POST['code'] ?? ''));
     $gate = trim((string)($_POST['gate'] ?? 'Acceso principal'));
@@ -100,7 +115,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
     redirect_self($evento_id);
   }
 
-  // === Cambiar estado del PEDIDO (habilitar/pagar/rechazar)
+  /* Cambiar estado del pedido */
   if ($accion === 'set_estado') {
     $pedido_id   = (int)($_POST['pedido_id'] ?? 0);
     $nuevoEstado = strtolower(trim((string)($_POST['nuevo_estado'] ?? '')));
@@ -109,17 +124,26 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
       $_SESSION['flash_err'] = 'Datos inválidos para cambiar estado.'; redirect_self($evento_id);
     }
 
+    // Leer estado actual para evitar falso error por 0 filas afectadas
+    $st = $conexion->prepare("SELECT estado FROM pedidos WHERE id=? AND evento_id=? LIMIT 1");
+    if (!$st) { $_SESSION['flash_err']='Error interno (leer estado).'; redirect_self($evento_id); }
+    $st->bind_param('ii',$pedido_id,$evento_id);
+    $st->execute(); $res=$st->get_result(); $row=$res?$res->fetch_assoc():null; $st->close();
+    if (!$row){ $_SESSION['flash_err']='Pedido no encontrado para este evento.'; redirect_self($evento_id); }
+
+    $estado_actual = strtolower((string)$row['estado']);
+    if ($estado_actual === $nuevoEstado) {
+      $_SESSION['flash_ok'] = "El pedido #{$pedido_id} ya estaba en estado {$nuevoEstado}.";
+      redirect_self($evento_id);
+    }
+
     $sql="UPDATE pedidos SET estado=? WHERE id=? AND evento_id=?";
     if($st=$conexion->prepare($sql)){
       $st->bind_param('sii',$nuevoEstado,$pedido_id,$evento_id);
-      if($st->execute() && $st->affected_rows>0){
-        // Mensaje claro para el organizador
-        if ($nuevoEstado==='aprobado') $_SESSION['flash_ok']='✅ Pedido #'.$pedido_id.' habilitado (APROBADO). Los QR ya se muestran.';
-        elseif ($nuevoEstado==='pagado') $_SESSION['flash_ok']='💵 Pedido #'.$pedido_id.' marcado como PAGADO. QR habilitado.';
-        elseif ($nuevoEstado==='rechazado') $_SESSION['flash_ok']='⛔ Pedido #'.$pedido_id.' RECHAZADO.';
-        else $_SESSION['flash_ok']='Estado del pedido #'.$pedido_id.' actualizado: '.$nuevoEstado.'.';
+      if($st->execute()){
+        $_SESSION['flash_ok'] = "Estado del pedido #{$pedido_id} actualizado a {$nuevoEstado}.";
       } else {
-        $_SESSION['flash_err']='No se pudo actualizar el estado del pedido.';
+        $_SESSION['flash_err']='Error al actualizar: '.h($conexion->error);
       }
       $st->close();
     } else {
@@ -127,12 +151,62 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
     }
     redirect_self($evento_id);
   }
+
+  /* Eliminar ticket (no usado) */
+  if ($accion === 'eliminar_ticket') {
+    $ticket_id = (int)($_POST['ticket_id'] ?? 0);
+    if ($ticket_id<=0) { $_SESSION['flash_err']='Ticket inválido.'; redirect_self($evento_id); }
+
+    $conexion->begin_transaction();
+    try {
+      $sql = "SELECT t.id, t.tipo_id, t.used_at, p.id AS pedido_id, tt.precio
+              FROM tickets t
+              JOIN pedidos p ON p.id=t.pedido_id
+              LEFT JOIN tickets_tipos tt ON tt.id=t.tipo_id
+              WHERE t.id=? AND p.evento_id=? FOR UPDATE";
+      $st = $conexion->prepare($sql);
+      if (!$st) throw new Exception('Prep select ticket.');
+      $st->bind_param('ii',$ticket_id,$evento_id);
+      $st->execute(); $r=$st->get_result(); $tk=$r?$r->fetch_assoc():null; $st->close();
+
+      if (!$tk) throw new Exception('Ticket no pertenece a este evento.');
+      if (!empty($tk['used_at'])) throw new Exception('No se puede eliminar: el ticket ya fue usado.');
+
+      $tipo_id   = (int)$tk['tipo_id'];
+      $pedido_id = (int)$tk['pedido_id'];
+      $precio    = (float)($tk['precio'] ?? 0);
+
+      $st = $conexion->prepare("DELETE FROM tickets WHERE id=? LIMIT 1");
+      if (!$st) throw new Exception('Prep delete.');
+      $st->bind_param('i',$ticket_id);
+      $st->execute();
+      if ($st->affected_rows<=0) { $st->close(); throw new Exception('No se pudo eliminar el ticket.'); }
+      $st->close();
+
+      $st = $conexion->prepare("UPDATE tickets_tipos SET stock_disponible=stock_disponible+1 WHERE id=? AND evento_id=?");
+      if (!$st) throw new Exception('Prep restock.');
+      $st->bind_param('ii',$tipo_id,$evento_id);
+      $st->execute(); $st->close();
+
+      $st = $conexion->prepare("UPDATE pedidos SET total = GREATEST(0, total - ?) WHERE id=?");
+      if (!$st) throw new Exception('Prep desc total.');
+      $st->bind_param('di',$precio,$pedido_id);
+      $st->execute(); $st->close();
+
+      $conexion->commit();
+      $_SESSION['flash_ok'] = "Ticket #{$ticket_id} eliminado. Stock repuesto y total actualizado.";
+    } catch(Exception $e) {
+      $conexion->rollback();
+      $_SESSION['flash_err'] = h($e->getMessage());
+    }
+    redirect_self($evento_id);
+  }
 }
 
 /* ===== Filtros ===== */
-$q       = trim((string)($_GET['q'] ?? ''));         // busca en code, email, nombre
-$estado  = trim((string)($_GET['estado'] ?? ''));    // estado del pedido
-$usado   = trim((string)($_GET['usado'] ?? ''));     // '1' usados, '0' sin usar, '' todos
+$q       = trim((string)($_GET['q'] ?? ''));
+$estado  = trim((string)($_GET['estado'] ?? ''));
+$usado   = trim((string)($_GET['usado'] ?? ''));
 $tipo_id = (int)($_GET['tipo_id'] ?? 0);
 
 $where = ["p.evento_id = ?"];
@@ -159,9 +233,9 @@ if ($st=$conexion->prepare("SELECT id,nombre FROM tickets_tipos WHERE evento_id=
   $tipos = $st->get_result()->fetch_all(MYSQLI_ASSOC); $st->close();
 }
 
-/* Consulta principal */
+/* Consulta principal (⚠️ sin t.qr_path para evitar error si no existe la columna) */
 $sql = "SELECT
-          t.id, t.code, t.qr_path, t.used_at, t.used_by, t.used_gate,
+          t.id, t.code, t.used_at, t.used_by, t.used_gate,
           tt.nombre AS tipo_nombre, tt.precio,
           p.id AS pedido_id, p.estado AS pedido_estado, p.origen,
           p.comprador_nombre, p.comprador_email, p.created_at
@@ -178,7 +252,7 @@ $st->execute(); $res = $st->get_result();
 $rows = $res ? $res->fetch_all(MYSQLI_ASSOC) : [];
 $st->close();
 
-/* Totales usados/no usados (sobre resultados filtrados) */
+/* Totales usados/no usados */
 $counts = ['todos'=>0,'usados'=>0,'libres'=>0];
 if ($rows) {
   $counts['todos'] = count($rows);
@@ -203,7 +277,7 @@ if (isset($_GET['export']) && $_GET['export']==='csv') {
   fclose($out); exit;
 }
 
-// Flash (PRG)
+/* Flash (PRG) */
 if (!empty($_SESSION['flash_ok']))  { $flash_ok  = $_SESSION['flash_ok'];  unset($_SESSION['flash_ok']); }
 if (!empty($_SESSION['flash_err'])) { $flash_err = $_SESSION['flash_err']; unset($_SESSION['flash_err']); }
 ?>
@@ -231,13 +305,13 @@ if (!empty($_SESSION['flash_err'])) { $flash_err = $_SESSION['flash_err']; unset
     .btn.green{background:#0f3; color:#000; border-color:#0b0}
     .btn.gold{background:#332b00; color:#ffde6a; border-color:#665200}
     .pill{display:inline-block;padding:.25rem .6rem;border-radius:999px;border:1px solid #3b3b3b;font-size:.85rem;color:#ddd}
-    input,select,button{padding:.56rem .7rem;border-radius:10px;border:1px solid var(--bd);background:#101010;color:var(--fg)}
+    input,select,button{padding:.56rem .7rem;border-radius:10px;border:1px solid var(--bd);background:#101010;color:#fg}
     button.btn{border:1px solid var(--bd)}
     .ok{margin:10px 0;padding:10px;border-radius:10px;background:var(--okbg);border:1px solid var(--okbd);color:var(--oktx)}
     .bad{margin:10px 0;padding:10px;border-radius:10px;background:var(--badbg);border:1px solid var(--badbd);color:var(--badt)}
     .table-wrap{overflow:auto;border:1px solid var(--bd);border-radius:12px}
     table{width:100%;border-collapse:collapse;min-width:900px}
-    thead th{position:sticky; top:0; background:#121212; color:var(--brand); text-align:left; padding:.7rem .65rem; border-bottom:1px solid var(--bd); z-index:1;}
+    thead th{position:sticky; top:0; background:#121212; color:#brand; text-align:left; padding:.7rem .65rem; border-bottom:1px solid var(--bd); z-index:1;}
     td{padding:.6rem .65rem;border-bottom:1px solid var(--bd);vertical-align:middle}
     code{background:#000; padding:.15rem .35rem; border-radius:6px; border:1px solid #333}
     @media(hover:hover){ tbody tr:hover{background:#101010} }
@@ -269,8 +343,8 @@ if (!empty($_SESSION['flash_err'])) { $flash_err = $_SESSION['flash_err']; unset
       <span class="pill">Disponibles: <?= (int)$counts['libres'] ?></span>
     </div>
 
-    <?php if($flash_ok): ?><div class="ok"><?= $flash_ok ?></div><?php endif; ?>
-    <?php if($flash_err): ?><div class="bad"><?= $flash_err ?></div><?php endif; ?>
+    <?php if(!empty($flash_ok)): ?><div class="ok"><?= $flash_ok ?></div><?php endif; ?>
+    <?php if(!empty($flash_err)): ?><div class="bad"><?= $flash_err ?></div><?php endif; ?>
 
     <div class="card">
       <h3 style="margin:0 0 8px">🎟️ Entradas vendidas — <?= h($ev['titulo']) ?></h3>
@@ -353,6 +427,12 @@ if (!empty($_SESSION['flash_err'])) { $flash_err = $_SESSION['flash_err']; unset
                     <input type="hidden" name="gate" value="Acceso principal">
                     <button class="btn gold" type="submit">✅ Usar</button>
                   </form>
+
+                  <form method="post" action="" style="display:inline" onsubmit="return confirm('¿Eliminar este ticket? Se repondrá el stock y se descontará del total del pedido.');">
+                    <input type="hidden" name="accion" value="eliminar_ticket">
+                    <input type="hidden" name="ticket_id" value="<?= (int)$r['id'] ?>">
+                    <button class="btn red" type="submit">🗑️ Eliminar</button>
+                  </form>
                 <?php else: ?>
                   <form method="post" action="" style="display:inline" onsubmit="return confirm('¿Revertir uso?');">
                     <input type="hidden" name="accion" value="revertir">
@@ -361,7 +441,6 @@ if (!empty($_SESSION['flash_err'])) { $flash_err = $_SESSION['flash_err']; unset
                   </form>
                 <?php endif; ?>
 
-                <!-- ===== Acciones de estado del pedido (habilitar/pagar/rechazar) ===== -->
                 <?php $est = strtolower((string)$r['pedido_estado']); ?>
                 <?php if (!in_array($est,['aprobado','pagado'],true)): ?>
                   <form method="post" action="" style="display:inline">
