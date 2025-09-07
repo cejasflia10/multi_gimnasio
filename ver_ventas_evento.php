@@ -38,9 +38,54 @@ if ($st=$conexion->prepare("SELECT id, titulo, fecha FROM eventos_deportivos WHE
 }
 if (!$evento){ http_response_code(404); exit('Evento no encontrado.'); }
 
-/* Migración suave: columna origen en pedidos */
+/* Migraciones suaves necesarias */
 if (!has_col($conexion,'pedidos','origen')) {
   @$conexion->query("ALTER TABLE pedidos ADD COLUMN origen ENUM('online','taquilla') NOT NULL DEFAULT 'online' AFTER total");
+}
+if (!has_col($conexion,'pedidos','comprobante_path')) {
+  @$conexion->query("ALTER TABLE pedidos ADD COLUMN comprobante_path VARCHAR(255) NULL AFTER metodo_pago");
+}
+
+/* ===== Acciones POST: habilitar / revertir ===== */
+$flash_ok = $_SESSION['flash_ok'] ?? '';
+$flash_err= $_SESSION['flash_err'] ?? '';
+unset($_SESSION['flash_ok'], $_SESSION['flash_err']);
+
+if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
+  $accion    = $_POST['accion'] ?? '';
+  $pedido_id = isset($_POST['pedido_id']) ? (int)$_POST['pedido_id'] : 0;
+
+  if ($pedido_id<=0) {
+    $_SESSION['flash_err'] = 'ID de pedido inválido.';
+    header('Location: ver_ventas_evento.php?evento_id='.$evento_id);
+    exit;
+  }
+
+  if ($accion === 'habilitar') {
+    // Marcar como pagado => habilita QR en PDF/mi_entrada
+    $sql = "UPDATE pedidos SET estado='pagado' WHERE id=? AND evento_id=? LIMIT 1";
+    if ($st=$conexion->prepare($sql)){
+      $st->bind_param('ii',$pedido_id,$evento_id);
+      $st->execute();
+      if ($st->affected_rows>0) { $_SESSION['flash_ok']='Entradas habilitadas (pedido marcado como pagado).'; }
+      else { $_SESSION['flash_err']='No se pudo actualizar el estado (¿pertenece a otro evento?).'; }
+      $st->close();
+    } else { $_SESSION['flash_err']='Error interno (prep habilitar).'; }
+  }
+  elseif ($accion === 'pendiente') {
+    // Volver a pendiente => QR no operable
+    $sql = "UPDATE pedidos SET estado='pendiente' WHERE id=? AND evento_id=? LIMIT 1";
+    if ($st=$conexion->prepare($sql)){
+      $st->bind_param('ii',$pedido_id,$evento_id);
+      $st->execute();
+      if ($st->affected_rows>0) { $_SESSION['flash_ok']='Pedido vuelto a pendiente.'; }
+      else { $_SESSION['flash_err']='No se pudo actualizar el estado (¿pertenece a otro evento?).'; }
+      $st->close();
+    } else { $_SESSION['flash_err']='Error interno (prep pendiente).'; }
+  }
+
+  header('Location: ver_ventas_evento.php?evento_id='.$evento_id);
+  exit;
 }
 
 /* Totales por origen/estado */
@@ -69,7 +114,7 @@ if ($st=$conexion->prepare("
 /* Listado de pedidos (últimos 300) */
 $pedidos = [];
 if ($st=$conexion->prepare("
-  SELECT id, comprador_nombre, comprador_email, total, estado, origen, created_at
+  SELECT id, comprador_nombre, comprador_email, total, estado, origen, created_at, comprobante_path
   FROM pedidos
   WHERE evento_id=?
   ORDER BY id DESC
@@ -104,6 +149,7 @@ if ($st=$conexion->prepare("
       --bg:#0a0a0a; --fg:#f6f6f6; --mut:#c9c9c9; --brand:#d4af37;
       --card:#111; --bd:#222; --line:#222;
       --okbg:#0f251b; --okbd:#164b31; --oktx:#b6f3d1;
+      --badbg:#2a1414; --badbd:#5e2626; --badt:#ffb4b4;
     }
     html,body{margin:0;background:var(--bg);color:var(--fg);font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Helvetica,Arial,sans-serif}
     a{color:var(--brand);text-decoration:none}
@@ -120,6 +166,7 @@ if ($st=$conexion->prepare("
     }
     .btn.gray{background:#1b1b1b;color:#ddd}
     .btn.small{padding:.45rem .7rem; font-size:.92rem}
+    .btn.red{background:#7a1f1f;border-color:#8f2a2a;color:#fff}
 
     .pill{display:inline-block;padding:.25rem .6rem;border-radius:999px;border:1px solid #3b3b3b;font-size:.85rem;color:#ddd;margin-right:6px}
 
@@ -128,6 +175,9 @@ if ($st=$conexion->prepare("
 
     .card{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:14px}
     .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+
+    .ok{margin:10px 0;padding:10px;border-radius:10px;background:var(--okbg);border:1px solid var(--okbd);color:var(--oktx)}
+    .bad{margin:10px 0;padding:10px;border-radius:10px;background:var(--badbg);border:1px solid var(--badbd);color:var(--badt)}
 
     /* ===== Tabla (desktop) ===== */
     .table-wrap{overflow:auto;border:1px solid var(--bd);border-radius:12px}
@@ -176,6 +226,9 @@ if ($st=$conexion->prepare("
       <?php if(!empty($evento['fecha'])): ?><span class="pill"><?= h($evento['fecha']) ?></span><?php endif; ?>
     </div>
 
+    <?php if(!empty($flash_ok)): ?><div class="ok"><?= $flash_ok ?></div><?php endif; ?>
+    <?php if(!empty($flash_err)): ?><div class="bad"><?= $flash_err ?></div><?php endif; ?>
+
     <h2>📊 Ventas — <?= h($evento['titulo']) ?></h2>
     <div class="mut" style="margin:-4px 0 12px">Resumen por origen (solo suma $ de <b>pagados</b>).</div>
 
@@ -218,12 +271,13 @@ if ($st=$conexion->prepare("
               <th>Estado</th>
               <th>Comprador</th>
               <th>Total</th>
+              <th>Comprobante</th>
               <th>Acciones</th>
             </tr>
           </thead>
           <tbody>
           <?php if(!$pedidos): ?>
-            <tr><td colspan="7" class="mut">Sin ventas.</td></tr>
+            <tr><td colspan="8" class="mut">Sin ventas.</td></tr>
           <?php else: foreach($pedidos as $p): ?>
             <tr>
               <td data-key="venta" data-label="# Venta"><?= sprintf('PED-%06d',(int)$p['id']) ?></td>
@@ -235,9 +289,32 @@ if ($st=$conexion->prepare("
                 <small class="mut"><?= h((string)$p['comprador_email']) ?></small>
               </td>
               <td data-label="Total">$ <?= money($p['total']) ?></td>
+              <td data-label="Comprobante">
+                <?php if(!empty($p['comprobante_path'])): ?>
+                  <a class="btn small gray" href="<?= h($p['comprobante_path']) ?>" target="_blank" rel="noopener">📎 Ver</a>
+                <?php else: ?>
+                  <span class="mut">—</span>
+                <?php endif; ?>
+              </td>
               <td data-key="acciones" data-label="Acciones" style="white-space:nowrap">
                 <a class="btn small" href="compra_ok.php?pedido_id=<?= (int)$p['id'] ?>" target="_blank" rel="noopener">👁️ Ver</a>
                 <a class="btn small gray" href="qr_evento.php?pedido_id=<?= (int)$p['id'] ?>" target="_blank" rel="noopener">📄 PDF</a>
+
+                <?php if (strtolower((string)$p['estado'])!=='pagado'): ?>
+                  <!-- Habilitar entradas (marcar pagado) -->
+                  <form method="post" action="" style="display:inline">
+                    <input type="hidden" name="accion" value="habilitar">
+                    <input type="hidden" name="pedido_id" value="<?= (int)$p['id'] ?>">
+                    <button class="btn small" type="submit">✅ Habilitar entradas</button>
+                  </form>
+                <?php else: ?>
+                  <!-- Volver a pendiente -->
+                  <form method="post" action="" style="display:inline" onsubmit="return confirm('¿Volver a pendiente este pedido?');">
+                    <input type="hidden" name="accion" value="pendiente">
+                    <input type="hidden" name="pedido_id" value="<?= (int)$p['id'] ?>">
+                    <button class="btn small red" type="submit">↩ Volver a pendiente</button>
+                  </form>
+                <?php endif; ?>
               </td>
             </tr>
           <?php endforeach; endif; ?>

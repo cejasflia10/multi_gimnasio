@@ -3,7 +3,7 @@
    ver_entradas_vendidas.php — Listado y gestión de tickets por evento (responsive)
    Requiere login módulo eventos (evento_usuario_id)
    GET: evento_id (obligatorio), q, estado, usado, tipo_id, export=csv
-   POST acciones: usar / revertir (marca uso del ticket)
+   POST acciones: usar / revertir / set_estado (habilitar, pagado, rechazar)
    ============================================================ */
 if (session_status() === PHP_SESSION_NONE) session_start();
 
@@ -31,12 +31,20 @@ function has_col(mysqli $db, string $t, string $c): bool {
   if ($r=$db->query($sql)) { $ok=(bool)$r->num_rows; $r->close(); return $ok; }
   return false;
 }
-/* Helper para bind dinámico compatible con PHP 7/8 */
 function bind_all_params(mysqli_stmt $st, string $types, array &$vals): bool {
-  $params = [];
-  $params[] = &$types;
-  foreach ($vals as $k => &$v) { $params[] = &$v; }
+  $params = []; $params[] = &$types; foreach ($vals as $k=>&$v) { $params[] = &$v; }
   return call_user_func_array([$st,'bind_param'], $params);
+}
+function redirect_self(int $evento_id): void {
+  // PRG: volvemos a la misma vista con solo evento_id y filtros básicos actuales
+  $qs = [
+    'evento_id' => $evento_id,
+  ];
+  foreach (['q','estado','usado','tipo_id'] as $k) {
+    if (isset($_GET[$k]) && $_GET[$k] !== '') { $qs[$k] = $_GET[$k]; }
+  }
+  header('Location: ?'.http_build_query($qs));
+  exit;
 }
 
 /* Evento */
@@ -55,16 +63,17 @@ if (!has_col($conexion,'tickets','used_at'))   { @$conexion->query("ALTER TABLE 
 if (!has_col($conexion,'tickets','used_by'))   { @$conexion->query("ALTER TABLE tickets ADD COLUMN used_by INT NULL"); }
 if (!has_col($conexion,'tickets','used_gate')) { @$conexion->query("ALTER TABLE tickets ADD COLUMN used_gate VARCHAR(60) NULL"); }
 
-/* ===== Acciones (marcar uso / revertir) ===== */
+/* ===== Acciones (POST) ===== */
 $flash_ok=''; $flash_err='';
 if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
   $accion = $_POST['accion'] ?? '';
-  $code   = trim((string)($_POST['code'] ?? ''));
-  $gate   = trim((string)($_POST['gate'] ?? 'Acceso principal'));
   $uid    = (int)($_SESSION['evento_usuario_id'] ?? 0);
 
-  if ($code===''){ $flash_err='Falta código.'; }
-  else {
+  if ($accion === 'usar' || $accion === 'revertir') {
+    $code = trim((string)($_POST['code'] ?? ''));
+    $gate = trim((string)($_POST['gate'] ?? 'Acceso principal'));
+    if ($code===''){ $_SESSION['flash_err']='Falta código.'; redirect_self($evento_id); }
+
     if ($accion==='usar'){
       $sql = "UPDATE tickets t
               JOIN pedidos p ON p.id=t.pedido_id
@@ -72,22 +81,51 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
               WHERE t.code=? AND p.evento_id=?";
       if ($st=$conexion->prepare($sql)){
         $st->bind_param('issi',$uid,$gate,$code,$evento_id);
-        if($st->execute() && $st->affected_rows>0){ $flash_ok='Ticket marcado como USADO.'; }
-        else { $flash_err='No se pudo marcar como usado (código inválido o de otro evento).'; }
+        if($st->execute() && $st->affected_rows>0){ $_SESSION['flash_ok']='Ticket marcado como USADO.'; }
+        else { $_SESSION['flash_err']='No se pudo marcar como usado (código inválido o de otro evento).'; }
         $st->close();
-      } else { $flash_err='Error interno (prep usar).'; }
-    } elseif ($accion==='revertir'){
+      } else { $_SESSION['flash_err']='Error interno (prep usar).'; }
+    } else {
       $sql = "UPDATE tickets t
               JOIN pedidos p ON p.id=t.pedido_id
               SET t.used_at=NULL, t.used_by=NULL, t.used_gate=NULL
               WHERE t.code=? AND p.evento_id=?";
       if ($st=$conexion->prepare($sql)){
         $st->bind_param('si',$code,$evento_id);
-        if($st->execute() && $st->affected_rows>0){ $flash_ok='Uso revertido.'; }
-        else { $flash_err='No se pudo revertir (código inválido o de otro evento).'; }
+        if($st->execute() && $st->affected_rows>0){ $_SESSION['flash_ok']='Uso revertido.'; }
+        else { $_SESSION['flash_err']='No se pudo revertir (código inválido o de otro evento).'; }
         $st->close();
-      } else { $flash_err='Error interno (prep revertir).'; }
+      } else { $_SESSION['flash_err']='Error interno (prep revertir).'; }
     }
+    redirect_self($evento_id);
+  }
+
+  // === Cambiar estado del PEDIDO (habilitar/pagar/rechazar)
+  if ($accion === 'set_estado') {
+    $pedido_id   = (int)($_POST['pedido_id'] ?? 0);
+    $nuevoEstado = strtolower(trim((string)($_POST['nuevo_estado'] ?? '')));
+    $permitidos  = ['aprobado','pagado','rechazado','pendiente','cancelado'];
+    if ($pedido_id<=0 || !in_array($nuevoEstado,$permitidos,true)) {
+      $_SESSION['flash_err'] = 'Datos inválidos para cambiar estado.'; redirect_self($evento_id);
+    }
+
+    $sql="UPDATE pedidos SET estado=? WHERE id=? AND evento_id=?";
+    if($st=$conexion->prepare($sql)){
+      $st->bind_param('sii',$nuevoEstado,$pedido_id,$evento_id);
+      if($st->execute() && $st->affected_rows>0){
+        // Mensaje claro para el organizador
+        if ($nuevoEstado==='aprobado') $_SESSION['flash_ok']='✅ Pedido #'.$pedido_id.' habilitado (APROBADO). Los QR ya se muestran.';
+        elseif ($nuevoEstado==='pagado') $_SESSION['flash_ok']='💵 Pedido #'.$pedido_id.' marcado como PAGADO. QR habilitado.';
+        elseif ($nuevoEstado==='rechazado') $_SESSION['flash_ok']='⛔ Pedido #'.$pedido_id.' RECHAZADO.';
+        else $_SESSION['flash_ok']='Estado del pedido #'.$pedido_id.' actualizado: '.$nuevoEstado.'.';
+      } else {
+        $_SESSION['flash_err']='No se pudo actualizar el estado del pedido.';
+      }
+      $st->close();
+    } else {
+      $_SESSION['flash_err']='Error interno (prep estado).';
+    }
+    redirect_self($evento_id);
   }
 }
 
@@ -106,19 +144,12 @@ if ($q!==''){
   $bindTy .= "sss"; array_push($bindVl, $q,$q,$q);
 }
 if ($estado!==''){
-  $where[] = "p.estado = ?";
-  $bindTy .= "s"; $bindVl[] = $estado;
+  $where[] = "p.estado = ?"; $bindTy .= "s"; $bindVl[] = $estado;
 }
-if ($usado==='1'){
-  $where[] = "t.used_at IS NOT NULL";
-}
-if ($usado==='0'){
-  $where[] = "t.used_at IS NULL";
-}
-if ($tipo_id>0){
-  $where[] = "t.tipo_id = ?";
-  $bindTy .= "i"; $bindVl[] = $tipo_id;
-}
+if ($usado==='1'){ $where[] = "t.used_at IS NOT NULL"; }
+if ($usado==='0'){ $where[] = "t.used_at IS NULL"; }
+if ($tipo_id>0){ $where[] = "t.tipo_id = ?"; $bindTy .= "i"; $bindVl[] = $tipo_id; }
+
 $wsql = implode(' AND ', $where);
 
 /* Tipos (para filtro) */
@@ -141,10 +172,7 @@ $sql = "SELECT
         ORDER BY t.id DESC";
 
 $st = $conexion->prepare($sql);
-if (!$st) {
-  http_response_code(500);
-  exit("SQL prepare error: ".h($conexion->error)."<br><small>$sql</small>");
-}
+if (!$st) { http_response_code(500); exit("SQL prepare error: ".h($conexion->error)."<br><small>$sql</small>"); }
 bind_all_params($st, $bindTy, $bindVl);
 $st->execute(); $res = $st->get_result();
 $rows = $res ? $res->fetch_all(MYSQLI_ASSOC) : [];
@@ -172,9 +200,12 @@ if (isset($_GET['export']) && $_GET['export']==='csv') {
       empty($r['used_at'])?'NO':'SI', $r['used_at'], $r['used_gate'] ?? '', $r['created_at']
     ]);
   }
-  fclose($out);
-  exit;
+  fclose($out); exit;
 }
+
+// Flash (PRG)
+if (!empty($_SESSION['flash_ok']))  { $flash_ok  = $_SESSION['flash_ok'];  unset($_SESSION['flash_ok']); }
+if (!empty($_SESSION['flash_err'])) { $flash_err = $_SESSION['flash_err']; unset($_SESSION['flash_err']); }
 ?>
 <!doctype html>
 <html lang="es">
@@ -192,59 +223,38 @@ if (isset($_GET['export']) && $_GET['export']==='csv') {
     a{color:var(--brand);text-decoration:none}
     a:focus{outline:2px dashed var(--brand); outline-offset:2px}
     .wrap{max-width:1200px;margin:18px auto;padding:16px}
-
     .card{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:14px}
     .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
     .btn{display:inline-flex;align-items:center;gap:.45rem;padding:.58rem .9rem;border-radius:10px;border:1px solid var(--bd);background:#151515;color:var(--brand);text-decoration:none;cursor:pointer;font-weight:600}
     .btn.gray{background:#1b1b1b;color:#ddd}
     .btn.red{background:#7a1f1f;color:#fff;border-color:#8f2a2a}
+    .btn.green{background:#0f3; color:#000; border-color:#0b0}
+    .btn.gold{background:#332b00; color:#ffde6a; border-color:#665200}
     .pill{display:inline-block;padding:.25rem .6rem;border-radius:999px;border:1px solid #3b3b3b;font-size:.85rem;color:#ddd}
-    input,select{padding:.56rem .7rem;border-radius:10px;border:1px solid var(--bd);background:#101010;color:var(--fg)}
+    input,select,button{padding:.56rem .7rem;border-radius:10px;border:1px solid var(--bd);background:#101010;color:var(--fg)}
+    button.btn{border:1px solid var(--bd)}
     .ok{margin:10px 0;padding:10px;border-radius:10px;background:var(--okbg);border:1px solid var(--okbd);color:var(--oktx)}
     .bad{margin:10px 0;padding:10px;border-radius:10px;background:var(--badbg);border:1px solid var(--badbd);color:var(--badt)}
-
-    /* ===== Tabla (desktop) ===== */
     .table-wrap{overflow:auto;border:1px solid var(--bd);border-radius:12px}
     table{width:100%;border-collapse:collapse;min-width:900px}
-    thead th{
-      position:sticky; top:0; background:#121212; color:var(--brand);
-      text-align:left; padding:.7rem .65rem; border-bottom:1px solid var(--bd); z-index:1;
-    }
+    thead th{position:sticky; top:0; background:#121212; color:var(--brand); text-align:left; padding:.7rem .65rem; border-bottom:1px solid var(--bd); z-index:1;}
     td{padding:.6rem .65rem;border-bottom:1px solid var(--bd);vertical-align:middle}
     code{background:#000; padding:.15rem .35rem; border-radius:6px; border:1px solid #333}
-
-    @media(hover:hover){
-      tbody tr:hover{background:#101010}
-    }
-
-    /* ===== Cards (mobile) ===== */
+    @media(hover:hover){ tbody tr:hover{background:#101010} }
     @media (max-width: 860px){
       .table-wrap{border:0}
       table{border-collapse:separate;border-spacing:0 12px;min-width:0}
       thead{display:none}
-      tbody tr{
-        display:block;background:var(--card);border:1px solid var(--bd);
-        border-radius:14px;padding:10px 10px 6px;
-      }
-      tbody td{
-        display:flex;justify-content:space-between;gap:12px;
-        padding:.55rem .3rem;border-bottom:0;font-size:.98rem;
-      }
-      tbody td::before{
-        content:attr(data-label); color:var(--mut); min-width:40%;
-      }
+      tbody tr{display:block;background:var(--card);border:1px solid var(--bd); border-radius:14px;padding:10px 10px 6px;}
+      tbody td{display:flex;justify-content:space-between;gap:12px; padding:.55rem .3rem;border-bottom:0;font-size:.98rem;}
+      tbody td::before{content:attr(data-label); color:var(--mut); min-width:40%;}
       td[data-key="id"]{display:block;font-weight:700}
       td[data-key="id"]::before{content:"Ticket #"}
       td[data-key="acciones"]{display:flex;gap:8px;flex-wrap:wrap}
       .btn{flex:1 1 48%}
       .table-wrap{overflow:visible}
     }
-
-    /* Form filtros responsive */
-    @media(max-width:900px){
-      .row>*, .row form{flex:1 1 100%}
-      .btn{width:auto}
-    }
+    @media(max-width:900px){ .row>*, .row form{flex:1 1 100%} .btn{width:auto} }
   </style>
 </head>
 <body>
@@ -341,13 +351,40 @@ if (isset($_GET['export']) && $_GET['export']==='csv') {
                     <input type="hidden" name="accion" value="usar">
                     <input type="hidden" name="code" value="<?= h($r['code']) ?>">
                     <input type="hidden" name="gate" value="Acceso principal">
-                    <button class="btn" type="submit">✅ Usar</button>
+                    <button class="btn gold" type="submit">✅ Usar</button>
                   </form>
                 <?php else: ?>
                   <form method="post" action="" style="display:inline" onsubmit="return confirm('¿Revertir uso?');">
                     <input type="hidden" name="accion" value="revertir">
                     <input type="hidden" name="code" value="<?= h($r['code']) ?>">
                     <button class="btn red" type="submit">↩ Revertir</button>
+                  </form>
+                <?php endif; ?>
+
+                <!-- ===== Acciones de estado del pedido (habilitar/pagar/rechazar) ===== -->
+                <?php $est = strtolower((string)$r['pedido_estado']); ?>
+                <?php if (!in_array($est,['aprobado','pagado'],true)): ?>
+                  <form method="post" action="" style="display:inline">
+                    <input type="hidden" name="accion" value="set_estado">
+                    <input type="hidden" name="pedido_id" value="<?= (int)$r['pedido_id'] ?>">
+                    <input type="hidden" name="nuevo_estado" value="aprobado">
+                    <button class="btn green" type="submit" title="Habilitar (aprobado)">✔ Habilitar</button>
+                  </form>
+                <?php endif; ?>
+                <?php if ($est!=='pagado'): ?>
+                  <form method="post" action="" style="display:inline">
+                    <input type="hidden" name="accion" value="set_estado">
+                    <input type="hidden" name="pedido_id" value="<?= (int)$r['pedido_id'] ?>">
+                    <input type="hidden" name="nuevo_estado" value="pagado">
+                    <button class="btn" type="submit" title="Marcar pagado">💵 Pagado</button>
+                  </form>
+                <?php endif; ?>
+                <?php if (!in_array($est,['rechazado','cancelado'],true)): ?>
+                  <form method="post" action="" style="display:inline" onsubmit="return confirm('¿Rechazar este pedido?');">
+                    <input type="hidden" name="accion" value="set_estado">
+                    <input type="hidden" name="pedido_id" value="<?= (int)$r['pedido_id'] ?>">
+                    <input type="hidden" name="nuevo_estado" value="rechazado">
+                    <button class="btn gray" type="submit" title="Rechazar">⛔ Rechazar</button>
                   </form>
                 <?php endif; ?>
               </td>
