@@ -65,6 +65,7 @@ if ($has_pe && $has_pe->num_rows) {
       if ($st=$conexion->prepare($sql)){ $st->bind_param('i',$pelea_id); $st->execute(); if($res=$st->get_result()->fetch_assoc()){ if(!empty($res['a']))$azul=trim($res['a']); if(!empty($res['r']))$rojo=trim($res['r']); } $st->close(); }
     }
   }
+  $evCol = null;
   foreach (['evento_id','event_id','id_evento'] as $c) { if (has_col($conexion,'peleas_evento',$c)) { $evCol=$c; break; } }
   if (!empty($evCol)) {
     if ($st=$conexion->prepare("SELECT `$evCol` AS eid FROM peleas_evento WHERE id=? LIMIT 1")){
@@ -143,22 +144,27 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
     $obs = trim((string)($_POST['observaciones'] ?? ''));
 
     if (!$err) {
+      /* ✅ Reescrito sin VALUES() en el UPDATE */
       $sql="INSERT INTO `puntuaciones_jueces`
               (pelea_id,juez_id,`round`,azul_puntos,rojo_puntos,azul_conteos,rojo_conteos,azul_advertencias,rojo_advertencias,observaciones)
             VALUES (?,?,?,?,?,?,?,?,?,?)
             ON DUPLICATE KEY UPDATE
-              azul_puntos=VALUES(azul_puntos),
-              rojo_puntos=VALUES(rojo_puntos),
-              azul_conteos=VALUES(azul_conteos),
-              rojo_conteos=VALUES(rojo_conteos),
-              azul_advertencias=VALUES(azul_advertencias),
-              rojo_advertencias=VALUES(rojo_advertencias),
-              observaciones=VALUES(observaciones)";
+              azul_puntos=?,
+              rojo_puntos=?,
+              azul_conteos=?,
+              rojo_conteos=?,
+              azul_advertencias=?,
+              rojo_advertencias=?,
+              observaciones=?";
       if ($st=$conexion->prepare($sql)) {
-        $st->bind_param('iiiiiiiiss',$pelea_id,$juez_id,$round,$azPts,$roPts,$azKD,$roKD,$azAdv,$roAdv,$obs);
-        if ($st->execute()) $msg='Round guardado.'; else $err='No se pudo guardar el round.';
+        $st->bind_param(
+          'iiiiiiiiis' . 'iiiiiis',
+          $pelea_id,$juez_id,$round,$azPts,$roPts,$azKD,$roKD,$azAdv,$roAdv,$obs,
+          $azPts,$roPts,$azKD,$roKD,$azAdv,$roAdv,$obs
+        );
+        if ($st->execute()) $msg='Round guardado.'; else $err='No se pudo guardar el round. '.$st->error;
         $st->close();
-      } else { $err='Error interno (prep).'; }
+      } else { $err='Error interno (prep): '.$conexion->error; }
     }
   }
 
@@ -176,23 +182,33 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
       if (!in_array($metodo, $metodos_validos, true)) $metodo = 'PTS';
       $gm = $_POST['ganador_manual'] ?? '';
       $gm = in_array($gm, ['azul','rojo','empate'], true) ? $gm : '';
-      if ($metodo === 'EMPATE') $gan = 'empate';
-      else $gan = $gm ?: ($totA>$totR?'azul':($totR>$totA?'rojo':'empate'));
+      $gan = ($metodo === 'EMPATE') ? 'empate' : ($gm ?: ($totA>$totR?'azul':($totR>$totA?'rojo':'empate')));
 
       $checksum = hash('sha256', json_encode($det,JSON_UNESCAPED_UNICODE));
       $obs = trim((string)($_POST['observaciones_final'] ?? ''));
 
-      $sql="INSERT INTO `resultados_jueces` (pelea_id,juez_id,total_azul,total_rojo,ganador,metodo,observaciones,detalle_checksum)
+      /* ✅ Reescrito sin VALUES() en el UPDATE */
+      $sql="INSERT INTO `resultados_jueces`
+              (pelea_id,juez_id,total_azul,total_rojo,ganador,metodo,observaciones,detalle_checksum)
             VALUES (?,?,?,?,?,?,?,?)
-            ON DUPLICATE KEY UPDATE total_azul=VALUES(total_azul), total_rojo=VALUES(total_rojo),
-                                    ganador=VALUES(ganador), metodo=VALUES(metodo),
-                                    observaciones=VALUES(observaciones),
-                                    detalle_checksum=VALUES(detalle_checksum), enviado_at=CURRENT_TIMESTAMP, estado='enviado'";
+            ON DUPLICATE KEY UPDATE
+              total_azul=?,
+              total_rojo=?,
+              ganador=?,
+              metodo=?,
+              observaciones=?,
+              detalle_checksum=?,
+              enviado_at=CURRENT_TIMESTAMP,
+              estado='enviado'";
       if ($st=$conexion->prepare($sql)){
-        $st->bind_param('iiiissss',$pelea_id,$juez_id,$totA,$totR,$gan,$metodo,$obs,$checksum);
-        if ($st->execute()) $msg='Resultado enviado al organizador.'; else $err='No se pudo enviar el resultado.';
+        $st->bind_param(
+          'iiiissss' . 'iissss',
+          $pelea_id,$juez_id,$totA,$totR,$gan,$metodo,$obs,$checksum,
+          $totA,$totR,$gan,$metodo,$obs,$checksum
+        );
+        if ($st->execute()) $msg='Resultado enviado al organizador.'; else $err='No se pudo enviar el resultado. '.$st->error;
         $st->close();
-      } else { $err='Error interno (prep envío).'; }
+      } else { $err='Error interno (prep envío): '.$conexion->error; }
     }
   }
 }
@@ -397,12 +413,12 @@ $next_round = $puntajes ? ((int)end($puntajes)['round']+1) : 1;
       const onlyDigits = (ev) => {
         const allowed = ['Backspace','Delete','ArrowLeft','ArrowRight','Tab','Home','End'];
         if (allowed.includes(ev.key)) return;
-        if (!/^\d$/.test(ev.key)) { ev.preventDefault(); }
+        if (!/^\\d$/.test(ev.key)) { ev.preventDefault(); }
       };
       document.querySelectorAll('input[type="number"]').forEach(inp=>{
         inp.addEventListener('keydown', onlyDigits);
         inp.addEventListener('input', (e)=>{
-          e.target.value = (e.target.value||'').replace(/\D+/g,'');
+          e.target.value = (e.target.value||'').replace(/\\D+/g,'');
         });
         if (!inp.hasAttribute('step')) inp.setAttribute('step','1');
       });
