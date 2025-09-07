@@ -1,33 +1,16 @@
 <?php
-if (session_status() === PHP_SESSION_NONE) {
-    session_start();
+// config_whatsapp.php
+// ⚠️ NO subas este archivo al repositorio público.
+// Rellena con tus credenciales de WhatsApp Cloud API (Meta).
+
+if (!defined('WA_CFG_LOADED')) {
+  define('WA_CFG_LOADED', true);
+
+  // Ejemplos:
+  // - WA_PHONE_NUMBER_ID: el "phone number ID" que te da Meta
+  // - WA_ACCESS_TOKEN: el token de acceso (largo)
+  // - WA_API_VERSION: opcional (v20.0 actualmente)
+  define('WA_PHONE_NUMBER_ID', 'YOUR_PHONE_NUMBER_ID');  // p.ej: 123456789012345
+  define('WA_ACCESS_TOKEN',    'YOUR_LONG_ACCESS_TOKEN');
+  define('WA_API_VERSION',     'v20.0');
 }
-include 'conexion.php';
-
-$gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
-
-// Guardar cambios
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $enlace = trim($_POST['enlace_whatsapp']);
-    $stmt = $conexion->prepare("
-        INSERT INTO links_gimnasio (gimnasio_id, enlace_whatsapp) 
-        VALUES (?, ?) 
-        ON DUPLICATE KEY UPDATE enlace_whatsapp = VALUES(enlace_whatsapp)
-    ");
-    $stmt->bind_param("is", $gimnasio_id, $enlace);
-    $stmt->execute();
-    echo "<p style='color: green;'>✅ Enlace guardado correctamente</p>";
-}
-
-// Obtener enlace actual
-$res = $conexion->query("SELECT enlace_whatsapp FROM links_gimnasio WHERE gimnasio_id = $gimnasio_id");
-$actual = $res->fetch_assoc()['enlace_whatsapp'] ?? "";
-?>
-
-<h2>🔗 Configurar enlace de WhatsApp</h2>
-<form method="post">
-    <label>Enlace del grupo:</label><br>
-    <input type="url" name="enlace_whatsapp" value="<?= htmlspecialchars($actual) ?>" placeholder="https://chat.whatsapp.com/..." style="width: 100%;" required>
-    <br><br>
-    <button type="submit">💾 Guardar enlace</button>
-</form>

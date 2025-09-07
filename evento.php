@@ -31,8 +31,7 @@ $st=$conexion->prepare("SELECT id, titulo, descripcion, fecha, hora, lugar, flye
 $st->bind_param('i',$evento_id); $st->execute(); $evento=$st->get_result()->fetch_assoc(); $st->close();
 if (!$evento){ http_response_code(404); exit('Evento no encontrado'); }
 
-/* Config pagos */
-$cfg=['habilitar_online'=>1,'alias_bancario'=>null,'titular_banco'=>null,'banco_nombre'=>null,'nota'=>null];
+/* Config pagos (crea si no existe) */
 $conexion->query("CREATE TABLE IF NOT EXISTS eventos_pagos_config (
   evento_id INT PRIMARY KEY,
   alias_bancario VARCHAR(120) NULL,
@@ -42,8 +41,10 @@ $conexion->query("CREATE TABLE IF NOT EXISTS eventos_pagos_config (
   habilitar_taquilla TINYINT(1) NOT NULL DEFAULT 1,
   nota TEXT NULL,
   updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  FOREIGN KEY (evento_id) REFERENCES eventos_deportivos(id) ON DELETE CASCADE
+  CONSTRAINT fk_ev_cfg FOREIGN KEY (evento_id) REFERENCES eventos_deportivos(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+$cfg=['habilitar_online'=>1,'alias_bancario'=>null,'titular_banco'=>null,'banco_nombre'=>null,'nota'=>null];
 $st=$conexion->prepare("SELECT alias_bancario,titular_banco,banco_nombre,habilitar_online,nota FROM eventos_pagos_config WHERE evento_id=?");
 $st->bind_param('i',$evento_id); $st->execute(); $r=$st->get_result(); if($r && $r->num_rows){ $cfg=$r->fetch_assoc(); } $st->close();
 
@@ -125,6 +126,9 @@ unset($_SESSION['flash_error'], $_SESSION['ok_msg']);
   </style>
 </head>
 <body>
+
+  <?php @include __DIR__.'/brand_header.php'; // Muestra la imagen de marca global si existe ?>
+
   <div class="wrap">
     <div style="margin-bottom:10px">
       <a class="btn gray" href="eventos_disponibles.php">← Eventos disponibles</a>
@@ -216,7 +220,7 @@ unset($_SESSION['flash_error'], $_SESSION['ok_msg']);
                 <div style="margin-top:8px"><label for="tel">Teléfono (opcional)</label><input id="tel" type="text" name="tel" autocomplete="tel"></div>
               </div>
 
-              <!-- NUEVO: método y comprobante -->
+              <!-- Método y comprobante -->
               <div class="card" style="margin-top:10px">
                 <h4 style="margin:0 0 8px">Pago</h4>
                 <div class="form-grid">
@@ -230,7 +234,6 @@ unset($_SESSION['flash_error'], $_SESSION['ok_msg']);
                   </div>
                   <div>
                     <label for="comprobante">Comprobante (imagen o PDF)</label>
-                    <!-- En móviles abre cámara por `capture` y limita a imágenes/PDF -->
                     <input id="comprobante" type="file" name="comprobante" accept="image/*,.pdf" capture="environment">
                   </div>
                 </div>

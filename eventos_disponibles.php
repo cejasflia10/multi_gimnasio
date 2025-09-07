@@ -31,11 +31,10 @@ $eventos = [];
 $hoy = date('Y-m-d H:i:s');
 
 if (table_exists($conexion,'eventos_deportivos')) {
-  $where = ["1=1"]; // no bloqueamos si no hay flags
+  $where = ["1=1"];
   $types = '';
   $vals  = [];
 
-  // si existe columna 'estado', mostramos publicados/activos
   if (has_col($conexion,'eventos_deportivos','estado')) {
     $where[] = "estado IN ('publicado','activo')";
   }
@@ -54,7 +53,6 @@ if (table_exists($conexion,'eventos_deportivos')) {
   $ord = "ORDER BY fecha ASC";
   if (has_col($conexion,'eventos_deportivos','hora')) { $ord = "ORDER BY fecha ASC, hora ASC"; }
 
-  // mapeamos columnas a una forma común (nombre/descripcion/fecha/hora/lugar/ciudad/banner_url,id)
   $sql = "SELECT id, titulo AS nombre, descripcion,
                  fecha, hora, lugar,
                  NULL AS ciudad, flyer AS banner_url
@@ -150,6 +148,9 @@ if (!$eventos && table_exists($conexion,'eventos_publicos')) {
   </style>
 </head>
 <body>
+  <!-- Mostrar imagen de marca global a LO ANCHO -->
+  <?php @include __DIR__.'/brand_header.php'; ?>
+
   <div class="wrap">
     <h1>🎟️ Eventos disponibles</h1>
 

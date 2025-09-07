@@ -1,6 +1,7 @@
 <?php
 /* ============================================================
    ver_evento.php — Vista general del evento + menú del evento (responsive)
+   + Configurar número de WhatsApp para notificaciones de comprobantes
    ============================================================ */
 if (session_status() === PHP_SESSION_NONE) session_start();
 
@@ -51,23 +52,15 @@ if ($evento_id <= 0) {
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     <link rel="stylesheet" href="estilo_unificado.css">
     <style>
-      :root{
-        --brand:#d4af37; --line:#222; --card:#111; --fg:#f6f6f6; --muted:#c9c9c9;
-      }
+      :root{ --brand:#d4af37; --line:#222; --card:#111; --fg:#f6f6f6; --muted:#c9c9c9; }
       html,body{background:#0a0a0a;color:var(--fg);margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,Noto Sans,sans-serif}
       a{color:var(--brand);text-decoration:none}
       .contenedor{max-width:1100px;margin:22px auto;padding:0 12px}
       h2{margin:8px 0 16px}
       .lista{display:grid;grid-template-columns:1fr;gap:10px;margin:0;padding:0;list-style:none}
-      .item{
-        background:var(--card); border:1px solid var(--line); border-radius:12px; padding:12px;
-        display:flex; align-items:center; justify-content:space-between; gap:10px;
-      }
+      .item{background:var(--card); border:1px solid var(--line); border-radius:12px; padding:12px; display:flex; align-items:center; justify-content:space-between; gap:10px;}
       .item .meta{color:var(--muted);font-size:.95rem}
-      .btn{
-        display:inline-flex;align-items:center;gap:.45rem;padding:.55rem .85rem;background:#111;
-        color:var(--brand);border-radius:10px;border:1px solid var(--line);font-weight:600;flex:0 0 auto;
-      }
+      .btn{display:inline-flex;align-items:center;gap:.45rem;padding:.55rem .85rem;background:#111; color:var(--brand);border-radius:10px;border:1px solid var(--line);font-weight:600;flex:0 0 auto;}
       @media (min-width:700px){ .lista{grid-template-columns:1fr 1fr} }
       @media (min-width:1000px){ .lista{grid-template-columns:1fr 1fr 1fr} }
     </style>
@@ -118,25 +111,40 @@ $conexion->query("CREATE TABLE IF NOT EXISTS eventos_pagos_config (
   habilitar_online  TINYINT(1) NOT NULL DEFAULT 1,
   habilitar_taquilla TINYINT(1) NOT NULL DEFAULT 1,
   nota TEXT NULL,
+  whatsapp_notif VARCHAR(32) NULL,
   updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   FOREIGN KEY (evento_id) REFERENCES eventos_deportivos(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
-if (!has_col($conexion,'pedidos','origen'))           { @$conexion->query("ALTER TABLE pedidos ADD COLUMN origen ENUM('online','taquilla') NOT NULL DEFAULT 'online' AFTER total"); }
-if (!has_col($conexion,'pedidos','metodo_pago'))      { @$conexion->query("ALTER TABLE pedidos ADD COLUMN metodo_pago VARCHAR(50) NULL AFTER origen"); }
-if (!has_col($conexion,'pedidos','alias_usado'))      { @$conexion->query("ALTER TABLE pedidos ADD COLUMN alias_usado VARCHAR(120) NULL AFTER metodo_pago"); }
-if (!has_col($conexion,'pedidos','cuenta_destino'))   { @$conexion->query("ALTER TABLE pedidos ADD COLUMN cuenta_destino VARCHAR(200) NULL AFTER alias_usado"); }
-if (!has_col($conexion,'pedidos','comprobante_path')) { @$conexion->query("ALTER TABLE pedidos ADD COLUMN comprobante_path VARCHAR(255) NULL AFTER cuenta_destino"); }
-if (!has_col($conexion,'pedidos','estado'))           { @$conexion->query("ALTER TABLE pedidos ADD COLUMN estado ENUM('pendiente','aprobado','pagado','rechazado','cancelado') NOT NULL DEFAULT 'pendiente' AFTER comprobante_path"); }
-if (!has_col($conexion,'pedidos','created_at'))       { @$conexion->query("ALTER TABLE pedidos ADD COLUMN created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP"); }
+/* Si la tabla ya existía, aseguramos columna whatsapp_notif */
+if (!has_col($conexion,'eventos_pagos_config','whatsapp_notif')) {
+  @$conexion->query("ALTER TABLE eventos_pagos_config ADD COLUMN whatsapp_notif VARCHAR(32) NULL AFTER nota");
+}
 
-if (!has_col($conexion,'tickets','qr_path'))   { @$conexion->query("ALTER TABLE tickets ADD COLUMN qr_path VARCHAR(255) NULL"); }
-if (!has_col($conexion,'tickets','used_at'))   { @$conexion->query("ALTER TABLE tickets ADD COLUMN used_at DATETIME NULL"); }
-if (!has_col($conexion,'tickets','used_by'))   { @$conexion->query("ALTER TABLE tickets ADD COLUMN used_by INT NULL"); }
-if (!has_col($conexion,'tickets','used_gate')) { @$conexion->query("ALTER TABLE tickets ADD COLUMN used_gate VARCHAR(60) NULL"); }
+/* ====== POST: actualizar WhatsApp ====== */
+$flash_ok = $flash_err = '';
+if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['accion']) && $_POST['accion']==='set_whatsapp') {
+  $in = trim((string)($_POST['whatsapp_notif'] ?? ''));
+  // saneamos: solo + y dígitos
+  $san = preg_replace('/[^0-9+]/', '', $in);
+  if ($san !== '' && strlen($san) > 32) { $san = substr($san, 0, 32); }
 
-/* Cargar config de pagos para las pills */
-$cfg = ['alias_bancario'=>null,'titular_banco'=>null,'banco_nombre'=>null,'habilitar_online'=>1,'habilitar_taquilla'=>1,'nota'=>null];
+  // upsert
+  $sql = "INSERT INTO eventos_pagos_config (evento_id, whatsapp_notif)
+          VALUES (?, ?)
+          ON DUPLICATE KEY UPDATE whatsapp_notif=VALUES(whatsapp_notif)";
+  if ($st = $conexion->prepare($sql)) {
+    $st->bind_param('is', $evento_id, $san);
+    if ($st->execute()) { $flash_ok = 'WhatsApp actualizado.'; }
+    else { $flash_err = 'No se pudo actualizar WhatsApp.'; }
+    $st->close();
+  } else {
+    $flash_err = 'Error interno al preparar actualización.';
+  }
+}
+
+/* Cargar config de pagos + whatsapp para las pills */
+$cfg = ['alias_bancario'=>null,'titular_banco'=>null,'banco_nombre'=>null,'habilitar_online'=>1,'habilitar_taquilla'=>1,'nota'=>null,'whatsapp_notif'=>null];
 $st=$conexion->prepare("SELECT * FROM eventos_pagos_config WHERE evento_id=?");
 $st->bind_param('i',$evento_id); $st->execute(); $r=$st->get_result(); if($r && $r->num_rows){ $cfg=$r->fetch_assoc(); } $st->close();
 
@@ -162,17 +170,10 @@ $st->bind_param('i',$evento_id); $st->execute(); $r=$st->get_result(); if($r && 
     .breadcrumb a{color:var(--brand)}
 
     /* Grid principal */
-    .grid{
-      display:grid; grid-template-columns:1.2fr .8fr; gap:18px; align-items:start;
-    }
-    @media (max-width: 980px){
-      .grid{ grid-template-columns:1fr; gap:14px; }
-    }
+    .grid{ display:grid; grid-template-columns:1.2fr .8fr; gap:18px; align-items:start; }
+    @media (max-width: 980px){ .grid{ grid-template-columns:1fr; gap:14px; } }
 
-    .card{
-      background:var(--card); color:var(--fg); padding:14px; border-radius:12px;
-      border:1px solid var(--line);
-    }
+    .card{ background:var(--card); color:var(--fg); padding:14px; border-radius:12px; border:1px solid var(--line); }
     .card h3{margin:0 0 10px 0}
 
     .btn{
@@ -182,20 +183,22 @@ $st->bind_param('i',$evento_id); $st->execute(); $r=$st->get_result(); if($r && 
     }
     .btn.sec{ background:#1a1a1a; color:#ddd; border-color:#444 }
 
-    /* Media responsive */
     .media{ display:grid; gap:10px }
     .flyer{ width:100%; height:auto; border-radius:10px; border:1px solid var(--line); background:#000 }
     .video-embed{ width:100%; aspect-ratio:16/9; border:0; border-radius:10px; background:#000 }
 
-    /* Pills */
     .pill{display:inline-block;padding:.15rem .55rem;border:1px solid #555;border-radius:999px;font-size:.85rem;color:#ddd;margin-left:.3rem}
 
-    /* Botonera: apilar en móvil */
     .btn-row{display:flex; flex-wrap:wrap}
     @media (max-width:560px){
       .btn{flex:1 1 100%}
       .btn-row{gap:6px}
     }
+
+    .ok{margin:8px 0; padding:10px; border-radius:10px; background:#0f251b; border:1px solid #164b31; color:#b6f3d1}
+    .bad{margin:8px 0; padding:10px; border-radius:10px; background:#2a1414; border:1px solid #5e2626; color:#ffb4b4}
+    input,select{padding:.56rem .7rem;border-radius:10px;border:1px solid var(--line);background:#0f0f0f;color:#fff}
+    .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
   </style>
 </head>
 <body>
@@ -253,6 +256,9 @@ $st->bind_param('i',$evento_id); $st->execute(); $r=$st->get_result(); if($r && 
 
     <!-- Columna lateral -->
     <aside>
+      <?php if ($flash_ok): ?><div class="ok"><?= h($flash_ok) ?></div><?php endif; ?>
+      <?php if ($flash_err): ?><div class="bad"><?= h($flash_err) ?></div><?php endif; ?>
+
       <div class="card">
         <h3>Menú del evento</h3>
 
@@ -277,6 +283,19 @@ $st->bind_param('i',$evento_id); $st->execute(); $r=$st->get_result(); if($r && 
         <div class="btn-row">
           <a class="btn" href="config_pagos_evento.php?evento_id=<?= (int)$evento['id'] ?>">💳 Configurar pagos</a>
         </div>
+
+        <p style="margin-top:10px"><strong>WhatsApp de notificaciones</strong></p>
+        <div class="row" style="margin-bottom:8px">
+          <span class="pill">Destino: <?= $cfg['whatsapp_notif'] ? h($cfg['whatsapp_notif']) : '— no configurado —' ?></span>
+        </div>
+        <form method="post" class="row" action="">
+          <input type="hidden" name="accion" value="set_whatsapp">
+          <input type="text" name="whatsapp_notif" placeholder="+54911..." value="<?= h((string)($cfg['whatsapp_notif'] ?? '')) ?>" style="min-width:220px" />
+          <button class="btn" type="submit">✅ Guardar WhatsApp</button>
+        </form>
+        <p class="muted" style="margin:.35rem 0 0">
+          <small>Formato sugerido: <code>+54911...</code> (código de país + número). Se aceptan solo <b>+</b> y dígitos.</small>
+        </p>
 
         <p style="margin-top:10px"><strong>Competidores</strong></p>
         <div class="btn-row">
