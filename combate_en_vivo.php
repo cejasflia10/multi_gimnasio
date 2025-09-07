@@ -37,7 +37,7 @@ if (!$C_EVENTO || !$C_ROJO || !$C_AZUL) {
   exit;
 }
 
-/* Traer info pelea + competidores */
+/* Traer info pelea + competidores (sin get_result) */
 $colE = bt($C_EVENTO);
 $colR = bt($C_ROJO);
 $colA = bt($C_AZUL);
@@ -74,13 +74,35 @@ if (!$st) {
 }
 $st->bind_param('i', $pelea_id);
 $st->execute();
-$info = $st->get_result()->fetch_assoc();
+$st->bind_result(
+  $X_pelea_id, $X_evento_id, $X_rondas,
+  $X_rojo_id,  $X_azul_id,
+
+  $r_apellido, $r_nombre, $r_escuela,
+  $r_foto, $r_edad,
+  $r_modalidad, $r_division, $r_peso,
+
+  $a_apellido, $a_nombre, $a_escuela,
+  $a_foto, $a_edad,
+  $a_modalidad, $a_division, $a_peso
+);
+$ok = $st->fetch();
 $st->close();
 
-if (!$info) {
+if (!$ok) {
   echo '<div style="max-width:900px;margin:16px auto;padding:12px;border:1px solid #f5c6cb;background:#fdecea;color:#b71c1c;border-radius:8px;">No se encontró la pelea.</div>';
   exit;
 }
+
+$info = [
+  'pelea_id'=>$X_pelea_id, 'evento_id'=>$X_evento_id, 'rondas'=>$X_rondas,
+  'r_apellido'=>$r_apellido, 'r_nombre'=>$r_nombre, 'r_escuela'=>$r_escuela,
+  'r_foto'=>$r_foto, 'r_edad'=>$r_edad, 'r_modalidad'=>$r_modalidad,
+  'r_division'=>$r_division, 'r_peso'=>$r_peso,
+  'a_apellido'=>$a_apellido, 'a_nombre'=>$a_nombre, 'a_escuela'=>$a_escuela,
+  'a_foto'=>$a_foto, 'a_edad'=>$a_edad, 'a_modalidad'=>$a_modalidad,
+  'a_division'=>$a_division, 'a_peso'=>$a_peso
+];
 
 $phUser = 'assets/placeholder-user.png';
 $rFoto = !empty($info['r_foto']) ? $info['r_foto'] : $phUser;
@@ -88,6 +110,34 @@ $aFoto = !empty($info['a_foto']) ? $info['a_foto'] : $phUser;
 
 $rondasEsperadas = (isset($info['rondas']) && (int)$info['rondas']>0) ? (int)$info['rondas'] : 3;
 $incluir_menu = empty($_SESSION['__JUEZ_MODE__']);
+
+/* ===== Resumen de resultado por mayoría (según resultados_jueces) ===== */
+$cntAz=0; $cntRo=0; $cntEmp=0; $sumAz=0; $sumRo=0; $tarjetas=0;
+if ($rs = $conexion->prepare("SELECT ganador, total_azul, total_rojo FROM resultados_jueces WHERE pelea_id=? AND estado='enviado'")) {
+  $rs->bind_param('i',$pelea_id); $rs->execute(); $rs->bind_result($g,$ta,$tr);
+  while($rs->fetch()){
+    $tarjetas++;
+    $sumAz += (int)$ta;
+    $sumRo += (int)$tr;
+    if ($g==='azul') $cntAz++;
+    elseif ($g==='rojo') $cntRo++;
+    else $cntEmp++;
+  }
+  $rs->close();
+}
+$mayoria = null; // 'azul','rojo','empate' o null
+if ($tarjetas>0){
+  if ($cntAz>$cntRo && $cntAz>$cntEmp) $mayoria='azul';
+  elseif ($cntRo>$cntAz && $cntRo>$cntEmp) $mayoria='rojo';
+  else $mayoria='empate';
+}
+$resumen_txt = $tarjetas>0
+  ? ("Tarjetas: AZUL $cntAz · ROJO $cntRo · EMP $cntEmp — Totales sumados: Azul $sumAz / Rojo $sumRo — Decisión por mayoría: ".strtoupper($mayoria))
+  : "Aún no hay tarjetas cerradas de jueces.";
+
+/* Mostrar/enabled botón sólo si hay al menos una tarjeta cerrada */
+$puede_enviar_resultado = ($tarjetas > 0);
+$return_to = 'ver_peleas_evento.php?evento_id='.(int)$info['evento_id'];
 ?>
 <!DOCTYPE html>
 <html lang="es">
@@ -117,6 +167,7 @@ $incluir_menu = empty($_SESSION['__JUEZ_MODE__']);
     .btn-primary{background:#00b894;color:#fff}
     .btn-warn{background:#ffb300;color:#1a1a1a}
     .btn-danger{background:#e53935;color:#fff}
+    .btn-gray{background:#2a2a2a;color:#fff}
     .num{font-weight:800}
     .row{display:flex;gap:6px;justify-content:center;flex-wrap:wrap}
     .blink{animation:blink .8s step-start infinite}
@@ -131,6 +182,7 @@ $incluir_menu = empty($_SESSION['__JUEZ_MODE__']);
     .draw{color:#ffd54f;font-weight:800}
     .pending{opacity:.5}
     .total-cell{font-weight:800}
+    .ok{margin-top:8px;padding:8px;border-radius:10px;background:#0f251b;border:1px solid #164b31;color:#b6f3d1}
   </style>
 </head>
 <body>
@@ -165,7 +217,7 @@ $incluir_menu = empty($_SESSION['__JUEZ_MODE__']);
         <button id="btnStart" class="btn btn-primary">▶️ Iniciar</button>
         <button id="btnPause" class="btn btn-warn">⏸️ Pausar</button>
         <button id="btnReset" class="btn btn-danger">⟲ Reiniciar</button>
-        <button id="btnNext"  class="btn">⏭️ Siguiente round</button>
+        <button id="btnNext"  class="btn btn-gray">⏭️ Siguiente round</button>
         <label class="sub" style="display:flex;align-items:center;gap:6px;">
           🔊 Volumen
           <input id="vol" type="range" min="0" max="100" value="95" style="width:160px">
@@ -174,14 +226,14 @@ $incluir_menu = empty($_SESSION['__JUEZ_MODE__']);
 
       <div style="margin-top:10px" class="row">
         Duración del round:
-        <select id="selDuracion" class="btn">
+        <select id="selDuracion" class="btn btn-gray">
           <option value="180" selected>3:00</option>
           <option value="120">2:00</option>
           <option value="90">1:30</option>
           <option value="60">1:00</option>
         </select>
         <span class="sub"> · Descanso (entre rounds): </span>
-        <select id="selDescanso" class="btn">
+        <select id="selDescanso" class="btn btn-gray">
           <option value="60" selected>1:00</option>
           <option value="30">0:30</option>
           <option value="90">1:30</option>
@@ -195,12 +247,41 @@ $incluir_menu = empty($_SESSION['__JUEZ_MODE__']);
         </div>
         <div class="sub" id="scoreHint"></div>
 
+        <!-- Preview del resultado y botón de envío -->
+        <div class="ok">
+          <b>Resumen actual:</b> <?= h($resumen_txt) ?><br>
+          <small>El envío registra el resultado de la pelea y vuelve al listado del evento.</small>
+        </div>
+
+        <form method="POST" action="resultados_combates.php" style="margin-top:10px;"
+              onsubmit="return confirm('¿Enviar el resultado de la pelea al sistema?');">
+          <input type="hidden" name="pelea_id" value="<?= (int)$info['pelea_id'] ?>">
+          <input type="hidden" name="evento_id" value="<?= (int)$info['evento_id'] ?>">
+          <!-- Datos útiles para el script receptor -->
+          <input type="hidden" name="mayoria" value="<?= h((string)$mayoria) ?>">
+          <input type="hidden" name="votos_azul" value="<?= (int)$cntAz ?>">
+          <input type="hidden" name="votos_rojo" value="<?= (int)$cntRo ?>">
+          <input type="hidden" name="votos_empate" value="<?= (int)$cntEmp ?>">
+          <input type="hidden" name="sum_total_azul" value="<?= (int)$sumAz ?>">
+          <input type="hidden" name="sum_total_rojo" value="<?= (int)$sumRo ?>">
+          <!-- URL de retorno para redirigir al terminar -->
+          <input type="hidden" name="return_to" value="<?= h($return_to) ?>">
+
+          <button class="btn btn-danger" <?= $puede_enviar_resultado ? '' : 'disabled' ?>>
+            📤 Enviar resultado
+          </button>
+          <a class="btn btn-gray" href="<?= h($return_to) ?>">↩️ Volver sin enviar</a>
+        </form>
+
         <?php if (!empty($_SESSION['user_rol']) && $_SESSION['user_rol']==='admin'): ?>
-          <form method="POST" action="finalizar_pelea.php" style="margin-top:10px;">
+          <!-- (Opcional) botón legacy si lo seguís necesitando -->
+          <!--
+          <form method="POST" action="finalizar_pelea.php" style="margin-top:8px;">
             <input type="hidden" name="pelea_id" value="<?= (int)$pelea_id ?>">
             <input type="hidden" name="evento_id" value="<?= (int)$info['evento_id'] ?>">
-            <button class="btn btn-danger" onclick="return confirm('¿Finalizar pelea y registrar decisión?')">🏁 Finalizar pelea</button>
+            <button class="btn btn-gray" onclick="return confirm('¿Finalizar pelea (modo legacy)?')">🏁 Finalizar pelea</button>
           </form>
+          -->
         <?php endif; ?>
       </div>
     </section>
@@ -223,7 +304,7 @@ $incluir_menu = empty($_SESSION['__JUEZ_MODE__']);
   </div>
 </div>
 
-<!-- Audios reales (campana/tabla/voz) -->
+<!-- Audios -->
 <audio id="bellStart" preload="auto" src="assets/sounds/ring_start_bell.mp3"></audio>
 <audio id="bellEnd"   preload="auto" src="assets/sounds/ring_end_bell.mp3"></audio>
 <audio id="woodHit"   preload="auto" src="assets/sounds/wood_block.mp3"></audio>
@@ -231,7 +312,7 @@ $incluir_menu = empty($_SESSION['__JUEZ_MODE__']);
 
 <script>
 (function(){
-  /* ===== Cronómetro ===== */
+  /* ===== Cronómetro / Audio (tu lógica original) ===== */
   const timerEl = document.getElementById('timer');
   const roundEl = document.getElementById('round');
   const btnStart = document.getElementById('btnStart');
@@ -248,14 +329,13 @@ $incluir_menu = empty($_SESSION['__JUEZ_MODE__']);
   let round    = 1;
   let t        = null;
   let inRest   = false;
-  let warned10 = false;     // 10s del round
-  let warned15Rest = false; // “segundos afuera” a 15s del fin del descanso
+  let warned10 = false;
+  let warned15Rest = false;
   let startedSound = false;
 
   function fmt(s){ const m=Math.floor(s/60), ss=(s%60).toString().padStart(2,'0'); return `${m}:${ss}`; }
   function paint(){ timerEl.textContent = fmt(remain); roundEl.textContent = round; }
 
-  /* ====== Audio setup (WebAudio + compresor + media elements) ====== */
   const AC = window.AudioContext || window.webkitAudioContext;
   const audioCtx = AC ? new AC() : null;
   const master = audioCtx ? audioCtx.createGain() : null;
@@ -269,10 +349,7 @@ $incluir_menu = empty($_SESSION['__JUEZ_MODE__']);
     comp.release.setValueAtTime(0.25, audioCtx.currentTime);
     comp.connect(master);
   }
-  if (master){
-    master.gain.value = 0.95;
-    master.connect(audioCtx.destination);
-  }
+  if (master){ master.gain.value = 0.95; master.connect(audioCtx.destination); }
 
   const bellStart = document.getElementById('bellStart');
   const bellEnd   = document.getElementById('bellEnd');
@@ -284,36 +361,18 @@ $incluir_menu = empty($_SESSION['__JUEZ_MODE__']);
     [bellStart,bellEnd,woodHit,segAfuera].forEach(a=>{ if(a) a.volume = v; });
     if (master) master.gain.value = v;
   }
-  volEl.addEventListener('input', syncMediaVolume);
-  syncMediaVolume();
+  volEl.addEventListener('input', syncMediaVolume); syncMediaVolume();
 
   function connectMediaElement(el){
     if (!audioCtx || !comp || !el) return;
-    try{
-      const node = audioCtx.createMediaElementSource(el);
-      node.connect(comp);
-    }catch(e){ /* ignore if already connected */ }
+    try{ const node = audioCtx.createMediaElementSource(el); node.connect(comp); }catch(e){}
   }
   [bellStart,bellEnd,woodHit,segAfuera].forEach(connectMediaElement);
 
-  async function ensureAudioReady(){
-    if (audioCtx && audioCtx.state==='suspended'){
-      try{ await audioCtx.resume(); }catch(_){}
-    }
-  }
-  function playEl(el){
-    if(!el) return;
-    ensureAudioReady();
-    el.currentTime = 0;
-    el.play().catch(()=>{});
-  }
-  function playWoodClone(){
-    const c = woodHit.cloneNode(true);
-    c.volume = woodHit.volume;
-    c.play().catch(()=>{});
-  }
+  async function ensureAudioReady(){ if (audioCtx && audioCtx.state==='suspended'){ try{ await audioCtx.resume(); }catch(_){}} }
+  function playEl(el){ if(!el) return; ensureAudioReady(); el.currentTime = 0; el.play().catch(()=>{}); }
+  function playWoodClone(){ const c = woodHit.cloneNode(true); c.volume = woodHit.volume; c.play().catch(()=>{}); }
 
-  /* ===== Fallbacks ===== */
   const useFallback = { start:false, end:false, wood:false, voz:false };
   bellStart?.addEventListener('error', ()=> useFallback.start = true);
   bellEnd  ?.addEventListener('error', ()=> useFallback.end   = true);
@@ -333,7 +392,6 @@ $incluir_menu = empty($_SESSION['__JUEZ_MODE__']);
     try{
       window.speechSynthesis.cancel();
       const u = new SpeechSynthesisUtterance(text);
-      // Elegir voz española/latina si está
       const voices = speechSynthesis.getVoices();
       const pref = voices.find(v=>/es-|Spanish/i.test(v.lang||v.name)) || voices[0];
       if (pref) u.voice = pref;
@@ -342,74 +400,25 @@ $incluir_menu = empty($_SESSION['__JUEZ_MODE__']);
     }catch(_){}
   }
 
-  /* ===== Sonidos “reales” ===== */
-  function soundStartRound(){
-    if (!useFallback.start) { playEl(bellStart); }
-    else { fallbackTone(1600,0.18,'triangle',0.38); setTimeout(()=>fallbackTone(1600,0.18,'triangle',0.38), 180); }
-  }
-  function soundWarn10(){
-    if (!useFallback.wood) {
-      for(let i=0;i<5;i++){ setTimeout(playWoodClone, i*200); }
-    } else {
-      for(let i=0;i<5;i++){ setTimeout(()=>fallbackTone(800,0.08,'square',0.4), i*200); }
-    }
-  }
-  function soundEndBell(){
-    if (!useFallback.end) { playEl(bellEnd); }
-    else {
-      fallbackTone(1700,0.12,'triangle',0.42);
-      setTimeout(()=>fallbackTone(1700,0.12,'triangle',0.42), 180);
-      setTimeout(()=>fallbackTone(1700,0.12,'triangle',0.42), 360);
-    }
-  }
-  function voiceSegundosAfuera(){
-    if (!useFallback.voz) { playEl(segAfuera); }
-    else { fallbackSpeak('¡Segundos afuera!'); }
-  }
+  function soundStartRound(){ if (!useFallback.start) { playEl(bellStart); } else { fallbackTone(1600,0.18,'triangle',0.38); setTimeout(()=>fallbackTone(1600,0.18,'triangle',0.38), 180); } }
+  function soundWarn10(){ if (!useFallback.wood) { for(let i=0;i<5;i++){ setTimeout(playWoodClone, i*200); } } else { for(let i=0;i<5;i++){ setTimeout(()=>fallbackTone(800,0.08,'square',0.4), i*200); } } }
+  function soundEndBell(){ if (!useFallback.end) { playEl(bellEnd); } else { fallbackTone(1700,0.12,'triangle',0.42); setTimeout(()=>fallbackTone(1700,0.12,'triangle',0.42), 180); setTimeout(()=>fallbackTone(1700,0.12,'triangle',0.42), 360); } }
+  function voiceSegundosAfuera(){ if (!useFallback.voz) { playEl(segAfuera); } else { fallbackSpeak('¡Segundos afuera!'); } }
 
-  /* ===== Lógica del reloj ===== */
-  function enterRound(){
-    inRest=false; warned10=false; warned15Rest=false; startedSound=false;
-    remain = duration; timerEl.style.color='#fff'; timerEl.classList.remove('blink'); paint();
-  }
-  function enterRest(){
-    inRest=true; warned10=false; warned15Rest=false; startedSound=false;
-    remain = rest; timerEl.style.color='#ffb300'; timerEl.classList.remove('blink'); paint();
-  }
+  function enterRound(){ inRest=false; warned10=false; warned15Rest=false; startedSound=false; remain = duration; timerEl.style.color='#fff'; timerEl.classList.remove('blink'); paint(); }
+  function enterRest(){ inRest=true; warned10=false; warned15Rest=false; startedSound=false; remain = rest; timerEl.style.color='#ffb300'; timerEl.classList.remove('blink'); paint(); }
 
   function tick(){
     if (remain > 0) {
-      remain--;
-      paint();
-
-      // Aviso de 10s en el round (golpes)
-      if (!inRest && !warned10 && remain === 10) {
-        warned10 = true;
-        timerEl.classList.add('blink');
-        soundWarn10();
-      }
-
-      // Aviso “segundos afuera” cuando faltan 15s para acabar el DESCANSO
-      if (inRest && !warned15Rest && remain === 15) {
-        warned15Rest = true;
-        voiceSegundosAfuera();
-      }
-
+      remain--; paint();
+      if (!inRest && !warned10 && remain === 10) { warned10 = true; timerEl.classList.add('blink'); soundWarn10(); }
+      if (inRest && !warned15Rest && remain === 15) { warned15Rest = true; voiceSegundosAfuera(); }
       return;
     }
-
-    // Cambio de estado al llegar a 0
-    if (!inRest){ soundEndBell(); enterRest(); }
-    else { round++; enterRound(); soundStartRound(); }
+    if (!inRest){ soundEndBell(); enterRest(); } else { round++; enterRound(); soundStartRound(); }
   }
 
-  function start(){
-    if(!t){
-      if(!inRest && remain===duration && !startedSound){ soundStartRound(); startedSound=true; }
-      t = setInterval(tick,1000);
-      ensureAudioReady();
-    }
-  }
+  function start(){ if(!t){ if(!inRest && remain===duration && !startedSound){ soundStartRound(); startedSound=true; } t = setInterval(tick,1000); ensureAudioReady(); } }
   function pause(){ if(t){ clearInterval(t); t=null; } }
   function reset(){ pause(); duration=parseInt(selDur.value,10); rest=parseInt(selRest.value,10); round=1; enterRound(); }
   function nextRound(){ pause(); round++; enterRound(); }
@@ -424,7 +433,7 @@ $incluir_menu = empty($_SESSION['__JUEZ_MODE__']);
 
   paint();
 
-  /* ===== Tarjetas (jueces) ===== */
+  /* ===== Tablero (polling) ===== */
   const tabla = document.getElementById('scores');
   const hint  = document.getElementById('scoreHint');
   const peleaId = <?= (int)$pelea_id ?>;
@@ -445,9 +454,7 @@ $incluir_menu = empty($_SESSION['__JUEZ_MODE__']);
   }
   function renderBoard(data){
     if(!data || !data.ok){
-      if (!tabla.dataset.hasInit) {
-        tabla.innerHTML='<tr><td style="padding:10px">Sin datos de tarjetas.</td></tr>';
-      }
+      if (!tabla.dataset.hasInit) tabla.innerHTML='<tr><td style="padding:10px">Sin datos de tarjetas.</td></tr>';
       hint.textContent='(Reintentando conexión…)';
       return;
     }
@@ -472,8 +479,8 @@ $incluir_menu = empty($_SESSION['__JUEZ_MODE__']);
         if(!j || j.ganador==null){ html += '<td class="pending">—</td>'; }
         else{
           if(j.ganador==='rojo') rR++; if(j.ganador==='azul') rA++;
-          const tag = j.metodo? ` <span class="badge">${j.metodo}</span>` : '';
-          html += `<td>${icon(j.ganador)}${tag}</td>`;
+          const pts = (j.azul_puntos!=null && j.rojo_puntos!=null) ? ` <div class="sub" style="opacity:.9">${j.azul_puntos}–${j.rojo_puntos}</div>` : '';
+          html += `<td>${icon(j.ganador)}${pts}</td>`;
         }
       });
       sumR+=rR; sumA+=rA;

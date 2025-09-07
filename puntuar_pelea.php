@@ -2,7 +2,7 @@
 // puntuar_pelea.php — puntos manuales + conteos/advertencias por round + método de resultado
 if (session_status() === PHP_SESSION_NONE) session_start();
 
-/* BYPASS para guards de asignación (dejado igual que tu versión) */
+/* BYPASS para guards de asignación (igual que tu versión) */
 $_SESSION['__JUEZ_MODE__']        = 1;
 $_SESSION['__ALLOW_UNASSIGNED__'] = 1;
 $_SESSION['__BYPASS_ASIG__']      = 1;
@@ -48,13 +48,13 @@ if ($has_pe && $has_pe->num_rows) {
   $nameR = has_col($conexion,'peleas_evento','rojo_nombre') ? 'rojo_nombre' : (has_col($conexion,'peleas_evento','competidor_b') ? 'competidor_b' : null);
   if ($nameA || $nameR) {
     $sql="SELECT ".($nameA?"$nameA AS a":"NULL AS a").", ".($nameR?"$nameR AS r":"NULL AS r")." FROM peleas_evento WHERE id=? LIMIT 1";
-    if ($st=$conexion->prepare($sql)){ $st->bind_param('i',$pelea_id); $st->execute(); if($res=$st->get_result()->fetch_assoc()){ $azul=trim($res['a']?:$azul); $rojo=trim($res['r']?:$rojo);} $st->close(); }
+    if ($st=$conexion->prepare($sql)){ $st->bind_param('i',$pelea_id); $st->execute(); $st->bind_result($a,$r); if($st->fetch()){ $azul=trim($a?:$azul); $rojo=trim($r?:$rojo);} $st->close(); }
   }
   if ($azul==='AZUL' || $rojo==='ROJO') {
     $idA=null; $idR=null;
     foreach(['competidor_azul_id','azul_id','id_azul','id_competidor_azul','azul'] as $c){ if (has_col($conexion,'peleas_evento',$c)) { $idA=$c; break; } }
     foreach(['competidor_rojo_id','rojo_id','id_rojo','id_competidor_rojo','rojo'] as $c){ if (has_col($conexion,'peleas_evento',$c)) { $idR=$c; break; } }
-    if (($idA||$idR) && ($conexion->query("SHOW TABLES LIKE 'competidores_evento'")?->num_rows)) {
+    if (($idA||$idR) && ($conexion->query("SHOW TABLES LIKE 'competidores_evento'") && $conexion->affected_rows!=-1)) {
       $sql="SELECT ".
            ($idA?"TRIM(CONCAT(COALESCE(ca.apellido,''),' ',COALESCE(ca.nombre,''))) AS a":"NULL AS a").",".
            ($idR?"TRIM(CONCAT(COALESCE(cr.apellido,''),' ',COALESCE(cr.nombre,''))) AS r":"NULL AS r")."
@@ -62,16 +62,14 @@ if ($has_pe && $has_pe->num_rows) {
            ($idA?"LEFT JOIN competidores_evento ca ON p.`$idA`=ca.id ":"").
            ($idR?"LEFT JOIN competidores_evento cr ON p.`$idR`=cr.id ":"").
            "WHERE p.id=? LIMIT 1";
-      if ($st=$conexion->prepare($sql)){ $st->bind_param('i',$pelea_id); $st->execute(); if($res=$st->get_result()->fetch_assoc()){ if(!empty($res['a']))$azul=trim($res['a']); if(!empty($res['r']))$rojo=trim($res['r']); } $st->close(); }
+      if ($st=$conexion->prepare($sql)){ $st->bind_param('i',$pelea_id); $st->execute(); $st->bind_result($a2,$r2); if($st->fetch()){ if(!empty($a2))$azul=trim($a2); if(!empty($r2))$rojo=trim($r2); } $st->close(); }
     }
   }
   $evCol = null;
   foreach (['evento_id','event_id','id_evento'] as $c) { if (has_col($conexion,'peleas_evento',$c)) { $evCol=$c; break; } }
   if (!empty($evCol)) {
     if ($st=$conexion->prepare("SELECT `$evCol` AS eid FROM peleas_evento WHERE id=? LIMIT 1")){
-      $st->bind_param('i',$pelea_id); $st->execute();
-      if ($r=$st->get_result()) { $row=$r->fetch_assoc(); $evento_id = (int)($row['eid'] ?? 0); }
-      $st->close();
+      $st->bind_param('i',$pelea_id); $st->execute(); $st->bind_result($eid); if($st->fetch()){ $evento_id=(int)$eid; } $st->close();
     }
   }
 }
@@ -109,6 +107,7 @@ foreach ($oldCols as $old => $new) {
   }
 }
 
+/* Aseguramos col 'metodo' si no existiera */
 $conexion->query("CREATE TABLE IF NOT EXISTS `resultados_jueces` (
   `id` INT AUTO_INCREMENT PRIMARY KEY,
   `pelea_id` INT NOT NULL,
@@ -144,65 +143,39 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
     $obs = trim((string)($_POST['observaciones'] ?? ''));
 
     if (!$err) {
-      /* Intento principal: ON DUPLICATE sin VALUES() */
-      $sql="INSERT INTO `puntuaciones_jueces`
-              (pelea_id,juez_id,`round`,azul_puntos,rojo_puntos,azul_conteos,rojo_conteos,azul_advertencias,rojo_advertencias,observaciones)
-            VALUES (?,?,?,?,?,?,?,?,?,?)
-            ON DUPLICATE KEY UPDATE
-              azul_puntos=?,
-              rojo_puntos=?,
-              azul_conteos=?,
-              rojo_conteos=?,
-              azul_advertencias=?,
-              rojo_advertencias=?,
-              observaciones=?";
-      $okPrep = false;
-      if ($st=$conexion->prepare($sql)) {
-        $okPrep = true;
-        $st->bind_param(
-          'iiiiiiiiis' . 'iiiiiis',
-          $pelea_id,$juez_id,$round,$azPts,$roPts,$azKD,$roKD,$azAdv,$roAdv,$obs,
-          $azPts,$roPts,$azKD,$roKD,$azAdv,$roAdv,$obs
-        );
-        if ($st->execute()) { $msg='Round guardado.'; } else { $err='No se pudo guardar el round. ['.$st->errno.'] '.$st->error; }
+      $sqlU = "UPDATE `puntuaciones_jueces`
+               SET azul_puntos=?, rojo_puntos=?, azul_conteos=?, rojo_conteos=?, azul_advertencias=?, rojo_advertencias=?, observaciones=?
+               WHERE pelea_id=? AND juez_id=? AND `round`=?";
+      if ($st=$conexion->prepare($sqlU)) {
+        $st->bind_param('iiiiissiii', $azPts,$roPts,$azKD,$roKD,$azAdv,$roAdv,$obs,$pelea_id,$juez_id,$round);
+        $st->execute();
+        $af = $st->affected_rows;
         $st->close();
-      }
-      if (!$okPrep) {
-        /* Plan B: UPDATE luego INSERT si no existe (evita ON DUPLICATE) */
-        $sqlU = "UPDATE `puntuaciones_jueces`
-                 SET azul_puntos=?, rojo_puntos=?, azul_conteos=?, rojo_conteos=?, azul_advertencias=?, rojo_advertencias=?, observaciones=?
-                 WHERE pelea_id=? AND juez_id=? AND `round`=?";
-        if ($st=$conexion->prepare($sqlU)) {
-          $st->bind_param('iiiiissiii', $azPts,$roPts,$azKD,$roKD,$azAdv,$roAdv,$obs,$pelea_id,$juez_id,$round);
-          $st->execute();
-          $af = $st->affected_rows;
-          $st->close();
-          if ($af<=0) {
-            $sqlI = "REPLACE INTO `puntuaciones_jueces`
-                     (pelea_id,juez_id,`round`,azul_puntos,rojo_puntos,azul_conteos,rojo_conteos,azul_advertencias,rojo_advertencias,observaciones)
-                     VALUES (?,?,?,?,?,?,?,?,?,?)";
-            if ($st=$conexion->prepare($sqlI)) {
-              $st->bind_param('iiiiiiiiss',$pelea_id,$juez_id,$round,$azPts,$roPts,$azKD,$roKD,$azAdv,$roAdv,$obs);
-              if ($st->execute()) $msg='Round guardado (plan B).'; else $err='No se pudo guardar el round (plan B). ['.$st->errno.'] '.$st->error;
-              $st->close();
-            } else {
-              $err='Error interno (prep round plan B): ['.$conexion->errno.'] '.$conexion->error;
-            }
-          } else {
-            $msg = 'Round actualizado (plan B).';
-          }
+        if ($af<=0) {
+          $sqlI = "INSERT INTO `puntuaciones_jueces`
+                   (pelea_id,juez_id,`round`,azul_puntos,rojo_puntos,azul_conteos,rojo_conteos,azul_advertencias,rojo_advertencias,observaciones)
+                   VALUES (?,?,?,?,?,?,?,?,?,?)";
+          if ($st=$conexion->prepare($sqlI)) {
+            $st->bind_param('iiiiiiiiss',$pelea_id,$juez_id,$round,$azPts,$roPts,$azKD,$roKD,$azAdv,$roAdv,$obs);
+            if ($st->execute()) $msg='Round guardado.'; else $err='No se pudo guardar el round. ['.$st->errno.'] '.$st->error;
+            $st->close();
+          } else { $err='Error interno (prep round insert): ['.$conexion->errno.'] '.$conexion->error; }
         } else {
-          $err='Error interno (prep round update): ['.$conexion->errno.'] '.$conexion->error;
+          $msg='Round actualizado.';
         }
-      }
+      } else { $err='Error interno (prep round update): ['.$conexion->errno.'] '.$conexion->error; }
     }
   }
 
   if ($accion==='enviar_resultado') {
-    $totA=0; $totR=0; $det=[];
-    if ($st=$conexion->prepare("SELECT `round`,azul_puntos,rojo_puntos FROM `puntuaciones_jueces` WHERE pelea_id=? AND juez_id=? ORDER BY `round`")){
-      $st->bind_param('ii',$pelea_id,$juez_id); $st->execute();
-      if ($r=$st->get_result()) while($row=$r->fetch_assoc()){ $det[]=$row; $totA+=(int)$row['azul_puntos']; $totR+=(int)$row['rojo_puntos']; }
+    // 1) Leer rondas del juez sin get_result()
+    $det = []; $totA = 0; $totR = 0;
+    if ($st=$conexion->prepare("SELECT `round`, azul_puntos, rojo_puntos FROM `puntuaciones_jueces` WHERE pelea_id=? AND juez_id=? ORDER BY `round`")){
+      $st->bind_param('ii',$pelea_id,$juez_id);
+      if ($st->execute()) {
+        $st->bind_result($r,$ap,$rp);
+        while($st->fetch()){ $det[] = ['round'=>$r,'azul_puntos'=>$ap,'rojo_puntos'=>$rp]; $totA+=(int)$ap; $totR+=(int)$rp; }
+      }
       $st->close();
     }
     if (!$det){ $err='Cargá al menos un round antes de enviar el resultado.'; }
@@ -214,92 +187,68 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
       $gm = in_array($gm, ['azul','rojo','empate'], true) ? $gm : '';
       $gan = ($metodo === 'EMPATE') ? 'empate' : ($gm ?: ($totA>$totR?'azul':($totR>$totA?'rojo':'empate')));
 
-      $checksum = hash('sha256', json_encode($det,JSON_UNESCAPED_UNICODE));
+      // Checksum opcional
+      $hasChecksum  = has_col($conexion,'resultados_jueces','detalle_checksum');
+      $checksum = $hasChecksum ? hash('sha256', json_encode($det,JSON_UNESCAPED_UNICODE)) : null;
       $obs = trim((string)($_POST['observaciones_final'] ?? ''));
 
-      /* Intento principal: ON DUPLICATE sin VALUES() */
-      $sql="INSERT INTO `resultados_jueces`
-              (pelea_id,juez_id,total_azul,total_rojo,ganador,metodo,observaciones,detalle_checksum)
-            VALUES (?,?,?,?,?,?,?,?)
-            ON DUPLICATE KEY UPDATE
-              total_azul=?,
-              total_rojo=?,
-              ganador=?,
-              metodo=?,
-              observaciones=?,
-              detalle_checksum=?,
-              enviado_at=CURRENT_TIMESTAMP,
-              estado='enviado'";
-      $okPrep = false;
-      if ($st=$conexion->prepare($sql)){
-        $okPrep = true;
-        $st->bind_param(
-          'iiiissss' . 'iissss',
-          $pelea_id,$juez_id,$totA,$totR,$gan,$metodo,$obs,$checksum,
-          $totA,$totR,$gan,$metodo,$obs,$checksum
-        );
-        if ($st->execute()) { $msg='Resultado enviado al organizador.'; }
-        else { $err='No se pudo enviar el resultado. ['.$st->errno.'] '.$st->error; }
-        $st->close();
-      }
+      $hasMetodo    = has_col($conexion,'resultados_jueces','metodo');
+      $hasObs       = has_col($conexion,'resultados_jueces','observaciones');
+      $hasEstado    = has_col($conexion,'resultados_jueces','estado');
+      $hasEnviadoAt = has_col($conexion,'resultados_jueces','enviado_at');
 
-      if (!$okPrep) {
-        /* ===== Plan B robusto (sin ON DUPLICATE): UPDATE -> REPLACE DINÁMICO ===== */
-        $hasMetodo    = has_col($conexion,'resultados_jueces','metodo');
-        $hasObs       = has_col($conexion,'resultados_jueces','observaciones');
-        $hasChecksum  = has_col($conexion,'resultados_jueces','detalle_checksum');
+      // 2) UPDATE (sólo columnas existentes)
+      $set = ["total_azul=?","total_rojo=?","ganador=?"];
+      $typesU = "iis"; $valsU = [$totA,$totR,$gan];
+      if ($hasMetodo)   { $set[]="metodo=?";           $typesU.="s"; $valsU[]=$metodo; }
+      if ($hasObs)      { $set[]="observaciones=?";    $typesU.="s"; $valsU[]=$obs; }
+      if ($hasChecksum) { $set[]="detalle_checksum=?"; $typesU.="s"; $valsU[]=$checksum; }
+      if ($hasEnviadoAt){ $set[]="enviado_at=CURRENT_TIMESTAMP"; }
+      if ($hasEstado)   { $set[]="estado='enviado'"; }
 
-        // UPDATE (solo columnas presentes)
-        $set = ["total_azul=?","total_rojo=?","ganador=?"];
-        $typesU = "iis";
-        $valsU  = [$totA,$totR,$gan];
-        if ($hasMetodo)   { $set[]="metodo=?";         $typesU.="s"; $valsU[]=$metodo; }
-        if ($hasObs)      { $set[]="observaciones=?";  $typesU.="s"; $valsU[]=$obs; }
-        if ($hasChecksum) { $set[]="detalle_checksum=?"; $typesU.="s"; $valsU[]=$checksum; }
-        $sqlU = "UPDATE `resultados_jueces` SET ".implode(',', $set).", enviado_at=CURRENT_TIMESTAMP, estado='enviado' WHERE pelea_id=? AND juez_id=?";
-        $typesU .= "ii";
-        $valsU[] = $pelea_id; $valsU[] = $juez_id;
+      $sqlU = "UPDATE `resultados_jueces` SET ".implode(',', $set)." WHERE pelea_id=? AND juez_id=?";
+      $typesU .= "ii"; $valsU[]=$pelea_id; $valsU[]=$juez_id;
 
-        $st = $conexion->prepare($sqlU);
-        if ($st) {
-          // bind dinámico
-          $bindParams = [];
-          $bindParams[] = $typesU;
-          foreach ($valsU as $k=>$v){ $bindParams[] = &$valsU[$k]; }
-          call_user_func_array([$st,'bind_param'],$bindParams);
-          $st->execute();
-          $af = $st->affected_rows;
-          $st->close();
+      $st = $conexion->prepare($sqlU);
+      if ($st) {
+        $bindParams = []; $bindParams[] = $typesU;
+        foreach ($valsU as $k=>$v){ $bindParams[] = &$valsU[$k]; }
+        call_user_func_array([$st,'bind_param'],$bindParams);
+        $st->execute(); $af = $st->affected_rows; $st->close();
 
-          if ($af<=0) {
-            // REPLACE (solo columnas existentes)
-            $cols   = ['pelea_id','juez_id','total_azul','total_rojo','ganador'];
-            $typesR = 'iiiis';
-            $valsR  = [&$pelea_id,&$juez_id,&$totA,&$totR,&$gan];
-            if ($hasMetodo)   { $cols[]='metodo';           $typesR.='s'; $valsR[]=&$metodo; }
-            if ($hasObs)      { $cols[]='observaciones';    $typesR.='s'; $valsR[]=&$obs; }
-            if ($hasChecksum) { $cols[]='detalle_checksum'; $typesR.='s'; $valsR[]=&$checksum; }
+        // 3) Si no existía, INSERT (sólo columnas existentes)
+        if ($af<=0) {
+          $cols   = ['pelea_id','juez_id','total_azul','total_rojo','ganador'];
+          $typesI = 'iiiis'; $valsI  = [$pelea_id,$juez_id,$totA,$totR,$gan];
+          if ($hasMetodo)   { $cols[]='metodo';           $typesI.='s'; $valsI[]=$metodo; }
+          if ($hasObs)      { $cols[]='observaciones';    $typesI.='s'; $valsI[]=$obs; }
+          if ($hasChecksum) { $cols[]='detalle_checksum'; $typesI.='s'; $valsI[]=$checksum; }
+          if ($hasEstado)   { $cols[]='estado';           $typesI.='s'; $valsI[]='enviado'; }
 
-            $place = implode(',', array_fill(0, count($cols), '?'));
-            $sqlR = "REPLACE INTO `resultados_jueces` (`".implode('`,`',$cols)."`) VALUES ($place)";
-            $stR = $conexion->prepare($sqlR);
-            if ($stR) {
-              $bindParamsR = [];
-              $bindParamsR[] = $typesR;
-              foreach ($valsR as $k=>$v){ $bindParamsR[] = &$valsR[$k]; }
-              call_user_func_array([$stR,'bind_param'],$bindParamsR);
-              if ($stR->execute()) { $msg = 'Resultado enviado (plan B).'; }
-              else { $err = 'No se pudo enviar el resultado (plan B). ['.$stR->errno.'] '.$stR->error; }
-              $stR->close();
+          $place = implode(',', array_fill(0, count($cols), '?'));
+          $sqlI  = "INSERT INTO `resultados_jueces` (`".implode('`,`',$cols)."`) VALUES ($place)";
+          $stI = $conexion->prepare($sqlI);
+          if ($stI) {
+            $bindParamsI = []; $bindParamsI[] = $typesI;
+            foreach ($valsI as $k=>$v){ $bindParamsI[] = &$valsI[$k]; }
+            call_user_func_array([$stI,'bind_param'],$bindParamsI);
+            if ($stI->execute()) {
+              $stI->close();
+              header("Location: combate_en_vivo.php?pelea_id=".$pelea_id."&from=puntuar&ok=1");
+              exit;
             } else {
-              $err = 'Error interno (prep envío plan B REPLACE): ['.$conexion->errno.'] '.$conexion->error;
+              $err = 'No se pudo enviar el resultado (insert). ['.$stI->errno.'] '.$stI->error;
+              $stI->close();
             }
           } else {
-            $msg = 'Resultado actualizado (plan B).';
+            $err = 'Error interno (prep envío insert): ['.$conexion->errno.'] '.$conexion->error;
           }
         } else {
-          $err = 'Error interno (prep envío plan B UPDATE): ['.$conexion->errno.'] '.$conexion->error;
+          header("Location: combate_en_vivo.php?pelea_id=".$pelea_id."&from=puntuar&ok=1");
+          exit;
         }
+      } else {
+        $err = 'Error interno (prep envío update): ['.$conexion->errno.'] '.$conexion->error;
       }
     }
   }
@@ -310,10 +259,18 @@ $puntajes=[]; $totalAz=0; $totalRo=0;
 $qSel = "SELECT `round`,azul_puntos,rojo_puntos,azul_conteos,rojo_conteos,azul_advertencias,rojo_advertencias,observaciones,updated_at
          FROM `puntuaciones_jueces` WHERE pelea_id=? AND juez_id=? ORDER BY `round` ASC";
 if ($st=$conexion->prepare($qSel)){
-  $st->bind_param('ii',$pelea_id,$juez_id); $st->execute();
-  if ($r=$st->get_result()){
-    $puntajes=$r->fetch_all(MYSQLI_ASSOC);
-    foreach($puntajes as $pu){ $totalAz+=(int)$pu['azul_puntos']; $totalRo+=(int)$pu['rojo_puntos']; }
+  $st->bind_param('ii',$pelea_id,$juez_id);
+  if ($st->execute()) {
+    $st->bind_result($r,$ap,$rp,$akd,$rkd,$aadv,$radv,$o,$upd);
+    while($st->fetch()){
+      $puntajes[] = [
+        'round'=>$r,'azul_puntos'=>$ap,'rojo_puntos'=>$rp,
+        'azul_conteos'=>$akd,'rojo_conteos'=>$rkd,
+        'azul_advertencias'=>$aadv,'rojo_advertencias'=>$radv,
+        'observaciones'=>$o,'updated_at'=>$upd
+      ];
+      $totalAz+=(int)$ap; $totalRo+=(int)$rp;
+    }
   }
   $st->close();
 }
@@ -371,7 +328,6 @@ $next_round = $puntajes ? ((int)end($puntajes)['round']+1) : 1;
       <form method="post" action="" id="frmRound" novalidate>
         <input type="hidden" name="__accion__" value="guardar_round">
 
-        <!-- Puntos manuales (solo números) -->
         <div class="grid3">
           <div>
             <label>Round</label>
@@ -387,7 +343,6 @@ $next_round = $puntajes ? ((int)end($puntajes)['round']+1) : 1;
           </div>
         </div>
 
-        <!-- Cantidades de conteos y advertencias -->
         <div class="grid2" style="margin-top:10px">
           <div>
             <label><?= h($azul) ?> — Conteos (knockdowns)</label>
@@ -406,16 +361,13 @@ $next_round = $puntajes ? ((int)end($puntajes)['round']+1) : 1;
             <input type="number" name="rojo_advertencias" min="0" step="1" value="0" inputmode="numeric" pattern="\d*">
           </div>
         </div>
-        <div class="subtle" style="margin-top:4px">
-          Ingresá valores enteros (0, 1, 2, …). El formulario bloquea letras y símbolos.
-        </div>
+        <div class="subtle" style="margin-top:4px">Ingresá valores enteros (0, 1, 2, …). El formulario bloquea letras y símbolos.</div>
 
         <label style="margin-top:8px">Observaciones (opcional)</label>
         <textarea name="observaciones" rows="2" placeholder="Advertencias verbales, penalidades, cortes, etc."></textarea>
 
         <div class="row" style="margin-top:10px">
           <button class="btn" type="submit">Guardar round</button>
-          <!-- 🔁 CAMBIO: vuelve al Panel del Juez -->
           <a class="btn gray" href="panel_juez.php">Volver al Panel del Juez</a>
           <a class="btn gray" href="combate_en_vivo.php?pelea_id=<?= (int)$pelea_id ?>&modo=juez">Ver en vivo</a>
         </div>
@@ -457,11 +409,9 @@ $next_round = $puntajes ? ((int)end($puntajes)['round']+1) : 1;
         </div>
       <?php endif; ?>
 
-      <!-- Envío de resultado (método + ganador) -->
       <form method="post" action="" style="margin-top:12px" id="frmResultado"
             onsubmit="return confirm('Se enviará el RESULTADO al organizador. ¿Confirmar?')">
         <input type="hidden" name="__accion__" value="enviar_resultado">
-
         <div class="grid2">
           <div>
             <label>Método del resultado</label>
@@ -479,9 +429,7 @@ $next_round = $puntajes ? ((int)end($puntajes)['round']+1) : 1;
           <div>
             <label>Ganador</label>
             <div class="row" style="gap:8px">
-              <?php
-                $default_gan = $totalAz>$totalRo?'azul':($totalRo>$totalAz?'rojo':'empate');
-              ?>
+              <?php $default_gan = $totalAz>$totalRo?'azul':($totalRo>$totalAz?'rojo':'empate'); ?>
               <label class="pill"><input type="radio" name="ganador_manual" value="azul" <?= $default_gan==='azul'?'checked':''; ?>> Azul (<?= h($azul) ?>)</label>
               <label class="pill"><input type="radio" name="ganador_manual" value="rojo" <?= $default_gan==='rojo'?'checked':''; ?>> Rojo (<?= h($rojo) ?>)</label>
               <label class="pill"><input type="radio" name="ganador_manual" value="empate" <?= $default_gan==='empate'?'checked':''; ?>> Empate</label>
@@ -509,9 +457,7 @@ $next_round = $puntajes ? ((int)end($puntajes)['round']+1) : 1;
       };
       document.querySelectorAll('input[type="number"]').forEach(inp=>{
         inp.addEventListener('keydown', onlyDigits);
-        inp.addEventListener('input', (e)=>{
-          e.target.value = (e.target.value||'').replace(/\D+/g,'');
-        });
+        inp.addEventListener('input', (e)=>{ e.target.value = (e.target.value||'').replace(/\D+/g,''); });
         if (!inp.hasAttribute('step')) inp.setAttribute('step','1');
       });
 
@@ -528,10 +474,7 @@ $next_round = $puntajes ? ((int)end($puntajes)['round']+1) : 1;
           }
         });
       };
-      if (metodoSel) {
-        metodoSel.addEventListener('change', syncWinner);
-        syncWinner();
-      }
+      if (metodoSel) { metodoSel.addEventListener('change', syncWinner); syncWinner(); }
     })();
   </script>
 </body>

@@ -94,6 +94,7 @@ $backUrl = safe_back_url();
         <li><a href="ver_peleas_evento.php">📊 Ver Peleas</a></li>
         <li><a href="combate_en_vivo.php">📺 En Vivo</a></li>
         <li><a href="resultados_combates.php">🥇 Resultados</a></li>
+        <li><a href="ranking_competidores.php">📊 score</a></li>
       </ul>
     </li>
 
