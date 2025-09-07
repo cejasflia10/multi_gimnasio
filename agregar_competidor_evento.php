@@ -61,6 +61,17 @@ function fk_ensure_id(mysqli $db, string $table, ?int $id): ?int {
   return fk_first_id($db, $table);
 }
 
+/* === Buscar id por nombre (para Muay Thai sin romper nada) === */
+function cat_id_by_nombre(mysqli $db, string $table, string $nombre): ?int {
+  if (!has_col($db,$table,'nombre') || !has_col($db,$table,'id')) return null;
+  if ($st=$db->prepare("SELECT id FROM `$table` WHERE nombre=? LIMIT 1")){
+    $st->bind_param('s',$nombre); $st->execute();
+    $r=$st->get_result(); $id = ($r && $r->num_rows) ? (int)$r->fetch_assoc()['id'] : null;
+    $st->close(); return $id;
+  }
+  return null;
+}
+
 /* ===== Duplicado por (evento_id, dni) ===== */
 function existe_dni_evento(mysqli $db, int $evento_id, string $dni): bool {
   $t = 'competidores_evento';
@@ -92,7 +103,8 @@ function insertar_competidor(mysqli $db, array $row): int {
   $cands = [
     'evento_id'=>'i','apellido'=>'s','nombre'=>'s','dni'=>'s','fecha_nacimiento'=>'s','edad'=>'i','sexo'=>'s',
     'escuela_nombre'=>'s','escuela_logo'=>'s','foto_competidor'=>'s',
-    'pago_inscripcion'=>'i','alias_transferencia'=>'s','comprobante_url'=>'s','telefono_organizador'=>'s',
+    /* corregido: monto como string/decimal, no 1|0 */
+    'pago_inscripcion'=>'s','alias_transferencia'=>'s','comprobante_url'=>'s','telefono_organizador'=>'s',
     'modalidad_id'=>'i','disciplina_id'=>'i','categoria_tecnica_id'=>'i','division_id'=>'i','categoria_peso_id'=>'i',
     'wins'=>'i','losses'=>'i','draws'=>'i','no_contest'=>'i',
     'categoria_tecnica'=>'s','division'=>'s'
@@ -157,11 +169,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   $escuela_nombre = post('escuela_nombre');
 
   // Pagos
-  $habilitar_pago   = (post('habilitar_pago') !== '');
-  $pago_inscripcion = $habilitar_pago ? 1 : 0;
+  $habilitar_pago      = (post('habilitar_pago') !== '');
+  $monto_inscripcion   = $habilitar_pago ? post('pago_inscripcion') : '0.00';
+  if ($monto_inscripcion === '' || !is_numeric(str_replace(',','.', $monto_inscripcion))) {
+    $monto_inscripcion = '0.00';
+  }
   $alias_transferencia = $habilitar_pago ? post('alias_transferencia') : '';
   $telefono_organizador= $habilitar_pago ? post('telefono_organizador') : '';
-  $comprobante_url  = null;
+  $comprobante_url     = null;
 
   // Selecciones
   $modalidad_id_in         = toIntOrNull(post('modalidad_id'));
@@ -229,7 +244,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     'escuela_logo'         => $escuela_logo ?: null,
     'foto_competidor'      => $foto_competidor ?: null,
 
-    'pago_inscripcion'     => $pago_inscripcion,
+    'pago_inscripcion'     => (string)$monto_inscripcion,
     'alias_transferencia'  => $alias_transferencia ?: null,
     'comprobante_url'      => $comprobante_url ?: null,
     'telefono_organizador' => $telefono_organizador ?: null,
@@ -264,6 +279,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 $evento_id = $evento_id_ctx;
 $wa_link = $_SESSION['wa_link'] ?? null;
 unset($_SESSION['wa_link']);
+
+/* ID real de Muay Thai (si existe), o 7 como backup */
+$idMuay = cat_id_by_nombre($conexion,'modalidades_evento','Muay Thai') ?? 7;
 ?>
 <!DOCTYPE html>
 <html lang="es">
@@ -461,6 +479,7 @@ unset($_SESSION['wa_link']);
               <option value="4">Low Kick</option>
               <option value="5">K1</option>
               <option value="6">MMA</option>
+              <option value="<?= (int)$idMuay ?>">Muay Thai</option> <!-- agregado -->
             </select>
           </div>
           <div>

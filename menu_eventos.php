@@ -116,6 +116,10 @@ $backUrl = safe_back_url();
         <li><a href="tipos_entradas.php">🎟️ Tipos de Entrada</a></li>
         <!-- Link para subir la imagen de marca (header) -->
         <li><a href="upload_brand_image.php">🖼️ Subir imagen de marca (header)</a></li>
+        <li><a href="config_catalogos_evento.php"> ⚙️ Catálogos</a></li>
+  </a>
+</li>
+
       </ul>
     </li>
 
