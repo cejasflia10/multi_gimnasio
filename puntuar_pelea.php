@@ -144,7 +144,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
     $obs = trim((string)($_POST['observaciones'] ?? ''));
 
     if (!$err) {
-      /* ✅ Reescrito sin VALUES() en el UPDATE */
+      /* Intento principal: ON DUPLICATE sin VALUES() */
       $sql="INSERT INTO `puntuaciones_jueces`
               (pelea_id,juez_id,`round`,azul_puntos,rojo_puntos,azul_conteos,rojo_conteos,azul_advertencias,rojo_advertencias,observaciones)
             VALUES (?,?,?,?,?,?,?,?,?,?)
@@ -156,15 +156,45 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
               azul_advertencias=?,
               rojo_advertencias=?,
               observaciones=?";
+      $okPrep = false;
       if ($st=$conexion->prepare($sql)) {
+        $okPrep = true;
         $st->bind_param(
           'iiiiiiiiis' . 'iiiiiis',
           $pelea_id,$juez_id,$round,$azPts,$roPts,$azKD,$roKD,$azAdv,$roAdv,$obs,
           $azPts,$roPts,$azKD,$roKD,$azAdv,$roAdv,$obs
         );
-        if ($st->execute()) $msg='Round guardado.'; else $err='No se pudo guardar el round. '.$st->error;
+        if ($st->execute()) { $msg='Round guardado.'; } else { $err='No se pudo guardar el round. ['.$st->errno.'] '.$st->error; }
         $st->close();
-      } else { $err='Error interno (prep): '.$conexion->error; }
+      }
+      if (!$okPrep) {
+        /* Plan B: UPDATE luego INSERT si no existe (evita ON DUPLICATE) */
+        $sqlU = "UPDATE `puntuaciones_jueces`
+                 SET azul_puntos=?, rojo_puntos=?, azul_conteos=?, rojo_conteos=?, azul_advertencias=?, rojo_advertencias=?, observaciones=?
+                 WHERE pelea_id=? AND juez_id=? AND `round`=?";
+        if ($st=$conexion->prepare($sqlU)) {
+          $st->bind_param('iiiiissiii', $azPts,$roPts,$azKD,$roKD,$azAdv,$roAdv,$obs,$pelea_id,$juez_id,$round);
+          $st->execute();
+          $af = $st->affected_rows;
+          $st->close();
+          if ($af<=0) {
+            $sqlI = "REPLACE INTO `puntuaciones_jueces`
+                     (pelea_id,juez_id,`round`,azul_puntos,rojo_puntos,azul_conteos,rojo_conteos,azul_advertencias,rojo_advertencias,observaciones)
+                     VALUES (?,?,?,?,?,?,?,?,?,?)";
+            if ($st=$conexion->prepare($sqlI)) {
+              $st->bind_param('iiiiiiiiss',$pelea_id,$juez_id,$round,$azPts,$roPts,$azKD,$roKD,$azAdv,$roAdv,$obs);
+              if ($st->execute()) $msg='Round guardado (plan B).'; else $err='No se pudo guardar el round (plan B). ['.$st->errno.'] '.$st->error;
+              $st->close();
+            } else {
+              $err='Error interno (prep round plan B): ['.$conexion->errno.'] '.$conexion->error;
+            }
+          } else {
+            $msg = 'Round actualizado (plan B).';
+          }
+        } else {
+          $err='Error interno (prep round update): ['.$conexion->errno.'] '.$conexion->error;
+        }
+      }
     }
   }
 
@@ -187,7 +217,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
       $checksum = hash('sha256', json_encode($det,JSON_UNESCAPED_UNICODE));
       $obs = trim((string)($_POST['observaciones_final'] ?? ''));
 
-      /* ✅ Reescrito sin VALUES() en el UPDATE */
+      /* Intento principal: ON DUPLICATE sin VALUES() */
       $sql="INSERT INTO `resultados_jueces`
               (pelea_id,juez_id,total_azul,total_rojo,ganador,metodo,observaciones,detalle_checksum)
             VALUES (?,?,?,?,?,?,?,?)
@@ -200,15 +230,77 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
               detalle_checksum=?,
               enviado_at=CURRENT_TIMESTAMP,
               estado='enviado'";
+      $okPrep = false;
       if ($st=$conexion->prepare($sql)){
+        $okPrep = true;
         $st->bind_param(
           'iiiissss' . 'iissss',
           $pelea_id,$juez_id,$totA,$totR,$gan,$metodo,$obs,$checksum,
           $totA,$totR,$gan,$metodo,$obs,$checksum
         );
-        if ($st->execute()) $msg='Resultado enviado al organizador.'; else $err='No se pudo enviar el resultado. '.$st->error;
+        if ($st->execute()) { $msg='Resultado enviado al organizador.'; }
+        else { $err='No se pudo enviar el resultado. ['.$st->errno.'] '.$st->error; }
         $st->close();
-      } else { $err='Error interno (prep envío): '.$conexion->error; }
+      }
+
+      if (!$okPrep) {
+        /* ===== Plan B robusto (sin ON DUPLICATE): UPDATE -> REPLACE DINÁMICO ===== */
+        $hasMetodo    = has_col($conexion,'resultados_jueces','metodo');
+        $hasObs       = has_col($conexion,'resultados_jueces','observaciones');
+        $hasChecksum  = has_col($conexion,'resultados_jueces','detalle_checksum');
+
+        // UPDATE (solo columnas presentes)
+        $set = ["total_azul=?","total_rojo=?","ganador=?"];
+        $typesU = "iis";
+        $valsU  = [$totA,$totR,$gan];
+        if ($hasMetodo)   { $set[]="metodo=?";         $typesU.="s"; $valsU[]=$metodo; }
+        if ($hasObs)      { $set[]="observaciones=?";  $typesU.="s"; $valsU[]=$obs; }
+        if ($hasChecksum) { $set[]="detalle_checksum=?"; $typesU.="s"; $valsU[]=$checksum; }
+        $sqlU = "UPDATE `resultados_jueces` SET ".implode(',', $set).", enviado_at=CURRENT_TIMESTAMP, estado='enviado' WHERE pelea_id=? AND juez_id=?";
+        $typesU .= "ii";
+        $valsU[] = $pelea_id; $valsU[] = $juez_id;
+
+        $st = $conexion->prepare($sqlU);
+        if ($st) {
+          // bind dinámico
+          $bindParams = [];
+          $bindParams[] = $typesU;
+          foreach ($valsU as $k=>$v){ $bindParams[] = &$valsU[$k]; }
+          call_user_func_array([$st,'bind_param'],$bindParams);
+          $st->execute();
+          $af = $st->affected_rows;
+          $st->close();
+
+          if ($af<=0) {
+            // REPLACE (solo columnas existentes)
+            $cols   = ['pelea_id','juez_id','total_azul','total_rojo','ganador'];
+            $typesR = 'iiiis';
+            $valsR  = [&$pelea_id,&$juez_id,&$totA,&$totR,&$gan];
+            if ($hasMetodo)   { $cols[]='metodo';           $typesR.='s'; $valsR[]=&$metodo; }
+            if ($hasObs)      { $cols[]='observaciones';    $typesR.='s'; $valsR[]=&$obs; }
+            if ($hasChecksum) { $cols[]='detalle_checksum'; $typesR.='s'; $valsR[]=&$checksum; }
+
+            $place = implode(',', array_fill(0, count($cols), '?'));
+            $sqlR = "REPLACE INTO `resultados_jueces` (`".implode('`,`',$cols)."`) VALUES ($place)";
+            $stR = $conexion->prepare($sqlR);
+            if ($stR) {
+              $bindParamsR = [];
+              $bindParamsR[] = $typesR;
+              foreach ($valsR as $k=>$v){ $bindParamsR[] = &$valsR[$k]; }
+              call_user_func_array([$stR,'bind_param'],$bindParamsR);
+              if ($stR->execute()) { $msg = 'Resultado enviado (plan B).'; }
+              else { $err = 'No se pudo enviar el resultado (plan B). ['.$stR->errno.'] '.$stR->error; }
+              $stR->close();
+            } else {
+              $err = 'Error interno (prep envío plan B REPLACE): ['.$conexion->errno.'] '.$conexion->error;
+            }
+          } else {
+            $msg = 'Resultado actualizado (plan B).';
+          }
+        } else {
+          $err = 'Error interno (prep envío plan B UPDATE): ['.$conexion->errno.'] '.$conexion->error;
+        }
+      }
     }
   }
 }
@@ -413,12 +505,12 @@ $next_round = $puntajes ? ((int)end($puntajes)['round']+1) : 1;
       const onlyDigits = (ev) => {
         const allowed = ['Backspace','Delete','ArrowLeft','ArrowRight','Tab','Home','End'];
         if (allowed.includes(ev.key)) return;
-        if (!/^\\d$/.test(ev.key)) { ev.preventDefault(); }
+        if (!/^\d$/.test(ev.key)) { ev.preventDefault(); }
       };
       document.querySelectorAll('input[type="number"]').forEach(inp=>{
         inp.addEventListener('keydown', onlyDigits);
         inp.addEventListener('input', (e)=>{
-          e.target.value = (e.target.value||'').replace(/\\D+/g,'');
+          e.target.value = (e.target.value||'').replace(/\D+/g,'');
         });
         if (!inp.hasAttribute('step')) inp.setAttribute('step','1');
       });
