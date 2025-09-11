@@ -1,8 +1,18 @@
-# Ignorar carpetas de compilación y ejecutables
-dist/
-node_modules/
-*.exe
-*.asar
-*.zip
-*.rar
-*.7z
+﻿# === Ignorar contenido generado o sensible ===
+/uploads/
+/ZK4500LocalService/bin/
+/ZK4500LocalService/obj/
+/vendor/
+/node_modules/
+/flyers_eventos/*.png
+/includes/conn.php
+/includes/conn.local.php
+/.env
+
+# === Basura de sistema / IDE ===
+*.log
+*.user
+*.suo
+*.tmp
+.DS_Store
+Thumbs.db
