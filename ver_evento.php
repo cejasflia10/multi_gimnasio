@@ -5,12 +5,6 @@
    ============================================================ */
 if (session_status() === PHP_SESSION_NONE) session_start();
 
-/* Guardia de sesión (login de eventos) */
-if (empty($_SESSION['evento_usuario_id'])) {
-  $return_to = $_SERVER['REQUEST_URI'] ?? 'ver_evento.php';
-  header('Location: login_evento.php?return_to=' . urlencode($return_to));
-  exit;
-}
 
 /* Conexión */
 require_once __DIR__ . '/conexion.php';

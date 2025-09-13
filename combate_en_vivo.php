@@ -39,25 +39,32 @@ while($r = $res->fetch_assoc()){ $cols[strtolower($r['Field'])] = $r['Field']; }
 $res->close();
 $pick = function(array $cands) use ($cols){ foreach($cands as $c){ $lc=strtolower($c); if(isset($cols[$lc])) return $cols[$lc]; } return null; };
 
-$C_EVENTO = $pick(['evento_id','id_evento','evento']);
-$C_ROJO   = $pick(['competidor_rojo_id','rojo_id','id_rojo','id_competidor_rojo','rojo']);
-$C_AZUL   = $pick(['competidor_azul_id','azul_id','id_azul','id_competidor_azul','azul']);
-$C_RONDAS = $pick(['rondas']);
+$C_EVENTO   = $pick(['evento_id','id_evento','evento']);
+$C_ROJO     = $pick(['competidor_rojo_id','rojo_id','id_rojo','id_competidor_rojo','rojo']);
+$C_AZUL     = $pick(['competidor_azul_id','azul_id','id_azul','id_competidor_azul','azul']);
+$C_RONDAS   = $pick(['rondas']);
+$C_DUR      = $pick(['duracion_segundos','duracion_round','round_seconds']);
+$C_DESC     = $pick(['descanso_segundos','descanso_round','rest_seconds']);
 
 if (!$C_EVENTO || !$C_ROJO || !$C_AZUL) {
   echo '<div style="max-width:900px;margin:16px auto;padding:12px;border:1px solid #f5c6cb;background:#fdecea;color:#b71c1c;border-radius:8px;">Faltan columnas obligatorias en <b>peleas_evento</b> (evento_id, competidor_rojo_id, competidor_azul_id).</div>';
   exit;
 }
 
-/* Traer info pelea + competidores */
+/* Traer info pelea + competidores + config de rounds/tiempos */
 $colE = bt($C_EVENTO);
 $colR = bt($C_ROJO);
 $colA = bt($C_AZUL);
 $selRondas = $C_RONDAS ? "p.".bt($C_RONDAS)." AS rondas," : "NULL AS rondas,";
+$selDur    = $C_DUR    ? "p.".bt($C_DUR   )." AS duracion_segundos," : "NULL AS duracion_segundos,";
+$selDesc   = $C_DESC   ? "p.".bt($C_DESC  )." AS descanso_segundos," : "NULL AS descanso_segundos,";
 
 $sql = "
   SELECT
-    p.id AS pelea_id, p.$colE AS evento_id, $selRondas
+    p.id AS pelea_id, p.$colE AS evento_id,
+    $selRondas
+    $selDur
+    $selDesc
     p.$colR AS rojo_id, p.$colA AS azul_id,
 
     cr.apellido AS r_apellido, cr.nombre AS r_nombre, cr.escuela_nombre AS r_escuela,
@@ -85,6 +92,7 @@ $st->bind_param('i', $pelea_id);
 $st->execute();
 $st->bind_result(
   $X_pelea_id, $X_evento_id, $X_rondas,
+  $X_duracion_seg, $X_descanso_seg,
   $X_rojo_id,  $X_azul_id,
   $r_apellido, $r_nombre, $r_escuela, $r_foto, $r_edad, $r_modalidad, $r_division, $r_peso,
   $a_apellido, $a_nombre, $a_escuela, $a_foto, $a_edad, $a_modalidad, $a_division, $a_peso
@@ -92,8 +100,13 @@ $st->bind_result(
 $ok = $st->fetch(); $st->close();
 if (!$ok) { echo '<div style="max-width:900px;margin:16px auto;padding:12px;border:1px solid #f5c6cb;background:#fdecea;color:#b71c1c;border-radius:8px;">No se encontró la pelea.</div>'; exit; }
 
+/* Defaults si no hay columnas/valores */
+$rondasEsperadas = (isset($X_rondas) && (int)$X_rondas>0) ? (int)$X_rondas : 3;
+$duracionSeg     = (isset($X_duracion_seg) && (int)$X_duracion_seg>0) ? (int)$X_duracion_seg : 180;
+$descansoSeg     = (isset($X_descanso_seg) && (int)$X_descanso_seg>0) ? (int)$X_descanso_seg : 60;
+
 $info = [
-  'pelea_id'=>$X_pelea_id, 'evento_id'=>$X_evento_id, 'rondas'=>$X_rondas,
+  'pelea_id'=>$X_pelea_id, 'evento_id'=>$X_evento_id, 'rondas'=>$rondasEsperadas,
   'r_apellido'=>$r_apellido, 'r_nombre'=>$r_nombre, 'r_escuela'=>$r_escuela,
   'r_foto'=>$r_foto, 'r_edad'=>$r_edad, 'r_modalidad'=>$r_modalidad,
   'r_division'=>$r_division, 'r_peso'=>$r_peso,
@@ -106,7 +119,6 @@ $phUser = 'assets/placeholder-user.png';
 $rFoto = !empty($info['r_foto']) ? $info['r_foto'] : $phUser;
 $aFoto = !empty($info['a_foto']) ? $info['a_foto'] : $phUser;
 
-$rondasEsperadas = (isset($info['rondas']) && (int)$info['rondas']>0) ? (int)$info['rondas'] : 3;
 $incluir_menu = empty($_SESSION['__JUEZ_MODE__']);
 
 /* Mayoría (tarjetas cerradas/“enviado”) — en el render inicial */
@@ -118,7 +130,7 @@ if ($rs = $conexion->prepare("SELECT ganador, total_azul, total_rojo FROM result
 }
 $mayoria = null;
 if ($tarjetas>0){
-  if ($cntAz>$cntRo && $cntAz>$cntEmp) $mayoria='azul';
+  if     ($cntAz>$cntRo && $cntAz>$cntEmp) $mayoria='azul';
   elseif ($cntRo>$cntAz && $cntRo>$cntEmp) $mayoria='rojo';
   else $mayoria='empate';
 }
@@ -132,6 +144,7 @@ if ($mayoria==='empate' && $tarjetas>0){ $rondasMax=$rondasEsperadas+1; $ext_por
 
 /* Enviar resultado requiere >=3 tarjetas cerradas */
 $puede_enviar_resultado = ($tarjetas >= 3);
+
 $return_to = 'ver_peleas_evento.php?evento_id='.(int)$info['evento_id'];
 ?>
 <!DOCTYPE html>
@@ -163,6 +176,7 @@ $return_to = 'ver_peleas_evento.php?evento_id='.(int)$info['evento_id'];
     .btn-warn{background:#ffb300;color:#1a1a1a}
     .btn-danger{background:#e53935;color:#fff}
     .btn-gray{background:#2a2a2a;color:#fff}
+    .btn-success{background:#1b5e20;color:#fff}
     .num{font-weight:800}
     .row{display:flex;gap:6px;justify-content:center;flex-wrap:wrap}
     .blink{animation:blink .8s step-start infinite}
@@ -179,6 +193,7 @@ $return_to = 'ver_peleas_evento.php?evento_id='.(int)$info['evento_id'];
     .total-cell{font-weight:800}
     .ok{margin-top:8px;padding:8px;border-radius:10px;background:#0f251b;border:1px solid #164b31;color:#b6f3d1}
     .final-msg{margin-top:8px;padding:10px;border-radius:10px;background:#25100f;border:1px solid #4b1616;color:#f3b6b6}
+    .result-banner{margin-top:8px;padding:10px;border-radius:10px;border:1px solid #2a2a2a;background:#151515}
     .build{position:fixed;right:8px;bottom:8px;background:#111;color:#9fe;border:1px solid #234;padding:6px 8px;border-radius:8px;font:12px/1.1 monospace;z-index:99999}
   </style>
 </head>
@@ -206,8 +221,12 @@ $return_to = 'ver_peleas_evento.php?evento_id='.(int)$info['evento_id'];
     </section>
 
     <section class="panel">
-      <div class="sub">Evento #<?= (int)$info['evento_id'] ?> · Rondas: <span id="txtRondas"><?= (int)$rondasEsperadas ?></span><?= $ext_por_empate ? ' <span class="badge">+1 por EMPATE</span>' : '' ?></div>
-      <div id="timer" class="timer-face">03:00</div>
+      <div class="sub">
+        Evento #<?= (int)$info['evento_id'] ?> · Rondas:
+        <span id="txtRondas"><?= (int)$rondasEsperadas ?></span>
+        <?= $ext_por_empate ? ' <span class="badge">+1 por EMPATE</span>' : '' ?>
+      </div>
+      <div id="timer" class="timer-face"><?= sprintf('%02d:%02d', floor($duracionSeg/60), $duracionSeg%60) ?></div>
       <div class="sub">Round <span id="round" class="num">1</span> / <span class="num" id="maxr"><?= (int)$rondasMax ?></span></div>
 
       <div class="controls">
@@ -219,6 +238,18 @@ $return_to = 'ver_peleas_evento.php?evento_id='.(int)$info['evento_id'];
           🔊 Volumen
           <input id="vol" type="range" min="0" max="100" value="95" style="width:160px">
         </label>
+      </div>
+
+      <!-- Info de duración/descanso (de BD, solo display) -->
+      <div class="row" style="margin-top:6px">
+        <span class="sub">Duración del round:</span>
+        <select id="selDuracion" class="btn btn-gray" disabled>
+          <option value="<?= (int)$duracionSeg ?>" selected><?= sprintf('%d:%02d', floor($duracionSeg/60), $duracionSeg%60) ?></option>
+        </select>
+        <span class="sub"> · Descanso (entre rounds): </span>
+        <select id="selDescanso" class="btn btn-gray" disabled>
+          <option value="<?= (int)$descansoSeg ?>" selected><?= sprintf('%d:%02d', floor($descansoSeg/60), $descansoSeg%60) ?></option>
+        </select>
       </div>
 
       <!-- ====== Finalizar por método (KO/KOT/RSC/IRC/SURRENDER/ABANDONO/EMPATE) ====== -->
@@ -277,12 +308,20 @@ $return_to = 'ver_peleas_evento.php?evento_id='.(int)$info['evento_id'];
       </div>
       <!-- ====== /Finalizar por método ====== -->
 
+      <!-- Control de habilitación de votos -->
+      <div class="row" style="margin-top:10px">
+        <button id="btnOpenVotes"  class="btn btn-success" disabled>🔓 Habilitar voto (descanso)</button>
+        <button id="btnCloseVotes" class="btn btn-danger"  disabled>🔒 Cerrar voto</button>
+        <span id="voteState" class="badge">Votación: cerrada</span>
+      </div>
+
       <div class="score-panel">
         <div class="sub" style="margin-bottom:6px;">Tarjetas de jueces (en vivo)</div>
         <div class="table-wrap">
           <table class="score-table" id="scores"></table>
         </div>
-        <div class="sub" id="scoreHint"></div>
+
+        <div id="resultBanner" class="result-banner" style="display:none"></div>
 
         <div class="ok" id="resumenBox">
           <b>Resumen actual:</b> <?= h($resumen_txt) ?><br>
@@ -303,6 +342,11 @@ $return_to = 'ver_peleas_evento.php?evento_id='.(int)$info['evento_id'];
           <input type="hidden" name="rondas_config" value="<?= (int)$rondasEsperadas ?>">
           <input type="hidden" name="rondas_max" value="<?= (int)$rondasMax ?>">
 
+          <!-- Totales por puntos (para receptor) -->
+          <input type="hidden" id="hidden_pts_azul" name="pts_total_azul" value="">
+          <input type="hidden" id="hidden_pts_rojo" name="pts_total_rojo" value="">
+          <input type="hidden" id="hidden_ganador_pts" name="ganador_por_puntos" value="">
+
           <!-- Cierre anticipado por método -->
           <input type="hidden" name="cierre_tipo" id="cierre_tipo" value="">
           <input type="hidden" name="metodo_final" id="metodo_final" value="">
@@ -311,6 +355,10 @@ $return_to = 'ver_peleas_evento.php?evento_id='.(int)$info['evento_id'];
           <input type="hidden" name="cierre_segundos" id="cierre_segundos" value="">
           <input type="hidden" name="motivo_texto" id="motivo_texto" value="">
           <input type="hidden" name="finalizada" id="finalizada" value="0">
+
+          <!-- Flags varios -->
+          <input type="hidden" name="cierre_forzado" value="0" id="flag_cierre_forzado">
+          <input type="hidden" name="update_ranking" value="1">
 
           <input type="hidden" name="return_to" value="<?= h($return_to) ?>">
 
@@ -349,8 +397,8 @@ $return_to = 'ver_peleas_evento.php?evento_id='.(int)$info['evento_id'];
 
 <script>
 (function(){
-  const MAX_R = <?= (int)$rondasMax ?>;    // tope de rondas (con +1 por empate si aplica)
-  const CONF_R = <?= (int)$rondasEsperadas ?>; // rondas configuradas originalmente
+  const MAX_R  = <?= (int)$rondasMax ?>;            // tope de rondas (con +1 por empate si aplica)
+  const CONF_R = <?= (int)$rondasEsperadas ?>;       // rondas configuradas originalmente
   const peleaId = <?= (int)$pelea_id ?>;
 
   const timerEl = document.getElementById('timer');
@@ -387,8 +435,15 @@ $return_to = 'ver_peleas_evento.php?evento_id='.(int)$info['evento_id'];
   const hCierreSeg    = document.getElementById('cierre_segundos');
   const hMotivoTxt    = document.getElementById('motivo_texto');
 
-  let duration = parseInt(selDur.value,10);
-  let rest     = parseInt(selRest.value,10);
+  const btnOpenVotes  = document.getElementById('btnOpenVotes');
+  const btnCloseVotes = document.getElementById('btnCloseVotes');
+  const voteState     = document.getElementById('voteState');
+
+  /* Config desde BD (bloqueado en UI) */
+  const RONDAS_MAX   = <?= (int)$rondasEsperadas ?>;
+  let duration       = parseInt(<?= (int)$duracionSeg ?>, 10);
+  let rest           = parseInt(<?= (int)$descansoSeg ?>, 10);
+
   let remain   = duration;
   let round    = 1;
   let t        = null;
@@ -404,14 +459,13 @@ $return_to = 'ver_peleas_evento.php?evento_id='.(int)$info['evento_id'];
     btnNext.disabled  = finished || round >= MAX_R;
     btnStart.disabled = finished;
     btnPause.disabled = finished;
-    selDur.disabled   = finished;
-    selRest.disabled  = finished;
-    // deshabilitar panel finish si terminó
+    selDur.disabled   = true;
+    selRest.disabled  = true;
     const fb = document.getElementById('finishBlock');
     if (fb){ fb.querySelectorAll('input,select,button').forEach(el=> el.disabled = finished); }
   }
 
-  /* ===== Audio mínimo (compacto) ===== */
+  /* ===== Audio mínimo ===== */
   const AC = window.AudioContext || window.webkitAudioContext;
   const audioCtx = AC ? new AC() : null;
   const master = audioCtx ? audioCtx.createGain() : null;
@@ -445,8 +499,14 @@ $return_to = 'ver_peleas_evento.php?evento_id='.(int)$info['evento_id'];
     }catch(_){}
   }
 
-  function enterRound(){ inRest=false; warned10=false; warned15Rest=false; startedSound=false; remain=duration; timerEl.style.color='#fff'; timerEl.classList.remove('blink'); paint(); updateControls(); closeVotingWindow(); }
-  function enterRest(){ inRest=true; warned10=false; warned15Rest=false; startedSound=false; remain=rest; timerEl.style.color='#ffb300'; timerEl.classList.remove('blink'); paint(); openVotingWindow(); }
+  function enterRound(){
+    inRest=false; warned10=false; warned15Rest=false; startedSound=false; remain=duration;
+    timerEl.style.color='#fff'; timerEl.classList.remove('blink'); paint(); updateControls(); closeVotingWindow();
+  }
+  function enterRest(){
+    inRest=true; warned10=false; warned15Rest=false; startedSound=false; remain=rest;
+    timerEl.style.color='#ffb300'; timerEl.classList.remove('blink'); paint(); openVotingWindow();
+  }
 
   function finalizeBout(setPts=true){
     if (finished) return;
@@ -478,12 +538,11 @@ $return_to = 'ver_peleas_evento.php?evento_id='.(int)$info['evento_id'];
 
   function start(){ if(!t && !finished){ if(!inRest && remain===duration && !startedSound){ soundStartRound(); startedSound=true; } t=setInterval(tick,1000); ensureAudioReady(); } }
   function pause(){ if(t){ clearInterval(t); t=null; } }
-  function reset(){ pause(); finished=false; duration=parseInt(selDur.value,10); rest=parseInt(selRest.value,10); round=1; enterRound(); finalMsg.style.display='none'; hMetodoFinal.value=''; hGanadorFinal.value=''; hCierreRound.value=''; hCierreSeg.value=''; hMotivoTxt.value=''; hCierreTipo.value=''; finalizadaInput.value='0'; }
-
+  function reset(){ pause(); finished=false; round=1; enterRound(); finalMsg.style.display='none';
+    hMetodoFinal.value=''; hGanadorFinal.value=''; hCierreRound.value=''; hCierreSeg.value=''; hMotivoTxt.value=''; hCierreTipo.value='';
+    if (finalizadaInput) finalizadaInput.value='0';
+  }
   function nextRound(){ if (finished || round>=MAX_R) { finalizeBout(true); return; } pause(); round++; enterRound(); }
-
-  selDur.addEventListener('change', ()=>{ if (finished) return; duration=parseInt(selDur.value,10); if(!t && !inRest){ remain=duration; paint(); } });
-  selRest.addEventListener('change', ()=>{ if (finished) return; rest=parseInt(selRest.value,10); });
 
   btnStart.addEventListener('click', start);
   btnPause.addEventListener('click', pause);
@@ -517,7 +576,7 @@ $return_to = 'ver_peleas_evento.php?evento_id='.(int)$info['evento_id'];
     hCierreSeg.value=String(segs);
     hMotivoTxt.value=(finDetalle.value||'').trim();
 
-    finalizeBout(false); finalizadaInput.value='1'; submitBtn?.removeAttribute('disabled');
+    finalizeBout(false); if (finalizadaInput) finalizadaInput.value='1'; submitBtn?.removeAttribute('disabled');
     const oldC=window.confirm; window.confirm=()=>true;
     try{ formResultados.submit(); } finally { window.confirm=oldC; }
   }
@@ -529,17 +588,29 @@ $return_to = 'ver_peleas_evento.php?evento_id='.(int)$info['evento_id'];
 
   /* ===== Tablero (polling) con Σ de puntos por round y cierre por “3 jueces x round” ===== */
   const tabla = document.getElementById('scores');
-  const hint  = document.getElementById('scoreHint');
   const juecesMap = new Map();
+  const resultBanner = document.getElementById('resultBanner');
+  const hiddenAz = document.getElementById('hidden_pts_azul');
+  const hiddenRo = document.getElementById('hidden_pts_rojo');
+  const hiddenGw = document.getElementById('hidden_ganador_pts');
 
   function icon(g){ if(g==='rojo') return '<span class="winR">🔴</span>'; if(g==='azul') return '<span class="winA">🔵</span>'; return '<span class="draw">⚖️</span>'; }
-  function judgeLabelById(id, fb){ const j=juecesMap.get(id) || (fb?{apellido:fb.apellido||'',nombre:fb.nombre||'',id:fb.id||fb.juez_id}:null); const ape=(j?.apellido||j?.nombre||'Juez'); return `${j?.id ?? id} — ${ape}`; }
-  function headerOrderFrom(data){ if (data?.rounds?.length && Array.isArray(data.rounds[0].judges)) return data.rounds[0].judges.map(j=>j.juez_id??j.id).filter(x=>x!=null); return Array.from(juecesMap.keys()); }
+  function judgeLabelById(id, fb){
+    const j = juecesMap.get(id);
+    if (j){ const ape = (j.apellido||j.nombre||'Juez'); return `${j.id ?? id} — ${ape}`; }
+    if (fb){ const ape=(fb.apellido||fb.nombre||'Juez'); return `${fb.id ?? id ?? ''}${(fb.id||id)?' — ':''}${ape}`; }
+    return String(id ?? 'Juez');
+  }
+  function headerOrderFrom(data){
+    if (data && Array.isArray(data.rounds) && data.rounds.length && Array.isArray(data.rounds[0].judges)){
+      return data.rounds[0].judges.map(j => j.juez_id ?? j.id).filter(x=>x!=null);
+    }
+    return Array.from(juecesMap.keys());
+  }
 
   function renderBoard(data){
     if(!data || !data.ok){
       if (!tabla.dataset.hasInit) tabla.innerHTML='<tr><td style="padding:10px">Sin datos de tarjetas.</td></tr>';
-      hint.textContent='(Reintentando conexión…)';
       return;
     }
     (data.jueces||[]).forEach(j=>{ const id=j.id??j.juez_id; if(id!=null && !juecesMap.has(id)){ juecesMap.set(id,{id,apellido:j.apellido||'',nombre:j.nombre||''}); } });
@@ -547,7 +618,10 @@ $return_to = 'ver_peleas_evento.php?evento_id='.(int)$info['evento_id'];
     const numJudges = (data.jueces||[]).length;
 
     let html = '<thead><tr><th>Round</th>';
-    order.forEach(id=>{ const fb=(data.jueces||[]).find(j=>(j.id??j.juez_id)===id); html += `<th>${judgeLabelById(id, fb)}</th>`; });
+    order.forEach(id=>{
+      const fb=(data.jueces||[]).find(j=>(j.id??j.juez_id)===id);
+      html += `<th>${judgeLabelById(id, fb)}</th>`;
+    });
     html += '<th>Rojo (Rds)</th><th>Azul (Rds)</th><th>Σ Rojo Pts</th><th>Σ Azul Pts</th></tr></thead><tbody>';
 
     let sumR=0,sumA=0, totalPtsR=0, totalPtsA=0;
@@ -583,8 +657,24 @@ $return_to = 'ver_peleas_evento.php?evento_id='.(int)$info['evento_id'];
     html += '</tbody>';
     tabla.innerHTML = html; tabla.dataset.hasInit = '1';
 
-    // Proyección simple opcional (si el endpoint trae)
-    hint.textContent = data.proyeccion ? ('Proyección: '+data.proyeccion) : '';
+    // Ganador por puntos totales (para banner y formulario)
+    let ganadorPts = 'empate';
+    if (totalPtsR > totalPtsA) ganadorPts = 'rojo';
+    else if (totalPtsA > totalPtsR) ganadorPts = 'azul';
+
+    hiddenAz.value = String(totalPtsA);
+    hiddenRo.value = String(totalPtsR);
+    hiddenGw.value = ganadorPts;
+
+    const rb = document.getElementById('resultBanner');
+    rb.style.display = 'block';
+    if (ganadorPts==='rojo'){
+      rb.innerHTML = `🔴 <b>Ganador por puntos totales: RINCÓN ROJO</b> — Rojo ${totalPtsR} / Azul ${totalPtsA}`;
+    } else if (ganadorPts==='azul'){
+      rb.innerHTML = `🔵 <b>Ganador por puntos totales: RINCÓN AZUL</b> — Azul ${totalPtsA} / Rojo ${totalPtsR}`;
+    } else {
+      rb.innerHTML = `⚖️ <b>Empate por puntos totales</b> — Rojo ${totalPtsR} / Azul ${totalPtsA}`;
+    }
 
     // 🔒 Cerrar automáticamente si:
     // 1) Se alcanzó el tope de rounds con jueces completos (>=3) por round
@@ -592,7 +682,6 @@ $return_to = 'ver_peleas_evento.php?evento_id='.(int)$info['evento_id'];
       finalizeBout(true);
       return;
     }
-
     // 2) O si el endpoint ya no devuelve más rounds que CONF_R (por seguridad)
     const roundsCargados = Array.isArray(data.rounds) ? data.rounds.length : 0;
     if (!finished && roundsCargados >= MAX_R){
@@ -607,9 +696,20 @@ $return_to = 'ver_peleas_evento.php?evento_id='.(int)$info['evento_id'];
     }
     return null;
   }
-  async function loadJudges(){ const j = await tryFetchJson('get_jueces_pelea.php?pelea_id='+peleaId, 3); if (j?.ok && Array.isArray(j.jueces)){ j.jueces.forEach(x=>{ if(x && x.id!=null){ juecesMap.set(x.id,{id:x.id,apellido:x.apellido||'',nombre:x.nombre||''}); } }); } }
+  async function loadJudges(){
+    const j = await tryFetchJson('get_jueces_pelea.php?pelea_id='+peleaId, 3);
+    if (j?.ok && Array.isArray(j.jueces)){
+      j.jueces.forEach(x=>{ if(x && x.id!=null){ juecesMap.set(x.id,{id:x.id,apellido:x.apellido||'',nombre:x.nombre||''}); } });
+    }
+  }
   async function loadBoard(){ const data = await tryFetchJson('get_tablero_tarjetas.php?pelea_id='+peleaId, 3); if (data) renderBoard(data); }
 
+  // Botones manuales de votos
+  btnOpenVotes.addEventListener('click', ()=>{ if(inRest){ voteState.textContent='Votación: abierta'; voteState.style.background='#0e2818'; openVotingWindow(); } });
+  btnCloseVotes.addEventListener('click', ()=>{ voteState.textContent='Votación: cerrada'; voteState.style.background='#1f1f1f'; closeVotingWindow(); });
+
+  // Estado inicial
+  paint(); updateControls();
   loadJudges().finally(()=>{ loadBoard(); setInterval(loadBoard, 3000); });
 })();
 </script>

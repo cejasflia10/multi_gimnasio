@@ -21,7 +21,6 @@ function has_col(mysqli $db, string $table, string $col): bool {
   return false;
 }
 function save_upload(string $field, int $evento_id): ?string {
-  // Acepta imágenes y PDF (para comprobantes)
   if (!isset($_FILES[$field]) || ($_FILES[$field]['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) return null;
   $tmp  = $_FILES[$field]['tmp_name'];
   $name = basename((string)$_FILES[$field]['name']);
@@ -103,7 +102,7 @@ function insertar_competidor(mysqli $db, array $row): int {
   $cands = [
     'evento_id'=>'i','apellido'=>'s','nombre'=>'s','dni'=>'s','fecha_nacimiento'=>'s','edad'=>'i','sexo'=>'s',
     'escuela_nombre'=>'s','escuela_logo'=>'s','foto_competidor'=>'s',
-    /* corregido: monto como string/decimal, no 1|0 */
+    'provincia'=>'s','localidad'=>'s','provincia_id'=>'i','localidad_id'=>'i',
     'pago_inscripcion'=>'s','alias_transferencia'=>'s','comprobante_url'=>'s','telefono_organizador'=>'s',
     'modalidad_id'=>'i','disciplina_id'=>'i','categoria_tecnica_id'=>'i','division_id'=>'i','categoria_peso_id'=>'i',
     'wins'=>'i','losses'=>'i','draws'=>'i','no_contest'=>'i',
@@ -160,13 +159,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   $edad      = toIntOrNull(post('edad'));
   if ($edad === null && preg_match('/^\d{4}-\d{2}-\d{2}$/', $fecha_nac)) {
     $hoy = new DateTime('now'); $nac = DateTime::createFromFormat('Y-m-d', $fecha_nac);
-    if ($nac) {
-      $diff = $hoy->diff($nac);
-      $edad = max(0, (int)$diff->y);
-    }
+    if ($nac) { $diff = $hoy->diff($nac); $edad = max(0, (int)$diff->y); }
   }
   $sexo      = post('sexo');
   $escuela_nombre = post('escuela_nombre');
+
+  // Nueva ubicación
+  $provincia      = post('provincia');
+  $localidad      = post('localidad');
+  $provincia_id   = toIntOrNull(post('provincia_id'));   // opcional si luego migrás a catálogos
+  $localidad_id   = toIntOrNull(post('localidad_id'));   // opcional
 
   // Pagos
   $habilitar_pago      = (post('habilitar_pago') !== '');
@@ -178,11 +180,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   $telefono_organizador= $habilitar_pago ? post('telefono_organizador') : '';
   $comprobante_url     = null;
 
-  // Selecciones
+  // Selecciones (se calculan/espeljan desde JS, pero aceptamos lo que venga)
   $modalidad_id_in         = toIntOrNull(post('modalidad_id'));
   $disciplina_id_in        = toIntOrNull(post('disciplina_id'));
-  $categoria_tecnica_id_in = toIntOrNull(post('categoria_tecnica_id'));
-  $division_id_in          = toIntOrNull(post('division_id'));
+  $categoria_tecnica_id_in = toIntOrNull(post('categoria_tecnica_id')); // llega por input oculto
+  $division_id_in          = toIntOrNull(post('division_id'));          // llega por input oculto
   $categoria_peso_id_in    = toIntOrNull(post('categoria_peso_id'));
 
   // Ranking
@@ -216,9 +218,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   // Subidas
   $escuela_logo    = save_upload('escuela_logo', $evento_id);
   $foto_competidor = save_upload('foto_competidor', $evento_id);
-  if ($habilitar_pago) {
-    $comprobante_url = save_upload('comprobante_pago', $evento_id);
-  }
+  if ($habilitar_pago) { $comprobante_url = save_upload('comprobante_pago', $evento_id); }
 
   // Strings alternativos
   $cat_tec_str = cat_tecnica_por_total($total);
@@ -243,6 +243,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     'escuela_nombre'       => ($escuela_nombre !== '') ? $escuela_nombre : null,
     'escuela_logo'         => $escuela_logo ?: null,
     'foto_competidor'      => $foto_competidor ?: null,
+
+    'provincia'            => $provincia ?: null,
+    'localidad'            => $localidad ?: null,
+    'provincia_id'         => $provincia_id,
+    'localidad_id'         => $localidad_id,
 
     'pago_inscripcion'     => (string)$monto_inscripcion,
     'alias_transferencia'  => $alias_transferencia ?: null,
@@ -301,32 +306,17 @@ $idMuay = cat_id_by_nombre($conexion,'modalidades_evento','Muay Thai') ?? 7;
     h1,h2,h3{margin:.2rem 0 .6rem}
     .card{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:12px;margin-top:10px}
 
-    /* Mobile-first: grids compactos */
-    .grid, .grid-3, .row{
-      display:grid; gap:10px;
-      grid-template-columns:1fr;
-    }
-    /* Campos cortos en dos por fila cuando hay espacio */
-    @media (min-width:520px){
-      .grid{grid-template-columns:repeat(2,1fr)}
-      .row{grid-template-columns:repeat(2,1fr)}
-    }
-    @media (min-width:880px){
-      .grid-3{grid-template-columns:repeat(3,1fr)}
-    }
+    .grid, .grid-3, .row{ display:grid; gap:10px; grid-template-columns:1fr; }
+    @media (min-width:520px){ .grid{grid-template-columns:repeat(2,1fr)} .row{grid-template-columns:repeat(2,1fr)} }
+    @media (min-width:880px){ .grid-3{grid-template-columns:repeat(3,1fr)} }
 
     label{font-size:12px;color:#cfe7ff;letter-spacing:.2px}
     input,select{
-      width:100%;padding:10px;border-radius:10px;
-      border:1px solid var(--line);background:#111a24;color:var(--fg);
+      width:100%;padding:10px;border-radius:10px;border:1px solid var(--line);background:#111a24;color:var(--fg);
       font-size:15px; line-height:1.15;
     }
     input[type="file"]{padding:8px}
-
-    /* Inputs numéricos compactos (sin flechas) */
-    input[type=number]::-webkit-outer-spin-button,
-    input[type=number]::-webkit-inner-spin-button{ -webkit-appearance:none; margin:0; }
-    input[type=number]{ -moz-appearance:textfield; }
+    input[readonly], select[disabled]{ opacity:.85; background:#0e1620; cursor:not-allowed; }
 
     .btn{display:inline-block;padding:12px 14px;border-radius:10px;border:1px solid #27455c;background:var(--accent);color:#fff;cursor:pointer}
     .btn[disabled]{opacity:.6;cursor:not-allowed}
@@ -339,12 +329,7 @@ $idMuay = cat_id_by_nombre($conexion,'modalidades_evento','Muay Thai') ?? 7;
     .toggle{display:flex;align-items:center;gap:8px;margin:6px 0}
     .whats{display:inline-block;padding:10px 12px;border-radius:10px;border:1px solid #1f5c3a;background:#123221;color:#b6f3d1;text-decoration:none}
 
-    /* Grupos visuales más apretados en mobile */
-    @media (max-width:420px){
-      .wrap{padding:10px}
-      input,select{padding:9px;font-size:14.5px}
-      .btn{width:100%}
-    }
+    @media (max-width:420px){ .wrap{padding:10px} input,select{padding:9px;font-size:14.5px} .btn{width:100%} }
   </style>
 </head>
 <body>
@@ -404,6 +389,23 @@ $idMuay = cat_id_by_nombre($conexion,'modalidades_evento','Muay Thai') ?? 7;
               <option value="femenino">Femenino</option>
             </select>
           </div>
+
+          <!-- NUEVO: Provincia / Localidad -->
+          <div>
+            <label>Provincia</label>
+            <select name="provincia" id="provincia" required onchange="onProvinciaChange()">
+              <option value="">Seleccionar provincia</option>
+            </select>
+            <input type="hidden" name="provincia_id" id="provincia_id">
+          </div>
+          <div>
+            <label>Localidad</label>
+            <input list="dl_localidades" name="localidad" id="localidad" placeholder="Escribí tu localidad" autocomplete="address-level2" required>
+            <datalist id="dl_localidades"></datalist>
+            <input type="hidden" name="localidad_id" id="localidad_id">
+            <div class="hint">Se autocompleta según la provincia. Si no aparece, escribila manualmente.</div>
+          </div>
+
           <div>
             <label>Escuela / Gimnasio</label>
             <input type="text" name="escuela_nombre" required autocomplete="organization">
@@ -455,13 +457,14 @@ $idMuay = cat_id_by_nombre($conexion,'modalidades_evento','Muay Thai') ?? 7;
             <input type="number" id="total_fights" value="0" readonly inputmode="numeric">
           </div>
           <div>
-            <label>Categoría técnica (auto)</label>
-            <select name="categoria_tecnica_id" id="categoria_tecnica_id">
+            <label>Categoría técnica (automática)</label>
+            <select id="categoria_tecnica_id_view" disabled>
               <option value="1">A</option>
               <option value="2">B</option>
               <option value="3">C</option>
               <option value="4" selected>N</option>
             </select>
+            <input type="hidden" name="categoria_tecnica_id" id="categoria_tecnica_id" value="4">
             <div class="hint">A: ≥10 • B: 5–9 • C: 1–4 • N: 0</div>
           </div>
         </div>
@@ -479,7 +482,7 @@ $idMuay = cat_id_by_nombre($conexion,'modalidades_evento','Muay Thai') ?? 7;
               <option value="4">Low Kick</option>
               <option value="5">K1</option>
               <option value="6">MMA</option>
-              <option value="<?= (int)$idMuay ?>">Muay Thai</option> <!-- agregado -->
+              <option value="<?= (int)$idMuay ?>">Muay Thai</option>
             </select>
           </div>
           <div>
@@ -492,14 +495,15 @@ $idMuay = cat_id_by_nombre($conexion,'modalidades_evento','Muay Thai') ?? 7;
             </select>
           </div>
           <div>
-            <label>División (auto por edad)</label>
-            <select name="division_id" id="division_id" required>
+            <label>División (automática por edad)</label>
+            <select id="division_id_view" disabled>
               <option value="1">Infantil</option>
               <option value="2">Juvenil</option>
               <option value="3">Adultos</option>
               <option value="4">Masters</option>
               <option value="5">Veteranos</option>
             </select>
+            <input type="hidden" name="division_id" id="division_id" value="">
           </div>
           <div>
             <label>Categoría por Peso</label>
@@ -549,6 +553,39 @@ $idMuay = cat_id_by_nombre($conexion,'modalidades_evento','Muay Thai') ?? 7;
   </div>
 
   <script>
+  /* ==== Provincias y Localidades (Argentina) ==== */
+  const PROVINCIAS = [
+    "Buenos Aires","CABA","Catamarca","Chaco","Chubut","Córdoba","Corrientes","Entre Ríos","Formosa",
+    "Jujuy","La Pampa","La Rioja","Mendoza","Misiones","Neuquén","Río Negro","Salta","San Juan",
+    "San Luis","Santa Cruz","Santa Fe","Santiago del Estero","Tierra del Fuego","Tucumán"
+  ];
+  const PROV_IDX = {}; PROVINCIAS.forEach((p,i)=>PROV_IDX[p]=i+1); // ids simples 1..24
+
+  function cargarProvincias(){
+    const sel = document.getElementById('provincia');
+    sel.innerHTML = '<option value="">Seleccionar provincia</option>';
+    PROVINCIAS.forEach(p=>{
+      const o=document.createElement('option'); o.value=p; o.textContent=p; sel.appendChild(o);
+    });
+  }
+  function onProvinciaChange(){
+    const p = document.getElementById('provincia').value;
+    document.getElementById('provincia_id').value = PROV_IDX[p] || '';
+    // Intento opcional de autocompletar localidades desde endpoint propio (si lo creás)
+    const dl = document.getElementById('dl_localidades');
+    dl.innerHTML = '';
+    // Si tenés un servicio local, descomentá:
+    // fetch('obtener_localidades.php?provincia='+encodeURIComponent(p))
+    //  .then(r=>r.ok?r.json():[])
+    //  .then(arr=>{
+    //     dl.innerHTML='';
+    //     (arr||[]).slice(0,500).forEach(loc=>{
+    //        const opt=document.createElement('option'); opt.value = loc.nombre; dl.appendChild(opt);
+    //     });
+    //  }).catch(()=>{ /* sin autocompletar, se escribe manual */});
+  }
+  cargarProvincias();
+
   /* ==== Edad, División auto y categorías por peso ==== */
   function calcularEdad() {
     const fechaNac = document.getElementById("fecha_nacimiento").value;
@@ -559,16 +596,21 @@ $idMuay = cat_id_by_nombre($conexion,'modalidades_evento','Muay Thai') ?? 7;
     if (m < 0 || (m === 0 && hoy.getDate() < nac.getDate())) edad--;
     document.getElementById("edad").value = Math.max(0, edad);
 
-    // División auto
-    const divSel = document.getElementById("division_id");
-    if (edad < 12) divSel.value = "1";
-    else if (edad < 18) divSel.value = "2";
-    else if (edad < 26) divSel.value = "3";
-    else if (edad < 46) divSel.value = "4";
-    else divSel.value = "5";
+    // División auto (bloqueada visualmente, se copia al hidden)
+    const divView = document.getElementById("division_id_view");
+    const divHidden = document.getElementById("division_id");
+    let divVal = "3";
+    if (edad < 12) divVal = "1";
+    else if (edad < 18) divVal = "2";
+    else if (edad < 26) divVal = "3";
+    else if (edad < 46) divVal = "4";
+    else divVal = "5";
+    divView.value = divVal;
+    divHidden.value = divVal;
 
     cargarCategoriasPeso();
   }
+
   function cargarCategoriasPeso() {
     const edad = document.getElementById("edad").value;
     const sexo = document.getElementById("sexo").value;
@@ -580,7 +622,7 @@ $idMuay = cat_id_by_nombre($conexion,'modalidades_evento','Muay Thai') ?? 7;
   }
   document.getElementById("sexo")?.addEventListener("change", cargarCategoriasPeso);
 
-  /* ==== Ranking: total + categoría técnica auto ==== */
+  /* ==== Ranking: total + categoría técnica auto (bloqueada) ==== */
   function recalcRanking() {
     const w = parseInt(document.getElementById('wins').value||0,10);
     const l = parseInt(document.getElementById('losses').value||0,10);
@@ -588,10 +630,11 @@ $idMuay = cat_id_by_nombre($conexion,'modalidades_evento','Muay Thai') ?? 7;
     const n = parseInt(document.getElementById('no_contest').value||0,10);
     const tot = w + l + d + n;
     document.getElementById('total_fights').value = tot;
-    const sel = document.getElementById('categoria_tecnica_id');
+
     let cat = '4'; // N
     if (tot>=10) cat='1'; else if (tot>=5) cat='2'; else if (tot>=1) cat='3'; else cat='4';
-    sel.value = cat;
+    document.getElementById('categoria_tecnica_id_view').value = cat;
+    document.getElementById('categoria_tecnica_id').value = cat;
   }
   ['wins','losses','draws','no_contest'].forEach(id => {
     document.getElementById(id)?.addEventListener('input', recalcRanking);
@@ -636,6 +679,9 @@ $idMuay = cat_id_by_nombre($conexion,'modalidades_evento','Muay Thai') ?? 7;
     document.getElementById('pago_box').style.display = on ? '' : 'none';
   }
   window.togglePagoBox = togglePagoBox;
+
+  // Inicializar división oculta en vacío para validación server
+  document.getElementById('division_id').value = document.getElementById('division_id_view').value || '';
   </script>
 </body>
 </html>
