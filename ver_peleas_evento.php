@@ -36,32 +36,61 @@ $pick = function(array $cands) use ($cols){
   foreach ($cands as $c) { $lc = strtolower($c); if (isset($cols[$lc])) return $cols[$lc]; }
   return null;
 };
+$C_ID       = $pick(['id','pelea_id','id_pelea']);
 $C_EVENTO   = $pick(['evento_id','id_evento','evento']);
 $C_ROJO     = $pick(['competidor_rojo_id','rojo_id','id_rojo','id_competidor_rojo','rojo']);
 $C_AZUL     = $pick(['competidor_azul_id','azul_id','id_azul','id_competidor_azul','azul']);
+$C_RONDAS   = $pick(['rondas','rounds']);
+$C_OBS      = $pick(['observaciones','obs','comentarios','comentario','nota']);
 $C_FECHA    = $pick(['fecha','creado_en','created_at','created','fh_creacion']); // para orden
 
 if (!$C_EVENTO || !$C_ROJO || !$C_AZUL) {
   echo '<div style="max-width:900px;margin:16px auto;padding:12px;border:1px solid #f5c6cb;background:#fdecea;color:#b71c1c;border-radius:8px;">
-          La tabla <b>peleas_evento</b> existe pero faltan columnas obligatorias.<br>
-          Necesarias (cualquiera de los alias):<br>
-          • Evento: <code>evento_id</code> / <code>id_evento</code> / <code>evento</code><br>
-          • Rojo: <code>competidor_rojo_id</code> / <code>rojo_id</code> / <code>id_rojo</code> / <code>id_competidor_rojo</code> / <code>rojo</code><br>
-          • Azul: <code>competidor_azul_id</code> / <code>azul_id</code> / <code>id_azul</code> / <code>id_competidor_azul</code> / <code>azul</code><br>
-          Detectadas: <code>'.h(implode(', ', array_values($cols))).'</code>
+          La tabla <b>peleas_evento</b> existe pero faltan columnas obligatorias (evento/rojo/azul).
         </div>';
   exit;
 }
 
-/* ========== Query de peleas ========== */
-$colE = bt($C_EVENTO);
-$colR = bt($C_ROJO);
-$colA = bt($C_AZUL);
-$colOrder = $C_FECHA ? 'p.'.bt($C_FECHA) : 'p.id';
+/* ========== Acciones (SOLO eliminar acá) ========== */
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+  $accion   = $_POST['accion'] ?? '';
+  $pelea_id = isset($_POST['pelea_id']) && is_numeric($_POST['pelea_id']) ? (int)$_POST['pelea_id'] : 0;
+
+  // Verificar pertenencia al evento
+  if ($pelea_id > 0) {
+    $sqlChk = "SELECT 1 FROM peleas_evento WHERE ".bt($C_EVENTO)." = ? AND ".bt($C_ID ?: 'id')." = ? LIMIT 1";
+    $st = $conexion->prepare($sqlChk);
+    if ($st) {
+      $st->bind_param('ii', $evento_id, $pelea_id);
+      $st->execute();
+      $ok = $st->get_result()->num_rows === 1;
+      $st->close();
+      if (!$ok) { $pelea_id = 0; }
+    } else { $pelea_id = 0; }
+  }
+
+  if ($accion === 'delete' && $pelea_id > 0) {
+    $sqlD = "DELETE FROM peleas_evento WHERE ".bt($C_EVENTO)."=? AND ".bt($C_ID ?: 'id')."=? LIMIT 1";
+    $st = $conexion->prepare($sqlD);
+    if ($st) {
+      $st->bind_param('ii', $evento_id, $pelea_id);
+      $st->execute(); $st->close();
+    }
+    header('Location: ver_peleas_evento.php?evento_id='.(int)$evento_id); exit;
+  }
+}
+
+/* ========== Listado de peleas ========== */
+$colE = bt($C_EVENTO); $colR = bt($C_ROJO); $colA = bt($C_AZUL);
+$orderBy = $C_FECHA ? ('p.'.bt($C_FECHA)) : 'p.'.bt($C_ID ?: 'id');
+$selectRondas = $C_RONDAS ? (', p.'.bt($C_RONDAS).' AS rondas') : ', NULL AS rondas';
+$selectObs    = $C_OBS    ? (', p.'.bt($C_OBS).' AS observaciones') : ', NULL AS observaciones';
 
 $sql = "
 SELECT 
-  p.id AS pelea_id,
+  p.".bt($C_ID ?: 'id')." AS pelea_id
+  $selectRondas
+  $selectObs,
   cr.apellido AS r_apellido, cr.nombre AS r_nombre, cr.escuela_nombre AS r_escuela,
   cr.foto_competidor AS r_foto, cpr.nombre AS r_peso, dvr.nombre AS r_division, mr.nombre AS r_modalidad,
   ca.apellido AS a_apellido, ca.nombre AS a_nombre, ca.escuela_nombre AS a_escuela,
@@ -76,7 +105,7 @@ LEFT JOIN categorias_peso_evento cpa ON cpa.id = ca.categoria_peso_id
 LEFT JOIN divisiones_evento      dva ON dva.id = ca.division_id
 LEFT JOIN modalidades_evento     ma  ON ma.id  = ca.modalidad_id
 WHERE p.$colE = ?
-ORDER BY $colOrder DESC
+ORDER BY $orderBy DESC
 ";
 $st = $conexion->prepare($sql);
 if (!$st) {
@@ -98,24 +127,36 @@ $ph = 'assets/placeholder-user.png';
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <link rel="stylesheet" href="estilo_unificado.css">
   <style>
-    .contenedor{max-width:1100px;margin:0 auto;padding:14px;text-align:center}
-    .table-wrap{width:100%;overflow-x:auto;margin-top:8px}
-    table{width:100%;border-collapse:collapse;min-width:860px;margin:0 auto}
-    th,td{border:1px solid #e7e7e7;padding:5px 6px;vertical-align:middle}
-    th{background:#f6f7f9;font-size:13px}
-    td{font-size:12.5px;line-height:1.1}
-    .avatar{width:44px;height:44px;object-fit:cover;border-radius:8px}
-    .pill{display:inline-block;padding:1px 6px;border-radius:999px;background:#eef5ff;color:#1e4fa1;font-size:11.5px}
-    .vs{font-weight:700;text-align:center;font-size:16px;color:#666}
-    .btn{display:inline-block;padding:7px 10px;border-radius:8px;border:0;cursor:pointer;text-decoration:none}
+    .contenedor{max-width:1150px;margin:0 auto;padding:14px;}
+    .toolbar{display:flex;gap:8px;align-items:center;justify-content:space-between;flex-wrap:wrap;margin-bottom:10px}
+    .btn{display:inline-block;padding:7px 10px;border-radius:10px;border:0;cursor:pointer;text-decoration:none}
     .btn-primary{background:#1e88e5;color:#fff}
+    .btn-secondary{background:#e9ecef;color:#0f172a}
+    .btn-danger{background:#d32f2f;color:#fff}
+    /* Botones chicos */
+    .btn-mini{padding:4px 8px;font-size:11px;border-radius:6px}
+    .btn-xxs{padding:3px 6px;font-size:10.5px;border-radius:6px}
+    .table-wrap{width:100%;overflow-x:auto;margin-top:6px}
+    table{width:100%;border-collapse:collapse;min-width:980px}
+    th,td{border:1px solid #e7e7e7;padding:6px 8px;vertical-align:middle}
+    th{background:#f6f7f9;font-size:13px}
+    td{font-size:12.5px}
+    .avatar{width:44px;height:44px;object-fit:cover;border-radius:8px}
+    .pill{display:inline-block;padding:2px 8px;border-radius:999px;background:#eef5ff;color:#1e4fa1;font-size:12px}
     .muted{color:#666;font-size:11.5px}
-    .acciones{text-align:center}
+    .acciones{text-align:center;white-space:nowrap}
+    .vs{font-weight:700;text-align:center;color:#666}
+    .row-actions{display:flex;gap:6px;align-items:center;justify-content:center;flex-wrap:wrap}
   </style>
 </head>
 <body>
 <div class="contenedor">
-  <h2>📋 Peleas programadas — Evento #<?= (int)$evento_id ?></h2>
+  <div class="toolbar">
+    <h2 style="margin:0">📋 Peleas programadas — Evento #<?= (int)$evento_id ?></h2>
+    <div>
+      <a class="btn btn-mini btn-secondary" href="organizar_pelea.php?evento_id=<?= (int)$evento_id ?>">➕ Nueva pelea</a>
+    </div>
+  </div>
 
   <div class="table-wrap">
     <table>
@@ -124,6 +165,8 @@ $ph = 'assets/placeholder-user.png';
           <th colspan="4">Esquina Roja</th>
           <th class="vs">VS</th>
           <th colspan="4">Esquina Azul</th>
+          <th>Rondas</th>
+          <th>Obs.</th>
           <th class="acciones">Acciones</th>
         </tr>
         <tr>
@@ -131,19 +174,23 @@ $ph = 'assets/placeholder-user.png';
           <th></th>
           <th>Foto</th><th>Nombre</th><th>Info</th><th>Escuela</th>
           <th></th>
+          <th></th>
+          <th></th>
         </tr>
       </thead>
       <tbody>
       <?php if (!$peleas): ?>
-        <tr><td colspan="10">No hay peleas programadas todavía.</td></tr>
+        <tr><td colspan="12">No hay peleas programadas todavía.</td></tr>
       <?php else: foreach ($peleas as $p):
         $rFoto = !empty($p['r_foto']) ? $p['r_foto'] : $ph;
         $aFoto = !empty($p['a_foto']) ? $p['a_foto'] : $ph;
         $rInfo = trim(($p['r_peso'] ?? '-').' / '.($p['r_division'] ?? '-').' / '.($p['r_modalidad'] ?? '-'));
         $aInfo = trim(($p['a_peso'] ?? '-').' / '.($p['a_division'] ?? '-').' / '.($p['a_modalidad'] ?? '-'));
+        $rondasVal = isset($p['rondas']) && is_numeric($p['rondas']) ? (int)$p['rondas'] : 3;
+        $obsVal = (string)($p['observaciones'] ?? '');
       ?>
         <tr>
-          <td><img src="<?= h($rFoto) ?>" class="avatar" alt="Rojo"></td>
+          <td><img src="<?= h($rFoto) ?>" class="avatar" alt="Roja"></td>
           <td><?= h($p['r_apellido'].' '.$p['r_nombre']) ?></td>
           <td><span class="pill"><?= h($rInfo) ?></span></td>
           <td class="muted"><?= h($p['r_escuela'] ?? '-') ?></td>
@@ -155,8 +202,25 @@ $ph = 'assets/placeholder-user.png';
           <td><span class="pill"><?= h($aInfo) ?></span></td>
           <td class="muted"><?= h($p['a_escuela'] ?? '-') ?></td>
 
+          <td><?= (int)$rondasVal ?></td>
+          <td><?= h($obsVal) ?></td>
           <td class="acciones">
-            <a class="btn btn-primary" href="combate_en_vivo.php?pelea_id=<?= (int)$p['pelea_id'] ?>">▶️ Iniciar</a>
+            <div class="row-actions">
+              <!-- EDITAR: llevar a una pantalla de edición dedicada -->
+              <a class="btn btn-xxs btn-primary" title="Editar"
+                 href="editar_pelea.php?evento_id=<?= (int)$evento_id ?>&pelea_id=<?= (int)$p['pelea_id'] ?>">✏️ Editar</a>
+
+              <!-- ELIMINAR -->
+              <form method="POST" class="inline" onsubmit="return confirm('¿Eliminar esta pelea? Esta acción no se puede deshacer.');">
+                <input type="hidden" name="pelea_id" value="<?= (int)$p['pelea_id'] ?>">
+                <input type="hidden" name="accion" value="delete">
+                <button type="submit" class="btn btn-xxs btn-danger" title="Eliminar">🗑️ Eliminar</button>
+              </form>
+
+              <!-- EN VIVO (se mantiene para poder iniciar combate con rondas) -->
+              <a class="btn btn-xxs btn-secondary" title="Iniciar en vivo"
+                 href="combate_en_vivo.php?evento_id=<?= (int)$evento_id ?>&pelea_id=<?= (int)$p['pelea_id'] ?><?= $C_RONDAS ? '&rondas='.(int)$rondasVal : '' ?>">▶️ Iniciar</a>
+            </div>
           </td>
         </tr>
       <?php endforeach; endif; ?>
