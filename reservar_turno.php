@@ -1,117 +1,146 @@
 <?php
 if (session_status() === PHP_SESSION_NONE) session_start();
+require_once __DIR__.'/conexion.php';
 
-ini_set('display_errors', 1);
-ini_set('display_startup_errors', 1);
-error_reporting(E_ALL);
+$cliente_id  = (int)($_SESSION['cliente_id']  ?? 0);
+$gimnasio_id = (int)($_SESSION['gimnasio_id'] ?? 0);
 
-include 'conexion.php';
-
-$cliente_id = $_SESSION['cliente_id'] ?? 0;
-$gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
-
-function mostrar_error($mensaje) {
-    echo "<!DOCTYPE html><html lang='es'><head>
-        <meta charset='UTF-8'>
-        <title>Error</title>
-        <meta name='viewport' content='width=device-width, initial-scale=1.0'>
-        <link rel='stylesheet' href='estilo_unificado.css'>
-    </head><body>
-    <div class='contenedor'>
-        <h2 style='color:red;'>$mensaje</h2>
-        <a href='ver_turnos_cliente.php' class='btn-principal'>Volver</a>
-    </div></body></html>";
-    exit;
+function volver($params = []) {
+  $qs = http_build_query($params);
+  header("Location: ver_turnos_clientes.php".($qs ? "?$qs" : ""));
+  exit;
 }
 
-function calcular_proxima_fecha($dia_nombre) {
-    $dias = [
-        'Lunes' => 1,
-        'Martes' => 2,
-        'Miércoles' => 3,
-        'Jueves' => 4,
-        'Viernes' => 5,
-        'Sábado' => 6,
-        'Domingo' => 7
-    ];
-    $hoy = date('N');
-    $objetivo = $dias[$dia_nombre] ?? 1;
-    $diferencia = ($objetivo - $hoy + 7) % 7;
-    return date('Y-m-d', strtotime("+$diferencia days"));
-}
-
+// 🔒 1) Solo POST
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-    mostrar_error("❌ Solicitud inválida.");
+  error_log("[reservar_turno] Bloqueado NO-POST desde IP ".$_SERVER['REMOTE_ADDR']);
+  volver(['err' => 'Seleccioná un turno para reservar.']);
 }
 
-if (!isset($_POST['turno_id']) || !is_numeric($_POST['turno_id'])) {
-    mostrar_error("❌ Turno no especificado.");
+// 🔒 2) Debe venir el botón "reservar"
+if (!isset($_POST['reservar'])) {
+  error_log("[reservar_turno] Falta boton reservar (posible auto-llamada) desde IP ".$_SERVER['REMOTE_ADDR']);
+  volver(['err' => 'Acción inválida.']);
 }
 
-$turno_id = intval($_POST['turno_id']);
-
-$turno = $conexion->query("SELECT * FROM turnos_disponibles WHERE id = $turno_id AND gimnasio_id = $gimnasio_id")->fetch_assoc();
-if (!$turno) {
-    mostrar_error("❌ Turno no encontrado.");
+// 🔒 3) CSRF token
+if (empty($_SESSION['csrf_token']) || empty($_POST['csrf']) || !hash_equals($_SESSION['csrf_token'], $_POST['csrf'])) {
+  error_log("[reservar_turno] CSRF inválido desde IP ".$_SERVER['REMOTE_ADDR']);
+  volver(['err' => 'Acción no autorizada.']);
 }
 
-$dia = $turno['dia'];
-$hora_inicio = $turno['hora_inicio'];
-$profesor_id = $turno['profesor_id'];
-$fecha_turno = calcular_proxima_fecha($dia);
+$turno_id = isset($_POST['turno_id']) && ctype_digit((string)$_POST['turno_id']) ? (int)$_POST['turno_id'] : 0;
+$fecha_ui = $_POST['fecha'] ?? '';
 
-// Si hoy es el mismo día del turno, usar hoy
-if (date('N') == date('N', strtotime($fecha_turno))) {
-    $fecha_turno = date('Y-m-d');
-}
+if ($turno_id <= 0) volver(['err' => 'Turno inválido.']);
+if (!$fecha_ui) volver(['err' => 'Fecha requerida.']);
 
-// Evitar duplicados
-$ya_reservado = $conexion->query("
-    SELECT id FROM reservas_clientes 
-    WHERE cliente_id = $cliente_id AND turno_id = $turno_id AND fecha_reserva = '$fecha_turno'
-")->fetch_assoc();
+$dt = DateTime::createFromFormat('Y-m-d', $fecha_ui);
+if (!$dt || $dt->format('Y-m-d') !== $fecha_ui) volver(['err' => 'Fecha inválida.']);
+$fecha_turno = $fecha_ui;
 
-if ($ya_reservado) {
-    mostrar_error("⚠️ Ya reservaste este turno.");
-}
+/* Traer turno base */
+$stm = $conexion->prepare("SELECT * FROM turnos_disponibles WHERE id=? AND gimnasio_id=?");
+$stm->bind_param("ii", $turno_id, $gimnasio_id);
+$stm->execute();
+$turno = $stm->get_result()->fetch_assoc();
+$stm->close();
+if (!$turno) volver(['err' => 'Turno no encontrado.', 'fecha'=>$fecha_turno]);
 
-// Registrar reserva (sin descontar clases)
-$conexion->query("
-    INSERT INTO reservas_clientes 
-    (cliente_id, turno_id, profesor_id, dia_semana, hora_inicio, fecha_reserva, gimnasio_id)
-    VALUES ($cliente_id, $turno_id, $profesor_id, '$dia', '$hora_inicio', '$fecha_turno', $gimnasio_id)
+$dia         = $turno['dia'];
+$hora_inicio = substr($turno['hora_inicio'],0,8);
+$hora_fin    = substr($turno['hora_fin'],0,8);
+$profesor_id = (int)$turno['profesor_id'];
+
+/* Lista blanca (bandera pid=0 00:00–00:00) */
+$flagLB = $conexion->prepare("
+  SELECT 1 FROM turnos_permitidos_fecha
+  WHERE gimnasio_id=? AND fecha=? AND profesor_id=0
+    AND hora_inicio='00:00:00' AND hora_fin='00:00:00'
+  LIMIT 1
 ");
+$flagLB->bind_param("is", $gimnasio_id, $fecha_turno);
+$flagLB->execute();
+$hayListaBlanca = (bool)$flagLB->get_result()->num_rows;
+$flagLB->close();
 
-// Verificar membresía activa y clases disponibles para registrar deuda si no tiene membresía o clases
+if ($hayListaBlanca) {
+  $qPerm = $conexion->prepare("
+    SELECT 1 FROM turnos_permitidos_fecha
+    WHERE gimnasio_id=? AND fecha=? AND profesor_id=? AND hora_inicio=? AND hora_fin=? LIMIT 1
+  ");
+  $qPerm->bind_param("isiss", $gimnasio_id, $fecha_turno, $profesor_id, $hora_inicio, $hora_fin);
+  $qPerm->execute();
+  $okPerm = (bool)$qPerm->get_result()->num_rows;
+  $qPerm->close();
+  if (!$okPerm) volver(['fecha'=>$fecha_turno, 'err'=>'Esta franja no está habilitada para esa fecha.']);
+}
+
+/* Excepciones simples: solo cierres bloquean */
+$qEx = $conexion->prepare("
+  SELECT profesor_id, cerrado
+  FROM turnos_profesor_excepciones
+  WHERE gimnasio_id=? AND fecha=?
+");
+$qEx->bind_param("is", $gimnasio_id, $fecha_turno);
+$qEx->execute();
+$exRows = $qEx->get_result()->fetch_all(MYSQLI_ASSOC);
+$qEx->close();
+
+$cerradoGlobal = false; $cerradosPorProfe = [];
+foreach ($exRows as $ex) {
+  $pid  = (int)$ex['profesor_id'];
+  $cerr = ((int)$ex['cerrado'] === 1);
+  if ($pid === 0 && $cerr) $cerradoGlobal = true;
+  if ($pid > 0  && $cerr) $cerradosPorProfe[$pid] = true;
+}
+if ($cerradoGlobal) volver(['fecha'=>$fecha_turno, 'err'=>'Día cerrado por feriado.']);
+if (!empty($cerradosPorProfe[$profesor_id])) volver(['fecha'=>$fecha_turno, 'err'=>'El profesor está cerrado por excepción.']);
+
+/* Duplicados */
+$qDup = $conexion->prepare("
+  SELECT id FROM reservas_clientes
+  WHERE cliente_id=? AND turno_id=? AND fecha_reserva=? AND gimnasio_id=? LIMIT 1
+");
+$qDup->bind_param("iisi", $cliente_id, $turno_id, $fecha_turno, $gimnasio_id);
+$qDup->execute();
+$dup = $qDup->get_result()->fetch_assoc();
+$qDup->close();
+if ($dup) volver(['fecha'=>$fecha_turno, 'err'=>'Ya reservaste este turno en esa fecha.']);
+
+/* Insertar reserva */
+$ins = $conexion->prepare("
+  INSERT INTO reservas_clientes
+  (cliente_id, turno_id, profesor_id, dia_semana, hora_inicio, fecha_reserva, gimnasio_id)
+  VALUES (?, ?, ?, ?, ?, ?, ?)
+");
+$ins->bind_param("iiisssi", $cliente_id, $turno_id, $profesor_id, $dia, $hora_inicio, $fecha_turno, $gimnasio_id);
+$ins->execute();
+$ins->close();
+
+/* Deuda si no tiene clases */
 $membresia = $conexion->query("
-    SELECT * FROM membresias 
-    WHERE cliente_id = $cliente_id 
-      AND fecha_vencimiento >= CURDATE()
-      AND gimnasio_id = $gimnasio_id
-    ORDER BY fecha_inicio DESC LIMIT 1
+  SELECT * FROM membresias 
+  WHERE cliente_id={$cliente_id} AND fecha_vencimiento>=CURDATE() AND gimnasio_id={$gimnasio_id}
+  ORDER BY fecha_inicio DESC LIMIT 1
 ")->fetch_assoc();
 
 $hoy = date('Y-m-d');
-$monto_deuda_por_clase = -1000; // monto negativo por clase (ajustalo a tu valor)
-
+$monto_deuda_por_clase = -1000; // ajustar valor real
 if ($membresia) {
-    if ($membresia['clases_disponibles'] <= 0) {
-        // No tiene clases, registrar deuda
-        $conexion->query("
-            INSERT INTO pagos (cliente_id, metodo_pago, monto, fecha, fecha_pago, gimnasio_id)
-            VALUES ($cliente_id, 'Cuenta Corriente', $monto_deuda_por_clase, '$hoy', '$hoy', $gimnasio_id)
-        ");
-        $_SESSION['aviso_deuda'] = true;
-    }
-} else {
-    // No tiene membresía activa, registrar deuda
+  if ((int)$membresia['clases_disponibles'] <= 0) {
     $conexion->query("
-        INSERT INTO pagos (cliente_id, metodo_pago, monto, fecha, fecha_pago, gimnasio_id)
-        VALUES ($cliente_id, 'Cuenta Corriente', $monto_deuda_por_clase, '$hoy', '$hoy', $gimnasio_id)
+      INSERT INTO pagos (cliente_id, metodo_pago, monto, fecha, fecha_pago, gimnasio_id)
+      VALUES ({$cliente_id}, 'Cuenta Corriente', {$monto_deuda_por_clase}, '{$hoy}', '{$hoy}', {$gimnasio_id})
     ");
     $_SESSION['aviso_deuda'] = true;
+  }
+} else {
+  $conexion->query("
+    INSERT INTO pagos (cliente_id, metodo_pago, monto, fecha, fecha_pago, gimnasio_id)
+    VALUES ({$cliente_id}, 'Cuenta Corriente', {$monto_deuda_por_clase}, '{$hoy}', '{$hoy}', {$gimnasio_id})
+  ");
+  $_SESSION['aviso_deuda'] = true;
 }
 
-header("Location: ver_turnos_cliente.php?ok=1");
-exit;
-?>
+volver(['ok'=>'Reserva registrada','fecha'=>$fecha_turno]);

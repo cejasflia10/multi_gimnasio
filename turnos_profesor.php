@@ -1,14 +1,29 @@
 <?php
+/* =====================================================================
+   turnos_profesor.php  —  Gestión de turnos semanales + especiales por fecha
+   ===================================================================== */
 ob_start();
-session_start();
+if (session_status() === PHP_SESSION_NONE) session_start();
+
+date_default_timezone_set('America/Argentina/Buenos_Aires');
 
 $gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
 if (!$gimnasio_id) { header("Location: login.php"); exit(); }
 
-include 'conexion.php';
+require_once __DIR__ . '/conexion.php';
 if (!isset($_SESSION['usuario'])) { header("Location: login.php"); exit(); }
 
-include 'menu_horizontal.php';
+// ---------- helpers ----------
+function h($s){ return htmlspecialchars((string)$s, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'); }
+function nombreDiaEs($fechaYmd) {
+  $map = ['Sunday'=>'Domingo','Monday'=>'Lunes','Tuesday'=>'Martes','Wednesday'=>'Miércoles','Thursday'=>'Jueves','Friday'=>'Viernes','Saturday'=>'Domingo'];
+  $diaEn = date('l', strtotime($fechaYmd));
+  $mapOk = [
+    'Sunday'=>'Domingo','Monday'=>'Lunes','Tuesday'=>'Martes',
+    'Wednesday'=>'Miércoles','Thursday'=>'Jueves','Friday'=>'Viernes','Saturday'=>'Sábado'
+  ];
+  return $mapOk[$diaEn] ?? 'Lunes';
+}
 
 $msg = '';
 $err = '';
@@ -16,10 +31,11 @@ $err = '';
 if (isset($_GET['ok']))  { $msg = strip_tags($_GET['ok']); }
 if (isset($_GET['err'])) { $err = strip_tags($_GET['err']); }
 
-/* ======================= Alta múltiple de turnos semanales ======================= */
+/* =====================================================================
+   1) Alta múltiple de turnos semanales (base)
+   ===================================================================== */
 if ($_SERVER["REQUEST_METHOD"] === "POST"
-    && isset($_POST['profesor_id'])
-    && isset($_POST['__accion'])
+    && isset($_POST['profesor_id'], $_POST['__accion'])
     && $_POST['__accion']==='alta_turnos') {
 
     $profesor_id  = (int)($_POST["profesor_id"] ?? 0);
@@ -90,7 +106,9 @@ if ($_SERVER["REQUEST_METHOD"] === "POST"
     }
 }
 
-/* ======================= Eliminar turno semanal ======================= */
+/* =====================================================================
+   2) Eliminar turno semanal (base)
+   ===================================================================== */
 if (isset($_GET['eliminar'])) {
     $id_turno = (int)$_GET['eliminar'];
 
@@ -134,8 +152,13 @@ if (isset($_GET['eliminar'])) {
     }
 }
 
-/* ======================= Toggle/Habilitar franjas por FECHA ======================= */
-if ($_SERVER['REQUEST_METHOD']==='POST' && isset($_POST['__accion']) && $_POST['__accion']==='toggle_slot') {
+/* =====================================================================
+   3) Acciones por FECHA (lista blanca con bandera)
+   - Bandera: profesor_id=0, hora_inicio='00:00:00', hora_fin='00:00:00'
+   ===================================================================== */
+
+// Toggle individual franja (habilitar/deshabilitar)
+if ($_SERVER['REQUEST_METHOD']==='POST' && ($_POST['__accion'] ?? '')==='toggle_slot') {
     $fecha = $_POST['fecha'] ?? '';
     $profesor_id = (int)($_POST['profesor_id'] ?? 0);
     $hora_inicio = $_POST['hora_inicio'] ?? '';
@@ -169,8 +192,8 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && isset($_POST['__accion']) && $_POST['
     }
 }
 
-/* ======================= Bulk habilitar/deshabilitar todo el día ======================= */
-if ($_SERVER['REQUEST_METHOD']==='POST' && isset($_POST['__accion']) && $_POST['__accion']==='toggle_all') {
+// Habilitar/Deshabilitar TODAS las franjas del día (lista blanca)
+if ($_SERVER['REQUEST_METHOD']==='POST' && ($_POST['__accion'] ?? '')==='toggle_all') {
     $fecha = $_POST['fecha'] ?? '';
     $modo  = (int)($_POST['modo'] ?? 0); // 1 = habilitar todas; 0 = deshabilitar todas
     $dia   = $_POST['dia'] ?? '';
@@ -192,6 +215,17 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && isset($_POST['__accion']) && $_POST['
     $q->close();
 
     if ($modo === 1) {
+        // Asegurar bandera ON
+        $insFlag = $conexion->prepare("
+          INSERT INTO turnos_permitidos_fecha (gimnasio_id, profesor_id, fecha, hora_inicio, hora_fin)
+          VALUES (?, 0, ?, '00:00:00', '00:00:00')
+          ON DUPLICATE KEY UPDATE hora_inicio=VALUES(hora_inicio)
+        ");
+        $insFlag->bind_param("is", $gimnasio_id, $fecha);
+        $insFlag->execute();
+        $insFlag->close();
+
+        // Insertar todas las franjas
         $ins = $conexion->prepare("
           INSERT INTO turnos_permitidos_fecha (gimnasio_id, profesor_id, fecha, hora_inicio, hora_fin)
           VALUES (?,?,?,?,?)
@@ -203,8 +237,10 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && isset($_POST['__accion']) && $_POST['
             $ins->execute();
         }
         $ins->close();
+
         header("Location: turnos_profesor.php?fecha_bloqueo={$fecha}&ok=Se%20habilitaron%20todas%20las%20franjas"); exit;
     } else {
+        // Deshabilitar todas: limpiar permitidos y bandera
         $del = $conexion->prepare("
           DELETE FROM turnos_permitidos_fecha
           WHERE gimnasio_id=? AND fecha=?
@@ -212,11 +248,60 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && isset($_POST['__accion']) && $_POST['
         $del->bind_param("is", $gimnasio_id, $fecha);
         $del->execute();
         $del->close();
+
         header("Location: turnos_profesor.php?fecha_bloqueo={$fecha}&ok=Se%20deshabilitaron%20todas%20las%20franjas"); exit;
     }
 }
 
-/* ======================= Listados base ======================= */
+// Activar modo especial (solo bandera)
+if ($_SERVER['REQUEST_METHOD']==='POST' && ($_POST['__accion'] ?? '')==='activar_especial') {
+    $fecha = $_POST['fecha'] ?? '';
+    $dt = DateTime::createFromFormat('Y-m-d', $fecha);
+    if (!$dt || $dt->format('Y-m-d') !== $fecha) { header("Location: turnos_profesor.php?err=Fecha%20inv%C3%A1lida"); exit; }
+
+    $insFlag = $conexion->prepare("
+      INSERT INTO turnos_permitidos_fecha (gimnasio_id, profesor_id, fecha, hora_inicio, hora_fin)
+      VALUES (?, 0, ?, '00:00:00', '00:00:00')
+      ON DUPLICATE KEY UPDATE hora_inicio=VALUES(hora_inicio)
+    ");
+    $insFlag->bind_param("is", $gimnasio_id, $fecha);
+    $insFlag->execute();
+    $insFlag->close();
+
+    header("Location: turnos_profesor.php?fecha_bloqueo={$fecha}&ok=Modo%20especial%20activado"); exit;
+}
+
+// Desactivar modo especial (borra bandera y, opcional, las franjas)
+if ($_SERVER['REQUEST_METHOD']==='POST' && ($_POST['__accion'] ?? '')==='desactivar_especial') {
+    $fecha = $_POST['fecha'] ?? '';
+    $dt = DateTime::createFromFormat('Y-m-d', $fecha);
+    if (!$dt || $dt->format('Y-m-d') !== $fecha) { header("Location: turnos_profesor.php?err=Fecha%20inv%C3%A1lida"); exit; }
+
+    // Borra la bandera
+    $delFlag = $conexion->prepare("
+      DELETE FROM turnos_permitidos_fecha
+      WHERE gimnasio_id=? AND fecha=? AND profesor_id=0
+            AND hora_inicio='00:00:00' AND hora_fin='00:00:00'
+    ");
+    $delFlag->bind_param("is", $gimnasio_id, $fecha);
+    $delFlag->execute();
+    $delFlag->close();
+
+    // Opcional: limpiar también los permitidos de esa fecha (dejar fecha normal)
+    $delPerm = $conexion->prepare("
+      DELETE FROM turnos_permitidos_fecha
+      WHERE gimnasio_id=? AND fecha=? AND profesor_id<>0
+    ");
+    $delPerm->bind_param("is", $gimnasio_id, $fecha);
+    $delPerm->execute();
+    $delPerm->close();
+
+    header("Location: turnos_profesor.php?fecha_bloqueo={$fecha}&ok=Modo%20especial%20desactivado"); exit;
+}
+
+/* =====================================================================
+   4) Listados base
+   ===================================================================== */
 $result = $conexion->query("
     SELECT id, apellido, nombre
     FROM profesores
@@ -234,18 +319,15 @@ $turnos = $conexion->query("
              t.hora_inicio
 ");
 
-/* ======================= Vista por fecha con botones ======================= */
-function nombreDiaEs($fechaYmd) {
-  $map = ['Sunday'=>'Domingo','Monday'=>'Lunes','Tuesday'=>'Martes','Wednesday'=>'Miércoles','Thursday'=>'Jueves','Friday'=>'Viernes','Saturday'=>'Sábado'];
-  return $map[date('l', strtotime($fechaYmd))] ?? 'Lunes';
-}
-
+/* =====================================================================
+   5) Vista por fecha + detección de especial por bandera
+   ===================================================================== */
 $fecha_bloqueo = $_GET['fecha_bloqueo'] ?? date('Y-m-d');
 $dtb = DateTime::createFromFormat('Y-m-d', $fecha_bloqueo);
 if (!$dtb || $dtb->format('Y-m-d') !== $fecha_bloqueo) { $fecha_bloqueo = date('Y-m-d'); }
 $dia_bloqueo = nombreDiaEs($fecha_bloqueo);
 
-// Base del día desde turnos_disponibles (lo que el cliente vería en un día normal)
+// Base del día desde turnos_disponibles
 $stmtBase = $conexion->prepare("
   SELECT td.id, td.profesor_id, td.hora_inicio, td.hora_fin,
          p.apellido, p.nombre
@@ -259,22 +341,34 @@ $stmtBase->execute();
 $base_del_dia = $stmtBase->get_result();
 $stmtBase->close();
 
-// Permitidos (lista blanca) para la fecha
-$stmtP = $conexion->prepare("
-  SELECT profesor_id, hora_inicio, hora_fin
-  FROM turnos_permitidos_fecha
-  WHERE gimnasio_id = ? AND fecha = ?
+// ¿Hay bandera (modo especial) para esta fecha?
+$flagQ = $conexion->prepare("
+  SELECT 1 FROM turnos_permitidos_fecha
+  WHERE gimnasio_id=? AND fecha=? AND profesor_id=0
+    AND hora_inicio='00:00:00' AND hora_fin='00:00:00'
+  LIMIT 1
 ");
-$stmtP->bind_param("is", $gimnasio_id, $fecha_bloqueo);
-$stmtP->execute();
-$resP = $stmtP->get_result();
-$permitidos = [];
-while ($p = $resP->fetch_assoc()) {
-  $permitidos[(int)$p['profesor_id']][$p['hora_inicio'].'_'.$p['hora_fin']] = true;
-}
-$stmtP->close();
+$flagQ->bind_param("is", $gimnasio_id, $fecha_bloqueo);
+$flagQ->execute();
+$modo_lista_blanca = (bool)$flagQ->get_result()->num_rows;
+$flagQ->close();
 
-$modo_lista_blanca = !empty($permitidos);
+// Si hay bandera, cargar permitidos (lista)
+$permitidos = [];
+if ($modo_lista_blanca) {
+  $stmtP = $conexion->prepare("
+    SELECT profesor_id, hora_inicio, hora_fin
+    FROM turnos_permitidos_fecha
+    WHERE gimnasio_id = ? AND fecha = ? AND profesor_id <> 0
+  ");
+  $stmtP->bind_param("is", $gimnasio_id, $fecha_bloqueo);
+  $stmtP->execute();
+  $resP = $stmtP->get_result();
+  while ($p = $resP->fetch_assoc()) {
+    $permitidos[(int)$p['profesor_id']][$p['hora_inicio'].'_'.$p['hora_fin']] = true;
+  }
+  $stmtP->close();
+}
 ?>
 <!DOCTYPE html>
 <html lang="es">
@@ -289,25 +383,25 @@ $modo_lista_blanca = !empty($permitidos);
     .dias {display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:.3rem;margin:.5rem 0;}
     .dias label{display:flex;align-items:center;gap:.4rem;padding:.35rem .5rem;background:#1f2937;color:#fff;border-radius:.4rem;}
     form .fila{display:flex;gap:.5rem;flex-wrap:wrap;align-items:center;margin:.5rem 0;}
-    button[type=submit]{background:#fbbf24;border:0;padding:.6rem 1rem;border-radius:.5rem;font-weight:600;cursor:pointer;}
+    button[type=submit], .btn-mini{background:#374151;color:#fff;padding:.45rem .8rem;border-radius:.5rem;border:0;cursor:pointer}
+    .btn-warn{background:#f59e0b}
     table {width:100%;border-collapse:collapse;}
     th, td {padding:.5rem;border-bottom:1px solid #444;}
     .boton{background:#374151;color:#fff;padding:.35rem .6rem;border-radius:.375rem;text-decoration:none;}
     .seccion {margin-top:1.25rem;padding-top:1rem;border-top:1px dashed #555;}
     .badge{padding:.2rem .45rem;border-radius:.35rem;color:#fff;display:inline-block}
     .ok{background:#10b981}.err{background:#ef4444}
-    .btn-mini{background:#1f2937;color:#fff;padding:.25rem .5rem;border-radius:.35rem;border:0;cursor:pointer}
   </style>
 </head>
 <body>
 <div class="contenedor">
   <h1>🕓 Turnos de Profesores</h1>
 
-  <?php if ($msg): ?><div class="alert-ok"><?= htmlspecialchars($msg) ?></div><?php endif; ?>
-  <?php if ($err): ?><div class="alert-err"><?= htmlspecialchars($err) ?></div><?php endif; ?>
+  <?php if ($msg): ?><div class="alert-ok"><?= h($msg) ?></div><?php endif; ?>
+  <?php if ($err): ?><div class="alert-err"><?= h($err) ?></div><?php endif; ?>
 
   <!-- Alta rápida semanal -->
-  <form method="POST">
+  <form method="POST" action="turnos_profesor.php">
     <input type="hidden" name="__accion" value="alta_turnos">
     <div class="fila">
       <select name="profesor_id" required>
@@ -321,7 +415,7 @@ $modo_lista_blanca = !empty($permitidos);
         ");
         while ($row = $result->fetch_assoc()): ?>
           <option value="<?= (int)$row['id'] ?>">
-            <?= htmlspecialchars($row['apellido'].' '.$row['nombre']) ?>
+            <?= h($row['apellido'].' '.$row['nombre']) ?>
           </option>
         <?php endwhile; ?>
       </select>
@@ -340,38 +434,51 @@ $modo_lista_blanca = !empty($permitidos);
       <label>Fin: <input type="time" name="hora_fin" required></label>
     </div>
 
-    <button type="submit">Agregar Turnos</button>
+    <button type="submit" class="btn-warn">Agregar Turnos</button>
   </form>
 
   <!-- ======= Panel por FECHA con botones ======= -->
   <div class="seccion">
-    <h2>Feriado por fecha (habilitar/deshabilitar franjas)</h2>
-    <form method="get" style="display:flex;gap:.5rem;align-items:end;flex-wrap:wrap;margin-bottom:.75rem">
+    <h2>Especial por fecha (habilitar/deshabilitar franjas)</h2>
+
+    <form method="get" action="turnos_profesor.php" style="display:flex;gap:.5rem;align-items:end;flex-wrap:wrap;margin-bottom:.75rem">
       <div>
         <label>Fecha:</label>
-        <input type="date" name="fecha_bloqueo" value="<?= htmlspecialchars($fecha_bloqueo) ?>" onchange="this.form.submit()">
+        <input type="date" name="fecha_bloqueo" value="<?= h($fecha_bloqueo) ?>" onchange="this.form.submit()">
       </div>
       <div>
         <label>Día detectado:</label>
-        <input type="text" value="<?= htmlspecialchars($dia_bloqueo) ?>" readonly>
+        <input type="text" value="<?= h($dia_bloqueo) ?>" readonly>
       </div>
     </form>
 
-      <form method="post" action="toggle_turno_fecha.php" style="margin:.5rem 0">
+    <form method="post" action="turnos_profesor.php" style="display:inline">
+      <input type="hidden" name="__accion" value="activar_especial">
+      <input type="hidden" name="fecha" value="<?= h($fecha_bloqueo) ?>">
+      <button class="btn-mini">🟠 Activar modo especial</button>
+    </form>
+
+    <form method="post" action="turnos_profesor.php" style="display:inline;margin-left:.4rem">
+      <input type="hidden" name="__accion" value="desactivar_especial">
+      <input type="hidden" name="fecha" value="<?= h($fecha_bloqueo) ?>">
+      <button class="btn-mini">⚪ Desactivar modo especial</button>
+    </form>
+
+    <form method="post" action="turnos_profesor.php" style="margin:.5rem 0">
       <input type="hidden" name="__accion" value="toggle_all">
-      <input type="hidden" name="fecha" value="<?= htmlspecialchars($fecha_bloqueo) ?>">
-      <input type="hidden" name="dia" value="<?= htmlspecialchars($dia_bloqueo) ?>">
+      <input type="hidden" name="fecha" value="<?= h($fecha_bloqueo) ?>">
+      <input type="hidden" name="dia" value="<?= h($dia_bloqueo) ?>">
       <button class="btn-mini" name="modo" value="1">✅ Habilitar todas las franjas del día</button>
       <button class="btn-mini" name="modo" value="0">⛔ Deshabilitar todas las franjas del día</button>
     </form>
 
     <?php if ($modo_lista_blanca): ?>
       <p style="background:#fff7e6;border:1px solid #ffd591;padding:.5rem .75rem;border-radius:.5rem;">
-        🟠 Modo lista blanca activo para <?= htmlspecialchars($fecha_bloqueo) ?>: solo se habilitan las franjas marcadas aquí.
+        🟠 Modo especial activo para <?= h($fecha_bloqueo) ?>: solo se habilitan las franjas marcadas aquí.
       </p>
     <?php else: ?>
       <p style="background:#eef2ff;border:1px solid #c7d2fe;padding:.5rem .75rem;border-radius:.5rem;">
-        ℹ️ Aún no marcaste franjas para <?= htmlspecialchars($fecha_bloqueo) ?>. Por defecto, todas aparecen habilitadas hasta que elijas.
+        ℹ️ Sin modo especial en <?= h($fecha_bloqueo) ?>: todas las franjas de la base aparecen habilitadas.
       </p>
     <?php endif; ?>
 
@@ -403,29 +510,29 @@ $modo_lista_blanca = !empty($permitidos);
         $cl = $estaPermitida ? 'ok' : 'err';
       ?>
         <tr>
-          <td><?= htmlspecialchars($b['apellido'].' '.$b['nombre']) ?></td>
-          <td><?= htmlspecialchars(substr($b['hora_inicio'],0,5)) ?></td>
-          <td><?= htmlspecialchars(substr($b['hora_fin'],0,5)) ?></td>
+          <td><?= h($b['apellido'].' '.$b['nombre']) ?></td>
+          <td><?= h(substr($b['hora_inicio'],0,5)) ?></td>
+          <td><?= h(substr($b['hora_fin'],0,5)) ?></td>
           <td>
-            <span class="badge <?= $cl ?>" style="margin-right:.5rem"><?= htmlspecialchars($estado) ?></span>
+            <span class="badge <?= $cl ?>" style="margin-right:.5rem"><?= h($estado) ?></span>
 
             <?php if ($estaPermitida): ?>
-              <form method="post" style="display:inline">
+              <form method="post" action="turnos_profesor.php" style="display:inline">
                 <input type="hidden" name="__accion" value="toggle_slot">
-                <input type="hidden" name="fecha" value="<?= htmlspecialchars($fecha_bloqueo) ?>">
+                <input type="hidden" name="fecha" value="<?= h($fecha_bloqueo) ?>">
                 <input type="hidden" name="profesor_id" value="<?= (int)$pid ?>">
-                <input type="hidden" name="hora_inicio" value="<?= htmlspecialchars($b['hora_inicio']) ?>">
-                <input type="hidden" name="hora_fin" value="<?= htmlspecialchars($b['hora_fin']) ?>">
+                <input type="hidden" name="hora_inicio" value="<?= h($b['hora_inicio']) ?>">
+                <input type="hidden" name="hora_fin" value="<?= h($b['hora_fin']) ?>">
                 <input type="hidden" name="habilitar" value="0">
                 <button type="submit" class="btn-mini">Deshabilitar</button>
               </form>
             <?php else: ?>
-                <form method="post" action="toggle_turno_fecha.php" style="display:inline">
+              <form method="post" action="turnos_profesor.php" style="display:inline">
                 <input type="hidden" name="__accion" value="toggle_slot">
-                <input type="hidden" name="fecha" value="<?= htmlspecialchars($fecha_bloqueo) ?>">
+                <input type="hidden" name="fecha" value="<?= h($fecha_bloqueo) ?>">
                 <input type="hidden" name="profesor_id" value="<?= (int)$pid ?>">
-                <input type="hidden" name="hora_inicio" value="<?= htmlspecialchars($b['hora_inicio']) ?>">
-                <input type="hidden" name="hora_fin" value="<?= htmlspecialchars($b['hora_fin']) ?>">
+                <input type="hidden" name="hora_inicio" value="<?= h($b['hora_inicio']) ?>">
+                <input type="hidden" name="hora_fin" value="<?= h($b['hora_fin']) ?>">
                 <input type="hidden" name="habilitar" value="1">
                 <button type="submit" class="btn-mini">Habilitar</button>
               </form>
@@ -448,10 +555,10 @@ $modo_lista_blanca = !empty($permitidos);
     </tr>
     <?php while ($t = $turnos->fetch_assoc()): ?>
       <tr>
-        <td><?= htmlspecialchars($t['apellido'] . ' ' . $t['nombre']) ?></td>
-        <td><?= htmlspecialchars($t['dia']) ?></td>
-        <td><?= htmlspecialchars($t['hora_inicio']) ?></td>
-        <td><?= htmlspecialchars($t['hora_fin']) ?></td>
+        <td><?= h($t['apellido'] . ' ' . $t['nombre']) ?></td>
+        <td><?= h($t['dia']) ?></td>
+        <td><?= h($t['hora_inicio']) ?></td>
+        <td><?= h($t['hora_fin']) ?></td>
         <td>
           <a class="boton" href="editar_turno_profesor.php?id=<?= (int)$t['id'] ?>">✏️ Editar</a>
           <a class="boton" href="turnos_profesor.php?eliminar=<?= (int)$t['id'] ?>" onclick="return confirm('¿Eliminar este turno?')">🗑️ Eliminar</a>
