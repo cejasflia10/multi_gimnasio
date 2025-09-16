@@ -1,5 +1,5 @@
 <?php
-// guardar_renovacion.php — renovación con CARGO (plan+otros+adicionales), PAGO por métodos, y DEBE a CC opcional
+// guardar_renovacion.php — versión con diagnóstico de prepares (POST only)
 if (session_status() === PHP_SESSION_NONE) session_start();
 require_once __DIR__ . '/conexion.php';
 
@@ -24,7 +24,6 @@ function bind_params_dynamic(mysqli_stmt $stmt, string $types, array $values): b
   foreach ($values as $k => $v) { $refs[] = &$values[$k]; }
   return call_user_func_array([$stmt, 'bind_param'], $refs);
 }
-/* Normaliza números de entrada: 10,5 | 12.345,67 | 1234.56 */
 function n($v): float {
   $s = trim((string)$v);
   if ($s === '') return 0.0;
@@ -36,8 +35,18 @@ function n($v): float {
   return (float)$s;
 }
 function h($s){ return htmlspecialchars((string)$s, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'); }
+function prep(mysqli $db, string $sql, string $label): mysqli_stmt {
+  $stmt = $db->prepare($sql);
+  if (!$stmt) { throw new Exception("[$label] prepare() falló: ".$db->error." | SQL: ".$sql); }
+  return $stmt;
+}
 
-/* =============== Entrada y validaciones =============== */
+/* ================= Método ================= */
+if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+  http_response_code(405); die("Método no permitido (solo POST).");
+}
+
+/* ================= Entrada ================= */
 $gimnasio_id = (int)($_SESSION['gimnasio_id'] ?? ($_POST['gimnasio_id'] ?? 0));
 if ($gimnasio_id <= 0) { http_response_code(403); die("Acceso denegado"); }
 
@@ -47,57 +56,46 @@ $fecha_inicio       = $_POST['fecha_inicio'] ?? date('Y-m-d');
 $fecha_vencimiento  = $_POST['fecha_vencimiento'] ?? '';
 $clases_disponibles = (int)($_POST['clases_disponibles'] ?? 0);
 
-/* Números robustos */
-$precio_plan   = n($_POST['precio']        ?? 0);
-$otros_cargos  = n($_POST['otros_pagos']   ?? 0);        // UI dice “Otros cargos”, se suma a CARGO
-$descuento_pct = n($_POST['descuento']     ?? 0);
-$duracion_meses= (int)($_POST['duracion_meses'] ?? 0);
+$precio_plan    = n($_POST['precio']        ?? 0);
+$otros_cargos   = n($_POST['otros_pagos']   ?? 0);
+$descuento_pct  = n($_POST['descuento']     ?? 0);
+$duracion_meses = (int)($_POST['duracion_meses'] ?? 0);
 
-/* Pagos individuales (no incluyen CC) */
-$pago_efectivo      = n($_POST['pago_efectivo']      ?? 0);
-$pago_transferencia = n($_POST['pago_transferencia'] ?? 0);
-$pago_debito        = n($_POST['pago_debito']        ?? 0);
-$pago_credito       = n($_POST['pago_credito']       ?? 0);
-/* A CC (DEBE) -> se registra como CARGO adicional (deuda) */
-$pago_cc_manual     = n($_POST['pago_cuenta_corriente'] ?? 0);
+$pago_efectivo       = n($_POST['pago_efectivo']      ?? 0);
+$pago_transferencia  = n($_POST['pago_transferencia'] ?? 0);
+$pago_debito         = n($_POST['pago_debito']        ?? 0);
+$pago_credito        = n($_POST['pago_credito']       ?? 0);
+$pago_cc_manual      = n($_POST['pago_cuenta_corriente'] ?? 0);
 
-/* Adicionales seleccionados */
 $adicionales_ids = isset($_POST['adicionales']) && is_array($_POST['adicionales'])
   ? array_map('intval', $_POST['adicionales'])
   : [];
 
 $fecha_actual = date('Y-m-d H:i:s');
 
-/* Si falta vencimiento, calcularlo con duracion_meses */
 if ($fecha_vencimiento === '' || $fecha_vencimiento === null) {
   $ts = strtotime($fecha_inicio ?: date('Y-m-d'));
   $fecha_vencimiento = date('Y-m-d', strtotime("+{$duracion_meses} month", $ts));
 }
 
-/* ========= Fallback: si precio del plan viene 0, leer del plan ========= */
+/* Fallback: precio plan desde BD si vino 0 */
 if ($precio_plan <= 0 && $plan_id > 0) {
-  $stp = $conexion->prepare("SELECT precio FROM planes WHERE id=? AND gimnasio_id=? LIMIT 1");
-  if ($stp) {
-    $stp->bind_param("ii", $plan_id, $gimnasio_id);
-    $stp->execute();
-    $stp->bind_result($pplan);
-    if ($stp->fetch()) { $precio_plan = n($pplan); }
-    $stp->close();
-  }
+  $stp = prep($conexion, "SELECT precio FROM planes WHERE id=? AND gimnasio_id=? LIMIT 1", "plan.select");
+  $stp->bind_param("ii", $plan_id, $gimnasio_id);
+  $stp->execute();
+  $stp->bind_result($pplan);
+  if ($stp->fetch()) { $precio_plan = n($pplan); }
+  $stp->close();
 }
-
-/* Clamp de descuento (0..100) */
 if ($descuento_pct < 0)   $descuento_pct = 0;
 if ($descuento_pct > 100) $descuento_pct = 100;
 
-/* ===== Traer precios de adicionales (desde BD) ===== */
+/* Adicionales seleccionados: precios desde BD */
 $precio_adicionales = 0.0;
 $adicionales_detalle = [];
-
 if (!empty($adicionales_ids)) {
   $ids_in = implode(',', array_map('intval', $adicionales_ids));
-  $sqlAd  = "SELECT id, nombre, precio FROM planes_adicionales WHERE gimnasio_id = ? AND id IN ($ids_in)";
-  $stmtAd = $conexion->prepare($sqlAd);
+  $stmtAd = prep($conexion, "SELECT id, nombre, precio FROM planes_adicionales WHERE gimnasio_id = ? AND id IN ($ids_in)", "adicionales.select");
   $stmtAd->bind_param('i', $gimnasio_id);
   if ($stmtAd->execute() && ($resAd = $stmtAd->get_result())) {
     while ($row = $resAd->fetch_assoc()) {
@@ -112,22 +110,13 @@ if (!empty($adicionales_ids)) {
   $stmtAd->close();
 }
 
-/* ===== Cálculo financiero =====
-   CARGO = precio_plan + otros_cargos + adicionales
-   Descuento % sobre ese subtotal
-   total_cargo = subtotal - descuento
-   total_pagado_hoy = suma métodos (efec/trans/deb/cred)
-   dif = total_cargo - total_pagado_hoy
-   A CC manual se registra como CARGO extra (DEBE).
-*/
+/* ================= Cálculos ================= */
 $subtotal_cargos = round($precio_plan + $otros_cargos + $precio_adicionales, 2);
 $descuento_monto = round($subtotal_cargos * ($descuento_pct / 100), 2);
 $total_cargo     = round(max(0, $subtotal_cargos - $descuento_monto), 2);
 
 $total_pagado_hoy = round($pago_efectivo + $pago_transferencia + $pago_debito + $pago_credito, 2);
-$dif = round($total_cargo - $total_pagado_hoy, 2);
 
-/* Métodos de pago (texto) */
 $metodos = [];
 if ($pago_efectivo      > 0) $metodos[] = "Efectivo:$pago_efectivo";
 if ($pago_transferencia > 0) $metodos[] = "Transferencia:$pago_transferencia";
@@ -135,18 +124,16 @@ if ($pago_debito        > 0) $metodos[] = "Débito:$pago_debito";
 if ($pago_credito       > 0) $metodos[] = "Crédito:$pago_credito";
 $metodo_pago_str = $metodos ? implode(' | ', $metodos) : 'Sin pagar ahora';
 
+/* ================= Transacción ================= */
 try {
   $conexion->begin_transaction();
 
-  /* ===== Lock filas del cliente para evitar condiciones de carrera ===== */
+  /* Lock fila(s) del cliente */
   $conexion->query("SELECT id FROM membresias WHERE cliente_id = {$cliente_id} AND gimnasio_id = {$gimnasio_id} FOR UPDATE");
 
-  /* ===== 1) Mover anteriores a historial (si existe) ===== */
+  /* 1) Pasar actuales a historial (si existe) */
   if (table_exists($conexion, 'membresias_historial')) {
-    $resPrev = $conexion->query("
-      SELECT * FROM membresias WHERE cliente_id = {$cliente_id} AND gimnasio_id = {$gimnasio_id}
-    ");
-
+    $resPrev = $conexion->query("SELECT * FROM membresias WHERE cliente_id = {$cliente_id} AND gimnasio_id = {$gimnasio_id}");
     if ($resPrev && $resPrev->num_rows > 0) {
       $has_mp_hist   = hcol($conexion, 'membresias_historial', 'metodo_pago');
       $has_op_hist   = hcol($conexion, 'membresias_historial', 'otros_pagos');
@@ -161,9 +148,7 @@ try {
       if ($has_dm_hist)  { $hist_cols[]='duracion_meses'; $hist_types.='i'; }
 
       $placeholders = implode(',', array_fill(0, count($hist_cols), '?'));
-      $sqlHist = "INSERT INTO membresias_historial (".implode(',', $hist_cols).") VALUES ($placeholders)";
-      $stmtHist = $conexion->prepare($sqlHist);
-      if (!$stmtHist) { throw new Exception("Prepare historial: ".$conexion->error); }
+      $stmtHist = prep($conexion, "INSERT INTO membresias_historial (".implode(',', $hist_cols).") VALUES ($placeholders)", "historial.insert");
 
       while ($m = $resPrev->fetch_assoc()) {
         $vals = [
@@ -178,20 +163,20 @@ try {
         if ($has_dm_hist)  { $vals[] = (int)($m['duracion_meses'] ?? 0); }
 
         if (!bind_params_dynamic($stmtHist, $hist_types, $vals) || !$stmtHist->execute()) {
-          throw new Exception("Exec historial: ".$stmtHist->error);
+          throw new Exception("[historial.insert] execute(): ".$stmtHist->error);
         }
       }
       $stmtHist->close();
     }
   }
 
-  /* ===== 2) Eliminar membresías anteriores ===== */
-  $stmtDel = $conexion->prepare("DELETE FROM membresias WHERE cliente_id = ? AND gimnasio_id = ?");
+  /* 2) Borrar membresías anteriores del cliente */
+  $stmtDel = prep($conexion, "DELETE FROM membresias WHERE cliente_id = ? AND gimnasio_id = ?", "membresias.delete_prev");
   $stmtDel->bind_param("ii", $cliente_id, $gimnasio_id);
   $stmtDel->execute();
   $stmtDel->close();
 
-  /* ===== 3) Insertar NUEVA membresía (columnas dinámicas) ===== */
+  /* 3) Insertar nueva membresía (columnas dinámicas) */
   $has_mp_mem  = hcol($conexion, 'membresias', 'metodo_pago');
   $has_scc_mem = hcol($conexion, 'membresias', 'saldo_cc');
   $has_act_mem = hcol($conexion, 'membresias', 'activa');
@@ -211,7 +196,6 @@ try {
   if ($has_dm_mem) { $cols[]='duracion_meses';     $types.='i'; $vals[]=$duracion_meses; }
   if ($has_ad_mem) { $cols[]='adicionales_total';  $types.='d'; $vals[]=$precio_adicionales; }
 
-  // Desgloses (si existen en tu schema)
   foreach ([
     'pago_efectivo'        => $pago_efectivo,
     'pago_transferencia'   => $pago_transferencia,
@@ -223,154 +207,204 @@ try {
   }
 
   $placeholders = implode(',', array_fill(0, count($cols), '?'));
-  $sqlMem = "INSERT INTO membresias (".implode(',', $cols).") VALUES ($placeholders)";
-  $stmt = $conexion->prepare($sqlMem);
-  if (!$stmt) { throw new Exception("Prepare membresias: ".$conexion->error); }
+  $stmt = prep($conexion, "INSERT INTO membresias (".implode(',', $cols).") VALUES ($placeholders)", "membresias.insert");
   if (!bind_params_dynamic($stmt, $types, $vals) || !$stmt->execute()) {
-    throw new Exception("Exec membresias: ".$stmt->error);
+    throw new Exception("[membresias.insert] execute(): ".$stmt->error);
   }
   $membresia_id = (int)$stmt->insert_id;
   $stmt->close();
 
-  /* ===== 3.b) Guardar detalle de adicionales si existe ===== */
+  /* 3.b) Guardar detalle de adicionales — DINÁMICO según columnas reales */
   if (!empty($adicionales_detalle) && table_exists($conexion, 'membresias_adicionales')) {
-    // Limpieza opcional del ciclo exacto
-    $del = $conexion->prepare("DELETE FROM membresias_adicionales WHERE cliente_id = ? AND gimnasio_id = ? AND plan_id = ? AND fecha_inicio = ?");
-    $del->bind_param('iiis', $cliente_id, $gimnasio_id, $plan_id, $fecha_inicio);
-    $del->execute();
-    $del->close();
+    $has_mid  = hcol($conexion,'membresias_adicionales','membresia_id');
+    $has_cli  = hcol($conexion,'membresias_adicionales','cliente_id');
+    $has_gym  = hcol($conexion,'membresias_adicionales','gimnasio_id');
+    $has_plan = hcol($conexion,'membresias_adicionales','plan_id');
+    $has_fi   = hcol($conexion,'membresias_adicionales','fecha_inicio');
+    $has_aid  = hcol($conexion,'membresias_adicionales','adicional_id');
+    $has_nom  = hcol($conexion,'membresias_adicionales','nombre');
+    $has_prec = hcol($conexion,'membresias_adicionales','precio');
 
-    $insAd = $conexion->prepare("INSERT INTO membresias_adicionales
-      (membresia_id, cliente_id, gimnasio_id, plan_id, fecha_inicio, adicional_id, nombre, precio)
-      VALUES (?,?,?,?,?,?,?,?)");
-    foreach ($adicionales_detalle as $ad) {
-      $aid = (int)$ad['id']; $an = (string)$ad['nombre']; $ap = (float)$ad['precio'];
-      $insAd->bind_param('iiiiisdd', $membresia_id, $cliente_id, $gimnasio_id, $plan_id, $fecha_inicio, $aid, $an, $ap);
-      $insAd->execute();
+    if ($has_mid) {
+      $whereCols = ['membresia_id']; $whereTyp = 'i'; $whereVals = [$membresia_id];
+      if ($has_cli)  { $whereCols[]='cliente_id';  $whereTyp.='i'; $whereVals[]=$cliente_id; }
+      if ($has_gym)  { $whereCols[]='gimnasio_id'; $whereTyp.='i'; $whereVals[]=$gimnasio_id; }
+      if ($has_plan) { $whereCols[]='plan_id';     $whereTyp.='i'; $whereVals[]=$plan_id; }
+      if ($has_fi)   { $whereCols[]='fecha_inicio';$whereTyp.='s'; $whereVals[]=$fecha_inicio; }
+
+      $whereSql = implode(' AND ', array_map(fn($c)=>"$c = ?", $whereCols));
+      $sqlDel   = "DELETE FROM membresias_adicionales WHERE $whereSql";
+      $stmtDel  = $conexion->prepare($sqlDel);
+      if ($stmtDel) {
+        bind_params_dynamic($stmtDel, $whereTyp, $whereVals);
+        $stmtDel->execute();
+        $stmtDel->close();
+      }
+
+      $colsAd  = ['membresia_id']; $typesAd='i';
+      if ($has_cli)  { $colsAd[]='cliente_id';  $typesAd.='i'; }
+      if ($has_gym)  { $colsAd[]='gimnasio_id'; $typesAd.='i'; }
+      if ($has_plan) { $colsAd[]='plan_id';     $typesAd.='i'; }
+      if ($has_fi)   { $colsAd[]='fecha_inicio';$typesAd.='s'; }
+      if ($has_aid)  { $colsAd[]='adicional_id';$typesAd.='i'; }
+      if ($has_nom)  { $colsAd[]='nombre';      $typesAd.='s'; }
+      if ($has_prec) { $colsAd[]='precio';      $typesAd.='d'; }
+
+      $phAd   = implode(',', array_fill(0, count($colsAd), '?'));
+      $sqlIns = "INSERT INTO membresias_adicionales (".implode(',', $colsAd).") VALUES ($phAd)";
+      $stmtAd = $conexion->prepare($sqlIns);
+      if (!$stmtAd) { throw new Exception("Prepare membresias_adicionales (dinámico): ".$conexion->error); }
+
+      foreach ($adicionales_detalle as $ad) {
+        $valsAd = [ $membresia_id ];
+        if ($has_cli)  { $valsAd[] = $cliente_id; }
+        if ($has_gym)  { $valsAd[] = $gimnasio_id; }
+        if ($has_plan) { $valsAd[] = $plan_id; }
+        if ($has_fi)   { $valsAd[] = $fecha_inicio; }
+        if ($has_aid)  { $valsAd[] = (int)$ad['id']; }
+        if ($has_nom)  { $valsAd[] = (string)$ad['nombre']; }
+        if ($has_prec) { $valsAd[] = (float)$ad['precio']; }
+
+        if (!bind_params_dynamic($stmtAd, $typesAd, $valsAd) || !$stmtAd->execute()) {
+          throw new Exception("Exec membresias_adicionales (dinámico): ".$stmtAd->error);
+        }
+      }
+      $stmtAd->close();
     }
-    $insAd->close();
   }
 
-  /* ===== 4) Registrar pagos en tabla de pagos si existe ===== */
+  /* 4) Registrar pago en tabla de pagos — DINÁMICO según columnas reales */
   $table_pagos = null;
   if (table_exists($conexion, 'pagos'))                $table_pagos = 'pagos';
   elseif (table_exists($conexion, 'pagos_membresia'))  $table_pagos = 'pagos_membresia';
 
   if ($table_pagos) {
-    $insPago = $conexion->prepare("INSERT INTO $table_pagos
-      (cliente_id, gimnasio_id, concepto, fecha, efectivo, transferencia, debito, credito, cuenta_corriente, total, metadata_json)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?)");
-    $concepto = "Renovación de membresía #{$membresia_id}";
-    $fechaHoy = date('Y-m-d');
-    $meta = [
-      'membresia_id'      => $membresia_id,
-      'plan_id'           => $plan_id,
-      'fecha_inicio'      => $fecha_inicio,
-      'fecha_vencimiento' => $fecha_vencimiento,
-      'duracion_meses'    => $duracion_meses,
-      'precio_plan'       => $precio_plan,
-      'otros_cargos'      => $otros_cargos,
-      'adicionales'       => $adicionales_detalle,
-      'descuento_pct'     => $descuento_pct,
-      'descuento_monto'   => $descuento_monto,
-      'total_cargo'       => $total_cargo,
-      'total_pagado_hoy'  => $total_pagado_hoy,
-      'pago_cc_manual'    => $pago_cc_manual
-    ];
-    $json = json_encode($meta, JSON_UNESCAPED_UNICODE);
+    // Descubrir columnas disponibles
+    $has_concepto   = hcol($conexion, $table_pagos, 'concepto');
+    $has_fecha      = hcol($conexion, $table_pagos, 'fecha');
+    $has_fecha_pago = hcol($conexion, $table_pagos, 'fecha_pago'); // <-- requerida en tu error
+    $has_total      = hcol($conexion, $table_pagos, 'total');
+    $has_monto      = hcol($conexion, $table_pagos, 'monto');
+    $has_importe    = hcol($conexion, $table_pagos, 'importe');
+    $has_json       = hcol($conexion, $table_pagos, 'metadata_json');
 
-    $insPago->bind_param(
-      'iissdddddds',
-      $cliente_id, $gimnasio_id, $concepto, $fechaHoy,
-      $pago_efectivo, $pago_transferencia, $pago_debito, $pago_credito, $pago_cc_manual,
-      $total_pagado_hoy, $json
-    );
-    if (!$insPago->execute()) { throw new Exception('No pude registrar el pago.'); }
+    $has_efec = hcol($conexion, $table_pagos, 'efectivo');
+    $has_trf  = hcol($conexion, $table_pagos, 'transferencia');
+    $has_deb  = hcol($conexion, $table_pagos, 'debito');
+    $has_cred = hcol($conexion, $table_pagos, 'credito');
+    $has_cc   = hcol($conexion, $table_pagos, 'cuenta_corriente');
+
+    // Otros posibles campos útiles (evita NOT NULL sin default):
+    $has_metodo     = hcol($conexion, $table_pagos, 'metodo');
+    $has_created_at = hcol($conexion, $table_pagos, 'created_at');
+    $has_creado_en  = hcol($conexion, $table_pagos, 'creado_en');
+
+    $colsPay = ['cliente_id','gimnasio_id'];
+    $typesPay = 'ii';
+    $valsPay = [ $cliente_id, $gimnasio_id ];
+
+    if ($has_concepto)   { $colsPay[]='concepto';   $typesPay.='s'; $valsPay[] = "Renovación de membresía #{$membresia_id}"; }
+    if ($has_fecha)      { $colsPay[]='fecha';      $typesPay.='s'; $valsPay[] = date('Y-m-d'); }
+    if ($has_fecha_pago) { $colsPay[]='fecha_pago'; $typesPay.='s'; $valsPay[] = date('Y-m-d H:i:s'); } // <-- agregado
+
+    if ($has_efec) { $colsPay[]='efectivo';       $typesPay.='d'; $valsPay[]=$pago_efectivo; }
+    if ($has_trf)  { $colsPay[]='transferencia';  $typesPay.='d'; $valsPay[]=$pago_transferencia; }
+    if ($has_deb)  { $colsPay[]='debito';         $typesPay.='d'; $valsPay[]=$pago_debito; }
+    if ($has_cred) { $colsPay[]='credito';        $typesPay.='d'; $valsPay[]=$pago_credito; }
+    if ($has_cc)   { $colsPay[]='cuenta_corriente';$typesPay.='d'; $valsPay[]=$pago_cc_manual; }
+
+    if      ($has_total)   { $colsPay[]='total';   $typesPay.='d'; $valsPay[]=$total_pagado_hoy; }
+    elseif  ($has_monto)   { $colsPay[]='monto';   $typesPay.='d'; $valsPay[]=$total_pagado_hoy; }
+    elseif  ($has_importe) { $colsPay[]='importe'; $typesPay.='d'; $valsPay[]=$total_pagado_hoy; }
+
+    if ($has_metodo)     { $colsPay[]='metodo';     $typesPay.='s'; $valsPay[]=$metodo_pago_str; }
+    if ($has_created_at) { $colsPay[]='created_at'; $typesPay.='s'; $valsPay[] = date('Y-m-d H:i:s'); }
+    if ($has_creado_en)  { $colsPay[]='creado_en';  $typesPay.='s'; $valsPay[] = date('Y-m-d H:i:s'); }
+
+    if ($has_json) {
+      $colsPay[]='metadata_json'; $typesPay.='s';
+      $meta = [
+        'membresia_id'=>$membresia_id,'plan_id'=>$plan_id,
+        'fecha_inicio'=>$fecha_inicio,'fecha_vencimiento'=>$fecha_vencimiento,'duracion_meses'=>$duracion_meses,
+        'precio_plan'=>$precio_plan,'otros_cargos'=>$otros_cargos,'adicionales'=>$adicionales_detalle,
+        'descuento_pct'=>$descuento_pct,'descuento_monto'=>$descuento_monto,
+        'total_cargo'=>$total_cargo,'total_pagado_hoy'=>$total_pagado_hoy,'pago_cc_manual'=>$pago_cc_manual
+      ];
+      $valsPay[] = json_encode($meta, JSON_UNESCAPED_UNICODE);
+    }
+
+    $phPay = implode(',', array_fill(0, count($colsPay), '?'));
+    $sqlPay = "INSERT INTO {$table_pagos} (".implode(',', $colsPay).") VALUES ($phPay)";
+    $insPago = prep($conexion, $sqlPay, "{$table_pagos}.insert_dynamic");
+
+    if (!bind_params_dynamic($insPago, $typesPay, $valsPay) || !$insPago->execute()) {
+      throw new Exception("[{$table_pagos}.insert_dynamic] execute(): ".$insPago->error);
+    }
     $insPago->close();
   }
 
-  /* ===== 5) Asientos en cuenta corriente (si existe) =====
-     Modelo: una línea CARGO (debe) por total_cargo;
-             una línea PAGO (haber) por total_pagado_hoy;
-             si hay "a CC manual", otra línea CARGO (debe) por ese monto.
-     (Esto deja trazabilidad clara; el saldo final queda de la diferencia)
-  */
+  /* 5) Cuenta corriente (si existe) */
   $debe_total  = 0.0;
   $haber_total = 0.0;
-
   if (table_exists($conexion, 'cc_movimientos')) {
     $fecha_cc = $fecha_actual;
 
-    // CARGO total de la renovación
     if ($total_cargo > 0.0) {
+      $stmtCC = prep($conexion,
+        "INSERT INTO cc_movimientos (gimnasio_id, cliente_id, venta_id, fecha, concepto, debe, haber)
+         VALUES (?, ?, ?, ?, ?, ?, 0)",
+        "cc_movimientos.cargo"
+      );
       $concepto = "Renovación membresía #{$membresia_id} — cargo total";
-      $stmtCC = $conexion->prepare("
-        INSERT INTO cc_movimientos (gimnasio_id, cliente_id, venta_id, fecha, concepto, debe, haber)
-        VALUES (?, ?, ?, ?, ?, ?, 0)
-      ");
-      if (!$stmtCC) { throw new Exception("Prepare cc_movimientos (cargo): ".$conexion->error); }
       $stmtCC->bind_param("iiissd", $gimnasio_id, $cliente_id, $membresia_id, $fecha_cc, $concepto, $total_cargo);
-      if (!$stmtCC->execute()) { throw new Exception("Exec cc_movimientos (cargo): ".$stmtCC->error); }
-      $stmtCC->close();
-      $debe_total += $total_cargo;
+      if (!$stmtCC->execute()) { throw new Exception("[cc_movimientos.cargo] execute(): ".$stmtCC->error); }
+      $stmtCC->close(); $debe_total += $total_cargo;
     }
-
-    // PAGO abonado hoy (haber)
     if ($total_pagado_hoy > 0.0) {
+      $stmtCC2 = prep($conexion,
+        "INSERT INTO cc_movimientos (gimnasio_id, cliente_id, venta_id, fecha, concepto, debe, haber)
+         VALUES (?, ?, ?, ?, ?, 0, ?)",
+        "cc_movimientos.pago"
+      );
       $concepto = "Renovación membresía #{$membresia_id} — pago hoy";
-      $stmtCC2 = $conexion->prepare("
-        INSERT INTO cc_movimientos (gimnasio_id, cliente_id, venta_id, fecha, concepto, debe, haber)
-        VALUES (?, ?, ?, ?, ?, 0, ?)
-      ");
-      if (!$stmtCC2) { throw new Exception("Prepare cc_movimientos (pago): ".$conexion->error); }
       $stmtCC2->bind_param("iiissd", $gimnasio_id, $cliente_id, $membresia_id, $fecha_cc, $concepto, $total_pagado_hoy);
-      if (!$stmtCC2->execute()) { throw new Exception("Exec cc_movimientos (pago): ".$stmtCC2->error); }
-      $stmtCC2->close();
-      $haber_total += $total_pagado_hoy;
+      if (!$stmtCC2->execute()) { throw new Exception("[cc_movimientos.pago] execute(): ".$stmtCC2->error); }
+      $stmtCC2->close(); $haber_total += $total_pagado_hoy;
     }
-
-    // CARGO manual a CC (si el operador decidió pasar una parte a cuenta)
     if ($pago_cc_manual > 0.0) {
+      $stmtCC3 = prep($conexion,
+        "INSERT INTO cc_movimientos (gimnasio_id, cliente_id, venta_id, fecha, concepto, debe, haber)
+         VALUES (?, ?, ?, ?, ?, ?, 0)",
+        "cc_movimientos.cc_manual"
+      );
       $concepto = "Renovación membresía #{$membresia_id} — a cuenta corriente (manual)";
-      $stmtCC3 = $conexion->prepare("
-        INSERT INTO cc_movimientos (gimnasio_id, cliente_id, venta_id, fecha, concepto, debe, haber)
-        VALUES (?, ?, ?, ?, ?, ?, 0)
-      ");
-      if (!$stmtCC3) { throw new Exception("Prepare cc_movimientos (cc manual): ".$conexion->error); }
       $stmtCC3->bind_param("iiissd", $gimnasio_id, $cliente_id, $membresia_id, $fecha_cc, $concepto, $pago_cc_manual);
-      if (!$stmtCC3->execute()) { throw new Exception("Exec cc_movimientos (cc manual): ".$stmtCC3->error); }
-      $stmtCC3->close();
-      $debe_total += $pago_cc_manual;
+      if (!$stmtCC3->execute()) { throw new Exception("[cc_movimientos.cc_manual] execute(): ".$stmtCC3->error); }
+      $stmtCC3->close(); $debe_total += $pago_cc_manual;
     }
   }
 
-  /* ===== 6) Actualizar saldo_cc en membresía si existe ===== */
+  /* 6) saldo_cc en membresía (si existe) */
   $saldo_cc_final = round($debe_total - $haber_total, 2);
   if (hcol($conexion, 'membresias', 'saldo_cc')) {
-    $stmtUpd = $conexion->prepare("UPDATE membresias SET saldo_cc = ? WHERE id = ? AND gimnasio_id = ?");
+    $stmtUpd = prep($conexion, "UPDATE membresias SET saldo_cc = ? WHERE id = ? AND gimnasio_id = ?", "membresias.update_saldo");
     $stmtUpd->bind_param("dii", $saldo_cc_final, $membresia_id, $gimnasio_id);
     $stmtUpd->execute();
     $stmtUpd->close();
   }
 
-  /* ===== 7) Asegurar una sola membresía activa ===== */
+  /* 7) única activa + limpieza */
   if (hcol($conexion, 'membresias', 'activa')) {
-    $conexion->query("UPDATE membresias
-                      SET activa = 0
-                      WHERE cliente_id = {$cliente_id} AND gimnasio_id = {$gimnasio_id} AND id <> {$membresia_id}");
-    $conexion->query("UPDATE membresias
-                      SET activa = 1
-                      WHERE id = {$membresia_id} AND gimnasio_id = {$gimnasio_id}");
+    $conexion->query("UPDATE membresias SET activa = 0 WHERE cliente_id = {$cliente_id} AND gimnasio_id = {$gimnasio_id} AND id <> {$membresia_id}");
+    $conexion->query("UPDATE membresias SET activa = 1 WHERE id = {$membresia_id} AND gimnasio_id = {$gimnasio_id}");
   }
-  // Limpieza extra por si algo quedó
-  $stmtClean = $conexion->prepare("DELETE FROM membresias WHERE cliente_id = ? AND gimnasio_id = ? AND id <> ?");
+  $stmtClean = prep($conexion, "DELETE FROM membresias WHERE cliente_id = ? AND gimnasio_id = ? AND id <> ?", "membresias.clean_others");
   $stmtClean->bind_param("iii", $cliente_id, $gimnasio_id, $membresia_id);
   $stmtClean->execute();
   $stmtClean->close();
 
   $conexion->commit();
-  header("Location: ver_membresias.php?exito=1");q
-  
+  header("Location: ver_membresias.php?exito=1", true, 303);
   exit;
 
 } catch (Throwable $e) {

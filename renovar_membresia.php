@@ -32,28 +32,22 @@ $adicionales = $conexion->query("SELECT id, nombre, precio
   <meta charset="UTF-8">
   <title>Renovar Membresía</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <!-- Usa SOLO tu CSS unificado -->
   <link rel="stylesheet" href="estilo_unificado.css">
-  <style>
-    .contenedor{max-width:960px;margin:20px auto;padding:16px;background:#fff;border-radius:10px;box-shadow:0 4px 14px rgba(0,0,0,.08)}
-    .grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
-    label{font-weight:600;margin-top:8px;display:block}
-    input[type="number"],input[type="date"],select{width:100%;padding:8px;border:1px solid #ddd;border-radius:8px}
-    .row{margin:10px 0}
-    .boton-verde{background:#2e7d32;color:#fff;border:0;padding:10px 16px;border-radius:8px;cursor:pointer}
-    .boton-volver{display:inline-block;margin-left:8px;padding:10px 16px;border-radius:8px;background:#e0e0e0;text-decoration:none;color:#212121}
-    .pill{display:inline-block;padding:6px 10px;border-radius:999px;background:#f5f5f5;margin:4px 6px 0 0;border:1px solid #e0e0e0}
-    .totales{margin-top:18px;padding:12px;border-radius:10px;background:#f9fafb;border:1px solid #e5e7eb}
-  </style>
 </head>
 <body>
+
 <div class="contenedor">
   <h2>♻️ Renovar Membresía</h2>
 
-  <form action="guardar_renovacion.php" method="POST">
+  <form action="guardar_renovacion.php" method="POST" id="formRenovar">
     <input type="hidden" name="cliente_id" value="<?= $cliente_id ?>">
     <input type="hidden" name="gimnasio_id" value="<?= $gimnasio_id ?>">
 
-    <p><strong>Cliente:</strong> <?= h(($cliente['apellido'] ?? '').', '.($cliente['nombre'] ?? '')) ?></p>
+    <p>
+      <strong>Cliente:</strong>
+      <?= h(($cliente['apellido'] ?? '').', '.($cliente['nombre'] ?? '')) ?>
+    </p>
 
     <div class="grid">
       <div class="row">
@@ -65,7 +59,7 @@ $adicionales = $conexion->query("SELECT id, nombre, precio
               data-precio="<?= h($plan['precio']) ?>"
               data-clases="<?= (int)$plan['clases_disponibles'] ?>"
               data-duracion="<?= (int)($plan['duracion_meses'] ?: 1) ?>">
-              <?= h($plan['nombre']) ?> - $<?= number_format((float)$plan['precio'], 2) ?>
+              <?= h($plan['nombre']) ?> — $<?= number_format((float)$plan['precio'], 2, ',', '.') ?>
             </option>
           <?php endwhile; ?>
         </select>
@@ -88,7 +82,7 @@ $adicionales = $conexion->query("SELECT id, nombre, precio
 
       <div class="row">
         <label for="precio">Precio del plan:</label>
-        <input type="number" name="precio" id="precio" readonly required>
+        <input type="number" name="precio" id="precio" readonly required step="0.01">
       </div>
 
       <div class="row">
@@ -101,11 +95,11 @@ $adicionales = $conexion->query("SELECT id, nombre, precio
 
     <div class="row">
       <h3>Descuento</h3>
-      <span class="pill"><label><input type="radio" name="descuento" value="0" checked> 0%</label></span>
-      <span class="pill"><label><input type="radio" name="descuento" value="10"> 10%</label></span>
-      <span class="pill"><label><input type="radio" name="descuento" value="15"> 15%</label></span>
-      <span class="pill"><label><input type="radio" name="descuento" value="25"> 25%</label></span>
-      <span class="pill"><label><input type="radio" name="descuento" value="50"> 50%</label></span>
+      <label class="pill"><input type="radio" name="descuento" value="0" checked> 0%</label>
+      <label class="pill"><input type="radio" name="descuento" value="10"> 10%</label>
+      <label class="pill"><input type="radio" name="descuento" value="15"> 15%</label>
+      <label class="pill"><input type="radio" name="descuento" value="25"> 25%</label>
+      <label class="pill"><input type="radio" name="descuento" value="50"> 50%</label>
     </div>
 
     <div class="row">
@@ -118,7 +112,7 @@ $adicionales = $conexion->query("SELECT id, nombre, precio
                    name="adicionales[]"
                    value="<?= (int)$ad['id'] ?>"
                    data-precio="<?= h($ad['precio']) ?>">
-            <?= h($ad['nombre']) ?> — $<?= number_format((float)$ad['precio'], 2) ?>
+            <?= h($ad['nombre']) ?> — $<?= number_format((float)$ad['precio'], 2, ',', '.') ?>
           </label>
         <?php endwhile; ?>
       <?php else: ?>
@@ -126,104 +120,138 @@ $adicionales = $conexion->query("SELECT id, nombre, precio
       <?php endif; ?>
     </div>
 
-    <div class="row">
-      <h3>Formas de Pago (hoy)</h3>
-      <div class="grid">
-        <div>
-          <label>Efectivo:</label>
-          <input type="number" name="pago_efectivo" id="pago_efectivo" value="0" step="0.01">
-        </div>
-        <div>
-          <label>Transferencia:</label>
-          <input type="number" name="pago_transferencia" id="pago_transferencia" value="0" step="0.01">
-        </div>
-        <div>
-          <label>Débito:</label>
-          <input type="number" name="pago_debito" id="pago_debito" value="0" step="0.01">
-        </div>
-        <div>
-          <label>Crédito:</label>
-          <input type="number" name="pago_credito" id="pago_credito" value="0" step="0.01">
-        </div>
-        <div>
-          <label>A cuenta corriente (cargar a DEBE):</label>
-          <input type="number" name="pago_cuenta_corriente" id="pago_cuenta_corriente" value="0" step="0.01">
-        </div>
-      </div>
-    </div>
-
     <div class="totales">
-      <h3 id="total_a_pagar">💰 Total a Pagar: $0.00</h3>
-      <div id="total_abonado_text">Abonado hoy: $0.00</div>
-      <div id="remanente_text">Remanente (deuda/saldo a favor): $0.00</div>
+      <h3 id="total_a_pagar">💰 Total a Pagar: $0,00</h3>
+      <div id="total_abonado_text">Abonado hoy: $0,00</div>
+      <div id="remanente_text">Remanente (deuda/saldo a favor): $0,00</div>
     </div>
 
     <br>
-    <button type="submit" class="boton-verde">Guardar Renovación</button>
+    <button type="submit" class="boton-verde" id="btnGuardar" disabled>Guardar Renovación</button>
     <a href="ver_membresias.php" class="boton-volver">Cancelar</a>
   </form>
 </div>
 
 <script>
-function toNum(s){ if(!s) return 0; s = (""+s).replace(/\s+/g,"").replace(",","."); return parseFloat(s)||0; }
+(function(){
+  const $  = (id)=>document.getElementById(id);
+  const q  = (sel)=>document.querySelector(sel);
+  const qa = (sel)=>Array.from(document.querySelectorAll(sel));
 
-function actualizarDatosPlan() {
-  const sel = document.getElementById('plan_id');
-  const opt = sel && sel.selectedOptions && sel.selectedOptions[0] ? sel.selectedOptions[0] : null;
-  if (!opt) return;
-  const precio = toNum(opt.dataset.precio || 0);
-  const clases = parseInt(opt.dataset.clases || 0);
-  const dur    = parseInt(opt.dataset.duracion || 1);
+  const elPlan        = $('plan_id');
+  const elFechaInicio = $('fecha_inicio');
+  const elFechaVto    = $('fecha_vencimiento');
+  const elClases      = $('clases_disponibles');
+  const elPrecio      = $('precio');
+  const elOtros       = $('otros_pagos');
+  const elDuracion    = $('duracion_meses');
 
-  document.getElementById('precio').value = precio.toFixed(2);
-  document.getElementById('clases_disponibles').value = isNaN(clases) ? 0 : clases;
-  document.getElementById('duracion_meses').value = isNaN(dur) ? 1 : dur;
+  const elEf   = $('pago_efectivo');
+  const elTrf  = $('pago_transferencia');
+  const elDeb  = $('pago_debito');
+  const elCred = $('pago_credito');
+  const elCC   = $('pago_cuenta_corriente');
 
-  const fi = new Date(document.getElementById('fecha_inicio').value);
-  if (!isNaN(fi)) {
-    const fv = new Date(fi);
-    fv.setMonth(fv.getMonth() + (isNaN(dur) ? 1 : dur));
-    const yyyy = fv.getFullYear();
-    const mm = String(fv.getMonth()+1).padStart(2,'0');
-    const dd = String(fv.getDate()).padStart(2,'0');
-    document.getElementById('fecha_vencimiento').value = `${yyyy}-${mm}-${dd}`;
+  const elTotalH3 = $('total_a_pagar');
+  const elAbonado = $('total_abonado_text');
+  const elReman   = $('remanente_text');
+  const btnGuardar= $('btnGuardar');
+
+  function toNum(s){
+    if(!s) return 0;
+    s = (""+s).replace(/\s+/g,"").replace(",",".");
+    const n = parseFloat(s);
+    return isNaN(n) ? 0 : n;
   }
 
-  actualizarTotales();
-}
+  function addMonthsKeepingDay(date, months){
+    const d = new Date(date.getTime());
+    const day = d.getDate();
+    d.setMonth(d.getMonth() + months);
+    if (d.getDate() < day) d.setDate(0); // último día del mes
+    return d;
+  }
 
-function actualizarTotales() {
-  const precioPlan  = toNum(document.getElementById('precio').value);
-  const otrosCargos = toNum(document.getElementById('otros_pagos').value);
+  function actualizarDatosPlan(){
+    const opt = elPlan && elPlan.selectedOptions && elPlan.selectedOptions[0] ? elPlan.selectedOptions[0] : null;
 
-  let sumAdic = 0;
-  document.querySelectorAll('.adicional:checked').forEach(chk=>{
-    sumAdic += toNum(chk.dataset.precio || 0);
+    btnGuardar.disabled = !opt || !elPlan.value;
+
+    if (!opt) {
+      elPrecio.value = '';
+      elClases.value = '';
+      elDuracion.value = '1';
+      elFechaVto.value = '';
+      actualizarTotales();
+      return;
+    }
+
+    const precio = toNum(opt.dataset.precio || 0);
+    const clases = parseInt(opt.dataset.clases || 0);
+    const dur    = parseInt(opt.dataset.duracion || 1);
+
+    elPrecio.value   = precio.toFixed(2);
+    elClases.value   = isNaN(clases) ? 0 : clases;
+    elDuracion.value = isNaN(dur) ? 1 : dur;
+
+    const fi = new Date(elFechaInicio.value);
+    if (!isNaN(fi.getTime())) {
+      const fv = addMonthsKeepingDay(fi, (isNaN(dur)?1:dur));
+      const yyyy = fv.getFullYear();
+      const mm = String(fv.getMonth()+1).padStart(2,'0');
+      const dd = String(fv.getDate()).padStart(2,'0');
+      elFechaVto.value = `${yyyy}-${mm}-${dd}`;
+    } else {
+      elFechaVto.value = '';
+    }
+
+    actualizarTotales();
+  }
+
+  function actualizarTotales(){
+    const precioPlan  = toNum(elPrecio.value);
+    const otrosCargos = toNum(elOtros.value);
+
+    let sumAdic = 0;
+    qa('.adicional:checked').forEach(chk=>{
+      sumAdic += toNum(chk.dataset.precio || 0);
+    });
+
+    const rDesc  = q('input[name="descuento"]:checked');
+    const descPct= toNum(rDesc ? rDesc.value : 0);
+
+    const subtotal = precioPlan + otrosCargos + sumAdic;
+    const total    = Math.max(0, subtotal - (subtotal * (descPct/100)));
+
+    const abonado  = toNum($('pago_efectivo')?.value || 0)
+                   + toNum($('pago_transferencia')?.value || 0)
+                   + toNum($('pago_debito')?.value || 0)
+                   + toNum($('pago_credito')?.value || 0);
+
+    const remanente= total - abonado; // CC se registra en backend como DEBE
+
+    if (elTotalH3) elTotalH3.textContent = "💰 Total a Pagar: $" + total.toFixed(2);
+    if (elAbonado) elAbonado.textContent = "Abonado hoy: $" + abonado.toFixed(2);
+    if (elReman)   elReman.textContent   = "Remanente (deuda/saldo a favor): $" + remanente.toFixed(2);
+  }
+
+  // Listeners principales
+  elPlan.addEventListener('change', actualizarDatosPlan);
+  elFechaInicio.addEventListener('change', actualizarDatosPlan);
+
+  [elOtros, elEf, elTrf, elDeb, elCred, elCC].forEach(el => {
+    if (el) el.addEventListener('input', actualizarTotales);
   });
 
-  const descPct = toNum(document.querySelector('input[name="descuento"]:checked')?.value || 0);
-  const subtotal = precioPlan + otrosCargos + sumAdic;
-  const total = Math.max(0, subtotal - (subtotal * (descPct/100)));
+  qa('input[name="descuento"]').forEach(r => r.addEventListener('change', actualizarTotales));
+  qa('.adicional').forEach(chk => chk.addEventListener('change', actualizarTotales));
 
-  // pagos hoy (no incluye CC porque es carga a DEBE)
-  const abonado = toNum(pago_efectivo.value) + toNum(pago_transferencia.value) + toNum(pago_debito.value) + toNum(pago_credito.value);
-  const remanente = total - abonado - 0; // CC manual se suma en backend como DEBE aparte
-
-  document.getElementById('total_a_pagar').textContent = "💰 Total a Pagar: $" + total.toFixed(2);
-  document.getElementById('total_abonado_text').textContent = "Abonado hoy: $" + abonado.toFixed(2);
-  document.getElementById('remanente_text').textContent = "Remanente (deuda/saldo a favor): $" + remanente.toFixed(2);
-}
-
-document.getElementById('plan_id').addEventListener('change', actualizarDatosPlan);
-document.getElementById('fecha_inicio').addEventListener('change', actualizarDatosPlan);
-
-['otros_pagos','pago_efectivo','pago_transferencia','pago_debito','pago_credito','pago_cuenta_corriente']
-  .forEach(id => document.getElementById(id).addEventListener('input', actualizarTotales));
-
-document.querySelectorAll('input[name="descuento"]').forEach(r => r.addEventListener('change', actualizarTotales));
-document.querySelectorAll('.adicional').forEach(chk => chk.addEventListener('change', actualizarTotales));
-
-window.addEventListener('DOMContentLoaded', actualizarDatosPlan);
+  // Inicializar
+  window.addEventListener('DOMContentLoaded', ()=>{
+    actualizarDatosPlan();
+    actualizarTotales();
+  });
+})();
 </script>
 </body>
 </html>
