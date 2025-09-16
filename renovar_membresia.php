@@ -44,10 +44,7 @@ $adicionales = $conexion->query("SELECT id, nombre, precio
     <input type="hidden" name="cliente_id" value="<?= $cliente_id ?>">
     <input type="hidden" name="gimnasio_id" value="<?= $gimnasio_id ?>">
 
-    <p>
-      <strong>Cliente:</strong>
-      <?= h(($cliente['apellido'] ?? '').', '.($cliente['nombre'] ?? '')) ?>
-    </p>
+    <p><strong>Cliente:</strong> <?= h(($cliente['apellido'] ?? '').', '.($cliente['nombre'] ?? '')) ?></p>
 
     <div class="grid">
       <div class="row">
@@ -120,6 +117,33 @@ $adicionales = $conexion->query("SELECT id, nombre, precio
       <?php endif; ?>
     </div>
 
+    <!-- ===== Formas de Pago (HOY) ===== -->
+    <div class="row">
+      <h3>Formas de Pago (hoy)</h3>
+      <div class="grid">
+        <div class="row">
+          <label for="pago_efectivo">Efectivo:</label>
+          <input type="number" name="pago_efectivo" id="pago_efectivo" value="0" step="0.01">
+        </div>
+        <div class="row">
+          <label for="pago_transferencia">Transferencia:</label>
+          <input type="number" name="pago_transferencia" id="pago_transferencia" value="0" step="0.01">
+        </div>
+        <div class="row">
+          <label for="pago_debito">Débito:</label>
+          <input type="number" name="pago_debito" id="pago_debito" value="0" step="0.01">
+        </div>
+        <div class="row">
+          <label for="pago_credito">Crédito:</label>
+          <input type="number" name="pago_credito" id="pago_credito" value="0" step="0.01">
+        </div>
+        <div class="row">
+          <label for="pago_cuenta_corriente">A cuenta corriente (cargar a DEBE):</label>
+          <input type="number" name="pago_cuenta_corriente" id="pago_cuenta_corriente" value="0" step="0.01">
+        </div>
+      </div>
+    </div>
+
     <div class="totales">
       <h3 id="total_a_pagar">💰 Total a Pagar: $0,00</h3>
       <div id="total_abonado_text">Abonado hoy: $0,00</div>
@@ -146,6 +170,7 @@ $adicionales = $conexion->query("SELECT id, nombre, precio
   const elOtros       = $('otros_pagos');
   const elDuracion    = $('duracion_meses');
 
+  // pagos (restaurados)
   const elEf   = $('pago_efectivo');
   const elTrf  = $('pago_transferencia');
   const elDeb  = $('pago_debito');
@@ -217,16 +242,16 @@ $adicionales = $conexion->query("SELECT id, nombre, precio
       sumAdic += toNum(chk.dataset.precio || 0);
     });
 
-    const rDesc  = q('input[name="descuento"]:checked');
-    const descPct= toNum(rDesc ? rDesc.value : 0);
+    const rDesc   = q('input[name="descuento"]:checked');
+    const descPct = toNum(rDesc ? rDesc.value : 0);
 
     const subtotal = precioPlan + otrosCargos + sumAdic;
     const total    = Math.max(0, subtotal - (subtotal * (descPct/100)));
 
-    const abonado  = toNum($('pago_efectivo')?.value || 0)
-                   + toNum($('pago_transferencia')?.value || 0)
-                   + toNum($('pago_debito')?.value || 0)
-                   + toNum($('pago_credito')?.value || 0);
+    const abonado  = toNum(elEf?.value || 0)
+                   + toNum(elTrf?.value || 0)
+                   + toNum(elDeb?.value || 0)
+                   + toNum(elCred?.value || 0);
 
     const remanente= total - abonado; // CC se registra en backend como DEBE
 
