@@ -5,8 +5,10 @@ require_once __DIR__.'/conexion.php';
 /* ================== CONFIG ================== */
 $MAX_MB          = 4;                       // Tamaño máx. de imagen
 $MAX_BYTES       = $MAX_MB * 1024 * 1024;
-$UPLOAD_DIR_BASE = __DIR__ . '/uploads/clientes';
-$URL_BASE        = 'uploads/clientes';      // ruta pública relativa (para src de <img>)
+
+// ✅ Unificamos con el panel: usar fotos_clientes/
+$UPLOAD_DIR_BASE = __DIR__ . '/fotos_clientes';
+$URL_BASE        = 'fotos_clientes';        // ruta pública relativa (para src de <img>)
 
 /* ============== AUTENTICACIÓN ============== */
 $cliente_id  = (int)($_SESSION['cliente_id']  ?? 0);
@@ -207,10 +209,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                   if (update_cliente_foto($conexion, $cliente_id, $gimnasio_id, $dest_url, $err)) {
                     $msg = 'Foto actualizada correctamente.';
-                    // borrar anterior si era nuestra
+                    // borrar anterior si era nuestra (admite ambas rutas históricas)
                     if ($old && is_string($old)) {
                       $old_fs = __DIR__ . '/' . ltrim($old, '/');
-                      if (strpos($old, $URL_BASE.'/') === 0 && is_file($old_fs)) { @unlink($old_fs); }
+                      $allowPrefixes = ['fotos_clientes/', 'uploads/clientes/'];
+                      $isOwned = false;
+                      foreach ($allowPrefixes as $p) {
+                        if (strpos($old, $p) === 0) { $isOwned = true; break; }
+                      }
+                      if ($isOwned && is_file($old_fs)) { @unlink($old_fs); }
                     }
                   } else {
                     // revertir archivo si falla DB
@@ -239,7 +246,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
           if ($st->execute()) {
             if ($old && is_string($old)) {
               $old_fs = __DIR__ . '/' . ltrim($old, '/');
-              if (strpos($old, $URL_BASE.'/') === 0 && is_file($old_fs)) { @unlink($old_fs); }
+              $allowPrefixes = ['fotos_clientes/', 'uploads/clientes/'];
+              $isOwned = false;
+              foreach ($allowPrefixes as $p) {
+                if (strpos($old, $p) === 0) { $isOwned = true; break; }
+              }
+              if ($isOwned && is_file($old_fs)) { @unlink($old_fs); }
             }
             $msg = 'Foto eliminada.';
           } else { $err = 'No se pudo eliminar la foto.'; }
@@ -255,6 +267,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 /* ============== CARGA INICIAL ============== */
 $cliente = get_cliente($conexion, $cliente_id, $gimnasio_id);
 $foto_url = (!empty($cliente['foto_path'])) ? $cliente['foto_path'] : 'https://via.placeholder.com/160x160?text=Sin+Foto';
+// ✅ cache-buster para ver cambios al instante
+$foto_url_ver = $foto_url . (strpos($foto_url,'?')===false ? ('?v='.time()) : '');
+
 ?>
 <!DOCTYPE html>
 <html lang="es">
@@ -318,7 +333,7 @@ $foto_url = (!empty($cliente['foto_path'])) ? $cliente['foto_path'] : 'https://v
     <!-- Foto -->
     <div class="card">
       <h3>Foto de perfil</h3>
-      <img src="<?= h($foto_url) ?>" alt="Foto de perfil" class="avatar" id="preview">
+      <img src="<?= h($foto_url_ver) ?>" alt="Foto de perfil" class="avatar" id="preview">
       <form method="POST" enctype="multipart/form-data" class="fila" style="margin-top:.6rem">
         <input type="hidden" name="__accion" value="subir_foto">
         <input type="hidden" name="csrf" value="<?= h($csrf) ?>">
