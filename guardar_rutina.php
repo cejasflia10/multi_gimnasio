@@ -1,10 +1,13 @@
 <?php
-// guardar_rutina.php — guarda SIEMPRE bajo el docroot público (/public/uploads/rutinas) y registra en BD
+// guardar_rutina.php — guarda el archivo en /uploads/rutinas (o /public/uploads/rutinas si existe)
+// y genera una URL pública ABSOLUTA correcta tanto en XAMPP (carpeta proyecto bajo htdocs) como en hosting (Render, etc.)
+
 if (session_status() === PHP_SESSION_NONE) session_start();
 require_once __DIR__ . '/conexion.php';
 
 if (!isset($conexion) || !($conexion instanceof mysqli)) {
-  http_response_code(500); exit('❌ Sin conexión a la base de datos.');
+  http_response_code(500);
+  exit('❌ Sin conexión a la base de datos.');
 }
 if (function_exists('mysqli_report')) { mysqli_report(MYSQLI_REPORT_OFF); }
 @$conexion->set_charset('utf8mb4');
@@ -13,12 +16,13 @@ if (function_exists('mysqli_report')) { mysqli_report(MYSQLI_REPORT_OFF); }
 $profesor_id = (int)($_SESSION['profesor_id'] ?? 0);
 $gimnasio_id = (int)($_SESSION['gimnasio_id'] ?? 0);
 if ($profesor_id <= 0 || $gimnasio_id <= 0) {
-  http_response_code(403); exit('❌ Sesión inválida. Volvé a iniciar sesión.');
+  http_response_code(403);
+  exit('❌ Sesión inválida. Volvé a iniciar sesión.');
 }
 
 /* ====== Input ====== */
 $cliente_id = isset($_POST['cliente_id']) ? (int)$_POST['cliente_id'] : 0;
-if ($cliente_id <= 0) { redirect_err('Falta seleccionar el alumno.'); }
+if ($cliente_id <= 0) redirect_err('Falta seleccionar el alumno.');
 
 /* Validar alumno pertenece al gimnasio */
 if ($st = $conexion->prepare("SELECT 1 FROM clientes WHERE id=? AND gimnasio_id=? LIMIT 1")) {
@@ -36,52 +40,45 @@ if (!isset($_FILES['archivo']) || $_FILES['archivo']['error'] !== UPLOAD_ERR_OK)
 }
 $ALLOWED  = ['pdf','jpg','jpeg','png','doc','docx'];
 $maxBytes = 20 * 1024 * 1024; // 20 MB
-$origName = (string)$_FILES['archivo']['name'];
-$tmpPath  = (string)$_FILES['archivo']['tmp_name'];
-$size     = (int)$_FILES['archivo']['size'];
+$origName = (string)($_FILES['archivo']['name'] ?? '');
+$tmpPath  = (string)($_FILES['archivo']['tmp_name'] ?? '');
+$size     = (int)($_FILES['archivo']['size'] ?? 0);
 $ext      = strtolower(pathinfo($origName, PATHINFO_EXTENSION));
 if (!in_array($ext, $ALLOWED, true)) redirect_err('Tipo de archivo no permitido.');
-if ($size <= 0 || $size > $maxBytes) redirect_err('Archivo demasiado grande (máx 20 MB).');
+if ($size <= 0 || $size > $maxBytes)  redirect_err('Archivo demasiado grande (máx 20 MB).');
 
-/* ====== Resolver DOCROOT confiable (preferimos /public) ====== */
-$docroot = '';
-$try = [];
+/* ====== Rutas: proyecto, docroot y baseUri ====== */
+$projectDir = str_replace('\\','/', realpath(__DIR__));                          // p.ej. C:/xampp/htdocs/multi_gimnasio
+$docroot    = isset($_SERVER['DOCUMENT_ROOT']) ? str_replace('\\','/', realpath($_SERVER['DOCUMENT_ROOT'])) : '';
+if (!$projectDir) redirect_err('No pude resolver el directorio del proyecto.');
+if (!$docroot)     $docroot = $projectDir; // fallback seguro
 
-/* 1) Si el proyecto tiene /public al lado de este archivo */
-$try[] = realpath(__DIR__ . '/public');
-$try[] = realpath(__DIR__ . '/../public');   // si este archivo está en /src, /app, etc.
-$try[] = realpath(__DIR__ . '/../../public'); // un nivel más por las dudas
-
-/* 2) DOCUMENT_ROOT del servidor */
-$dr = isset($_SERVER['DOCUMENT_ROOT']) ? rtrim((string)$_SERVER['DOCUMENT_ROOT'], '/') : '';
-$try[] = ($dr !== '') ? $dr : null;
-
-/* 3) Último recurso: la carpeta de este archivo (no ideal, pero funciona) */
-$try[] = realpath(__DIR__);
-
-foreach ($try as $cand) {
-  if ($cand && is_dir($cand)) { $docroot = $cand; break; }
+// Base URI del proyecto respecto al docroot (ej: "/multi_gimnasio" en XAMPP; "" si el docroot ES la raíz del proyecto)
+$baseUri = '';
+if (strpos($projectDir, $docroot) === 0) {
+  $baseUri = substr($projectDir, strlen($docroot)); // puede ser "" o "/multi_gimnasio"
+  if ($baseUri === false) $baseUri = '';
 }
-if ($docroot === '') {
-  redirect_err('No pude resolver el directorio público (docroot).');
+if ($baseUri !== '' && $baseUri[0] !== '/') $baseUri = '/'.$baseUri;
+
+/* ====== Carpeta destino: respetar tu estructura actual ======
+   - Si YA existe /public/uploads/rutinas dentro del proyecto, usamos ESA (no movés nada).
+   - Si no existe, usamos /uploads/rutinas en la raíz del proyecto.
+*/
+$dirPublicUploads = $projectDir . '/public/uploads/rutinas';
+$dirRootUploads   = $projectDir . '/uploads/rutinas';
+
+if (is_dir($dirPublicUploads)) {
+  $baseDir = $dirPublicUploads;
+  $relUriPrefix = '/public/uploads/rutinas'; // para armar la URL
+} else {
+  $baseDir = $dirRootUploads;
+  $relUriPrefix = '/uploads/rutinas';
+  if (!is_dir($baseDir)) @mkdir($baseDir, 0775, true);
 }
 
-/* Si el docroot no es “public” pero existe una carpeta public dentro, usala */
-if (basename($docroot) !== 'public') {
-  $cand = realpath($docroot . '/public');
-  if ($cand && is_dir($cand)) $docroot = $cand;
-}
-
-/* ====== Carpeta destino dentro del docroot ====== */
-$publicRel = '/uploads/rutinas';                 // ruta accesible por URL
-$baseDir   = rtrim($docroot, '/') . $publicRel;  // ruta física absoluta
-
-if (!is_dir($baseDir)) { @mkdir($baseDir, 0775, true); }
-if (!is_dir($baseDir)) {
-  redirect_err('No existe la carpeta destino: ' . $baseDir);
-}
-if (!is_writable($baseDir)) {
-  redirect_err('La carpeta no es escribible: ' . $baseDir);
+if (!is_dir($baseDir) || !is_writable($baseDir)) {
+  redirect_err('Carpeta no escribible: ' . $baseDir);
 }
 
 /* ====== Nombre único y mover ====== */
@@ -93,16 +90,24 @@ if (!move_uploaded_file($tmpPath, $destPath)) {
   redirect_err('No se pudo guardar el archivo en el servidor (move_uploaded_file).');
 }
 
-/* ====== URL pública ====== */
-$publicPath = $publicRel . '/' . $fname; // ej: /uploads/rutinas/20250917_...
-if (defined('APP_BASE_URL') && APP_BASE_URL) {
-  $publicUrl = rtrim(APP_BASE_URL, '/') . $publicPath;
-} else {
-  // relativa por si lo mostrás adentro de tu app
-  $publicUrl = ltrim($publicPath, '/'); // 'uploads/rutinas/...'
-}
+/* ====== URL pública ABSOLUTA ====== */
+$isHttps = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') || (($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https');
+$scheme  = $isHttps ? 'https' : 'http';
+$host    = $_SERVER['HTTP_HOST'] ?? 'localhost';
 
-/* ====== Registrar en BD ====== */
+// Si definiste APP_BASE_URL (config propia), la respetamos. Si no, calculamos con host + baseUri.
+if (!defined('APP_BASE_URL') || !APP_BASE_URL) {
+  define('APP_BASE_URL', $scheme . '://' . $host . $baseUri);
+}
+$publicUrl = rtrim(APP_BASE_URL, '/') . $relUriPrefix . '/' . $fname;
+
+// Ejemplos:
+//  - XAMPP sin vhost:  http://localhost/multi_gimnasio/uploads/rutinas/archivo.pdf
+//  - XAMPP si usás /public: http://localhost/multi_gimnasio/public/uploads/rutinas/archivo.pdf
+//  - Render (todo en raíz): https://tu-app.onrender.com/uploads/rutinas/archivo.pdf
+//  - Render (si usás subcarpeta public y la servís): https://tu-app.onrender.com/public/uploads/rutinas/archivo.pdf
+
+/* ====== Tabla e inserción ====== */
 $conexion->query("
   CREATE TABLE IF NOT EXISTS rutinas_clientes (
     id INT AUTO_INCREMENT PRIMARY KEY,
@@ -137,7 +142,7 @@ if (!$ok) {
   redirect_err('No se pudo guardar en la base de datos.');
 }
 
-/* ====== Éxito ====== */
+/* ====== OK ====== */
 if (!headers_sent()) {
   header('Location: subir_rutina.php?ok=1');
   exit;
