@@ -1,5 +1,5 @@
 <?php
-// panel_cliente.php — versión moderna + PROMOS "flash"
+// panel_cliente.php — versión moderna + PROMOS "flash" + NOTIFICACIONES (rutinas/planes)
 if (session_status() === PHP_SESSION_NONE) session_start();
 require_once __DIR__ . '/conexion.php';
 
@@ -21,6 +21,14 @@ function col_exists(mysqli $db, string $table, string $col): bool {
   $rs = $db->query($sql);
   return $rs && $rs->num_rows > 0;
 }
+function fmt_bytes($b){
+  $b=(float)$b; $u=['B','KB','MB','GB','TB']; $i=0;
+  while($b>=1024 && $i<count($u)-1){ $b/=1024; $i++; }
+  return number_format($b, ($i>1?2:0), ',', '.') . ' ' . $u[$i];
+}
+
+if (function_exists('mysqli_report')) { mysqli_report(MYSQLI_REPORT_OFF); }
+@$conexion->set_charset('utf8mb4');
 
 /* ===== Validar cliente ===== */
 $cliente = null;
@@ -35,7 +43,7 @@ if (!$cliente) {
     exit;
 }
 
-/* ===== Completar Datos Físicos (si faltan) ===== */
+/* ===== Completar Datos Físicos (idéntico a tu versión) ===== */
 if ((int)($cliente['datos_completos'] ?? 0) === 0) {
     $mensaje = "";
     if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['guardar_datos_fisicos'])) {
@@ -188,7 +196,7 @@ if ($membresia) {
   </div>';
 }
 
-/* ===== PROMOCIONES: cargar promos vigentes para este gimnasio ===== */
+/* ===== PROMOCIONES (idéntico a tu lógica) ===== */
 $promos = [];
 $hasCols = [
   'gimnasio_id' => col_exists($conexion,'promociones','gimnasio_id'),
@@ -209,7 +217,6 @@ foreach (['titulo','descripcion','link_url','color_fondo','color_texto'] as $c) 
   if ($hasCols[$c]) $colsSelect[] = $c;
 }
 if ($hasCols['imagen_url']) {
-  // Si no existe imagen_url pero sí 'imagen', la seleccionamos como imagen_url con alias
   if (!col_exists($conexion,'promociones','imagen_url') && col_exists($conexion,'promociones','imagen')) {
     $colsSelect[] = "imagen AS imagen_url";
   } else {
@@ -237,35 +244,81 @@ if ($hasCols['fecha_fin']) $orderParts[] = "fecha_fin DESC";
 $orderParts[] = "id DESC";
 $order .= implode(', ', $orderParts);
 
-$sqlPromos = "SELECT {$select} FROM promociones ".
+$sqlPromos = "SELECT {$select} FROM promociones " .
              (empty($where) ? "" : ("WHERE ".implode(' AND ', $where)." ")).$order;
 
 $rsP = $conexion->query($sqlPromos);
 if ($rsP) {
   while($p = $rsP->fetch_assoc()){
-    // Normalizar colores por si faltan
     if (empty($p['color_fondo'])) $p['color_fondo'] = '#111111';
     if (empty($p['color_texto'])) $p['color_texto'] = '#FFD700';
-
-    // Resolver imagen: si trae ruta relativa, buscar en /promos/
     $img = trim((string)($p['imagen_url'] ?? ''));
     if ($img !== '') {
-      if (preg_match('#^https?://#i', $img)) {
-        // url absoluta: ok
-      } else {
+      if (!preg_match('#^https?://#i', $img)) {
         $localPath = __DIR__ . '/promos/' . $img;
-        if (is_file($localPath)) {
-          $img = 'promos/' . rawurlencode($img);
-        } else {
-          // si guardaron "promo1.jpg" en la BD pero el archivo no está, no rompemos
-          $img = '';
-        }
+        $img = is_file($localPath) ? ('promos/' . rawurlencode($img)) : '';
       }
     }
     $p['imagen_resuelta'] = $img;
     $promos[] = $p;
   }
   $rsP->free();
+}
+
+/* ====== NOTIFICACIONES (rutinas/planes) ====== */
+/* Tabla de “visto” (idempotente) */
+$conexion->query("
+  CREATE TABLE IF NOT EXISTS rutinas_vistas (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    cliente_id INT NOT NULL,
+    rutina_id INT NOT NULL,
+    visto_en DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_cli_rut (cliente_id, rutina_id),
+    INDEX idx_cli (cliente_id),
+    INDEX idx_rut (rutina_id)
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+");
+
+/* Marcar como visto (POST al mismo archivo) */
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['marcar_visto'], $_POST['rutina_id'])) {
+  $rid = (int)$_POST['rutina_id'];
+  // Validar pertenencia
+  $okRut = false;
+  if ($st = $conexion->prepare("SELECT 1 FROM rutinas_clientes WHERE id=? AND cliente_id=? AND gimnasio_id=? LIMIT 1")) {
+    $st->bind_param('iii', $rid, $cliente_id, $gimnasio_id);
+    $st->execute(); $st->store_result(); $okRut = $st->num_rows > 0; $st->close();
+  }
+  if ($okRut) {
+    if ($st2 = $conexion->prepare("
+      INSERT INTO rutinas_vistas (cliente_id, rutina_id) VALUES (?, ?)
+      ON DUPLICATE KEY UPDATE visto_en = CURRENT_TIMESTAMP
+    ")) {
+      $st2->bind_param('ii', $cliente_id, $rid);
+      $st2->execute(); $st2->close();
+    }
+  }
+  // Volver al panel para evitar reenvío
+  header("Location: panel_cliente.php");
+  exit;
+}
+
+/* Traer últimas 10 rutinas/planes para este cliente con flag visto */
+$notis = [];
+if ($stmtN = $conexion->prepare("
+  SELECT r.id, r.nombre_archivo, r.url_archivo, r.extension, r.tamano_bytes, r.creado_en,
+         COALESCE(CONCAT(p.apellido, ', ', p.nombre), CONCAT('ID ', r.profesor_id)) AS profesor,
+         CASE WHEN v.id IS NULL THEN 0 ELSE 1 END AS visto
+  FROM rutinas_clientes r
+  LEFT JOIN profesores p ON p.id = r.profesor_id
+  LEFT JOIN rutinas_vistas v ON v.rutina_id = r.id AND v.cliente_id = ?
+  WHERE r.gimnasio_id = ? AND r.cliente_id = ?
+  ORDER BY r.creado_en DESC, r.id DESC
+  LIMIT 10
+")) {
+  $stmtN->bind_param('iii', $cliente_id, $gimnasio_id, $cliente_id);
+  $stmtN->execute();
+  $notis = $stmtN->get_result()->fetch_all(MYSQLI_ASSOC);
+  $stmtN->close();
 }
 
 /* ===== Menú cliente ===== */
@@ -299,7 +352,6 @@ include __DIR__ . '/menu_cliente.php';
     .grid{ display:grid; gap:16px; margin-top:18px; grid-template-columns: 1fr; }
     @media (min-width:740px){ .grid{ grid-template-columns: repeat(3, 1fr);} .col-span-2{ grid-column: span 2; } }
     .card{ padding:18px }
-    .card h2{ margin:0 0 10px; font-size:16px; font-weight:700 }
     .dl{ display:flex; flex-direction:column; gap:10px; font-size:14px; color:var(--muted) }
     .row{ display:flex; justify-content:space-between; gap:12px }
     .val{ color:var(--fg) }
@@ -337,18 +389,21 @@ include __DIR__ . '/menu_cliente.php';
     .promos-dots{ display:flex; gap:6px; justify-content:center; margin-top:8px }
     .promos-dots .dot{ width:8px; height:8px; border-radius:50%; background:#ffffff33 }
     .promos-dots .dot.active{ background:#fff }
-    @media (max-width:720px){
-      .promo-banner{ flex-direction:column; align-items:flex-start; }
-      .promo-img{ width:100%; height:160px }
-      .promo-cta{ width:100% }
-      .promo-cta a{ width:100%; text-align:center }
-    }
+
+    /* ===== NOTIFICACIONES (Rutinas) ===== */
+    .noti-list{ list-style:none; margin:0; padding:0; display:grid; gap:10px }
+    .noti-item{ display:flex; gap:12px; align-items:center; padding:12px; border:1px solid var(--border); border-radius:14px; background:#0f1115 }
+    .noti-dot{ width:10px; height:10px; border-radius:50%; background:#22c55e; flex:0 0 auto; }
+    .noti-dot.visto{ background:#475569 }
+    .noti-name{ font-weight:700 }
+    .chip{display:inline-block;padding:2px 8px;border-radius:999px;border:1px solid #334155;background:#0f172a;font-size:.8rem}
+    .actions a, .actions button{display:inline-block;padding:6px 10px;border-radius:8px;border:1px solid #334155;background:#0f172a;color:#e5e7eb;text-decoration:none}
   </style>
 </head>
 <body>
   <div class="container">
 
-    <!-- ===== Promociones (Flash) arriba de todo si hay promos ===== -->
+    <!-- ===== Promociones (Flash) ===== -->
     <?php if (!empty($promos)): ?>
       <section class="promos-wrap">
         <div id="promo-slide" class="promo-banner" style="background: <?= h($promos[0]['color_fondo']) ?>; color: <?= h($promos[0]['color_texto']) ?>">
@@ -433,10 +488,41 @@ include __DIR__ . '/menu_cliente.php';
         <ul id="contenedor-reservas" class="res-list"><li class="muted">Cargando reservas...</li></ul>
       </article>
 
-      <!-- Novedades -->
+      <!-- ===== Notificaciones: rutinas/planes subidos por tu profe ===== -->
       <article class="glass card col-span-2">
-        <h2>Novedades</h2>
-        <p class="muted">Sumá aquí promos, anuncios o recordatorios para el cliente.</p>
+        <h2>🔔 Notificaciones (Rutinas y Planes)</h2>
+        <?php if (empty($notis)): ?>
+          <p class="muted">No tenés novedades por ahora.</p>
+        <?php else: ?>
+          <ul class="noti-list">
+            <?php foreach ($notis as $n): ?>
+            <li class="noti-item">
+              <span class="noti-dot <?= $n['visto'] ? 'visto':'' ?>"></span>
+              <div style="flex:1 1 auto">
+                <div class="noti-name"><?= h($n['nombre_archivo']) ?></div>
+                <div class="muted" style="font-size:.9rem">
+                  <span class="chip"><?= strtoupper(h($n['extension'])) ?></span>
+                  · <?= h(fmt_bytes($n['tamano_bytes'])) ?>
+                  · Subido por <?= h($n['profesor']) ?>
+                  · <span class="muted"><?= h($n['creado_en']) ?></span>
+                </div>
+              </div>
+              <div class="actions">
+                <a href="<?= h($n['url_archivo']) ?>" target="_blank" rel="noopener">Ver/Descargar</a>
+                <?php if (!$n['visto']): ?>
+                  <form method="post" style="display:inline">
+                    <input type="hidden" name="rutina_id" value="<?= (int)$n['id'] ?>">
+                    <button type="submit" name="marcar_visto">Marcar visto</button>
+                  </form>
+                <?php endif; ?>
+              </div>
+            </li>
+            <?php endforeach; ?>
+          </ul>
+          <div style="margin-top:10px">
+            <a class="btn" href="ver_mis_rutinas.php">📁 Ver historial completo</a>
+          </div>
+        <?php endif; ?>
       </article>
     </section>
 
