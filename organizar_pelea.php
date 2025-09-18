@@ -7,9 +7,17 @@ if (!isset($conexion) || !($conexion instanceof mysqli)) { http_response_code(50
 if (function_exists('mysqli_report')) { mysqli_report(MYSQLI_REPORT_OFF); }
 @$conexion->set_charset('utf8mb4');
 
+/* ========= Flash helpers ========= */
 function flash_err($msg){ $_SESSION['flash_error'] = $msg; }
 function flash_ok($msg){ $_SESSION['flash_ok'] = $msg; }
 function h($s){ return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); }
+
+/* ========= CSRF ========= */
+if (empty($_SESSION['csrf_token'])) {
+  $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+}
+$CSRF = $_SESSION['csrf_token'];
+function csrf_ok($t){ return !empty($_SESSION['csrf_token']) && !empty($t) && hash_equals($_SESSION['csrf_token'], $t); }
 
 /* ====== evento_id del contexto ====== */
 $evento_id = (int)($_GET['evento_id'] ?? $_SESSION['evento_id_actual'] ?? 0);
@@ -100,7 +108,6 @@ function fmt_kg($n){
   return rtrim(rtrim(number_format((float)$n, 2, '.', ''), '0'), '.');
 }
 function label_peso_cat($row){
-  // Usa ct_peso_min/ct_peso_max/ct_nombre/ct_genero/ct_edad_min/ct_edad_max si existen
   $min = isset($row['ct_peso_min']) ? fmt_kg($row['ct_peso_min']) : null;
   $max = isset($row['ct_peso_max']) ? fmt_kg($row['ct_peso_max']) : null;
   $nom = trim((string)($row['ct_nombre'] ?? ''));
@@ -121,9 +128,47 @@ function label_peso_cat($row){
 }
 
 /* =========================
-   POST: Guardar pelea(s)
+   POST: Acciones
    ========================= */
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+
+/* 1) Eliminar competidor del evento */
+if (($_POST['accion'] ?? '') === 'eliminar_comp') {
+  $token = $_POST['csrf'] ?? '';
+  $comp_id = isset($_POST['comp_id']) && is_numeric($_POST['comp_id']) ? (int)$_POST['comp_id'] : 0;
+  if (!csrf_ok($token)) { flash_err('CSRF inválido.'); header('Location: organizar_pelea.php?evento_id='.$evento_id); exit; }
+  if ($comp_id <= 0) { flash_err('ID de competidor inválido.'); header('Location: organizar_pelea.php?evento_id='.$evento_id); exit; }
+
+  // Bloquear si está asignado a una pelea
+  $sqlChk = "SELECT 1 FROM peleas_evento
+             WHERE ".bt($pe_cols['evento'])." = ?
+               AND (".bt($pe_cols['rojo'])." = ? OR ".bt($pe_cols['azul'])." = ?)
+             LIMIT 1";
+  $st = $conexion->prepare($sqlChk);
+  if (!$st) { flash_err('No se pudo validar referencias: '.$conexion->error); header('Location: organizar_pelea.php?evento_id='.$evento_id); exit; }
+  $st->bind_param('iii', $evento_id, $comp_id, $comp_id);
+  $st->execute(); $ref = $st->get_result(); $st->close();
+  if ($ref && $ref->num_rows > 0) {
+    flash_err('No podés eliminar: el competidor ya está en una pelea (Rojo/Azul). Eliminá/edita esas peleas primero.');
+    header('Location: organizar_pelea.php?evento_id='.$evento_id); exit;
+  }
+
+  $del = $conexion->prepare("DELETE FROM competidores_evento WHERE id=? AND evento_id=?");
+  if (!$del) { flash_err('No se pudo preparar la eliminación: '.$conexion->error); header('Location: organizar_pelea.php?evento_id='.$evento_id); exit; }
+  $del->bind_param('ii', $comp_id, $evento_id);
+  if ($del->execute() && $del->affected_rows > 0) {
+    flash_ok('Competidor eliminado del evento.');
+  } else {
+    flash_err('No se pudo eliminar el competidor (puede no existir o no corresponder al evento).');
+  }
+  $del->close();
+  header('Location: organizar_pelea.php?evento_id='.$evento_id); exit;
+}
+
+/* 2) Guardar pelea(s) nueva(s) */
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['accion'] ?? '') === 'crear_pelea') {
+  $token = $_POST['csrf'] ?? '';
+  if (!csrf_ok($token)) { flash_err('CSRF inválido.'); header('Location: organizar_pelea.php?evento_id='.$evento_id); exit; }
+
   $formato = $_POST['formato'] ?? 'simple';
   $rondas  = isset($_POST['rondas']) && is_numeric($_POST['rondas']) ? (int)$_POST['rondas'] : 3;
   $obsBase = isset($_POST['observaciones']) ? trim((string)$_POST['observaciones']) : '';
@@ -334,7 +379,7 @@ $placeholderLogo = 'assets/placeholder-logo.png';
     label { font-weight:600; font-size:14px; }
     select, button, input[type=number], input[type=text] { width:100%; padding:8px 10px; border:1px solid #ddd; border-radius:8px; }
     .table-wrap { width:100%; overflow-x:auto; }
-    table { width:100%; border-collapse:collapse; min-width: 980px; }
+    table { width:100%; border-collapse:collapse; min-width: 1050px; }
     th, td { border:1px solid #e7e7e7; padding:8px 10px; vertical-align:middle; }
     th { background:#f6f7f9; text-align:left; }
     .avatar { width:50px; height:50px; object-fit:cover; border-radius:8px; }
@@ -344,11 +389,13 @@ $placeholderLogo = 'assets/placeholder-logo.png';
     .btn-primary { background:#1e88e5; color:#fff; border:0; padding:10px 14px; border-radius:10px; cursor:pointer; }
     .btn-primary:disabled{ opacity:.6; cursor:not-allowed; }
     .btn-secondary{background:#e9ecef;color:#0f172a;border:0;padding:10px 14px;border-radius:10px;cursor:pointer;text-decoration:none;display:inline-block}
+    .btn-danger{background:#dc2626;color:#fff;border:0;padding:8px 12px;border-radius:8px;cursor:pointer}
     .note { font-size:13px; color:#555; }
     .pill { display:inline-block; padding:2px 8px; border-radius:999px; background:#eef5ff; color:#1e4fa1; font-size:12px; }
     .slot-grid { display:grid; grid-template-columns: repeat(2, 1fr); gap:10px; }
     .slot-grid .full { grid-column: 1 / -1; }
     .muted { color:#475569; font-size:13px; }
+    form.inline { display:inline; }
   </style>
 </head>
 <body>
@@ -425,6 +472,8 @@ $placeholderLogo = 'assets/placeholder-logo.png';
   <!-- CREACIÓN DE PELEA(S) -->
   <form method="POST" action="" id="form-bout">
     <input type="hidden" name="evento_id" value="<?= (int)$evento_id ?>">
+    <input type="hidden" name="csrf" value="<?= h($CSRF) ?>">
+    <input type="hidden" name="accion" value="crear_pelea">
 
     <div class="cols" style="margin:12px 0;">
       <div>
@@ -477,11 +526,12 @@ $placeholderLogo = 'assets/placeholder-logo.png';
             <th>División</th>
             <th>Escuela</th>
             <th>Logo</th>
+            <th>Acciones</th>
           </tr>
         </thead>
         <tbody>
         <?php if (!$competidores): ?>
-          <tr><td colspan="11">No hay competidores con esos filtros.</td></tr>
+          <tr><td colspan="12">No hay competidores con esos filtros.</td></tr>
         <?php else: foreach ($competidores as $c):
           $srcFoto = !empty($c['foto_competidor']) ? $c['foto_competidor'] : $placeholderFoto;
           $srcLogo = !empty($c['escuela_logo'])    ? $c['escuela_logo']    : $placeholderLogo;
@@ -513,6 +563,14 @@ $placeholderLogo = 'assets/placeholder-logo.png';
             <td><?= h($c['division'] ?? '-') ?></td>
             <td><?= h($c['escuela_nombre'] ?? '-') ?></td>
             <td><img src="<?= h($srcLogo) ?>" class="logo" alt="Logo"></td>
+            <td>
+              <form method="POST" class="inline" onsubmit="return confirm('¿Eliminar competidor del evento?');">
+                <input type="hidden" name="accion" value="eliminar_comp">
+                <input type="hidden" name="csrf" value="<?= h($CSRF) ?>">
+                <input type="hidden" name="comp_id" value="<?= (int)$c['id'] ?>">
+                <button type="submit" class="btn-danger">🗑️ Eliminar</button>
+              </form>
+            </td>
           </tr>
         <?php endforeach; endif; ?>
         </tbody>
@@ -533,8 +591,10 @@ $placeholderLogo = 'assets/placeholder-logo.png';
     <?php foreach ($competidores as $c):
       $min = isset($c['ct_peso_min']) ? fmt_kg($c['ct_peso_min']) : '';
       $max = isset($c['ct_peso_max']) ? fmt_kg($c['ct_peso_max']) : '';
-      $peso = ($min && $max) ? "$min–$max kg" : (($min||$max) ? (($min?:$max)+' kg') : ($c['ct_nombre'] ?? '-'));
-      $label = trim(($c['apellido'].' '.$c['nombre']).' — '.$peso.' / '.($c['division']??'-').' / '.($c['modalidad']??'-'));
+      $peso = ($min && $max) ? "{$min}–{$max} kg" : (($min || $max) ? ((($min?:$max)).' kg') : ($c['ct_nombre'] ?? '-'));
+      $div = $c['division'] ?? '-';
+      $mod = $c['modalidad'] ?? '-';
+      $label = trim(($c['apellido'].' '.$c['nombre']).' — '.$peso.' / '.$div.' / '.$mod);
     ?>
       opts.push(`<option value="<?= (int)$c['id'] ?>"><?= h($label) ?></option>`);
     <?php endforeach; ?>
