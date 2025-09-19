@@ -7,6 +7,13 @@
    ============================================================ */
 
 if (session_status() === PHP_SESSION_NONE) session_start();
+// 🔒 SOLO fightacademy y lucianoc pueden entrar
+if (!isset($_SESSION['usuario']) || 
+   !in_array(strtolower($_SESSION['usuario']), ['fightacademy', 'lucianoc'])) {
+    echo "<p style='color:red; text-align:center; font-size:20px;'>🚫 No tienes permisos para acceder a esta página.</p>";
+    exit;
+}
+
 
 /* ---------- Guardia de sesión ---------- */
 if (empty($_SESSION['evento_usuario_id'])) {
