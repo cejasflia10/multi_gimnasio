@@ -29,9 +29,15 @@ if ($evento_id <= 0) {
 }
 $_SESSION['evento_id_actual'] = $evento_id;
 
-/* ============== Utilidades SQL ============== */
+/* ============== Utilidades ============== */
 function bt($col){ return '`'.str_replace('`','``',$col).'`'; }
+function table_exists(mysqli $db, string $name): bool {
+  $name = $db->real_escape_string($name);
+  $rs = $db->query("SHOW TABLES LIKE '$name'");
+  return $rs && $rs->num_rows > 0;
+}
 
+/* ============== Columnas dinámicas ============== */
 function pe_get_cols(mysqli $db){
   $res = $db->query("SHOW COLUMNS FROM peleas_evento");
   if (!$res) { return ['error' => 'No se pudo leer columnas de peleas_evento: '.$db->error]; }
@@ -42,20 +48,21 @@ function pe_get_cols(mysqli $db){
     return null;
   };
   $map = [
-    'id'      => $find(['id','pelea_id','id_pelea']),
-    'evento'  => $find(['evento_id','id_evento','evento']),
-    'rojo'    => $find(['rojo_id','id_rojo','competidor_rojo_id','id_competidor_rojo','rojo']),
-    'azul'    => $find(['azul_id','id_azul','competidor_azul_id','id_competidor_azul','azul']),
-    'rondas'  => $find(['rondas','rounds']),
-    'obs'     => $find(['observaciones','obs','comentarios','comentario','nota']),
-    'estado'  => $find(['estado','status']),
-    'fecha'   => $find(['fecha','creado_en','created_at','created','fh_creacion']),
+    'id'        => $find(['id','pelea_id','id_pelea']),
+    'evento'    => $find(['evento_id','id_evento','evento']),
+    'rojo'      => $find(['rojo_id','id_rojo','competidor_rojo_id','id_competidor_rojo','rojo']),
+    'azul'      => $find(['azul_id','id_azul','competidor_azul_id','id_competidor_azul','azul']),
+    'rondas'    => $find(['rondas','rounds']),
+    'obs'       => $find(['observaciones','obs','comentarios','comentario','nota']),
+    'estado'    => $find(['estado','status']),
+    'fecha'     => $find(['fecha','creado_en','created_at','created','fh_creacion']),
+    // opcional
+    'modalidad' => $find(['modalidad_id','id_modalidad','mod_id','modalidad']),
   ];
   $map['_all'] = array_keys($cols);
   return $map;
 }
 
-/* columnas dinámicas de categorias_evento */
 function cat_get_cols(mysqli $db){
   $res = $db->query("SHOW COLUMNS FROM categorias_evento");
   if (!$res) { return ['error' => 'No se pudo leer columnas de categorias_evento: '.$db->error]; }
@@ -77,29 +84,57 @@ function cat_get_cols(mysqli $db){
   ];
 }
 
-$pe_cols = pe_get_cols($conexion);
-if (isset($pe_cols['error'])) {
-  echo '<div style="max-width:900px;margin:16px auto;padding:12px;border:1px solid #f5c6cb;background:#fdecea;color:#b71c1c;border-radius:8px;">Error: '.h($pe_cols['error']).'</div>'; 
-  exit;
+/* Detectar columnas de categoría técnica en competidores_evento */
+function ce_get_cols(mysqli $db){
+  $res = $db->query("SHOW COLUMNS FROM competidores_evento");
+  if (!$res) { return ['error' => 'No se pudo leer columnas de competidores_evento: '.$db->error]; }
+  $cols = [];
+  while($r = $res->fetch_assoc()){ $cols[strtolower($r['Field'])] = $r['Field']; }
+  $pick = function(array $cands) use ($cols){
+    foreach ($cands as $c) { $lc = strtolower($c); if (isset($cols[$lc])) return $cols[$lc]; }
+    return null;
+  };
+  return [
+    'cat_tec_text' => $pick(['categoria_tecnica','cat_tecnica','categoria_nivel','nivel_tecnico']),
+    'cat_tec_id'   => $pick(['categoria_tecnica_id','cat_tecnica_id','categoria_nivel_id']),
+  ];
 }
+
+/* Detectar tabla de catálogo para técnica (si se usa ID) */
+function tec_catalog_info(mysqli $db){
+  $cands = ['categorias_tecnicas_evento','categorias_tecnicas','categorias_nivel'];
+  foreach ($cands as $t) {
+    if (table_exists($db, $t)) {
+      // detectar columnas id/nombre
+      $rs = $db->query("SHOW COLUMNS FROM $t");
+      if (!$rs) continue;
+      $have = [];
+      while($r = $rs->fetch_assoc()) $have[strtolower($r['Field'])] = $r['Field'];
+      $id = null; $nom = null;
+      foreach (['id','categoria_id','cat_id'] as $k) if (isset($have[$k])) { $id=$have[$k]; break; }
+      foreach (['nombre','name','titulo','title','descripcion'] as $k) if (isset($have[$k])) { $nom=$have[$k]; break; }
+      if ($id && $nom) return ['table'=>$t,'id'=>$id,'nombre'=>$nom];
+    }
+  }
+  return null;
+}
+
+/* ====== Cargar mapas ====== */
+$pe_cols  = pe_get_cols($conexion);
+if (isset($pe_cols['error'])) { echo '<div class="alert error">'.h($pe_cols['error']).'</div>'; exit; }
 if (!$pe_cols['evento'] || !$pe_cols['rojo'] || !$pe_cols['azul']) {
-  echo '<div style="max-width:900px;margin:16px auto;padding:12px;border:1px solid #f5c6cb;background:#fdecea;color:#b71c1c;border-radius:8px;">
-        La tabla <b>peleas_evento</b> existe, pero faltan las 3 columnas obligatorias.
-        <br>Detectadas: <code>'.h(implode(', ', $pe_cols['_all'])).'</code></div>';
-  exit;
+  echo '<div class="alert error">Faltan columnas obligatorias en <b>peleas_evento</b>. Detectadas: <code>'.h(implode(', ', $pe_cols['_all'])).'</code></div>'; exit;
 }
 
 $cat_cols = cat_get_cols($conexion);
-if (isset($cat_cols['error'])) {
-  echo '<div style="max-width:900px;margin:16px auto;padding:12px;border:1px solid #f5c6cb;background:#fdecea;color:#b71c1c;border-radius:8px;">Error: '.h($cat_cols['error']).'</div>';
-  exit;
-}
+if (isset($cat_cols['error'])) { echo '<div class="alert error">'.h($cat_cols['error']).'</div>'; exit; }
 if (!$cat_cols['id']) {
-  echo '<div style="max-width:900px;margin:16px auto;padding:12px;border:1px solid #f5c6cb;background:#fdecea;color:#b71c1c;border-radius:8px;">'.
-       'La tabla <b>categorias_evento</b> no tiene columna <code>id</code> detectable. Columnas: <code>'.h(implode(', ', $cat_cols['_all'])).'</code>'.
-       '</div>';
-  exit;
+  echo '<div class="alert error">La tabla <b>categorias_evento</b> no tiene <code>id</code> detectable. Columnas: <code>'.h(implode(', ', $cat_cols['_all'])).'</code></div>'; exit;
 }
+
+$ce_cols = ce_get_cols($conexion);
+if (isset($ce_cols['error'])) { echo '<div class="alert error">'.h($ce_cols['error']).'</div>'; exit; }
+$tec_catalog = tec_catalog_info($conexion);
 
 /* ====== Helpers de presentación ====== */
 function fmt_kg($n){
@@ -128,17 +163,15 @@ function label_peso_cat($row){
 }
 
 /* =========================
-   POST: Acciones
+   POST: Acciones (eliminar/crear)
    ========================= */
 
-/* 1) Eliminar competidor del evento */
 if (($_POST['accion'] ?? '') === 'eliminar_comp') {
   $token = $_POST['csrf'] ?? '';
   $comp_id = isset($_POST['comp_id']) && is_numeric($_POST['comp_id']) ? (int)$_POST['comp_id'] : 0;
   if (!csrf_ok($token)) { flash_err('CSRF inválido.'); header('Location: organizar_pelea.php?evento_id='.$evento_id); exit; }
   if ($comp_id <= 0) { flash_err('ID de competidor inválido.'); header('Location: organizar_pelea.php?evento_id='.$evento_id); exit; }
 
-  // Bloquear si está asignado a una pelea
   $sqlChk = "SELECT 1 FROM peleas_evento
              WHERE ".bt($pe_cols['evento'])." = ?
                AND (".bt($pe_cols['rojo'])." = ? OR ".bt($pe_cols['azul'])." = ?)
@@ -164,7 +197,7 @@ if (($_POST['accion'] ?? '') === 'eliminar_comp') {
   header('Location: organizar_pelea.php?evento_id='.$evento_id); exit;
 }
 
-/* 2) Guardar pelea(s) nueva(s) */
+/* Crear pelea(s) */
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['accion'] ?? '') === 'crear_pelea') {
   $token = $_POST['csrf'] ?? '';
   if (!csrf_ok($token)) { flash_err('CSRF inválido.'); header('Location: organizar_pelea.php?evento_id='.$evento_id); exit; }
@@ -174,72 +207,85 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['accion'] ?? '') === 'crear
   $obsBase = isset($_POST['observaciones']) ? trim((string)$_POST['observaciones']) : '';
   if ($rondas < 1 || $rondas > 12) { $rondas = 3; }
 
-  $pairs = []; // [rojo_id, azul_id, obs_suffix]
-  $todos = [];
+  $pairs = []; $todos = [];
 
   if ($formato === 'simple') {
-    $rojo_id = isset($_POST['rojo_id']) && is_numeric($_POST['rojo_id']) ? (int)$_POST['rojo_id'] : 0;
-    $azul_id = isset($_POST['azul_id']) && is_numeric($_POST['azul_id']) ? (int)$_POST['azul_id'] : 0;
+    $rojo_id = (int)($_POST['rojo_id'] ?? 0);
+    $azul_id = (int)($_POST['azul_id'] ?? 0);
     if ($rojo_id <= 0 || $azul_id <= 0) { flash_err('Seleccioná ambas esquinas (1 vs 1).'); header('Location: organizar_pelea.php?evento_id='.$evento_id); exit; }
     if ($rojo_id === $azul_id) { flash_err('No podés elegir al mismo competidor en ambas esquinas.'); header('Location: organizar_pelea.php?evento_id='.$evento_id); exit; }
     $todos = [$rojo_id, $azul_id];
     $pairs[] = [$rojo_id, $azul_id, ''];
 
   } elseif ($formato === 'triangular') {
-    $tri_r = isset($_POST['tri_rojo_id']) ? (int)$_POST['tri_rojo_id'] : 0;
-    $tri_a = isset($_POST['tri_azul_id']) ? (int)$_POST['tri_azul_id'] : 0;
-    $tri_l = isset($_POST['tri_libre_id']) ? (int)$_POST['tri_libre_id'] : 0;
-
+    $tri_r = (int)($_POST['tri_rojo_id'] ?? 0);
+    $tri_a = (int)($_POST['tri_azul_id'] ?? 0);
+    $tri_l = (int)($_POST['tri_libre_id'] ?? 0);
     if ($tri_r<=0 || $tri_a<=0 || $tri_l<=0) { flash_err('Completá los 3 slots: Rojo (SF), Azul (SF) y Libre.'); header('Location: organizar_pelea.php?evento_id='.$evento_id); exit; }
     if (count(array_unique([$tri_r,$tri_a,$tri_l])) !== 3) { flash_err('Los 3 competidores deben ser distintos en Triangular.'); header('Location: organizar_pelea.php?evento_id='.$evento_id); exit; }
-
     $todos = [$tri_r,$tri_a,$tri_l];
     $pairs[] = [$tri_r, $tri_a, ' (Triangular - Semifinal)'];
 
   } else { // super4
-    $sf1r = isset($_POST['sf1_rojo_id']) ? (int)$_POST['sf1_rojo_id'] : 0;
-    $sf1a = isset($_POST['sf1_azul_id']) ? (int)$_POST['sf1_azul_id'] : 0;
-    $sf2r = isset($_POST['sf2_rojo_id']) ? (int)$_POST['sf2_rojo_id'] : 0;
-    $sf2a = isset($_POST['sf2_azul_id']) ? (int)$_POST['sf2_azul_id'] : 0;
-
+    $sf1r = (int)($_POST['sf1_rojo_id'] ?? 0);
+    $sf1a = (int)($_POST['sf1_azul_id'] ?? 0);
+    $sf2r = (int)($_POST['sf2_rojo_id'] ?? 0);
+    $sf2a = (int)($_POST['sf2_azul_id'] ?? 0);
     if ($sf1r<=0 || $sf1a<=0 || $sf2r<=0 || $sf2a<=0) { flash_err('Completá los 4 slots de semifinales (SF1 y SF2).'); header('Location: organizar_pelea.php?evento_id='.$evento_id); exit; }
     if (count(array_unique([$sf1r,$sf1a,$sf2r,$sf2a])) !== 4) { flash_err('No repitas competidores entre las semifinales (Super 4).'); header('Location: organizar_pelea.php?evento_id='.$evento_id); exit; }
-
     $todos = [$sf1r,$sf1a,$sf2r,$sf2a];
     $pairs[] = [$sf1r, $sf1a, ' (Super 4 - SF1)'];
     $pairs[] = [$sf2r, $sf2a, ' (Super 4 - SF2)'];
   }
 
-  // Verificar pertenencia al evento
+  // Pertenencia al evento
   if ($todos) {
     $place = implode(',', array_fill(0, count($todos), '?'));
     $types = str_repeat('i', count($todos) + 1);
     $sql = "SELECT COUNT(*) AS c FROM competidores_evento WHERE evento_id = ? AND id IN ($place)";
-    $st = $conexion->prepare($sql);
-    if (!$st) { flash_err('SQL prepare (verificar pertenencia): '.$conexion->error); header('Location: organizar_pelea.php?evento_id='.$evento_id); exit; }
-    $bind = []; $bind[] = $types; $ev_copy = $evento_id; $bind[] = &$ev_copy;
-    foreach ($todos as $i=>&$v) { $bind[] = &$v; }
+    $st = $conexion->prepare($sql); if (!$st) { flash_err('SQL prepare (pertenencia): '.$conexion->error); header('Location: organizar_pelea.php?evento_id='.$evento_id); exit; }
+    $bind = []; $bind[] = $types; $ev_copy = $evento_id; $bind[] = &$ev_copy; foreach ($todos as $i=>&$v) { $bind[] = &$v; }
     call_user_func_array([$st,'bind_param'],$bind);
-    $st->execute();
-    $cOk = (int)($st->get_result()->fetch_assoc()['c'] ?? 0);
-    $st->close();
+    $st->execute(); $cOk = (int)($st->get_result()->fetch_assoc()['c'] ?? 0); $st->close();
     if ($cOk !== count($todos)) { flash_err('Algún competidor no pertenece al evento.'); header('Location: organizar_pelea.php?evento_id='.$evento_id); exit; }
   }
 
-  // Chequear duplicadas
+  // ✅ Validar MODALIDAD: todos con la misma
+  if ($todos) {
+    $place = implode(',', array_fill(0, count($todos), '?'));
+    $types = str_repeat('i', count($todos));
+    $sqlMod = "SELECT COUNT(DISTINCT modalidad_id) AS k FROM competidores_evento WHERE id IN ($place)";
+    $st = $conexion->prepare($sqlMod);
+    if (!$st) { flash_err('SQL prepare (validar modalidad): '.$conexion->error); header('Location: organizar_pelea.php?evento_id='.$evento_id); exit; }
+    $bind = []; $bind[] = $types; foreach ($todos as $i=>&$v) { $bind[] = &$v; }
+    call_user_func_array([$st,'bind_param'],$bind);
+    $st->execute(); $k = (int)($st->get_result()->fetch_assoc()['k'] ?? 0); $st->close();
+    if ($k !== 1) { flash_err('Los competidores no comparten la misma <b>modalidad</b>.'); header('Location: organizar_pelea.php?evento_id='.$evento_id); exit; }
+
+    // obtener modalidad concreta
+    $st = $conexion->prepare("SELECT modalidad_id FROM competidores_evento WHERE id IN ($place) LIMIT 1");
+    if ($st) {
+      $bind = []; $bind[] = $types; foreach ($todos as $i=>&$v) { $bind[] = &$v; }
+      call_user_func_array([$st,'bind_param'],$bind);
+      $st->execute(); $row = $st->get_result()->fetch_assoc(); $st->close();
+      $modalidad_compartida = isset($row['modalidad_id']) ? (int)$row['modalidad_id'] : null;
+    } else { $modalidad_compartida = null; }
+  }
+
+  // Duplicadas?
   foreach ($pairs as [$r,$a]) {
     $sql = "SELECT 1 FROM peleas_evento
             WHERE ".bt($pe_cols['evento'])." = ?
               AND ((".bt($pe_cols['rojo'])." = ? AND ".bt($pe_cols['azul'])." = ?) OR (".bt($pe_cols['rojo'])." = ? AND ".bt($pe_cols['azul'])." = ?))
             LIMIT 1";
     $st = $conexion->prepare($sql);
-    if (!$st) { flash_err('SQL prepare (verificar duplicadas): '.$conexion->error); header('Location: organizar_pelea.php?evento_id='.$evento_id); exit; }
+    if (!$st) { flash_err('SQL prepare (duplicadas): '.$conexion->error); header('Location: organizar_pelea.php?evento_id='.$evento_id); exit; }
     $st->bind_param('iiiii', $evento_id, $r, $a, $a, $r);
     $st->execute(); $dupe = $st->get_result(); $st->close();
-    if ($dupe && $dupe->num_rows > 0) { flash_err('Alguna pelea ya existe en este evento.'); header('Location: organizar_pelea.php?evento_id='.$evento_id); exit; }
+    if ($dupe && $dupe->num_rows > 0) { flash_err('Alguna pelea ya existe.'); header('Location: organizar_pelea.php?evento_id='.$evento_id); exit; }
   }
 
-  // INSERT en transacción
+  // INSERT
   $conexion->begin_transaction();
   try {
     foreach ($pairs as [$r,$a,$obsSuf]) {
@@ -247,6 +293,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['accion'] ?? '') === 'crear
       $vals = [$evento_id, $r, $a];
       $types = 'iii';
 
+      if (!empty($pe_cols['modalidad']) && isset($modalidad_compartida)) { $cols[] = $pe_cols['modalidad']; $vals[] = $modalidad_compartida; $types .= 'i'; }
       if ($pe_cols['rondas']) { $cols[] = $pe_cols['rondas']; $vals[] = $rondas; $types .= 'i'; }
       if ($pe_cols['obs'])    { $cols[] = $pe_cols['obs'];    $vals[] = trim($obsBase.$obsSuf); $types .= 's'; }
 
@@ -254,10 +301,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['accion'] ?? '') === 'crear
       $ph = implode(',', array_fill(0, count($cols_bt), '?'));
       $sql = "INSERT INTO peleas_evento (".implode(',', $cols_bt).") VALUES ($ph)";
       $st = $conexion->prepare($sql);
-      if (!$st) throw new Exception('SQL prepare (insert pelea): '.$conexion->error);
+      if (!$st) throw new Exception('SQL prepare (insert): '.$conexion->error);
 
-      $bind = []; $bind[] = $types;
-      foreach ($vals as $k=>&$v) { $bind[] = &$v; }
+      $bind = []; $bind[] = $types; foreach ($vals as $k=>&$v) { $bind[] = &$v; }
       call_user_func_array([$st, 'bind_param'], $bind);
       if (!$st->execute()) { $err = $st->error; $st->close(); throw new Exception('No se pudo guardar una pelea: '.$err); }
       $st->close();
@@ -276,7 +322,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['accion'] ?? '') === 'crear
   exit;
 }
 
-/* ====== Catálogos (para filtros básicos) ====== */
+/* ====== Catálogos (para filtros) ====== */
 $disciplinas = $conexion->query("SELECT id, nombre FROM disciplinas_evento ORDER BY nombre");
 $modalidades = $conexion->query("SELECT id, nombre FROM modalidades_evento ORDER BY nombre");
 $divisiones  = $conexion->query("SELECT id, nombre FROM divisiones_evento ORDER BY id");
@@ -289,32 +335,30 @@ $selGenero = $cat_cols['genero']   ? "ct.".bt($cat_cols['genero'])."   AS ct_gen
 $selEmin   = $cat_cols['edad_min'] ? "ct.".bt($cat_cols['edad_min'])." AS ct_edad_min"  : "NULL AS ct_edad_min";
 $selEmax   = $cat_cols['edad_max'] ? "ct.".bt($cat_cols['edad_max'])." AS ct_edad_max"  : "NULL AS ct_edad_max";
 
-/* “Categoría de Peso (desde categorías_evento)” – usamos todas las filas como opciones */
-$pesos = [];
-$cat_rs = $conexion->query("SELECT ct.".bt($cat_cols['id'])." AS ct_id, $selNombre, $selPmin, $selPmax, $selGenero, $selEmin, $selEmax FROM categorias_evento ct ORDER BY ct.".bt($cat_cols['id']));
-if ($cat_rs) {
-  while($t = $cat_rs->fetch_assoc()){
-    $label = label_peso_cat($t);
-    $pesos[] = ['id'=>(int)$t['ct_id'], 'nombre'=>$label];
-  }
+/* ====== Query de competidores ====== */
+$selTecText = "NULL AS cat_tec_text";
+$selTecId   = "NULL AS cat_tec_id";
+if (!empty($ce_cols['cat_tec_text'])) $selTecText = "ce.".bt($ce_cols['cat_tec_text'])." AS cat_tec_text";
+if (!empty($ce_cols['cat_tec_id']))   $selTecId   = "ce.".bt($ce_cols['cat_tec_id'])."   AS cat_tec_id";
+
+$selTecName = "NULL AS cat_tec_name";
+$joinTec    = "";
+if (!empty($ce_cols['cat_tec_id']) && $tec_catalog) {
+  $joinTec  = "LEFT JOIN ".$tec_catalog['table']." tcat ON tcat.".bt($tec_catalog['id'])." = ce.".bt($ce_cols['cat_tec_id']);
+  $selTecName = "tcat.".bt($tec_catalog['nombre'])." AS cat_tec_name";
 }
 
-/* “Categoría Técnica” = mismas filas (si querés diferenciarlas visualmente) */
-$categorias = $conexion->query("SELECT ct.".bt($cat_cols['id'])." AS ct_id, $selNombre, $selPmin, $selPmax, $selGenero, $selEmin, $selEmax FROM categorias_evento ct ORDER BY ct.".bt($cat_cols['id']));
-
-/* ====== Filtros (por ID) ====== */
-$f_disciplina_id        = (isset($_GET['disciplina_id'])        && is_numeric($_GET['disciplina_id']))        ? (int)$_GET['disciplina_id']        : null;
-$f_modalidad_id         = (isset($_GET['modalidad_id'])         && is_numeric($_GET['modalidad_id']))         ? (int)$_GET['modalidad_id']         : null;
-$f_division_id          = (isset($_GET['division_id'])          && is_numeric($_GET['division_id']))          ? (int)$_GET['division_id']          : null;
-$f_categoria_peso_id    = (isset($_GET['categoria_peso_id'])    && is_numeric($_GET['categoria_peso_id']))    ? (int)$_GET['categoria_peso_id']    : null;
-$f_categoria_tecnica_id = (isset($_GET['categoria_tecnica_id']) && is_numeric($_GET['categoria_tecnica_id'])) ? (int)$_GET['categoria_tecnica_id'] : null;
-
-/* ====== Buscar competidores (peso desde categorias_evento) ====== */
 $sql = "
 SELECT
   ce.id,
   ce.apellido, ce.nombre, ce.dni, ce.edad,
   ce.foto_competidor, ce.escuela_logo, ce.escuela_nombre,
+  ce.disciplina_id AS disc_id,
+  ce.modalidad_id  AS mod_id,
+  ce.division_id   AS div_id,
+  $selTecText,
+  $selTecId,
+  $selTecName,
   d.nombre  AS disciplina,
   m.nombre  AS modalidad,
   dv.nombre AS division,
@@ -330,33 +374,49 @@ LEFT JOIN disciplinas_evento d  ON d.id  = ce.disciplina_id
 LEFT JOIN modalidades_evento m  ON m.id  = ce.modalidad_id
 LEFT JOIN divisiones_evento dv ON dv.id = ce.division_id
 LEFT JOIN categorias_evento ct  ON ct.".bt($cat_cols['id'])." = ce.categoria_tecnica_id
+$joinTec
 WHERE ce.evento_id = ?
 ";
+
 $types = 'i';
 $params = [$evento_id];
 
-if (!is_null($f_disciplina_id))        { $sql .= " AND ce.disciplina_id = ?";         $types.='i'; $params[]=$f_disciplina_id; }
-if (!is_null($f_modalidad_id))         { $sql .= " AND ce.modalidad_id = ?";          $types.='i'; $params[]=$f_modalidad_id; }
-if (!is_null($f_division_id))          { $sql .= " AND ce.division_id = ?";           $types.='i'; $params[]=$f_division_id; }
+$f_disciplina_id        = (isset($_GET['disciplina_id'])        && is_numeric($_GET['disciplina_id']))        ? (int)$_GET['disciplina_id']        : null;
+$f_modalidad_id         = (isset($_GET['modalidad_id'])         && is_numeric($_GET['modalidad_id']))         ? (int)$_GET['modalidad_id']         : null;
+$f_division_id          = (isset($_GET['division_id'])          && is_numeric($_GET['division_id']))          ? (int)$_GET['division_id']          : null;
+$f_categoria_peso_id    = (isset($_GET['categoria_peso_id'])    && is_numeric($_GET['categoria_peso_id']))    ? (int)$_GET['categoria_peso_id']    : null;
+$f_categoria_tecnica_id = (isset($_GET['categoria_tecnica_id']) && is_numeric($_GET['categoria_tecnica_id'])) ? (int)$_GET['categoria_tecnica_id'] : null;
 
-/* Filtro “Categoría de Peso (desde Categoría)” -> coincide con ce.categoria_tecnica_id */
-if (!is_null($f_categoria_peso_id))    { $sql .= " AND ce.categoria_tecnica_id = ?";  $types.='i'; $params[]=$f_categoria_peso_id; }
-
-/* Filtro “Categoría Técnica” (mismo id) */
-if (!is_null($f_categoria_tecnica_id)) { $sql .= " AND ce.categoria_tecnica_id = ?";  $types.='i'; $params[]=$f_categoria_tecnica_id; }
+if (!is_null($f_disciplina_id))        { $sql .= " AND ce.disciplina_id = ?";        $types.='i'; $params[]=$f_disciplina_id; }
+if (!is_null($f_modalidad_id))         { $sql .= " AND ce.modalidad_id = ?";         $types.='i'; $params[]=$f_modalidad_id; }
+if (!is_null($f_division_id))          { $sql .= " AND ce.division_id = ?";          $types.='i'; $params[]=$f_division_id; }
+if (!is_null($f_categoria_peso_id))    { $sql .= " AND ce.categoria_tecnica_id = ?"; $types.='i'; $params[]=$f_categoria_peso_id; }
+/* Si querés filtrar por técnica real con ID, dejá habilitado; si usás texto, ignorá este filtro */
+if (!is_null($f_categoria_tecnica_id) && !empty($ce_cols['cat_tec_id'])) {
+  $sql .= " AND ce.".bt($ce_cols['cat_tec_id'])." = ?"; $types.='i'; $params[]=$f_categoria_tecnica_id;
+}
 
 $sql .= " ORDER BY ct.".bt($cat_cols['id']).", dv.nombre, ce.apellido, ce.nombre";
 
 $st = $conexion->prepare($sql);
 if (!$st) { http_response_code(500); exit('❌ SQL prepare (listar competidores): '.$conexion->error); }
-$refs = [];
-foreach ($params as $k=>&$v) { $refs[$k] = &$v; }
-array_unshift($refs, $types);
+$refs = []; foreach ($params as $k=>&$v) { $refs[$k] = &$v; } array_unshift($refs, $types);
 call_user_func_array([$st,'bind_param'], $refs);
-$st->execute();
-$res = $st->get_result();
+$st->execute(); $res = $st->get_result();
 $competidores = $res ? $res->fetch_all(MYSQLI_ASSOC) : [];
 $st->close();
+
+/* ====== Opciones de peso y técnica para filtros ====== */
+$pesos = [];
+$cat_rs = $conexion->query("SELECT ct.".bt($cat_cols['id'])." AS ct_id, $selNombre, $selPmin, $selPmax, $selGenero, $selEmin, $selEmax FROM categorias_evento ct ORDER BY ct.".bt($cat_cols['id']));
+if ($cat_rs) while($t = $cat_rs->fetch_assoc()){ $pesos[] = ['id'=>(int)$t['ct_id'], 'nombre'=>label_peso_cat($t)]; }
+
+/* Catálogo técnica (si aplica con ID) */
+$tec_opts = [];
+if (!empty($ce_cols['cat_tec_id']) && $tec_catalog) {
+  $rs = $conexion->query("SELECT ".bt($tec_catalog['id'])." AS id, ".bt($tec_catalog['nombre'])." AS nombre FROM ".$tec_catalog['table']." ORDER BY 1");
+  if ($rs) while($r = $rs->fetch_assoc()) $tec_opts[] = ['id'=>(int)$r['id'],'nombre'=>$r['nombre']];
+}
 
 $placeholderFoto = 'assets/placeholder-user.png';
 $placeholderLogo = 'assets/placeholder-logo.png';
@@ -379,7 +439,7 @@ $placeholderLogo = 'assets/placeholder-logo.png';
     label { font-weight:600; font-size:14px; }
     select, button, input[type=number], input[type=text] { width:100%; padding:8px 10px; border:1px solid #ddd; border-radius:8px; }
     .table-wrap { width:100%; overflow-x:auto; }
-    table { width:100%; border-collapse:collapse; min-width: 1050px; }
+    table { width:100%; border-collapse:collapse; min-width: 1200px; }
     th, td { border:1px solid #e7e7e7; padding:8px 10px; vertical-align:middle; }
     th { background:#f6f7f9; text-align:left; }
     .avatar { width:50px; height:50px; object-fit:cover; border-radius:8px; }
@@ -390,10 +450,6 @@ $placeholderLogo = 'assets/placeholder-logo.png';
     .btn-primary:disabled{ opacity:.6; cursor:not-allowed; }
     .btn-secondary{background:#e9ecef;color:#0f172a;border:0;padding:10px 14px;border-radius:10px;cursor:pointer;text-decoration:none;display:inline-block}
     .btn-danger{background:#dc2626;color:#fff;border:0;padding:8px 12px;border-radius:8px;cursor:pointer}
-    .note { font-size:13px; color:#555; }
-    .pill { display:inline-block; padding:2px 8px; border-radius:999px; background:#eef5ff; color:#1e4fa1; font-size:12px; }
-    .slot-grid { display:grid; grid-template-columns: repeat(2, 1fr); gap:10px; }
-    .slot-grid .full { grid-column: 1 / -1; }
     .muted { color:#475569; font-size:13px; }
     form.inline { display:inline; }
   </style>
@@ -440,7 +496,7 @@ $placeholderLogo = 'assets/placeholder-logo.png';
       </select>
     </div>
     <div>
-      <label>Categoría de Peso (desde Categoría)</label>
+      <label>Categoría de Peso</label>
       <select name="categoria_peso_id">
         <option value="">Todas</option>
         <?php foreach ($pesos as $p): ?>
@@ -449,20 +505,23 @@ $placeholderLogo = 'assets/placeholder-logo.png';
           </option>
         <?php endforeach; ?>
       </select>
-      <small class="muted">* Sale de <b>categorias_evento</b> (min–max kg, género y edades).</small>
+      <small class="muted">* Desde <b>categorias_evento</b> (min–max kg / género / edades).</small>
     </div>
     <div>
       <label>Categoría Técnica</label>
-      <select name="categoria_tecnica_id">
-        <option value="">Todas</option>
-        <?php if ($categorias): while($ct = $categorias->fetch_assoc()):
-              $lbl = label_peso_cat($ct);
-        ?>
-          <option value="<?= (int)$ct['ct_id'] ?>" <?= ($f_categoria_tecnica_id===(int)$ct['ct_id'])?'selected':'' ?>>
-            <?= h($lbl) ?>
-          </option>
-        <?php endwhile; endif; ?>
-      </select>
+      <?php if (!empty($ce_cols['cat_tec_id']) && $tec_catalog): ?>
+        <select name="categoria_tecnica_id">
+          <option value="">Todas</option>
+          <?php foreach ($tec_opts as $opt): ?>
+            <option value="<?= (int)$opt['id'] ?>" <?= ($f_categoria_tecnica_id===(int)$opt['id'])?'selected':'' ?>>
+              <?= h($opt['nombre']) ?>
+            </option>
+          <?php endforeach; ?>
+        </select>
+      <?php else: ?>
+        <input type="text" name="categoria_tecnica_text" value="<?= h($_GET['categoria_tecnica_text'] ?? '') ?>" placeholder="A / B / C / N / CBA…" />
+      <?php endif; ?>
+      <small class="muted">* Técnica = A/B/C/N, CBA, etc.</small>
     </div>
     <div>
       <button type="submit" class="btn-primary">🔍 Buscar</button>
@@ -495,9 +554,7 @@ $placeholderLogo = 'assets/placeholder-logo.png';
     </div>
 
     <!-- SLOTS DINÁMICOS -->
-    <div id="slots-container" class="slot-grid" style="margin-bottom:10px;">
-      <!-- Se completa vía JS -->
-    </div>
+    <div id="slots-container" class="slot-grid" style="margin-bottom:10px;"></div>
 
     <div class="cols" style="grid-template-columns: 1fr auto; align-items:center;">
       <div class="muted">
@@ -510,7 +567,7 @@ $placeholderLogo = 'assets/placeholder-logo.png';
       </div>
     </div>
 
-    <!-- LISTADO INFORMATIVO -->
+    <!-- LISTADO -->
     <div class="table-wrap" style="margin-top:12px;">
       <table>
         <thead>
@@ -521,8 +578,9 @@ $placeholderLogo = 'assets/placeholder-logo.png';
             <th>Edad</th>
             <th>Disciplina</th>
             <th>Modalidad</th>
-            <th>Categoría</th>
-            <th>Peso (min–max kg)</th>
+            <th>Cat. Técnica</th>
+            <th>Cat. de Peso</th>
+            <th>Peso (min–max)</th>
             <th>División</th>
             <th>Escuela</th>
             <th>Logo</th>
@@ -531,10 +589,16 @@ $placeholderLogo = 'assets/placeholder-logo.png';
         </thead>
         <tbody>
         <?php if (!$competidores): ?>
-          <tr><td colspan="12">No hay competidores con esos filtros.</td></tr>
+          <tr><td colspan="13">No hay competidores con esos filtros.</td></tr>
         <?php else: foreach ($competidores as $c):
           $srcFoto = !empty($c['foto_competidor']) ? $c['foto_competidor'] : $placeholderFoto;
           $srcLogo = !empty($c['escuela_logo'])    ? $c['escuela_logo']    : $placeholderLogo;
+
+          // Técnica real (texto directo o desde catálogo)
+          $catTec = '-';
+          if (!empty($c['cat_tec_name']))      $catTec = $c['cat_tec_name'];
+          elseif (!empty($c['cat_tec_text']))  $catTec = $c['cat_tec_text'];
+
           $catLbl  = label_peso_cat([
             'ct_peso_min'=>$c['ct_peso_min'] ?? null,
             'ct_peso_max'=>$c['ct_peso_max'] ?? null,
@@ -550,14 +614,21 @@ $placeholderLogo = 'assets/placeholder-logo.png';
             if ($max) return $max.' kg';
             return '-';
           })($c['ct_peso_min'] ?? null, $c['ct_peso_max'] ?? null);
+
+          // Etiqueta para opción
+          $min = isset($c['ct_peso_min']) ? fmt_kg($c['ct_peso_min']) : '';
+          $max = isset($c['ct_peso_max']) ? fmt_kg($c['ct_peso_max']) : '';
+          $pesoEtiqueta = ($min && $max) ? "{$min}–{$max} kg" : (($min || $max) ? (($min?:$max).' kg') : ($c['ct_nombre'] ?? '-'));
+          $labelOption = trim(($c['apellido'].' '.$c['nombre']).' — '.$pesoEtiqueta.' / '.($c['division'] ?? '-').' / '.($c['modalidad'] ?? '-'));
         ?>
           <tr>
             <td><img src="<?= h($srcFoto) ?>" class="avatar" alt="Foto"></td>
             <td><?= h($c['apellido'].' '.$c['nombre']) ?></td>
             <td><?= h($c['dni']) ?></td>
             <td><?= h($c['edad']) ?></td>
-            <td><span class="pill"><?= h($c['disciplina'] ?? '-') ?></span></td>
+            <td><span class="muted"><?= h($c['disciplina'] ?? '-') ?></span></td>
             <td><?= h($c['modalidad'] ?? '-') ?></td>
+            <td><?= h($catTec) ?></td>
             <td><?= h($catLbl) ?></td>
             <td><?= h($pesoSolo) ?></td>
             <td><?= h($c['division'] ?? '-') ?></td>
@@ -576,30 +647,33 @@ $placeholderLogo = 'assets/placeholder-logo.png';
         </tbody>
       </table>
     </div>
+
+    <!-- Opciones para los selects (sin PHP corto dentro de JS) -->
+    <?php
+      // Pre-render de <option> seguros para inyectar en JS
+      ob_start();
+      echo '<option value="">Seleccioná competidor…</option>';
+      foreach ($competidores as $c) {
+        $min = isset($c['ct_peso_min']) ? fmt_kg($c['ct_peso_min']) : '';
+        $max = isset($c['ct_peso_max']) ? fmt_kg($c['ct_peso_max']) : '';
+        $peso = ($min && $max) ? "{$min}–{$max} kg" : (($min || $max) ? (($min?:$max).' kg') : ($c['ct_nombre'] ?? '-'));
+        $label = trim(($c['apellido'].' '.$c['nombre']).' — '.$peso.' / '.($c['division'] ?? '-').' / '.($c['modalidad'] ?? '-'));
+        $val   = (int)$c['id'];
+        $modId = (int)($c['mod_id'] ?? 0);
+        $divId = (int)($c['div_id'] ?? 0);
+        $disId = (int)($c['disc_id'] ?? 0);
+        echo '<option value="'.$val.'" data-mod="'.$modId.'" data-div="'.$divId.'" data-disc="'.$disId.'">'.h($label).'</option>';
+      }
+      $OPTIONS_HTML = ob_get_clean();
+    ?>
   </form>
 </div>
 
 <script>
-  // ==== Helpers UI ====
   const formatoSel = document.getElementById('formato');
   const slots = document.getElementById('slots-container');
   const btn = document.getElementById('btn-guardar');
-
-  // Opciones de competidores (label incluye peso min–max desde categorias_evento)
-  const optionsHTML = (function(){
-    const opts = [`<option value="">Seleccioná competidor…</option>`];
-    <?php foreach ($competidores as $c):
-      $min = isset($c['ct_peso_min']) ? fmt_kg($c['ct_peso_min']) : '';
-      $max = isset($c['ct_peso_max']) ? fmt_kg($c['ct_peso_max']) : '';
-      $peso = ($min && $max) ? "{$min}–{$max} kg" : (($min || $max) ? ((($min?:$max)).' kg') : ($c['ct_nombre'] ?? '-'));
-      $div = $c['division'] ?? '-';
-      $mod = $c['modalidad'] ?? '-';
-      $label = trim(($c['apellido'].' '.$c['nombre']).' — '.$peso.' / '.$div.' / '.$mod);
-    ?>
-      opts.push(`<option value="<?= (int)$c['id'] ?>"><?= h($label) ?></option>`);
-    <?php endforeach; ?>
-    return opts.join('');
-  })();
+  const optionsHTML = <?php echo json_encode($OPTIONS_HTML, JSON_UNESCAPED_UNICODE); ?>;
 
   function selectTpl(name, label){
     return `
@@ -615,40 +689,38 @@ $placeholderLogo = 'assets/placeholder-logo.png';
   function renderSlots(){
     const fmt = formatoSel.value;
     let html = '';
-
     if (fmt === 'simple'){
-      html = `
-        ${selectTpl('rojo_id', 'Rincón Rojo')}
-        ${selectTpl('azul_id', 'Rincón Azul')}
-      `;
+      html = `${selectTpl('rojo_id', 'Rincón Rojo')}${selectTpl('azul_id', 'Rincón Azul')}`;
     } else if (fmt === 'triangular'){
       html = `
-        ${selectTpl('tri_rojo_id', 'Triangular — SF (Rincón Rojo)')}
-        ${selectTpl('tri_azul_id', 'Triangular — SF (Rincón Azul)')}
+        ${selectTpl('tri_rojo_id', 'Triangular — SF (Rojo)')}
+        ${selectTpl('tri_azul_id', 'Triangular — SF (Azul)')}
         <div class="full" style="height:0;"></div>
         ${selectTpl('tri_libre_id', 'Triangular — Libre (espera la final)')}
       `;
-    } else { // super4
+    } else {
       html = `
         <div class="full" style="font-weight:600;">Semifinal 1</div>
-        ${selectTpl('sf1_rojo_id', 'SF1 — Rincón Rojo')}
-        ${selectTpl('sf1_azul_id', 'SF1 — Rincón Azul')}
-
+        ${selectTpl('sf1_rojo_id', 'SF1 — Rojo')}
+        ${selectTpl('sf1_azul_id', 'SF1 — Azul')}
         <div class="full" style="font-weight:600;margin-top:6px;">Semifinal 2</div>
-        ${selectTpl('sf2_rojo_id', 'SF2 — Rincón Rojo')}
-        ${selectTpl('sf2_azul_id', 'SF2 — Rincón Azul')}
-
-        <div class="full muted" style="margin-top:6px;">Final (Rincón Rojo) — libre, se define luego con ganador SF1/SF2</div>
-        <div class="full muted" style="margin-top:-6px;">Final (Rincón Azul) — libre, se define luego con ganador SF1/SF2</div>
+        ${selectTpl('sf2_rojo_id', 'SF2 — Rojo')}
+        ${selectTpl('sf2_azul_id', 'SF2 — Azul')}
+        <div class="full muted" style="margin-top:6px;">Final libre: se arma luego con ganadores</div>
       `;
     }
-
     slots.innerHTML = html;
     attachUniqueLogic();
     validar();
   }
 
-  // Evitar repetir el mismo competidor en varios selects
+  function getModId(selectEl){
+    const v = selectEl.value;
+    if (!v) return 0;
+    const opt = selectEl.querySelector(`option[value="${v}"]`);
+    return opt ? parseInt(opt.dataset.mod||'0') : 0;
+  }
+
   function attachUniqueLogic(){
     const selects = Array.from(document.querySelectorAll('.slot-select'));
     function refreshDisables(){
@@ -670,30 +742,40 @@ $placeholderLogo = 'assets/placeholder-logo.png';
     const fmt = formatoSel.value;
 
     function getVal(name){ const s = document.querySelector(`[name="${name}"]`); return s ? parseInt(s.value||'0') : 0; }
+    function getSel(name){ return document.querySelector(`[name="${name}"]`); }
+    function sameMod(selectNames){
+      const mods = selectNames.map(n => { const s = getSel(n); return s ? getModId(s) : 0; }).filter(Boolean);
+      if (mods.length < selectNames.length) return false;
+      return new Set(mods).size === 1;
+    }
 
     if (fmt === 'simple'){
       const r = getVal('rojo_id'), a = getVal('azul_id');
-      if (!r || !a || r===a){ btn.disabled = true; btn.title="Elegí Rojo y Azul distintos."; return; }
-      btn.disabled = false; btn.title = "";
+      const okBase = (r && a && r!==a);
+      const okMod  = sameMod(['rojo_id','azul_id']);
+      btn.disabled = !(okBase && okMod);
+      btn.title = btn.disabled ? "Elegí Rojo y Azul distintos y con la MISMA modalidad." : "";
       return;
     }
     if (fmt === 'triangular'){
       const r = getVal('tri_rojo_id'), a = getVal('tri_azul_id'), l = getVal('tri_libre_id');
       const all = [r,a,l].filter(Boolean);
-      const ok = r && a && l && (new Set(all).size===3);
-      btn.disabled = !ok;
-      btn.title = ok ? "" : "Elegí 3 competidores distintos (Rojo, Azul y Libre).";
+      const okBase = (r && a && l && (new Set(all).size===3));
+      const okMod  = sameMod(['tri_rojo_id','tri_azul_id','tri_libre_id']);
+      btn.disabled = !(okBase && okMod);
+      btn.title = btn.disabled ? "Los 3 deben ser distintos y compartir la MISMA modalidad." : "";
       return;
     }
-    // super4
-    const v = ['sf1_rojo_id','sf1_azul_id','sf2_rojo_id','sf2_azul_id'].map(getVal).filter(Boolean);
-    const ok = v.length===4 && (new Set(v).size===4);
-    btn.disabled = !ok;
-    btn.title = ok ? "" : "Completá SF1 y SF2 con 4 competidores distintos.";
+    const names = ['sf1_rojo_id','sf1_azul_id','sf2_rojo_id','sf2_azul_id'];
+    const vals = names.map(getVal).filter(Boolean);
+    const okBase = (vals.length===4 && (new Set(vals).size===4));
+    const okMod  = sameMod(names);
+    btn.disabled = !(okBase && okMod);
+    btn.title = btn.disabled ? "Completá SF1 y SF2 con 4 distintos y MISMA modalidad para todos." : "";
   }
 
   formatoSel.addEventListener('change', renderSlots);
-  renderSlots(); // inicial
+  renderSlots();
 </script>
 </body>
 </html>

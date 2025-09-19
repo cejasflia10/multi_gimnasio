@@ -12,53 +12,122 @@ if (session_status() !== PHP_SESSION_ACTIVE) {
 require_once __DIR__ . '/conexion.php';
 
 /* =========================================================
-   Cloudinary (opcional) — “Cloudy”
+   Cloudinary (Cloudy) — ACTIVADO + credenciales
    ========================================================= */
-// Opción 1 (recomendada): setear CLOUDINARY_URL en el entorno
+// Opción 1 (recomendada): usar variable de entorno CLOUDINARY_URL
 //   cloudinary://API_KEY:API_SECRET@CLOUD_NAME
-// Opción 2: activar constantes:
-const CLOUD_ENABLED     = false;              // ← poné true si usás las constantes
-const CLOUD_NAME        = '';                 // ej. "ddrugdsqe"
-const CLOUD_API_KEY     = '';                 // ej. "65784174747786"
-const CLOUD_API_SECRET  = '';                 // ej. "*************"
+// O bien, Opción 2: activar constantes (ya activado):
+const CLOUD_ENABLED     = true;                    // ← activado
+const CLOUD_NAME        = 'ddfugds9b';
+const CLOUD_API_KEY     = '657814174747186';
+const CLOUD_API_SECRET  = 'TKo5BRiKCEjxSLFzn2DLbz_ji4c';
 
-function cloud_inited(){ static $i=false; return $i; }
 function cloud_init(): void {
   static $inited=false; if ($inited) return; $inited=true;
   $vendor1 = __DIR__.'/vendor/autoload.php';
   $vendor2 = dirname(__DIR__).'/vendor/autoload.php';
   if (file_exists($vendor1)) require_once $vendor1;
   elseif (file_exists($vendor2)) require_once $vendor2;
+
+  // Config SDK si no hay CLOUDINARY_URL exportada
+  if (class_exists('\Cloudinary\Configuration\Configuration')
+      && !getenv('CLOUDINARY_URL')
+      && CLOUD_ENABLED && CLOUD_NAME && CLOUD_API_KEY && CLOUD_API_SECRET) {
+    \Cloudinary\Configuration\Configuration::instance([
+      'cloud'=>[
+        'cloud_name'=>CLOUD_NAME,
+        'api_key'   =>CLOUD_API_KEY,
+        'api_secret'=>CLOUD_API_SECRET
+      ],
+      'secure'=>true
+    ]);
+  }
 }
 function cloud_configured(): bool {
-  $url = getenv('CLOUDINARY_URL');
-  if ($url && is_string($url) && preg_match('~^cloudinary://[^:]+:[^@]+@[^/]+$~',$url)) return true;
-  if (CLOUD_ENABLED && CLOUD_NAME && CLOUD_API_KEY && CLOUD_API_SECRET) return true;
-  return false;
+  if (getenv('CLOUDINARY_URL') && preg_match('~^cloudinary://[^:]+:[^@]+@[^/]+$~', getenv('CLOUDINARY_URL'))) return true;
+  return (CLOUD_ENABLED && CLOUD_NAME && CLOUD_API_KEY && CLOUD_API_SECRET);
 }
-/** Sube un archivo local a Cloudinary. Devuelve secure_url o null. */
-function cloud_upload(string $abs_path, string $folder, string $public_id): ?string {
-  if (!cloud_configured()) return null;
-  try {
-    cloud_init();
-    if (!getenv('CLOUDINARY_URL') && CLOUD_ENABLED) {
-      \Cloudinary\Configuration\Configuration::instance([
-        'cloud'=>['cloud_name'=>CLOUD_NAME,'api_key'=>CLOUD_API_KEY,'api_secret'=>CLOUD_API_SECRET],
-        'url'=>['secure'=>true],
-      ]);
-    }
-    $uploader = new \Cloudinary\Api\Upload\UploadApi();
-    $res = $uploader->upload($abs_path, [
-      'folder'        => $folder,
-      'public_id'     => $public_id,
-      'resource_type' => 'auto',
-      'overwrite'     => true,
-    ]);
-    return $res['secure_url'] ?? null;
-  } catch (\Throwable $e) {
-    // Podés loguear $e->getMessage()
-    return null;
+
+/** Firma para API cURL cuando no hay SDK. */
+function cloud_sign(array $params): string {
+  // armar string "key=value&..." (sin api_key ni file) + api_secret
+  ksort($params);
+  $parts=[];
+  foreach ($params as $k=>$v) {
+    if ($v === '' || $v === null) continue;
+    $parts[] = $k.'='.$v;
   }
+  $toSign = implode('&', $parts) . CLOUD_API_SECRET;
+  return sha1($toSign);
+}
+
+/**
+ * Sube un archivo local a Cloudinary.
+ * Usa SDK si está; si no, cURL firmado. Devuelve secure_url o null.
+ */
+function cloud_upload(string $abs_path, string $folder, string $public_id): ?string {
+  if (!cloud_configured() || !is_file($abs_path)) return null;
+
+  cloud_init();
+
+  // A) SDK
+  if (class_exists('\Cloudinary\Api\Upload\UploadApi')) {
+    try {
+      $uploader = new \Cloudinary\Api\Upload\UploadApi();
+      $res = $uploader->upload($abs_path, [
+        'folder'        => $folder,
+        'public_id'     => $public_id,
+        'resource_type' => 'auto',
+        'overwrite'     => true,
+      ]);
+      return $res['secure_url'] ?? null;
+    } catch (\Throwable $e) {
+      // si falla SDK, probamos cURL
+    }
+  }
+
+  // B) cURL directo
+  $url = "https://api.cloudinary.com/v1_1/".rawurlencode(CLOUD_NAME)."/auto/upload";
+  $timestamp = time();
+
+  // parámetros a firmar (sin api_key ni file)
+  $signParams = [
+    'folder'     => $folder,
+    'overwrite'  => 'true',
+    'public_id'  => $public_id,
+    'timestamp'  => $timestamp,
+  ];
+  $signature = cloud_sign($signParams);
+
+  // payload POST
+  $cfile = function_exists('curl_file_create')
+    ? curl_file_create($abs_path, mime_content_type($abs_path) ?: 'application/octet-stream', basename($abs_path))
+    : '@'.$abs_path;
+
+  $post = [
+    'file'       => $cfile,
+    'api_key'    => CLOUD_API_KEY,
+    'timestamp'  => $timestamp,
+    'signature'  => $signature,
+    'folder'     => $folder,
+    'overwrite'  => 'true',
+    'public_id'  => $public_id,
+  ];
+
+  $ch = curl_init($url);
+  curl_setopt_array($ch, [
+    CURLOPT_RETURNTRANSFER => true,
+    CURLOPT_POST           => true,
+    CURLOPT_POSTFIELDS     => $post,
+    CURLOPT_TIMEOUT        => 45,
+  ]);
+  $resp = curl_exec($ch);
+  $err  = curl_error($ch);
+  curl_close($ch);
+
+  if ($err || !$resp) return null;
+  $json = json_decode($resp, true);
+  return $json['secure_url'] ?? null;
 }
 
 /* ===== Conexión ===== */
@@ -115,7 +184,7 @@ function save_event_asset(string $field, string $subdir, int $evento_id, string 
   $base = trim($base,'-_') ?: 'archivo';
 
   $dirAbs = __DIR__ . DIRECTORY_SEPARATOR . $subdir;
-  if (!is_dir($dirAbs)) @mkdir($dirAbs, 0775, true);  // ← crea la carpeta si falta
+  if (!is_dir($dirAbs)) @mkdir($dirAbs, 0775, true);  // crea la carpeta si falta
   if (!is_dir($dirAbs)) return null;
 
   $uniq = date('Ymd_His') . '_' . mt_rand(1000,9999);
@@ -125,7 +194,7 @@ function save_event_asset(string $field, string $subdir, int $evento_id, string 
   $destRel = $subdir . '/' . $file;
 
   if (!@move_uploaded_file($tmp, $destAbs)) {
-    // reintento con nombre simple si Windows/XAMPP jode con caracteres
+    // reintento con nombre simple si Windows/XAMPP tiene conflicto
     $file2 = 'file_' . $uniq . '.' . $ext;
     $destAbs2 = $dirAbs . DIRECTORY_SEPARATOR . $file2;
     $destRel2 = $subdir . '/' . $file2;
@@ -136,12 +205,12 @@ function save_event_asset(string $field, string $subdir, int $evento_id, string 
     @chmod($destAbs, 0644);
   }
 
-  // Si Cloudinary está configurado, subimos y devolvemos la URL
+  // Subir a Cloudinary (prioriza URL cloud si sale bien)
   $publicId = $field . '_' . $base . '_' . $uniq;
   $cloudUrl = cloud_upload($destAbs, $cloudFolder, $publicId);
   if ($cloudUrl) return $cloudUrl;
 
-  // Si no hay Cloudinary, devolvemos la ruta relativa local
+  // Si no hay Cloudinary/SDK, devolvemos la ruta local relativa
   return $destRel;
 }
 
@@ -193,7 +262,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   if ($cols['lugar'])  { $updates[]="`{$cols['lugar']}`=?";  $types.='s'; $vals[]=post('lugar'); }
   if ($cols['desc'])   { $updates[]="`{$cols['desc']}`=?";   $types.='s'; $vals[]=post('descripcion'); }
 
-  // carpetas locales + carpeta cloud
+  // carpetas locales + carpeta Cloudinary
   $cloudFolder = 'multi_gimnasio/eventos/'.$evento_id;
 
   $logo    = save_event_asset('logo_evento',    'media_eventos',  $evento_id, $cloudFolder);

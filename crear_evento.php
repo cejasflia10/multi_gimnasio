@@ -1,170 +1,224 @@
 <?php
 /*******************************************************
- * crear_evento.php — con Cloudinary (Cloudy)
+ * crear_evento.php — con Cloudinary integrado
  *******************************************************/
-session_start();
+if (session_status() !== PHP_SESSION_ACTIVE) {
+  session_set_cookie_params([
+    'lifetime'=>0,'path'=>'/','domain'=>'','secure'=>false,'httponly'=>true,'samesite'=>'Lax'
+  ]);
+  session_start();
+}
+
 require_once __DIR__.'/conexion.php';
-require_once __DIR__.'/menu_eventos.php';
+@include_once __DIR__.'/menu_eventos.php';
 
 /* =========================================================
-   Cloudinary (opcional) — “Cloudy”
-   =========================================================
-   Opción 1 (recomendada): setear CLOUDINARY_URL en el entorno
-     cloudinary://API_KEY:API_SECRET@CLOUD_NAME
-   Opción 2: activar constantes acá:
-*/
-const CLOUD_ENABLED     = false;   // ← poné true si usás constantes
-const CLOUD_NAME        = '';
-const CLOUD_API_KEY     = '';
-const CLOUD_API_SECRET  = '';
+   Cloudinary (Cloudy) — activado con tus credenciales
+   ========================================================= */
+const CLOUD_ENABLED      = true;                 // ← activado
+const CLOUD_NAME         = 'ddfugds9b';
+const CLOUD_API_KEY      = '657814174747186';
+const CLOUD_API_SECRET   = 'TKo5BRiKCEjxSLFzn2DLbz_ji4c';
+const CLOUD_FOLDER_ROOT  = 'ROOT';               // carpeta raíz en Cloudinary
 
+$__cloud_inited = false;
 function cloud_init(): void {
-  static $inited=false; if ($inited) return; $inited=true;
-  $vendor1 = __DIR__.'/vendor/autoload.php';
-  $vendor2 = dirname(__DIR__).'/vendor/autoload.php';
-  if (file_exists($vendor1)) require_once $vendor1;
-  elseif (file_exists($vendor2)) require_once $vendor2;
-}
-function cloud_configured(): bool {
-  $url = getenv('CLOUDINARY_URL');
-  if ($url && is_string($url) && preg_match('~^cloudinary://[^:]+:[^@]+@[^/]+$~',$url)) return true;
-  if (CLOUD_ENABLED && CLOUD_NAME && CLOUD_API_KEY && CLOUD_API_SECRET) return true;
-  return false;
-}
-/** Sube un archivo local a Cloudinary. Devuelve secure_url o null. */
-function cloud_upload(string $abs_path, string $folder, string $public_id): ?string {
-  if (!cloud_configured()) return null;
-  try {
-    cloud_init();
-    if (!getenv('CLOUDINARY_URL') && CLOUD_ENABLED) {
-      \Cloudinary\Configuration\Configuration::instance([
-        'cloud'=>['cloud_name'=>CLOUD_NAME,'api_key'=>CLOUD_API_KEY,'api_secret'=>CLOUD_API_SECRET],
-        'url'=>['secure'=>true],
-      ]);
-    }
-    $uploader = new \Cloudinary\Api\Upload\UploadApi();
-    $res = $uploader->upload($abs_path, [
-      'folder'        => $folder,
-      'public_id'     => $public_id,
-      'resource_type' => 'auto',
-      'overwrite'     => true,
+  global $__cloud_inited;
+  if ($__cloud_inited) return;
+  $__cloud_inited = true;
+
+  // Si existe autoload del SDK, lo cargamos
+  $v1 = __DIR__.'/vendor/autoload.php';
+  $v2 = dirname(__DIR__).'/vendor/autoload.php';
+  if (file_exists($v1)) { require_once $v1; }
+  elseif (file_exists($v2)) { require_once $v2; }
+
+  // Si hay SDK y NO tenemos CLOUDINARY_URL, configuramos instancia
+  if (class_exists('\Cloudinary\Configuration\Configuration') && CLOUD_ENABLED && CLOUD_NAME && CLOUD_API_KEY && CLOUD_API_SECRET) {
+    \Cloudinary\Configuration\Configuration::instance([
+      'cloud' => [
+        'cloud_name' => CLOUD_NAME,
+        'api_key'    => CLOUD_API_KEY,
+        'api_secret' => CLOUD_API_SECRET,
+      ],
+      'secure' => true
     ]);
-    return $res['secure_url'] ?? null;
-  } catch (\Throwable $e) {
-    // Podés loguear $e->getMessage()
-    return null;
   }
 }
-
-/* ===== Helpers ===== */
-function h($s){ return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); }
-function has_col(mysqli $db, string $table, string $col): bool {
-  $t=$db->real_escape_string($table); $c=$db->real_escape_string($col);
-  $sql="SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS
-        WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='{$t}' AND COLUMN_NAME='{$c}' LIMIT 1";
-  if ($r=$db->query($sql)) { $ok=(bool)$r->num_rows; $r->close(); return $ok; }
-  return false;
+function cloud_configured(): bool {
+  if (!CLOUD_ENABLED) return false;
+  return (bool)(CLOUD_NAME && CLOUD_API_KEY && CLOUD_API_SECRET);
 }
 
 /**
- * Guarda el archivo (crea carpeta si falta) y si Cloudinary está activo,
- * además lo sube a la nube y retorna la secure_url. Si no, retorna ruta relativa local.
- * $subdir: 'flyers_eventos' o 'media_eventos'
+ * Fallback: firma para la API de subida si no hay SDK.
+ * signature = sha1(query_string + api_secret)
  */
-function save_asset(string $field, string $subdir, string $cloudFolder): ?string {
-  if (!isset($_FILES[$field]) || !is_array($_FILES[$field])) return null;
-  $err = $_FILES[$field]['error'] ?? UPLOAD_ERR_NO_FILE;
-  if ($err !== UPLOAD_ERR_OK) return null;
-
-  $tmp  = (string)($_FILES[$field]['tmp_name'] ?? '');
-  if (!$tmp || !is_uploaded_file($tmp)) return null;
-
-  $orig = basename((string)($_FILES[$field]['name'] ?? 'archivo'));
-  $ext  = strtolower(pathinfo($orig, PATHINFO_EXTENSION));
-  $allow= ['jpg','jpeg','png','webp','gif','pdf'];
-  if (!in_array($ext,$allow,true)) $ext='jpg';
-
-  $base = pathinfo($orig, PATHINFO_FILENAME);
-  $base = preg_replace('/[^\p{L}\p{N}\-_]+/u','-',$base);
-  $base = trim($base,'-_') ?: 'archivo';
-
-  $dirAbs = __DIR__ . DIRECTORY_SEPARATOR . $subdir;
-  if (!is_dir($dirAbs)) @mkdir($dirAbs, 0775, true); // evita "No such file or directory"
-  if (!is_dir($dirAbs)) return null;
-
-  $uniq = date('Ymd_His') . '_' . mt_rand(1000,9999);
-  $file = $base . '_' . $uniq . '.' . $ext;
-  $destAbs = $dirAbs . DIRECTORY_SEPARATOR . $file;
-  $destRel = $subdir . '/' . $file;
-
-  if (!@move_uploaded_file($tmp, $destAbs)) {
-    // reintento con nombre simple (Windows/XAMPP a veces falla por espacios/acentos)
-    $file2 = 'file_' . $uniq . '.' . $ext;
-    $destAbs2 = $dirAbs . DIRECTORY_SEPARATOR . $file2;
-    $destRel2 = $subdir . '/' . $file2;
-    if (!@move_uploaded_file($tmp, $destAbs2)) return null;
-    @chmod($destAbs2, 0644);
-    $destAbs = $destAbs2; $destRel = $destRel2; $file = $file2;
-  } else {
-    @chmod($destAbs, 0644);
+function cloud_sign(array $params): string {
+  ksort($params);
+  $toSign = [];
+  foreach ($params as $k=>$v) {
+    if ($v === '' || $v === null) continue;
+    $toSign[] = $k.'='.$v;
   }
-
-  // Cloudinary
-  $publicId = $field . '_' . $base . '_' . $uniq;
-  $cloudUrl = cloud_upload($destAbs, $cloudFolder, $publicId);
-  if ($cloudUrl) return $cloudUrl;
-
-  return $destRel;
+  $base = implode('&', $toSign) . CLOUD_API_SECRET;
+  return sha1($base);
 }
 
-/* ===== Conexión ===== */
+/**
+ * Sube archivo a Cloudinary. Usa SDK si está; si no, cURL firmando.
+ * @return string|null secure_url si ok
+ */
+function cloud_upload_file(string $abs_path, string $folder, string $public_id=null): ?string {
+  cloud_init();
+  if (!cloud_configured() || !is_file($abs_path)) return null;
+
+  // Opción A: SDK
+  if (class_exists('\Cloudinary\Api\Upload\UploadApi')) {
+    try {
+      $up = new \Cloudinary\Api\Upload\UploadApi();
+      $opt = [
+        'folder'        => $folder,
+        'resource_type' => 'auto',
+        'overwrite'     => true
+      ];
+      if ($public_id) $opt['public_id'] = $public_id;
+      $res = $up->upload($abs_path, $opt);
+      return $res['secure_url'] ?? null;
+    } catch (\Throwable $e) {
+      // si falla, probamos cURL
+    }
+  }
+
+  // Opción B: cURL directo (firma server-side)
+  $url = "https://api.cloudinary.com/v1_1/".rawurlencode(CLOUD_NAME)."/auto/upload";
+  $timestamp = time();
+  $params = [
+    'timestamp'  => $timestamp,
+    'folder'     => $folder,
+    'public_id'  => $public_id ?: null,
+    'overwrite'  => 'true',
+    'api_key'    => CLOUD_API_KEY,
+  ];
+  // Para firmar NO se incluye api_key ni file
+  $toSign = [
+    'folder'     => $params['folder'],
+    'overwrite'  => $params['overwrite'],
+    'public_id'  => $params['public_id'],
+    'timestamp'  => $params['timestamp'],
+  ];
+  $signature = cloud_sign($toSign);
+
+  $cfile = function_exists('curl_file_create')
+          ? curl_file_create($abs_path, mime_content_type($abs_path) ?: 'application/octet-stream', basename($abs_path))
+          : '@'.$abs_path;
+
+  $post = [
+    'file'       => $cfile,
+    'api_key'    => CLOUD_API_KEY,
+    'timestamp'  => $timestamp,
+    'signature'  => $signature,
+    'folder'     => $params['folder'],
+    'overwrite'  => $params['overwrite'],
+  ];
+  if ($public_id) $post['public_id'] = $public_id;
+
+  $ch = curl_init($url);
+  curl_setopt_array($ch, [
+    CURLOPT_RETURNTRANSFER => true,
+    CURLOPT_POST           => true,
+    CURLOPT_POSTFIELDS     => $post,
+    CURLOPT_TIMEOUT        => 30
+  ]);
+  $resp = curl_exec($ch);
+  $err  = curl_error($ch);
+  curl_close($ch);
+  if ($err || !$resp) return null;
+
+  $json = json_decode($resp, true);
+  return $json['secure_url'] ?? null;
+}
+
+/* =========================================================
+   DB & helpers
+   ========================================================= */
 if (!isset($conexion) || !($conexion instanceof mysqli)) {
-  http_response_code(500); exit('❌ No hay conexión a la base de datos.');
+  http_response_code(500);
+  exit('❌ No hay conexión a la base de datos.');
 }
 if (function_exists('mysqli_report')) { mysqli_report(MYSQLI_REPORT_OFF); }
 @$conexion->set_charset('utf8mb4');
 
+function h($s){ return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); }
+
+function save_local_upload(string $field, string $subdir): ?array {
+  if (!isset($_FILES[$field]) || ($_FILES[$field]['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) return null;
+  $tmp = (string)($_FILES[$field]['tmp_name'] ?? '');
+  if (!$tmp || !is_uploaded_file($tmp)) return null;
+
+  $orig = basename((string)($_FILES[$field]['name'] ?? 'archivo'));
+  $ext  = strtolower(pathinfo($orig, PATHINFO_EXTENSION));
+  $allow = ['jpg','jpeg','png','webp','gif','pdf'];
+  if (!in_array($ext, $allow, true)) $ext = 'jpg';
+
+  $base = pathinfo($orig, PATHINFO_FILENAME);
+  $base = preg_replace('/[^\p{L}\p{N}\-_]+/u', '-', $base);
+  $base = trim($base, '-_') ?: 'archivo';
+
+  $dirAbs = __DIR__ . DIRECTORY_SEPARATOR . $subdir;
+  if (!is_dir($dirAbs)) @mkdir($dirAbs, 0775, true);
+  if (!is_dir($dirAbs)) return null;
+
+  $uniq = date('Ymd_His') . '_' . mt_rand(1000,9999);
+  $file = $base . '_' . $uniq . '.' . $ext;
+
+  $destAbs = $dirAbs . DIRECTORY_SEPARATOR . $file;
+  $destRel = $subdir . '/' . $file;
+
+  if (!@move_uploaded_file($tmp, $destAbs)) return null;
+  @chmod($destAbs, 0644);
+
+  return ['abs'=>$destAbs, 'rel'=>$destRel, 'name'=>$base, 'ext'=>$ext];
+}
+
+/* =========================================================
+   POST: crear evento
+   ========================================================= */
 $mensaje = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-  $titulo = trim($_POST['titulo'] ?? '');
+  $titulo      = trim($_POST['titulo'] ?? '');
   $descripcion = trim($_POST['descripcion'] ?? '');
-  $fecha = $_POST['fecha'] ?? '';
-  $hora  = $_POST['hora']  ?? '';
-  $lugar = trim($_POST['lugar'] ?? '');
-  $video = trim($_POST['video'] ?? '');
+  $fecha       = trim($_POST['fecha'] ?? '');
+  $hora        = trim($_POST['hora'] ?? '');
+  $lugar       = trim($_POST['lugar'] ?? '');
+  $video       = trim($_POST['video'] ?? '');
 
   if ($titulo && $fecha && $hora && $lugar) {
-    // Subidas
-    $cloudFolder = 'multi_gimnasio/eventos/crear_'.date('Ymd');
-    $ruta_flyer   = save_asset('flyer',   'flyers_eventos', $cloudFolder); // puede devolver URL Cloud
-    $ruta_logo    = save_asset('logo',    'media_eventos',  $cloudFolder); // opcional
-    $ruta_portada = save_asset('portada', 'media_eventos',  $cloudFolder); // opcional
+    // 1) Guardado local del flyer
+    $local = save_local_upload('flyer', 'flyers_eventos'); // ['abs','rel','name','ext']|null
+    $ruta_flyer = $local['rel'] ?? '';
 
-    // INSERT flexible: siempre estos 7 campos base
-    $sql = "INSERT INTO eventos_deportivos (titulo, descripcion, fecha, hora, lugar, flyer, video";
-    $vals = [$titulo, $descripcion, $fecha, $hora, $lugar, (string)($ruta_flyer ?? ''), $video];
-    $types = "sssssss";
+    // 2) Cloudinary (si hay archivo subido y Cloudy está activo)
+    $flyer_cloud = null;
+    if ($local && cloud_configured()) {
+      // carpeta: ROOT/eventos/aaaamm/titulo_slug
+      $slug = preg_replace('/[^\p{L}\p{N}\-]+/u','-', strtolower($titulo));
+      $slug = trim($slug,'-') ?: 'evento';
+      $folder = CLOUD_FOLDER_ROOT . '/eventos/' . date('Ym') . '/' . $slug;
+      $public = 'flyer_' . $local['name'] . '_' . date('Ymd_His');
 
-    // Si existen columnas extra (logo/portada), las agrego sin romper
-    if (has_col($conexion,'eventos_deportivos','logo')) {
-      $sql .= ", logo";
-      $vals[] = (string)($ruta_logo ?? '');
-      $types .= "s";
+      $flyer_cloud = cloud_upload_file($local['abs'], $folder, $public);
+      if ($flyer_cloud) {
+        // Priorizar CDN sobre local:
+        $ruta_flyer = $flyer_cloud;
+      }
     }
-    if (has_col($conexion,'eventos_deportivos','portada')) {
-      $sql .= ", portada";
-      $vals[] = (string)($ruta_portada ?? '');
-      $types .= "s";
-    }
-    $sql .= ") VALUES (" . rtrim(str_repeat('?,', strlen($types)), ',') . ")";
 
-    $stmt = $conexion->prepare($sql);
+    // 3) Insert
+    $stmt = $conexion->prepare("INSERT INTO eventos_deportivos (titulo, descripcion, fecha, hora, lugar, flyer, video) VALUES (?, ?, ?, ?, ?, ?, ?)");
     if ($stmt) {
-      $bind = [$types];
-      foreach ($vals as $k => $v) { $bind[] = &$vals[$k]; }
-      call_user_func_array([$stmt,'bind_param'],$bind);
-
+      $stmt->bind_param("sssssss", $titulo, $descripcion, $fecha, $hora, $lugar, $ruta_flyer, $video);
       if ($stmt->execute()) {
         $mensaje = "✅ Evento creado correctamente.";
       } else {
@@ -172,10 +226,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       }
       $stmt->close();
     } else {
-      $mensaje = "❌ Error al preparar consulta: ".$conexion->error;
+      $mensaje = "❌ Error preparando INSERT: ".$conexion->error;
     }
   } else {
-    $mensaje = "⚠️ Completa todos los campos obligatorios.";
+    $mensaje = "⚠️ Completá todos los campos obligatorios.";
   }
 }
 ?>
@@ -187,21 +241,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   <link rel="stylesheet" href="estilo_unificado.css">
   <style>
     body { background-color:#000; color:gold; font-family:'Segoe UI',sans-serif; }
-    .contenedor { width:80%; max-width:1200px; margin:40px auto; background:#111; padding:35px; border-radius:12px; border:2px solid gold; box-shadow:0 0 15px rgba(255,215,0,.3); }
-    h2,h3 { color:gold; margin-bottom:25px; }
-    form label { display:block; margin-top:15px; font-weight:600; }
-    input[type="text"], input[type="date"], input[type="time"], input[type="file"], textarea {
-      width:100%; padding:12px; margin-top:5px; border-radius:6px; border:1px solid #555; background:#1a1a1a; color:gold; font-size:16px;
+    .contenedor{ width:80%; max-width:1200px; margin:40px auto; background:#111; padding:35px; border-radius:12px; border:2px solid gold; box-shadow:0 0 15px rgba(255,215,0,.3) }
+    h2,h3{ color:gold; margin-bottom:25px }
+    form label{ display:block; margin-top:15px; font-weight:600 }
+    input[type="text"],input[type="date"],input[type="time"],input[type="file"],textarea{
+      width:100%; padding:12px; margin-top:5px; border-radius:6px; border:1px solid #555; background:#1a1a1a; color:gold; font-size:16px
     }
-    textarea { resize:vertical; }
-    .boton { margin-top:25px; padding:12px 24px; background:linear-gradient(to right,gold,#d4af37); color:#000; border:none; border-radius:8px; font-weight:bold; cursor:pointer; transition:.3s; font-size:16px; }
-    .boton:hover { background:linear-gradient(to right,#ffe600,gold); transform:scale(1.05); }
-    .boton-volver { text-decoration:none; padding:12px 20px; background:#222; color:gold; border:1px solid gold; border-radius:8px; margin-left:15px; transition:.3s; }
-    .boton-volver:hover { background:gold; color:#000; }
-    .acciones { margin-top:40px; display:flex; flex-wrap:wrap; gap:15px; }
-    .boton-accion { flex:1 1 200px; text-align:center; background:#222; color:gold; padding:15px 20px; border:2px solid gold; border-radius:10px; text-decoration:none; font-weight:bold; transition:.3s; }
-    .boton-accion:hover { background:gold; color:#111; transform:scale(1.05); }
-    .mensaje { background:#222; padding:10px 20px; border-left:5px solid gold; margin-bottom:20px; border-radius:8px; }
+    textarea{ resize:vertical }
+    .boton{ margin-top:25px; padding:12px 24px; background:linear-gradient(to right, gold, #d4af37); color:#000; border:none; border-radius:8px; font-weight:bold; cursor:pointer; transition:.3s; font-size:16px }
+    .boton:hover{ background:linear-gradient(to right, #ffe600, gold); transform:scale(1.05) }
+    .boton-volver{ text-decoration:none; padding:12px 20px; background:#222; color:gold; border:1px solid gold; border-radius:8px; margin-left:15px; transition:.3s }
+    .boton-volver:hover{ background:gold; color:#000 }
+    .acciones{ margin-top:40px; display:flex; flex-wrap:wrap; gap:15px }
+    .boton-accion{ flex:1 1 200px; text-align:center; background:#222; color:gold; padding:15px 20px; border:2px solid gold; border-radius:10px; text-decoration:none; font-weight:bold; transition:.3s }
+    .boton-accion:hover{ background:gold; color:#111; transform:scale(1.05) }
+    .mensaje{ background:#222; padding:10px 20px; border-left:5px solid gold; margin-bottom:20px; border-radius:8px; color:#ffd700 }
   </style>
 </head>
 <body>
@@ -228,15 +282,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <label>Lugar:</label>
     <input type="text" name="lugar" required>
 
-    <label>Flyer del Evento (imagen/PDF):</label>
+    <label>Flyer del Evento (imagen o PDF):</label>
     <input type="file" name="flyer" accept="image/*,application/pdf">
-
-    <!-- Opcionales: si tu tabla tiene columnas logo/portada, se guardan; si no, se ignoran -->
-    <label>Logo del Evento (opcional):</label>
-    <input type="file" name="logo" accept="image/*,application/pdf">
-
-    <label>Portada/Banner (opcional):</label>
-    <input type="file" name="portada" accept="image/*,application/pdf">
 
     <label>Video Promocional (YouTube o enlace directo):</label>
     <input type="text" name="video" placeholder="https://youtube.com/...">

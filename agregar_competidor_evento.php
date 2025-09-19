@@ -7,11 +7,11 @@ require_once __DIR__.'/conexion.php';
    ========================================================= */
 // Opción 1 (recomendada): usar variable de entorno CLOUDINARY_URL
 //    cloudinary://API_KEY:API_SECRET@CLOUD_NAME
-// Opción 2: activar constantes acá:
+// Opción 2: activar constantes acá (activadas con tus datos):
 const CLOUD_ENABLED    = true;                 // ← activado
-const CLOUD_NAME       = 'ddrugdsqe';          // ← tu cloud name
-const CLOUD_API_KEY    = '6578147474786';      // ← tu API key
-const CLOUD_API_SECRET = 'TU_API_SECRET';      // ← poné tu API secret
+const CLOUD_NAME       = 'ddfugds9b';          // ← tu cloud name
+const CLOUD_API_KEY    = '657814174747186';    // ← tu API key
+const CLOUD_API_SECRET = 'TKo5BRiKCEjxSLFzn2DLbz_ji4c'; // ← tu API secret
 
 $CLOUD_ERR = null;
 
