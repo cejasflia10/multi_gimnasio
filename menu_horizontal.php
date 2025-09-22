@@ -63,6 +63,11 @@ if (!function_exists('has_perm')) {
     .menu-horizontal a:hover,
     .dropdown-content a:hover{background:var(--brand-dark)}
 
+    /* Indicador visual (opcional) para links que abren ventana */
+    .dropdown-content a.newwin::after{
+      content:"↗"; font-weight:bold; margin-left:8px; opacity:.85;
+    }
+
     @media (max-width: 768px){
       .menu-toggle{display:block}
       .menu-horizontal{display:none;flex-direction:column;width:100%}
@@ -84,6 +89,63 @@ if (!function_exists('has_perm')) {
         else { window.close(); }
       }
     }
+
+    // --- POPUP CONTROLADO para <a.newwin> ---
+    (function(){
+      const opened = new Map(); // reuso por nombre
+
+      document.addEventListener('click', function(e){
+        const a = e.target.closest('a.newwin');
+        if (!a) return;
+
+        // click de usuario -> no debería bloquearse
+        e.preventDefault();
+
+        const href     = a.href;
+        const isPopup  = a.dataset.popup === '1';
+        const features = (a.dataset.features || '').trim();
+        const winName  = (a.dataset.window || '_blank').trim();
+
+        if (!isPopup) {
+          window.open(href, '_blank', 'noopener');
+          return;
+        }
+
+        // parseo básico de width/height
+        const parseFeat = (key, def) => {
+          const m = new RegExp(key + '=([0-9]+)').exec(features);
+          return m ? parseInt(m[1], 10) : def;
+        };
+        const w = parseFeat('width', 1200);
+        const h = parseFeat('height', 800);
+
+        // centro en pantalla disponible
+        const left = Math.max(0, Math.floor((window.screen.availWidth  - w) / 2));
+        const top  = Math.max(0, Math.floor((window.screen.availHeight - h) / 2));
+
+        // features finales (con left/top)
+        const baseFeats = features
+          ? features.replace(/\bleft=\d+\b/g,'').replace(/\btop=\d+\b/g,'')
+          : 'menubar=no,toolbar=no,location=no,status=no,scrollbars=yes,resizable=yes,width=' + w + ',height=' + h;
+        const finalFeats = baseFeats + `,left=${left},top=${top}`;
+
+        // reutilizo ventana si sigue abierta
+        let win = opened.get(winName);
+        if (win && !win.closed) {
+          try { win.focus(); win.location.href = href; } catch {}
+        } else {
+          win = window.open(href, winName, finalFeats);
+          if (win) {
+            try { win.opener = null; } catch {}
+            opened.set(winName, win);
+            try { win.focus(); } catch {}
+          } else {
+            // fallback si algún bloqueador interviene
+            window.open(href, '_blank', 'noopener');
+          }
+        }
+      });
+    })();
   </script>
 </head>
 <body>
@@ -148,7 +210,15 @@ if (!function_exists('has_perm')) {
     <a href="#">🧍‍♂️ Asistencias</a>
     <div class="dropdown-content">
       <a href="ver_asistencia.php">Ver Asistencias</a>
-      <a href="registrar_asistencia.php">Registrar Asistencia</a>
+
+      <!-- Popup controlado 1200x800, centrado, reutiliza 'asistenciaWin' -->
+      <a href="registrar_asistencia.php"
+         class="newwin"
+         data-popup="1"
+         data-features="width=1200,height=800,menubar=no,toolbar=no,location=no,status=no,scrollbars=yes,resizable=yes"
+         data-window="asistenciaWin"
+         rel="noopener">Registrar Asistencia</a>
+
       <a href="scanner_qr.php">Escaneo QR</a>
       <a href="ver_asistencias_profesor.php">Asistencia Profesores</a>
     </div>
@@ -167,7 +237,6 @@ if (!function_exists('has_perm')) {
       <a href="ver_productos.php">Ver Productos</a>
       <a href="ver_facturas.php">Ver Facturas</a>
       <a href="promociones_admin.php">Promociones</a>
-
     </div>
   </div>
   <?php endif; ?>

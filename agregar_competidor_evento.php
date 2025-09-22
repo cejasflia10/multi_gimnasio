@@ -79,13 +79,17 @@ function has_col(mysqli $db, string $table, string $col): bool {
   if ($r=$db->query($sql)) { $ok=(bool)$r->num_rows; $r->close(); return $ok; }
   return false;
 }
+/** Acepta .jpg/.png/webp/gif (con o sin querystring), URLs Cloudinary /image/upload/ y data:image */
 function is_image_path($p): bool {
   if (!$p) return false;
-  $ext = strtolower(pathinfo((string)$p, PATHINFO_EXTENSION));
-  return in_array($ext, ['jpg','jpeg','png','webp','gif'], true);
+  $p = (string)$p;
+  if (preg_match('~\.(jpe?g|png|webp|gif)(\?.*)?$~i', $p)) return true;
+  if (strpos($p, '/image/upload/') !== false) return true;   // Cloudinary sin extensión
+  if (strpos($p, 'data:image/') === 0) return true;
+  return false;
 }
 
-/** Guarda archivo local; intenta Cloudinary y guarda estado de subida por campo en $_SESSION['upload_status'] */
+/** Guarda archivo local y, si hay Cloudinary, lo sube y devuelve secure_url (o ruta local) */
 function save_upload(string $field, int $evento_id): ?string {
   if (!isset($_FILES[$field]) || ($_FILES[$field]['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) return null;
   $tmp = $_FILES[$field]['tmp_name'];
@@ -208,28 +212,36 @@ function get_evento_meta(mysqli $db, int $evento_id): array {
       $st->close();
     }
   }
-  $nombre_keys=['nombre','titulo','title'];
+  // Nombre
+  $nombre='Evento';
+  foreach(['nombre','titulo','title'] as $k){ if(!empty($row[$k])){ $nombre=(string)$row[$k]; break; } }
 
-  $logo_cloud=['logo_cloud','logoUrlCloud','logo_cdn'];
-  $logo_local=['logo','logo_url','imagen_logo','logoEvento'];
+  // Logo (cloud/local)
+  $logo=null;
+  foreach(['logo_cloud','logoUrlCloud','logo_cdn','logo','logo_url','imagen_logo','logoEvento'] as $k){
+    if(!empty($row[$k])){ $logo=(string)$row[$k]; break; }
+  }
 
-  $flyer_cloud=['flyer_cloud','poster_cloud','flyer_cdn'];
-  $flyer_local=['flyer','flyer_url','poster'];
-  $bg_cloud=['portada_cloud','banner_cloud','imagen_portada_cloud','bg_cdn'];
-  $bg_local=['portada','banner','imagen_portada','imagen','bg_url','fondo'];
-
-  $nombre='Evento'; foreach($nombre_keys as $k) if(!empty($row[$k])){ $nombre=(string)$row[$k]; break; }
-
-  $logo=null; foreach($logo_cloud as $k) if(!empty($row[$k])){ $logo=(string)$row[$k]; break; }
-  if(!$logo){ foreach($logo_local as $k) if(!empty($row[$k])){ $logo=(string)$row[$k]; break; } }
+  // FONDO: primero variantes de flyer/poster, luego portada/banner, luego genéricos
+  $candidatos_fondo=[
+    'flyer_cloud','poster_cloud','flyer_cdn','flyer','flyer_url','poster','poster_url','flyer_evento','flyer_img',
+    'portada_cloud','banner_cloud','imagen_portada_cloud','bg_cdn',
+    'portada','banner','imagen_portada','imagen','bg_url','fondo','background','background_image',
+  ];
 
   $bg=null;
-  foreach($flyer_cloud as $k) if(!empty($row[$k])){ $bg=(string)$row[$k]; break; }
-  if(!$bg){ foreach($flyer_local as $k) if(!empty($row[$k])){ $bg=(string)$row[$k]; break; } }
-  if(!$bg){ foreach($bg_cloud as $k) if(!empty($row[$k])){ $bg=(string)$row[$k]; break; } }
-  if(!$bg){ foreach($bg_local as $k) if(!empty($row[$k])){ $bg=(string)$row[$k]; break; } }
+  foreach($candidatos_fondo as $k){
+    if(!empty($row[$k]) && is_image_path($row[$k])){ $bg=(string)$row[$k]; break; }
+  }
+  // Si aún no hay fondo, usar logo como último recurso
+  if(!$bg && $logo && is_image_path($logo)) $bg=$logo;
 
-  if($bg && !is_image_path($bg)) $bg=null;
+  // Normalizar a URL absoluta si es ruta local (no http/https)
+  if ($bg && !preg_match('~^https?://~i', $bg) && strpos($bg, 'data:image/')!==0) {
+    $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS']!=='off') ? 'https' : 'http';
+    $host   = $_SERVER['HTTP_HOST'] ?? 'localhost';
+    $bg = rtrim($scheme.'://'.$host,'/').'/'.ltrim($bg,'/');
+  }
 
   return ['nombre'=>$nombre,'logo'=>$logo?:null,'bg'=>$bg?:null,'raw'=>$row];
 }
