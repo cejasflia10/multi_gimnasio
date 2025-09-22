@@ -38,6 +38,12 @@ function has_col(mysqli $db, string $table, string $col): bool {
   if ($r=$db->query($sql)) { $ok=(bool)$r->num_rows; $r->close(); return $ok; }
   return false;
 }
+/* Limpia cualquier salida previa antes de responder JSON (evita romper el fetch con BOM/espacios) */
+function json_clean_headers(){
+  while (ob_get_level()) { ob_end_clean(); }
+  header_remove('Set-Cookie'); // opcional
+  header('Content-Type: application/json; charset=utf-8');
+}
 
 /* ===== Ruta de resultados ===== */
 $RESULTADOS_RUTA = 'resultados.php';
@@ -46,7 +52,7 @@ $RESULTADOS_RUTA = 'resultados.php';
    En disco (XAMPP): C:\xampp\htdocs\multi_gimnasio\assets\sounds\ring_start_bell.mp3
    En web: /multi_gimnasio/assets/sounds/...
 */
-$SND_BASE     = 'assets/sounds/';
+$SND_BASE     = '/multi_gimnasio/assets/sounds/'; // <— AJUSTADO A TU RUTA WEB
 $SND_START    = $SND_BASE.'ring_start_bell.mp3'; // inicio asalto
 $SND_ROUNDEND = $SND_BASE.'ring_end_bell.mp3';   // fin asalto
 $SND_RESTEND  = $SND_BASE.'ring_end_bell.mp3';   // fin descanso / próximo asalto
@@ -71,7 +77,7 @@ function pick_cols_puntuaciones(mysqli $db): array {
 /* ===== Endpoint AJAX: TABLERO ===== */
 if (isset($_GET['ajax']) && $_GET['ajax']==='tablero') {
   ini_set('display_errors', '0'); // no romper JSON
-  header('Content-Type: application/json; charset=utf-8');
+  json_clean_headers();
 
   $t0 = microtime(true);
   $pelea_id = isset($_GET['pelea_id']) && is_numeric($_GET['pelea_id']) ? (int)$_GET['pelea_id'] : 0;
@@ -258,7 +264,7 @@ if (isset($_GET['ajax']) && $_GET['ajax']==='tablero') {
 /* ===== Endpoint AJAX: FINALIZAR (decide y redirige) ===== */
 if (isset($_GET['ajax']) && $_GET['ajax']==='finalizar') {
   ini_set('display_errors', '0');
-  header('Content-Type: application/json; charset=utf-8');
+  json_clean_headers();
   $pelea_id = isset($_POST['pelea_id']) ? (int)$_POST['pelea_id'] : 0;
   if ($pelea_id<=0){ echo json_encode(['ok'=>false,'error'=>'pelea_id_invalido']); exit; }
 
