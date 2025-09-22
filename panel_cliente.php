@@ -1,5 +1,5 @@
 <?php
-// panel_cliente.php — versión moderna + PROMOS "flash" + NOTIFICACIONES (rutinas/planes)
+// panel_cliente.php — versión moderna + PROMOS "flash" + RUTINAS/ARCHIVOS persistentes
 if (session_status() === PHP_SESSION_NONE) session_start();
 require_once __DIR__ . '/conexion.php';
 
@@ -337,7 +337,7 @@ if ($rsP) {
   $rsP->free();
 }
 
-/* ====== NOTIFICACIONES (rutinas/planes) ====== */
+/* ====== RUTINAS/ARCHIVOS (con persistencia por URL externa) ====== */
 /* Tabla de “visto” (idempotente) */
 $conexion->query("
   CREATE TABLE IF NOT EXISTS rutinas_vistas (
@@ -348,6 +348,24 @@ $conexion->query("
     UNIQUE KEY uq_cli_rut (cliente_id, rutina_id),
     INDEX idx_cli (cliente_id),
     INDEX idx_rut (rutina_id)
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+");
+
+/* Tabla de rutinas/archivos enviados por el profesor (si no existe) */
+$conexion->query("
+  CREATE TABLE IF NOT EXISTS rutinas_clientes (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    cliente_id INT NOT NULL,
+    gimnasio_id INT NOT NULL,
+    profesor_id INT NOT NULL,
+    nombre_archivo VARCHAR(255) NOT NULL,
+    url_archivo TEXT NOT NULL,
+    extension VARCHAR(16) DEFAULT '',
+    tamano_bytes INT DEFAULT 0,
+    creado_en DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_cli (cliente_id),
+    INDEX idx_gym (gimnasio_id),
+    INDEX idx_fecha (creado_en)
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 ");
 
@@ -374,8 +392,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['marcar_visto'], $_POS
   exit;
 }
 
-/* Traer últimas 10 rutinas/planes para este cliente con flag visto */
-$notis = [];
+/* Traer rutinas/archivos del profesor con flag visto
+   - Por defecto 10; si ?todo=1, hasta 100 (para historial). */
+$rut_limit = (isset($_GET['todo']) && $_GET['todo'] == '1') ? 100 : 10;
+$rutinas = [];
 if ($stmtN = $conexion->prepare("
   SELECT r.id, r.nombre_archivo, r.url_archivo, r.extension, r.tamano_bytes, r.creado_en,
          COALESCE(CONCAT(p.apellido, ', ', p.nombre), CONCAT('ID ', r.profesor_id)) AS profesor,
@@ -385,11 +405,11 @@ if ($stmtN = $conexion->prepare("
   LEFT JOIN rutinas_vistas v ON v.rutina_id = r.id AND v.cliente_id = ?
   WHERE r.gimnasio_id = ? AND r.cliente_id = ?
   ORDER BY r.creado_en DESC, r.id DESC
-  LIMIT 10
+  LIMIT ?
 ")) {
-  $stmtN->bind_param('iii', $cliente_id, $gimnasio_id, $cliente_id);
+  $stmtN->bind_param('iiii', $cliente_id, $gimnasio_id, $cliente_id, $rut_limit);
   $stmtN->execute();
-  $notis = $stmtN->get_result()->fetch_all(MYSQLI_ASSOC);
+  $rutinas = $stmtN->get_result()->fetch_all(MYSQLI_ASSOC);
   $stmtN->close();
 }
 
@@ -462,7 +482,7 @@ include __DIR__ . '/menu_cliente.php';
     .promos-dots .dot{ width:8px; height:8px; border-radius:50%; background:#ffffff33 }
     .promos-dots .dot.active{ background:#fff }
 
-    /* ===== NOTIFICACIONES (Rutinas) ===== */
+    /* ===== RUTINAS ===== */
     .noti-list{ list-style:none; margin:0; padding:0; display:grid; gap:10px }
     .noti-item{ display:flex; gap:12px; align-items:center; padding:12px; border:1px solid var(--border); border-radius:14px; background:#0f1115 }
     .noti-dot{ width:10px; height:10px; border-radius:50%; background:#22c55e; flex:0 0 auto; }
@@ -560,20 +580,20 @@ include __DIR__ . '/menu_cliente.php';
         <ul id="contenedor-reservas" class="res-list"><li class="muted">Cargando reservas...</li></ul>
       </article>
 
-      <!-- ===== Notificaciones: rutinas/planes subidos por tu profe ===== -->
+      <!-- ===== Rutinas / Archivos enviados por tu profesor ===== -->
       <article class="glass card col-span-2">
-        <h2>🔔 Notificaciones (Rutinas y Planes)</h2>
-        <?php if (empty($notis)): ?>
-          <p class="muted">No tenés novedades por ahora.</p>
+        <h2>📄 Rutinas y Archivos del Profesor</h2>
+        <?php if (empty($rutinas)): ?>
+          <p class="muted">No tenés rutinas/archivos disponibles por ahora.</p>
         <?php else: ?>
-          <ul class="noti-list">
-            <?php foreach ($notis as $n): ?>
+          <ul class="noti-list" id="lista-rutinas" style="max-height:480px; overflow:auto">
+            <?php foreach ($rutinas as $n): ?>
             <li class="noti-item">
               <span class="noti-dot <?= $n['visto'] ? 'visto':'' ?>"></span>
               <div style="flex:1 1 auto">
                 <div class="noti-name"><?= h($n['nombre_archivo']) ?></div>
                 <div class="muted" style="font-size:.9rem">
-                  <span class="chip"><?= strtoupper(h($n['extension'])) ?></span>
+                  <span class="chip"><?= strtoupper(h($n['extension'] ?: 'archivo')) ?></span>
                   · <?= h(fmt_bytes($n['tamano_bytes'])) ?>
                   · Subido por <?= h($n['profesor']) ?>
                   · <span class="muted"><?= h($n['creado_en']) ?></span>
@@ -591,8 +611,14 @@ include __DIR__ . '/menu_cliente.php';
             </li>
             <?php endforeach; ?>
           </ul>
-          <div style="margin-top:10px">
-            <a class="btn" href="ver_mis_rutinas.php">📁 Ver historial completo</a>
+
+          <!-- Mostrar más / menos sin salir del panel -->
+          <div style="margin-top:10px; display:flex; gap:8px; flex-wrap:wrap">
+            <?php if (!isset($_GET['todo']) || $_GET['todo'] != '1'): ?>
+              <a class="btn" href="panel_cliente.php?todo=1">📁 Ver historial completo</a>
+            <?php else: ?>
+              <a class="btn" href="panel_cliente.php">⬆️ Mostrar menos</a>
+            <?php endif; ?>
           </div>
         <?php endif; ?>
       </article>

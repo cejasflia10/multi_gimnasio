@@ -1,161 +1,158 @@
 <?php
-// guardar_rutina.php — guarda el archivo en /uploads/rutinas (o /public/uploads/rutinas si existe)
-// y genera una URL pública ABSOLUTA correcta tanto en XAMPP (carpeta proyecto bajo htdocs) como en hosting (Render, etc.)
-
+// guardar_rutina.php — Sube rutinas del profesor a Cloudinary (persistente) y guarda metadatos en MySQL
 if (session_status() === PHP_SESSION_NONE) session_start();
 require_once __DIR__ . '/conexion.php';
 
-if (!isset($conexion) || !($conexion instanceof mysqli)) {
-  http_response_code(500);
-  exit('❌ Sin conexión a la base de datos.');
-}
+if (!isset($conexion) || !($conexion instanceof mysqli)) { http_response_code(500); exit('❌ Sin conexión BD'); }
 if (function_exists('mysqli_report')) { mysqli_report(MYSQLI_REPORT_OFF); }
 @$conexion->set_charset('utf8mb4');
 
-/* ====== Guards de sesión ====== */
 $profesor_id = (int)($_SESSION['profesor_id'] ?? 0);
 $gimnasio_id = (int)($_SESSION['gimnasio_id'] ?? 0);
-if ($profesor_id <= 0 || $gimnasio_id <= 0) {
-  http_response_code(403);
-  exit('❌ Sesión inválida. Volvé a iniciar sesión.');
-}
+if ($profesor_id <= 0 || $gimnasio_id <= 0) { http_response_code(403); exit('❌ Sesión inválida.'); }
 
-/* ====== Input ====== */
-$cliente_id = isset($_POST['cliente_id']) ? (int)$_POST['cliente_id'] : 0;
-if ($cliente_id <= 0) redirect_err('Falta seleccionar el alumno.');
+/* =========================
+   Cloudinary (persistente)
+   ========================= */
+// Opción 1: usa CLOUDINARY_URL en variables de entorno
+// Opción 2: completa acá tus credenciale
+const CLOUD_ENABLED    = true;                 // ← activado
+const CLOUD_NAME       = 'ddfugds9b';          // ← tu cloud name
+const CLOUD_API_KEY    = '657814174747186';    // ← tu API key
+const CLOUD_API_SECRET = 'TKo5BRiKCEjxSLFzn2DLbz_ji4c'; // ← tu API secret
 
-/* Validar alumno pertenece al gimnasio */
-if ($st = $conexion->prepare("SELECT 1 FROM clientes WHERE id=? AND gimnasio_id=? LIMIT 1")) {
-  $st->bind_param('ii', $cliente_id, $gimnasio_id);
-  $st->execute(); $st->store_result();
-  if ($st->num_rows === 0) { $st->close(); redirect_err('Alumno inválido para este gimnasio.'); }
-  $st->close();
-} else {
-  redirect_err('Error interno al validar alumno.');
-}
+function cloud_init(): void {
+  static $ok=false; if ($ok) return; $ok=true;
+  if (!CLOUD_ENABLED && !getenv('CLOUDINARY_URL')) return;
 
-/* ====== Archivo ====== */
-if (!isset($_FILES['archivo']) || $_FILES['archivo']['error'] !== UPLOAD_ERR_OK) {
-  redirect_err('No se recibió el archivo o hubo un error al subirlo.');
-}
-$ALLOWED  = ['pdf','jpg','jpeg','png','doc','docx'];
-$maxBytes = 20 * 1024 * 1024; // 20 MB
-$origName = (string)($_FILES['archivo']['name'] ?? '');
-$tmpPath  = (string)($_FILES['archivo']['tmp_name'] ?? '');
-$size     = (int)($_FILES['archivo']['size'] ?? 0);
-$ext      = strtolower(pathinfo($origName, PATHINFO_EXTENSION));
-if (!in_array($ext, $ALLOWED, true)) redirect_err('Tipo de archivo no permitido.');
-if ($size <= 0 || $size > $maxBytes)  redirect_err('Archivo demasiado grande (máx 20 MB).');
+  $autoload1 = __DIR__ . '/vendor/autoload.php';
+  $autoload2 = dirname(__DIR__) . '/vendor/autoload.php';
+  if (file_exists($autoload1)) require_once $autoload1;
+  elseif (file_exists($autoload2)) require_once $autoload2;
 
-/* ====== Rutas: proyecto, docroot y baseUri ====== */
-$projectDir = str_replace('\\','/', realpath(__DIR__));                          // p.ej. C:/xampp/htdocs/multi_gimnasio
-$docroot    = isset($_SERVER['DOCUMENT_ROOT']) ? str_replace('\\','/', realpath($_SERVER['DOCUMENT_ROOT'])) : '';
-if (!$projectDir) redirect_err('No pude resolver el directorio del proyecto.');
-if (!$docroot)     $docroot = $projectDir; // fallback seguro
-
-// Base URI del proyecto respecto al docroot (ej: "/multi_gimnasio" en XAMPP; "" si el docroot ES la raíz del proyecto)
-$baseUri = '';
-if (strpos($projectDir, $docroot) === 0) {
-  $baseUri = substr($projectDir, strlen($docroot)); // puede ser "" o "/multi_gimnasio"
-  if ($baseUri === false) $baseUri = '';
-}
-if ($baseUri !== '' && $baseUri[0] !== '/') $baseUri = '/'.$baseUri;
-
-/* ====== Carpeta destino: respetar tu estructura actual ======
-   - Si YA existe /public/uploads/rutinas dentro del proyecto, usamos ESA (no movés nada).
-   - Si no existe, usamos /uploads/rutinas en la raíz del proyecto.
-*/
-$dirPublicUploads = $projectDir . '/public/uploads/rutinas';
-$dirRootUploads   = $projectDir . '/uploads/rutinas';
-
-if (is_dir($dirPublicUploads)) {
-  $baseDir = $dirPublicUploads;
-  $relUriPrefix = '/public/uploads/rutinas'; // para armar la URL
-} else {
-  $baseDir = $dirRootUploads;
-  $relUriPrefix = '/uploads/rutinas';
-  if (!is_dir($baseDir)) @mkdir($baseDir, 0775, true);
-}
-
-if (!is_dir($baseDir) || !is_writable($baseDir)) {
-  redirect_err('Carpeta no escribible: ' . $baseDir);
-}
-
-/* ====== Nombre único y mover ====== */
-try { $rand = bin2hex(random_bytes(4)); } catch (Throwable $e) { $rand = uniqid(); }
-$fname    = date('Ymd_His') . "_alumno-{$cliente_id}_{$rand}." . $ext;
-$destPath = $baseDir . '/' . $fname;
-
-if (!move_uploaded_file($tmpPath, $destPath)) {
-  redirect_err('No se pudo guardar el archivo en el servidor (move_uploaded_file).');
-}
-
-/* ====== URL pública ABSOLUTA ====== */
-$isHttps = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') || (($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https');
-$scheme  = $isHttps ? 'https' : 'http';
-$host    = $_SERVER['HTTP_HOST'] ?? 'localhost';
-
-// Si definiste APP_BASE_URL (config propia), la respetamos. Si no, calculamos con host + baseUri.
-if (!defined('APP_BASE_URL') || !APP_BASE_URL) {
-  define('APP_BASE_URL', $scheme . '://' . $host . $baseUri);
-}
-$publicUrl = rtrim(APP_BASE_URL, '/') . $relUriPrefix . '/' . $fname;
-
-// Ejemplos:
-//  - XAMPP sin vhost:  http://localhost/multi_gimnasio/uploads/rutinas/archivo.pdf
-//  - XAMPP si usás /public: http://localhost/multi_gimnasio/public/uploads/rutinas/archivo.pdf
-//  - Render (todo en raíz): https://tu-app.onrender.com/uploads/rutinas/archivo.pdf
-//  - Render (si usás subcarpeta public y la servís): https://tu-app.onrender.com/public/uploads/rutinas/archivo.pdf
-
-/* ====== Tabla e inserción ====== */
-$conexion->query("
-  CREATE TABLE IF NOT EXISTS rutinas_clientes (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    gimnasio_id INT NOT NULL,
-    profesor_id INT NOT NULL,
-    cliente_id INT NOT NULL,
-    nombre_archivo VARCHAR(255) NOT NULL,
-    url_archivo TEXT NOT NULL,
-    tamano_bytes BIGINT UNSIGNED NOT NULL,
-    extension VARCHAR(10) NOT NULL,
-    creado_en DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    INDEX idx_gym_cliente (gimnasio_id, cliente_id),
-    INDEX idx_profesor (profesor_id)
-  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-");
-
-$sql = "INSERT INTO rutinas_clientes
-        (gimnasio_id, profesor_id, cliente_id, nombre_archivo, url_archivo, tamano_bytes, extension)
-        VALUES (?,?,?,?,?,?,?)";
-$stmt = $conexion->prepare($sql);
-if (!$stmt) {
-  @unlink($destPath);
-  redirect_err('Error al preparar inserción: ' . $conexion->error);
-}
-$basename = basename($destPath);
-$stmt->bind_param('iiissis', $gimnasio_id, $profesor_id, $cliente_id, $basename, $publicUrl, $size, $ext);
-$ok = $stmt->execute();
-$stmt->close();
-
-if (!$ok) {
-  @unlink($destPath);
-  redirect_err('No se pudo guardar en la base de datos.');
-}
-
-/* ====== OK ====== */
-if (!headers_sent()) {
-  header('Location: subir_rutina.php?ok=1');
-  exit;
-}
-echo "✅ Rutina subida correctamente. <a href=\"subir_rutina.php\">Volver</a>";
-
-/* ====== Helper ====== */
-function redirect_err(string $msg){
-  $msg = trim($msg);
-  if (!headers_sent()) {
-    header('Location: subir_rutina.php?err=' . urlencode($msg));
-  } else {
-    echo '❌ ' . htmlspecialchars($msg, ENT_QUOTES, 'UTF-8');
+  if (!class_exists('\Cloudinary\Configuration\Configuration')) {
+    throw new RuntimeException('Cloudinary SDK no encontrado. Ejecutá "composer require cloudinary/cloudinary_php".');
   }
+
+  // Si tenés CLOUDINARY_URL, podés omitir esto; igual lo dejamos explícito.
+  \Cloudinary\Configuration\Configuration::instance([
+    'cloud' => [
+      'cloud_name' => CLOUD_NAME,
+      'api_key'    => CLOUD_API_KEY,
+      'api_secret' => CLOUD_API_SECRET,
+    ],
+    'url' => ['secure' => true]
+  ]);
+}
+
+function subir_cloudinary_auto(string $tmpPath, string $publicId, string $folder): array {
+  cloud_init();
+  $uploader = new \Cloudinary\Uploader();
+
+  // resource_type:auto -> decide solo (imagenes como image, pdf/doc como raw)
+  return $uploader->upload($tmpPath, [
+    'resource_type'    => 'auto',
+    'public_id'        => $publicId,
+    'use_filename'     => false,
+    'unique_filename'  => false,
+    'overwrite'        => true,
+    'folder'           => $folder,   // ej: multi_gimnasio/rutinas/90
+  ]);
+}
+
+function redir_ok(int $ok = 1, string $extra = ''): void {
+  $qs = "ok={$ok}";
+  if ($extra !== '') $qs .= '&err=' . rawurlencode($extra);
+  header('Location: subir_rutina.php?' . $qs);
   exit;
+}
+
+/* =========================
+   Validaciones
+   ========================= */
+if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+  http_response_code(405);
+  exit('Método no permitido.');
+}
+
+$cliente_id = (int)($_POST['cliente_id'] ?? 0);
+if ($cliente_id <= 0) { redir_ok(0, 'Alumno inválido.'); }
+
+if (!isset($_FILES['archivo']) || $_FILES['archivo']['error'] !== UPLOAD_ERR_OK) {
+  redir_ok(0, 'Error al recibir el archivo.');
+}
+
+$f = $_FILES['archivo'];
+$maxBytes = 20 * 1024 * 1024; // 20MB
+if ($f['size'] <= 0 || $f['size'] > $maxBytes) {
+  redir_ok(0, 'Tamaño inválido (0 o supera 20 MB).');
+}
+
+// validar que el alumno pertenezca al gimnasio
+$stmt = $conexion->prepare("SELECT id FROM clientes WHERE id=? AND gimnasio_id=? LIMIT 1");
+$stmt->bind_param('ii', $cliente_id, $gimnasio_id);
+$stmt->execute();
+$cli = $stmt->get_result()->fetch_assoc();
+$stmt->close();
+if (!$cli) { redir_ok(0, 'El alumno no pertenece a este gimnasio.'); }
+
+// detectar mime
+$mime = @mime_content_type($f['tmp_name']) ?: '';
+$permitidos = [
+  'application/pdf',
+  'image/jpeg','image/png',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+];
+if (!in_array($mime, $permitidos, true)) {
+  redir_ok(0, 'Formato no permitido (PDF/JPG/PNG/DOC/DOCX).');
+}
+
+/* =========================
+   Subida a Cloudinary
+   ========================= */
+$baseName  = pathinfo($f['name'], PATHINFO_FILENAME);
+$sanitized = preg_replace('/[^A-Za-z0-9._-]+/', '_', $baseName);
+$timestamp = date('Ymd_His');
+$rand8     = substr(bin2hex(random_bytes(4)), 0, 8);
+
+// public_id final (sin extensión). Ej: 20250917_201942_rutina-alumno-90_ab12cd34
+$publicId = $timestamp . '_' . ($sanitized ?: 'rutina') . "_alumno-{$cliente_id}_{$rand8}";
+
+// carpeta por cliente para orden: multi_gimnasio/rutinas/90
+$folder = "multi_gimnasio/rutinas/{$cliente_id}";
+
+try {
+  $res = subir_cloudinary_auto($f['tmp_name'], $publicId, $folder);
+
+  // Datos devueltos
+  $url    = $res['secure_url'] ?? ($res['url'] ?? '');
+  $pid    = $res['public_id']  ?? ($folder . '/' . $publicId);
+  $bytes  = (int)($res['bytes'] ?? $f['size']);
+  $format = (string)($res['format'] ?? '');
+  $nombre_original = $f['name'];
+
+  if (!$url) {
+    redir_ok(0, 'No se obtuvo URL de Cloudinary.');
+  }
+
+  // Guardar metadatos
+  $stmt2 = $conexion->prepare("INSERT INTO cliente_archivos
+    (cliente_id, gimnasio_id, profesor_id, nombre_original, public_id, url, formato, mime, bytes)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)");
+  $stmt2->bind_param(
+    'iiisssssi',
+    $cliente_id, $gimnasio_id, $profesor_id, $nombre_original, $pid, $url, $format, $mime, $bytes
+  );
+  $ok = $stmt2->execute();
+  $stmt2->close();
+
+  if (!$ok) {
+    redir_ok(0, 'No se pudo guardar metadatos en la BD.');
+  }
+
+  redir_ok(1);
+
+} catch (Throwable $e) {
+  redir_ok(0, 'Error subiendo: ' . $e->getMessage());
 }
