@@ -124,7 +124,6 @@ function save_upload(string $field, int $evento_id): ?string {
       'filename' => $name,
     ];
   } else {
-    // Si no se intentó (Cloudinary no configurado), no mostramos nada.
     unset($_SESSION['upload_status'][$field]);
   }
 
@@ -266,6 +265,9 @@ $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS']!=='off') ? 'https' : '
 $host   = $_SERVER['HTTP_HOST'] ?? 'localhost';
 $path   = strtok($_SERVER['PHP_SELF'] ?? '/agregar_competidor_evento.php','?');
 $share_url = $scheme.'://'.$host.$path.($evento_presente ? ('?evento_id='.$evento_id_ctx) : '');
+
+/* ===== Estado de Cloudinary para mostrar en UI ===== */
+$CLOUDY_ON = cloud_configured();
 
 /* ===== POST: guardar competidor ===== */
 if ($_SERVER['REQUEST_METHOD']==='POST') {
@@ -428,6 +430,7 @@ $idMuay = cat_id_by_nombre($conexion,'modalidades_evento','Muay Thai') ?? 7;
     .alert{padding:10px 12px;border-radius:10px;margin:10px 0}
     .alert.ok{background:var(--ok);border:1px solid var(--okbd);color:var(--oktx)}
     .alert.bad{background:var(--bad);border:1px solid var(--badbd);color:var(--badt)}
+    .alert.info{background:#14202b;border:1px solid #2b4154;color:#cfe7ff}
 
     .hero{
       position:relative;border:1px solid var(--bd);border-radius:16px;overflow:hidden;margin-bottom:10px;
@@ -475,6 +478,13 @@ $idMuay = cat_id_by_nombre($conexion,'modalidades_evento','Muay Thai') ?? 7;
     </div>
 
     <h2>🏅 Registro de Competidor</h2>
+
+    <!-- Banner de estado de Cloudinary -->
+    <?php if ($CLOUDY_ON): ?>
+      <div class="alert ok">☁️ Cloudinary <b>ACTIVO</b>: los archivos se subirán a la nube.</div>
+    <?php else: ?>
+      <div class="alert info">☁️ Cloudinary <b>INACTIVO</b>: los archivos se guardarán <b>localmente</b>. (Podés activar <code>CLOUDINARY_URL</code> o las constantes).</div>
+    <?php endif; ?>
 
     <!-- Link para COMPARTIR con evento_id -->
     <div class="card" style="margin-top:6px">
@@ -546,12 +556,14 @@ $idMuay = cat_id_by_nombre($conexion,'modalidades_evento','Muay Thai') ?? 7;
           <div>
             <label>Logo de la Escuela (IMG/PDF)</label>
             <input type="file" id="escuela_logo" name="escuela_logo" accept="image/*,application/pdf">
-            <div class="mut" style="font-size:.85rem;margin-top:4px">Se sube a Cloudinary si está activo.</div>
+            <div class="<?= $CLOUDY_ON ? 'note-ok' : 'note-bad' ?>">
+              <?= $CLOUDY_ON ? 'Cloudinary activo: se subirá a la nube.' : 'Cloudinary inactivo: se guardará localmente.' ?>
+            </div>
             <?php if (!empty($upload_status['escuela_logo'])): ?>
               <?php if ($upload_status['escuela_logo']['status']==='ok'): ?>
-                <div class="note-ok">☁️ Cloudinary: subido correctamente.</div>
+                <div class="note-ok">☁️ Subido correctamente.</div>
               <?php else: ?>
-                <div class="note-bad">☁️ Cloudinary: fallo al subir. Vuelva a intentar.</div>
+                <div class="note-bad">☁️ Fallo al subir. Vuelva a intentar.</div>
               <?php endif; ?>
             <?php endif; ?>
           </div>
@@ -559,11 +571,14 @@ $idMuay = cat_id_by_nombre($conexion,'modalidades_evento','Muay Thai') ?? 7;
           <div>
             <label>Foto del Competidor</label>
             <input type="file" id="foto_competidor" name="foto_competidor" accept="image/*">
+            <div class="<?= $CLOUDY_ON ? 'note-ok' : 'note-bad' ?>">
+              <?= $CLOUDY_ON ? 'Cloudinary activo: se subirá a la nube.' : 'Cloudinary inactivo: se guardará localmente.' ?>
+            </div>
             <?php if (!empty($upload_status['foto_competidor'])): ?>
               <?php if ($upload_status['foto_competidor']['status']==='ok'): ?>
-                <div class="note-ok">☁️ Cloudinary: subido correctamente.</div>
+                <div class="note-ok">☁️ Subido correctamente.</div>
               <?php else: ?>
-                <div class="note-bad">☁️ Cloudinary: fallo al subir. Vuelva a intentar.</div>
+                <div class="note-bad">☁️ Fallo al subir. Vuelva a intentar.</div>
               <?php endif; ?>
             <?php endif; ?>
           </div>
@@ -637,11 +652,14 @@ $idMuay = cat_id_by_nombre($conexion,'modalidades_evento','Muay Thai') ?? 7;
           <div>
             <label>Comprobante (imagen o PDF)</label>
             <input type="file" name="comprobante_pago" id="comprobante_pago" accept="image/*,application/pdf">
+            <div class="<?= $CLOUDY_ON ? 'note-ok' : 'note-bad' ?>">
+              <?= $CLOUDY_ON ? 'Cloudinary activo: se subirá a la nube.' : 'Cloudinary inactivo: se guardará localmente.' ?>
+            </div>
             <?php if (!empty($upload_status['comprobante_pago'])): ?>
               <?php if ($upload_status['comprobante_pago']['status']==='ok'): ?>
-                <div class="note-ok">☁️ Cloudinary: subido correctamente.</div>
+                <div class="note-ok">☁️ Subido correctamente.</div>
               <?php else: ?>
-                <div class="note-bad">☁️ Cloudinary: fallo al subir. Vuelva a intentar.</div>
+                <div class="note-bad">☁️ Fallo al subir. Vuelva a intentar.</div>
               <?php endif; ?>
             <?php endif; ?>
           </div>
