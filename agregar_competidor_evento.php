@@ -243,12 +243,18 @@ $EV_NOMBRE = $ev['nombre'] ?: 'Evento';
 $EV_LOGO   = $ev['logo']   ?: null;
 $EV_BG     = $ev['bg']     ?: null;
 
+/* URL canónica para compartir (con evento_id) */
+$scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS']!=='off') ? 'https' : 'http';
+$host   = $_SERVER['HTTP_HOST'] ?? 'localhost';
+$path   = strtok($_SERVER['PHP_SELF'] ?? '/agregar_competidor_evento.php','?');
+$share_url = $scheme.'://'.$host.$path.($evento_presente ? ('?evento_id='.$evento_id_ctx) : '');
+
 /* ===== POST: guardar competidor ===== */
 if ($_SERVER['REQUEST_METHOD']==='POST') {
   $evento_id = $evento_id_ctx;
   if ($evento_id <= 0) {
-    $_SESSION['flash_error']='Falta evento_id. Abrí el formulario desde el evento.';
-    header('Location: '.$_SERVER['PHP_SELF'].($evento_id_ctx>0?'?evento_id='.$evento_id_ctx:'')); exit;
+    $_SESSION['flash_error']='Falta evento_id. Abrí el formulario desde el evento o usá el link compartido.';
+    header('Location: '.$path.($evento_id_ctx>0?'?evento_id='.$evento_id_ctx:'')); exit;
   }
 
   // Datos base
@@ -295,15 +301,15 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
   // Validaciones mínimas
   if ($apellido==='' || $nombre==='' || $dni==='') {
     $_SESSION['flash_error']='Apellido, Nombre y DNI son obligatorios.';
-    header('Location: '.$_SERVER['PHP_SELF'].'?evento_id='.$evento_id); exit;
+    header('Location: '.$path.'?evento_id='.$evento_id); exit;
   }
   if ($fecha_nac!=='' && !preg_match('/^\d{4}-\d{2}-\d{2}$/',$fecha_nac)) {
     $_SESSION['flash_error']='Fecha de nacimiento inválida (YYYY-MM-DD).';
-    header('Location: '.$_SERVER['PHP_SELF'].'?evento_id='.$evento_id); exit;
+    header('Location: '.$path.'?evento_id='.$evento_id); exit;
   }
   if (existe_dni_evento($conexion,$evento_id,$dni)) {
     $_SESSION['flash_error']='Ese DNI ya está inscripto en este evento.';
-    header('Location: '.$_SERVER['PHP_SELF'].'?evento_id='.$evento_id); exit;
+    header('Location: '.$path.'?evento_id='.$evento_id); exit;
   }
 
   // Normalizar FKs
@@ -354,11 +360,11 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
     $_SESSION['wa_link'] = $tel ? ("https://wa.me/".$tel."?text=".$msg) : null;
   } else { $_SESSION['wa_link']=null; }
 
-  header('Location: '.$_SERVER['PHP_SELF'].'?evento_id='.$evento_id); exit;
+  header('Location: '.$path.'?evento_id='.$evento_id); exit;
 }
 
 /* ===== Vista (GET) ===== */
-$evento_id = $evento_id_ctx;
+$evento_id = $evento_id_ctx; // por comodidad con el nombre corto
 $wa_link = $_SESSION['wa_link'] ?? null;
 unset($_SESSION['wa_link']);
 
@@ -412,6 +418,8 @@ $idMuay = cat_id_by_nombre($conexion,'modalidades_evento','Muay Thai') ?? 7;
       box-shadow:0 8px 30px rgba(0,0,0,.35);
     }
     .hero .title{font-size:22px;font-weight:700;letter-spacing:.3px;text-shadow:0 2px 10px rgba(0,0,0,.5);}
+    .share{display:flex;gap:8px;align-items:center;margin:8px 0 0}
+    .share input{flex:1}
   </style>
 <?php if ($EV_BG): ?>
   <style>
@@ -443,6 +451,18 @@ $idMuay = cat_id_by_nombre($conexion,'modalidades_evento','Muay Thai') ?? 7;
 
     <h2>🏅 Registro de Competidor</h2>
 
+    <!-- Link para COMPARTIR con evento_id -->
+    <div class="card" style="margin-top:6px">
+      <b>🔗 Compartir formulario de inscripción</b>
+      <div class="share">
+        <input type="text" id="share_url" readonly value="<?= h($share_url) ?>">
+        <button type="button" class="btn" onclick="copyShare()">Copiar</button>
+      </div>
+      <div style="color:#cfe7ff;font-size:.9rem;margin-top:6px">
+        Enviá este enlace. Abre el formulario ya asociado al evento #<?= (int)$evento_id ?>.
+      </div>
+    </div>
+
     <?php if (!empty($_SESSION['ok_msg'])): ?>
       <div class="alert ok"><?= h($_SESSION['ok_msg']); unset($_SESSION['ok_msg']); ?></div>
     <?php endif; ?>
@@ -450,7 +470,7 @@ $idMuay = cat_id_by_nombre($conexion,'modalidades_evento','Muay Thai') ?? 7;
       <div class="alert bad"><?= h($_SESSION['flash_error']); unset($_SESSION['flash_error']); ?></div>
     <?php endif; ?>
     <?php if (!$evento_presente): ?>
-      <div class="alert bad">Falta <b>evento_id</b>. Abrí este formulario desde el enlace del evento.</div>
+      <div class="alert bad">Falta <b>evento_id</b>. Abrí este formulario desde el enlace del evento o usá el botón “Compartir formulario”.</div>
     <?php endif; ?>
 
     <?php if (!empty($wa_link)): ?>
@@ -460,7 +480,7 @@ $idMuay = cat_id_by_nombre($conexion,'modalidades_evento','Muay Thai') ?? 7;
       </div>
     <?php endif; ?>
 
-    <form action="<?= h($_SERVER['PHP_SELF']) ?>?evento_id=<?= (int)$evento_id ?>" method="POST" enctype="multipart/form-data" id="form_comp">
+    <form action="<?= h($path) ?>?evento_id=<?= (int)$evento_id ?>" method="POST" enctype="multipart/form-data" id="form_comp">
       <input type="hidden" name="evento_id" id="evento_id" value="<?= $evento_presente ? h((string)$evento_id) : '' ?>">
 
       <div class="card">
@@ -592,6 +612,13 @@ $idMuay = cat_id_by_nombre($conexion,'modalidades_evento','Muay Thai') ?? 7;
   </div>
 
   <script>
+  /* ==== Copiar link de compartir ==== */
+  function copyShare(){
+    const el = document.getElementById('share_url');
+    el.select(); el.setSelectionRange(0, 99999);
+    try { document.execCommand('copy'); } catch(e){}
+  }
+
   /* ==== Provincias y Localidades (Argentina) ==== */
   const PROVINCIAS=["Buenos Aires","CABA","Catamarca","Chaco","Chubut","Córdoba","Corrientes","Entre Ríos","Formosa","Jujuy","La Pampa","La Rioja","Mendoza","Misiones","Neuquén","Río Negro","Salta","San Juan","San Luis","Santa Cruz","Santa Fe","Santiago del Estero","Tierra del Fuego","Tucumán"];
   const PROV_IDX={}; PROVINCIAS.forEach((p,i)=>PROV_IDX[p]=i+1);

@@ -42,7 +42,7 @@ $C_ROJO     = $pick(['competidor_rojo_id','rojo_id','id_rojo','id_competidor_roj
 $C_AZUL     = $pick(['competidor_azul_id','azul_id','id_azul','id_competidor_azul','azul']);
 $C_RONDAS   = $pick(['rondas','rounds']);
 $C_OBS      = $pick(['observaciones','obs','comentarios','comentario','nota']);
-$C_FECHA    = $pick(['fecha','creado_en','created_at','created','fh_creacion']); // para orden
+$C_FECHA    = $pick(['fecha','creado_en','created_at','created','fh_creacion']); // fallback para orden inicial
 
 if (!$C_EVENTO || !$C_ROJO || !$C_AZUL) {
   echo '<div style="max-width:900px;margin:16px auto;padding:12px;border:1px solid #f5c6cb;background:#fdecea;color:#b71c1c;border-radius:8px;">
@@ -86,6 +86,7 @@ $orderBy = $C_FECHA ? ('p.'.bt($C_FECHA)) : 'p.'.bt($C_ID ?: 'id');
 $selectRondas = $C_RONDAS ? (', p.'.bt($C_RONDAS).' AS rondas') : ', NULL AS rondas';
 $selectObs    = $C_OBS    ? (', p.'.bt($C_OBS).' AS observaciones') : ', NULL AS observaciones';
 
+/* Traemos además la categoría técnica de cada competidor para el orden secundario */
 $sql = "
 SELECT 
   p.".bt($C_ID ?: 'id')." AS pelea_id
@@ -93,19 +94,27 @@ SELECT
   $selectObs,
   cr.apellido AS r_apellido, cr.nombre AS r_nombre, cr.escuela_nombre AS r_escuela,
   cr.foto_competidor AS r_foto, cpr.nombre AS r_peso, dvr.nombre AS r_division, mr.nombre AS r_modalidad,
+  ctr.codigo AS r_cat_cod, ctr.descripcion AS r_cat_desc, ctr.id AS r_cat_id,
+
   ca.apellido AS a_apellido, ca.nombre AS a_nombre, ca.escuela_nombre AS a_escuela,
-  ca.foto_competidor AS a_foto, cpa.nombre AS a_peso, dva.nombre AS a_division, ma.nombre AS a_modalidad
+  ca.foto_competidor AS a_foto, cpa.nombre AS a_peso, dva.nombre AS a_division, ma.nombre AS a_modalidad,
+  cta.codigo AS a_cat_cod, cta.descripcion AS a_cat_desc, cta.id AS a_cat_id
 FROM peleas_evento p
 JOIN competidores_evento cr ON p.$colR = cr.id
 JOIN competidores_evento ca ON p.$colA = ca.id
-LEFT JOIN categorias_peso_evento cpr ON cpr.id = cr.categoria_peso_id
-LEFT JOIN divisiones_evento      dvr ON dvr.id = cr.division_id
-LEFT JOIN modalidades_evento     mr  ON mr.id  = cr.modalidad_id
-LEFT JOIN categorias_peso_evento cpa ON cpa.id = ca.categoria_peso_id
-LEFT JOIN divisiones_evento      dva ON dva.id = ca.division_id
-LEFT JOIN modalidades_evento     ma  ON ma.id  = ca.modalidad_id
+LEFT JOIN categorias_peso_evento     cpr ON cpr.id = cr.categoria_peso_id
+LEFT JOIN divisiones_evento          dvr ON dvr.id = cr.division_id
+LEFT JOIN modalidades_evento         mr  ON mr.id  = cr.modalidad_id
+LEFT JOIN categorias_tecnicas_evento ctr ON ctr.id = cr.categoria_tecnica_id
+
+LEFT JOIN categorias_peso_evento     cpa ON cpa.id = ca.categoria_peso_id
+LEFT JOIN divisiones_evento          dva ON dva.id = ca.division_id
+LEFT JOIN modalidades_evento         ma  ON ma.id  = ca.modalidad_id
+LEFT JOIN categorias_tecnicas_evento cta ON cta.id = ca.categoria_tecnica_id
+
 WHERE p.$colE = ?
-ORDER BY $orderBy DESC
+/* Orden preliminar estable (por fecha/ID) para que el usort sea determinístico */
+ORDER BY $orderBy ASC
 ";
 $st = $conexion->prepare($sql);
 if (!$st) {
@@ -117,6 +126,108 @@ $st->execute();
 $peleas = $st->get_result()->fetch_all(MYSQLI_ASSOC);
 $st->close();
 
+/* ====== Clasificación y ordenamiento según reglas ====== */
+function norm($s){ return mb_strtolower(trim((string)$s), 'UTF-8'); }
+
+/**
+ * Retorna [bloque_prioridad, etiqueta_bloque]
+ * Bloques (menor número = antes):
+ * 1: Exhibiciones Boxeo
+ * 2: Exhibiciones Lowkick
+ * 3: Amateur Boxeo
+ * 4: Amateur Lowkick
+ * 5: Amateur K1
+ * 6: ProAm
+ * 7: K1
+ * 8: MMA
+ * 9: Pro
+ * 99: Otros / sin clasificar
+ */
+function clasificar_bloque(array $row): array {
+  $modR = norm($row['r_modalidad'] ?? '');
+  $modA = norm($row['a_modalidad'] ?? '');
+  $obs  = norm($row['observaciones'] ?? '');
+  $mod  = $modR.' '.$modA.' '.$obs;
+
+  $isExhib = (bool)preg_match('/exhib/i', $mod);
+  $isAma   = (bool)preg_match('/amateur|amat\b/i', $mod);
+  $isProAm = (bool)preg_match('/pro[\s\-]?am/i', $mod);
+  $isPro   = (bool)preg_match('/\bpro\b|prof(esional)?/i', $mod);
+
+  $isK1    = (bool)preg_match('/\bk1\b/i', $mod);
+  $isMMA   = (bool)preg_match('/\bmma\b/i', $mod);
+  $isBox   = (bool)preg_match('/box|boxeo/i', $mod);
+  $isLow   = (bool)preg_match('/low[\s\-]?kick/i', $mod);
+
+  // Exhibiciones primero
+  if ($isExhib && $isBox) return [1, 'Exhibición Boxeo'];
+  if ($isExhib && $isLow) return [2, 'Exhibición Lowkick'];
+
+  // Amateur (por modalidad/obs)
+  if ($isAma && $isBox)   return [3, 'Amateur Boxeo'];
+  if ($isAma && $isLow)   return [4, 'Amateur Lowkick'];
+  if ($isAma && $isK1)    return [5, 'Amateur K1'];
+
+  // ProAm
+  if ($isProAm)           return [6, 'ProAm'];
+
+  // K1 / MMA "abiertos" (no marcar como amateur explícito)
+  if ($isK1)              return [7, 'K1'];
+  if ($isMMA)             return [8, 'MMA'];
+
+  // Pro (genérico o por marca)
+  if ($isPro)             return [9, 'Pro'];
+
+  return [99, 'Otros'];
+}
+
+/* Clave de orden por categoría técnica */
+function clave_tecnica(array $row): array {
+  // Preferimos el código (alfanumérico), luego la descripción, luego el ID
+  $cod = $row['r_cat_cod'] ?? '';
+  $desc= $row['r_cat_desc'] ?? '';
+  $id  = $row['r_cat_id'] ?? null;
+
+  // Si en rojo está vacío, probamos azul
+  if ($cod === '' && ($row['a_cat_cod'] ?? '') !== '') $cod = $row['a_cat_cod'];
+  if ($desc === '' && ($row['a_cat_desc'] ?? '') !== '') $desc = $row['a_cat_desc'];
+  if (is_null($id) && !is_null($row['a_cat_id'] ?? null)) $id = $row['a_cat_id'];
+
+  $codNorm  = strtoupper(trim((string)$cod));
+  $descNorm = strtoupper(trim((string)$desc));
+  $idVal    = (int)($id ?? 0);
+
+  // Construimos una tupla comparable
+  if ($codNorm !== '')   return [0, $codNorm, $idVal, $descNorm];
+  if ($descNorm !== '')  return [1, $descNorm, $idVal, ''];
+  return [2, '', $idVal, ''];
+}
+
+/* Ordenamos en PHP según (bloque, técnica, id_pelea) */
+usort($peleas, function($A, $B){
+  [$b1a] = clasificar_bloque($A);
+  [$b1b] = clasificar_bloque($B);
+  if ($b1a !== $b1b) return $b1a <=> $b1b;
+
+  $ta = clave_tecnica($A);
+  $tb = clave_tecnica($B);
+  if ($ta !== $tb) return $ta <=> $tb;
+
+  // estable: por pelea_id asc
+  return ((int)$A['pelea_id']) <=> ((int)$B['pelea_id']);
+});
+
+/* Enumeración final */
+$enumerado = [];
+$contador = 1;
+foreach ($peleas as $p) {
+  $p['_n'] = $contador++;
+  [$prio, $lbl] = clasificar_bloque($p);
+  $p['_bloque_lbl'] = $lbl;
+  $enumerado[] = $p;
+}
+
+$peleas = $enumerado;
 $ph = 'assets/placeholder-user.png';
 ?>
 <!DOCTYPE html>
@@ -133,11 +244,10 @@ $ph = 'assets/placeholder-user.png';
     .btn-primary{background:#1e88e5;color:#fff}
     .btn-secondary{background:#e9ecef;color:#0f172a}
     .btn-danger{background:#d32f2f;color:#fff}
-    /* Botones chicos */
     .btn-mini{padding:4px 8px;font-size:11px;border-radius:6px}
     .btn-xxs{padding:3px 6px;font-size:10.5px;border-radius:6px}
     .table-wrap{width:100%;overflow-x:auto;margin-top:6px}
-    table{width:100%;border-collapse:collapse;min-width:980px}
+    table{width:100%;border-collapse:collapse;min-width:1040px}
     th,td{border:1px solid #e7e7e7;padding:6px 8px;vertical-align:middle}
     th{background:#f6f7f9;font-size:13px}
     td{font-size:12.5px}
@@ -147,6 +257,8 @@ $ph = 'assets/placeholder-user.png';
     .acciones{text-align:center;white-space:nowrap}
     .vs{font-weight:700;text-align:center;color:#666}
     .row-actions{display:flex;gap:6px;align-items:center;justify-content:center;flex-wrap:wrap}
+    .bloque{font-size:11px;color:#475569}
+    .num{font-weight:700}
   </style>
 </head>
 <body>
@@ -162,6 +274,8 @@ $ph = 'assets/placeholder-user.png';
     <table>
       <thead>
         <tr>
+          <th>#</th>
+          <th>Bloque</th>
           <th colspan="4">Esquina Roja</th>
           <th class="vs">VS</th>
           <th colspan="4">Esquina Azul</th>
@@ -170,6 +284,7 @@ $ph = 'assets/placeholder-user.png';
           <th class="acciones">Acciones</th>
         </tr>
         <tr>
+          <th></th><th></th>
           <th>Foto</th><th>Nombre</th><th>Info</th><th>Escuela</th>
           <th></th>
           <th>Foto</th><th>Nombre</th><th>Info</th><th>Escuela</th>
@@ -180,7 +295,7 @@ $ph = 'assets/placeholder-user.png';
       </thead>
       <tbody>
       <?php if (!$peleas): ?>
-        <tr><td colspan="12">No hay peleas programadas todavía.</td></tr>
+        <tr><td colspan="14">No hay peleas programadas todavía.</td></tr>
       <?php else: foreach ($peleas as $p):
         $rFoto = !empty($p['r_foto']) ? $p['r_foto'] : $ph;
         $aFoto = !empty($p['a_foto']) ? $p['a_foto'] : $ph;
@@ -190,6 +305,9 @@ $ph = 'assets/placeholder-user.png';
         $obsVal = (string)($p['observaciones'] ?? '');
       ?>
         <tr>
+          <td class="num"><?= (int)$p['_n'] ?></td>
+          <td class="bloque"><?= h($p['_bloque_lbl']) ?></td>
+
           <td><img src="<?= h($rFoto) ?>" class="avatar" alt="Roja"></td>
           <td><?= h($p['r_apellido'].' '.$p['r_nombre']) ?></td>
           <td><span class="pill"><?= h($rInfo) ?></span></td>
@@ -206,18 +324,13 @@ $ph = 'assets/placeholder-user.png';
           <td><?= h($obsVal) ?></td>
           <td class="acciones">
             <div class="row-actions">
-              <!-- EDITAR: llevar a una pantalla de edición dedicada -->
               <a class="btn btn-xxs btn-primary" title="Editar"
                  href="editar_pelea.php?evento_id=<?= (int)$evento_id ?>&pelea_id=<?= (int)$p['pelea_id'] ?>">✏️ Editar</a>
-
-              <!-- ELIMINAR -->
               <form method="POST" class="inline" onsubmit="return confirm('¿Eliminar esta pelea? Esta acción no se puede deshacer.');">
                 <input type="hidden" name="pelea_id" value="<?= (int)$p['pelea_id'] ?>">
                 <input type="hidden" name="accion" value="delete">
                 <button type="submit" class="btn btn-xxs btn-danger" title="Eliminar">🗑️ Eliminar</button>
               </form>
-
-              <!-- EN VIVO (se mantiene para poder iniciar combate con rondas) -->
               <a class="btn btn-xxs btn-secondary" title="Iniciar en vivo"
                  href="combate_en_vivo.php?evento_id=<?= (int)$evento_id ?>&pelea_id=<?= (int)$p['pelea_id'] ?><?= $C_RONDAS ? '&rondas='.(int)$rondasVal : '' ?>">▶️ Iniciar</a>
             </div>

@@ -9,25 +9,115 @@ if (!isset($conexion) || !($conexion instanceof mysqli)) {
 if (function_exists('mysqli_report')) { mysqli_report(MYSQLI_REPORT_OFF); }
 @$conexion->set_charset('utf8mb4');
 
-/* ====== evento_id ====== */
-$evento_id = (int)($_GET['evento_id'] ?? $_SESSION['evento_id_actual'] ?? 0);
+/* =========================
+   Helpers
+   ========================= */
+function h($s){ return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); }
+function bt($col){ return '`'.str_replace('`','``',$col).'`'; }
+function flash_err($msg){ $_SESSION['flash_error'] = $msg; }
+function flash_ok($msg){ $_SESSION['flash_ok'] = $msg; }
+
+/* CSRF */
+if (empty($_SESSION['csrf_token'])) {
+  $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+}
+$CSRF = $_SESSION['csrf_token'];
+function csrf_ok($t){ return !empty($_SESSION['csrf_token']) && !empty($t) && hash_equals($_SESSION['csrf_token'], $t); }
+
+/* evento_id */
+$evento_id = (int)($_GET['evento_id'] ?? $_POST['evento_id'] ?? $_SESSION['evento_id_actual'] ?? 0);
 if ($evento_id <= 0) { http_response_code(400); exit('❌ Falta evento_id'); }
+$_SESSION['evento_id_actual'] = $evento_id;
 
-/* ====== Catálogos ====== */
-$disciplinas = $conexion->query("SELECT id, nombre FROM disciplinas_evento ORDER BY id");
-$modalidades = $conexion->query("SELECT id, nombre FROM modalidades_evento ORDER BY id");
-$categorias_peso = $conexion->query("SELECT id, nombre FROM categorias_peso_evento ORDER BY id");
-$divisiones = $conexion->query("SELECT id, nombre FROM divisiones_evento ORDER BY id");
-$categorias_tecnicas = $conexion->query("SELECT id, codigo, descripcion FROM categorias_tecnicas_evento ORDER BY id");
+/* =========================
+   Detección columnas peleas_evento
+   ========================= */
+function pe_get_cols(mysqli $db){
+  $res = $db->query("SHOW COLUMNS FROM peleas_evento");
+  if (!$res) return null;
+  $cols = [];
+  while($r = $res->fetch_assoc()){ $cols[strtolower($r['Field'])] = $r['Field']; }
+  $pick = function(array $cands) use ($cols){
+    foreach ($cands as $c) { $lc=strtolower($c); if (isset($cols[$lc])) return $cols[$lc]; }
+    return null;
+  };
+  return [
+    'evento' => $pick(['evento_id','id_evento','evento']),
+    'rojo'   => $pick(['rojo_id','id_rojo','competidor_rojo_id','id_competidor_rojo','rojo']),
+    'azul'   => $pick(['azul_id','id_azul','competidor_azul_id','id_competidor_azul','azul']),
+  ];
+}
 
-/* ====== Filtros (por ID) ====== */
+/* =========================
+   POST: Eliminar competidor
+   ========================= */
+if ($_SERVER['REQUEST_METHOD']==='POST' && ($_POST['accion'] ?? '') === 'eliminar_comp') {
+  $token = $_POST['csrf'] ?? '';
+  $comp_id = (int)($_POST['comp_id'] ?? 0);
+  if (!csrf_ok($token)) { flash_err('CSRF inválido.'); header('Location: ver_competidores_evento.php?evento_id='.$evento_id); exit; }
+  if ($comp_id <= 0) { flash_err('ID de competidor inválido.'); header('Location: ver_competidores_evento.php?evento_id='.$evento_id); exit; }
+
+  // Verificar que el competidor pertenece al evento
+  $st = $conexion->prepare("SELECT 1 FROM competidores_evento WHERE id=? AND evento_id=? LIMIT 1");
+  if (!$st) { flash_err('Error al validar pertenencia: '.$conexion->error); header('Location: ver_competidores_evento.php?evento_id='.$evento_id); exit; }
+  $st->bind_param('ii', $comp_id, $evento_id);
+  $st->execute(); $own = $st->get_result(); $st->close();
+  if (!$own || $own->num_rows===0) {
+    flash_err('El competidor no existe o no pertenece a este evento.');
+    header('Location: ver_competidores_evento.php?evento_id='.$evento_id); exit;
+  }
+
+  // Bloquear si está referenciado en peleas_evento
+  $pe = pe_get_cols($conexion);
+  if ($pe && $pe['evento'] && $pe['rojo'] && $pe['azul']) {
+    $sqlRef = "SELECT 1 FROM peleas_evento
+               WHERE ".bt($pe['evento'])."=?
+                 AND (".bt($pe['rojo'])."=? OR ".bt($pe['azul'])."=?)
+               LIMIT 1";
+    $st = $conexion->prepare($sqlRef);
+    if ($st) {
+      $st->bind_param('iii', $evento_id, $comp_id, $comp_id);
+      $st->execute(); $ref = $st->get_result(); $st->close();
+      if ($ref && $ref->num_rows>0) {
+        flash_err('No se puede eliminar: el competidor ya está asignado a una pelea de este evento. Editá/eliminá esas peleas primero.');
+        header('Location: ver_competidores_evento.php?evento_id='.$evento_id); exit;
+      }
+    }
+  }
+
+  $del = $conexion->prepare("DELETE FROM competidores_evento WHERE id=? AND evento_id=?");
+  if (!$del) { flash_err('No se pudo preparar la eliminación: '.$conexion->error); header('Location: ver_competidores_evento.php?evento_id='.$evento_id); exit; }
+  $del->bind_param('ii', $comp_id, $evento_id);
+  if ($del->execute() && $del->affected_rows>0) {
+    flash_ok('Competidor eliminado correctamente.');
+  } else {
+    flash_err('No se pudo eliminar el competidor (puede no existir).');
+  }
+  $del->close();
+  header('Location: ver_competidores_evento.php?evento_id='.$evento_id); exit;
+}
+
+/* =========================
+   Catálogos
+   ========================= */
+$disciplinas        = $conexion->query("SELECT id, nombre FROM disciplinas_evento ORDER BY id");
+$modalidades        = $conexion->query("SELECT id, nombre FROM modalidades_evento ORDER BY id");
+$categorias_peso    = $conexion->query("SELECT id, nombre FROM categorias_peso_evento ORDER BY id");
+$divisiones         = $conexion->query("SELECT id, nombre FROM divisiones_evento ORDER BY id");
+$categorias_tecnicas= $conexion->query("SELECT id, codigo, descripcion FROM categorias_tecnicas_evento ORDER BY id");
+
+/* =========================
+   Filtros
+   ========================= */
 $f_disciplina_id        = (isset($_GET['disciplina_id'])        && is_numeric($_GET['disciplina_id']))        ? (int)$_GET['disciplina_id']        : null;
 $f_modalidad_id         = (isset($_GET['modalidad_id'])         && is_numeric($_GET['modalidad_id']))         ? (int)$_GET['modalidad_id']         : null;
 $f_categoria_peso_id    = (isset($_GET['categoria_peso_id'])    && is_numeric($_GET['categoria_peso_id']))    ? (int)$_GET['categoria_peso_id']    : null;
 $f_division_id          = (isset($_GET['division_id'])          && is_numeric($_GET['division_id']))          ? (int)$_GET['division_id']          : null;
 $f_categoria_tecnica_id = (isset($_GET['categoria_tecnica_id']) && is_numeric($_GET['categoria_tecnica_id'])) ? (int)$_GET['categoria_tecnica_id'] : null;
 
-/* ====== SQL con JOINs + filtros dinámicos ====== */
+/* =========================
+   Consulta
+   ========================= */
 $sql = "
 SELECT
   ce.id,
@@ -83,9 +173,6 @@ $st->close();
 /* Placeholders */
 $placeholderFoto = 'assets/placeholder-user.png';
 $placeholderLogo = 'assets/placeholder-logo.png';
-
-/* Escapar */
-function h($s){ return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); }
 ?>
 <!DOCTYPE html>
 <html lang="es">
@@ -96,7 +183,11 @@ function h($s){ return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); }
   <link rel="stylesheet" href="estilo_unificado.css">
   <style>
     .contenedor { max-width: 1200px; margin: 0 auto; padding: 16px; }
-    /* Filtros en grid */
+    .alert { padding:10px 12px;border-radius:8px;margin-bottom:12px }
+    .alert.error{background:#fdecea;color:#b71c1c;border:1px solid #f5c6cb}
+    .alert.ok{background:#e6f4ea;color:#0f5132;border:1px solid #badbcc}
+
+    /* Filtros */
     form .filters {
       display: grid;
       grid-template-columns: repeat(5, minmax(160px, 1fr));
@@ -109,17 +200,15 @@ function h($s){ return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); }
       width: 100%; padding: 8px 10px; border: 1px solid #dcdcdc; border-radius: 8px;
     }
     form button { cursor: pointer; }
-    @media (max-width: 900px) {
-      form .filters { grid-template-columns: repeat(2, 1fr); }
-    }
+    @media (max-width: 900px) { form .filters { grid-template-columns: repeat(2, 1fr); } }
     @media (max-width: 600px) {
       form .filters { grid-template-columns: 1fr; }
       form button { padding: 12px; }
     }
 
-    /* Tabla desktop + wrapper para scroll horizontal si hace falta */
+    /* Tabla */
     .table-wrap { width: 100%; overflow-x: auto; }
-    .tabla { width: 100%; border-collapse: collapse; min-width: 860px; }
+    .tabla { width: 100%; border-collapse: collapse; min-width: 980px; }
     .tabla th, .tabla td { border: 1px solid #e7e7e7; padding: 8px 10px; vertical-align: middle; }
     .tabla th { background: #f6f7f9; text-align: left; }
     .avatar { width: 60px; height: 60px; object-fit: cover; border-radius: 8px; }
@@ -144,13 +233,25 @@ function h($s){ return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); }
       .logo   { width: 72px; height: 72px; }
     }
 
-    .btn-principal { display: inline-block; padding: 10px 14px; border-radius: 10px; background: #1e88e5; color:#fff; text-decoration:none; }
-    .btn-principal:hover { background:#166fbe; }
+    .btn { display:inline-block; padding:8px 10px; border-radius:8px; text-decoration:none; border:1px solid #dcdcdc; background:#fff; color:#0f172a; }
+    .btn:hover { background:#f2f4f7; }
+    .btn-primary { background:#1e88e5; color:#fff; border:0; }
+    .btn-primary:hover { background:#166fbe; }
+    .btn-danger { background:#dc2626; color:#fff; border:0; }
+    form.inline { display:inline; }
+    .actions a, .actions button { margin-right:6px; }
   </style>
 </head>
 <body>
 <div class="contenedor">
   <h2>👊 Competidores del Evento #<?= (int)$evento_id ?></h2>
+
+  <?php if (isset($_SESSION['flash_error'])): ?>
+    <div class="alert error"><?= h($_SESSION['flash_error']); unset($_SESSION['flash_error']); ?></div>
+  <?php endif; ?>
+  <?php if (isset($_SESSION['flash_ok'])): ?>
+    <div class="alert ok"><?= h($_SESSION['flash_ok']); unset($_SESSION['flash_ok']); ?></div>
+  <?php endif; ?>
 
   <form method="GET">
     <input type="hidden" name="evento_id" value="<?= (int)$evento_id ?>">
@@ -185,7 +286,7 @@ function h($s){ return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); }
           <option value="">Todas</option>
           <?php while($ct = $categorias_tecnicas->fetch_assoc()): ?>
             <option value="<?= (int)$ct['id'] ?>" <?= (!is_null($f_categoria_tecnica_id) && $f_categoria_tecnica_id==(int)$ct['id'])?'selected':'' ?>>
-              <?= h(($ct['codigo'] ?? '') . (isset($ct['descripcion']) ? ' - '.$ct['descripcion'] : '')) ?>
+              <?= h(($ct['codigo'] ?? '') . (isset($ct['descripcion']) && $ct['descripcion']!=='' ? ' - '.$ct['descripcion'] : '')) ?>
             </option>
           <?php endwhile; ?>
         </select>
@@ -216,10 +317,14 @@ function h($s){ return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); }
       </div>
 
       <div>
-        <button type="submit">🔍 Filtrar</button>
+        <button type="submit" class="btn">🔍 Filtrar</button>
       </div>
     </div>
   </form>
+
+  <p style="margin-bottom:12px">
+    <a class="btn btn-primary" href="agregar_competidor_evento.php?evento_id=<?= (int)$evento_id ?>">➕ Agregar competidor</a>
+  </p>
 
   <?php if (!$competidores): ?>
     <p>No hay competidores que coincidan con los filtros.</p>
@@ -240,6 +345,7 @@ function h($s){ return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); }
             <th>Escuela</th>
             <th>Logo</th>
             <th>Inscripción</th>
+            <th>Acciones</th>
           </tr>
         </thead>
         <tbody>
@@ -247,6 +353,7 @@ function h($s){ return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); }
             $srcFoto = !empty($c['foto_competidor']) ? $c['foto_competidor'] : $placeholderFoto;
             $srcLogo = !empty($c['escuela_logo'])    ? $c['escuela_logo']    : $placeholderLogo;
             $catTec  = trim(($c['categoria_tecnica_codigo'] ?? '').' - '.($c['categoria_tecnica_desc'] ?? ''));
+            $catTec  = ($catTec === ' - ')? '-' : $catTec;
           ?>
             <tr>
               <td data-label="Foto"><img class="avatar" src="<?= h($srcFoto) ?>" alt="Foto"></td>
@@ -255,12 +362,22 @@ function h($s){ return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); }
               <td data-label="Edad"><?= h($c['edad']) ?></td>
               <td data-label="Disciplina"><?= h($c['disciplina'] ?? '-') ?></td>
               <td data-label="Modalidad"><?= h($c['modalidad'] ?? '-') ?></td>
-              <td data-label="Cat. Técnica"><?= h($catTec !== ' - ' ? $catTec : '-') ?></td>
+              <td data-label="Cat. Técnica"><?= h($catTec) ?></td>
               <td data-label="Categoría Peso"><?= h($c['categoria_peso'] ?? '-') ?></td>
               <td data-label="División"><?= h($c['division'] ?? '-') ?></td>
               <td data-label="Escuela"><?= h($c['escuela_nombre'] ?? '-') ?></td>
               <td data-label="Logo"><img class="logo" src="<?= h($srcLogo) ?>" alt="Logo"></td>
               <td data-label="Inscripción">$ <?= h($c['pago_inscripcion'] ?? '0.00') ?></td>
+              <td class="actions" data-label="Acciones">
+                <a class="btn" href="editar_competidor_evento.php?evento_id=<?= (int)$evento_id ?>&id=<?= (int)$c['id'] ?>">✏️ Editar</a>
+                <form method="POST" class="inline" onsubmit="return confirm('¿Eliminar a <?= h($c['apellido'].' '.$c['nombre']) ?> del evento?');">
+                  <input type="hidden" name="accion" value="eliminar_comp">
+                  <input type="hidden" name="csrf" value="<?= h($CSRF) ?>">
+                  <input type="hidden" name="evento_id" value="<?= (int)$evento_id ?>">
+                  <input type="hidden" name="comp_id" value="<?= (int)$c['id'] ?>">
+                  <button type="submit" class="btn btn-danger">🗑️ Eliminar</button>
+                </form>
+              </td>
             </tr>
           <?php endforeach; ?>
         </tbody>
@@ -269,7 +386,7 @@ function h($s){ return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); }
   <?php endif; ?>
 
   <p style="margin-top:14px">
-    <a class="btn-principal" href="agregar_competidor_evento.php?evento_id=<?= (int)$evento_id ?>">➕ Agregar competidor</a>
+    <a class="btn btn-primary" href="agregar_competidor_evento.php?evento_id=<?= (int)$evento_id ?>">➕ Agregar competidor</a>
   </p>
 </div>
 </body>

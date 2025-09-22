@@ -324,6 +324,8 @@ $phGym ='assets/placeholder-gym.png';
   .logo{width:40px;height:40px;object-fit:contain;background:#0b131c;border-radius:8px;border:1px solid #263341}
   .pill{display:inline-block;padding:2px 8px;border-radius:999px;border:1px solid #27455c;font-size:12px;margin-right:4px}
   .muted{color:#bcd8ff}
+  a.rowlink{display:flex;gap:8px;align-items:center;text-decoration:none;color:inherit}
+  a.rowlink:hover{text-decoration:underline}
 </style>
 </head>
 <body>
@@ -373,10 +375,15 @@ $phGym ='assets/placeholder-gym.png';
           $nombre = trim($c['nombre']) ?: '—';
           $foto = $c['foto'] ?: $phUser;
           $logo = $c['logo'] ?: $phGym;
+
+          // URL al perfil individual (prioriza DNI si existe)
+          $perfilUrl = !empty($c['dni'])
+            ? 'ver_competidor_ranking.php?dni='.urlencode($c['dni'])
+            : 'ver_competidor_ranking.php?id='.(int)$c['id_base'];
         ?>
           <tr>
             <td>
-              <div class="row" style="gap:8px;align-items:center">
+              <a class="rowlink" href="<?= h($perfilUrl) ?>">
                 <img class="pfp" src="<?= h($foto) ?>" alt="foto">
                 <div>
                   <div style="font-weight:800"><?= h($nombre) ?><?= h($c['badge'] ?? '') ?></div>
@@ -386,7 +393,7 @@ $phGym ='assets/placeholder-gym.png';
                     <div class="muted" style="font-size:12px">Ficha ID: <?= (int)$c['id_base'] ?></div>
                   <?php endif; ?>
                 </div>
-              </div>
+              </a>
             </td>
             <td>
               <div class="row" style="gap:8px;align-items:center">

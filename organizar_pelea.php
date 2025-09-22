@@ -95,8 +95,14 @@ function ce_get_cols(mysqli $db){
     return null;
   };
   return [
+    // Texto como "A/B/C/N", "CBA", etc.
     'cat_tec_text' => $pick(['categoria_tecnica','cat_tecnica','categoria_nivel','nivel_tecnico']),
+    // ID a catálogo (opcional)
     'cat_tec_id'   => $pick(['categoria_tecnica_id','cat_tecnica_id','categoria_nivel_id']),
+    // (peso) id de categoria_peso si existe (en muchos esquemas se llama categoria_peso_id o similar)
+    'cat_peso_id'  => $pick(['categoria_peso_id','categoria_evento_id','cat_peso_id','categoria_id']),
+    // Escuela (para regla 2)
+    'escuela_id'   => $pick(['escuela_id','id_escuela']),
   ];
 }
 
@@ -105,7 +111,6 @@ function tec_catalog_info(mysqli $db){
   $cands = ['categorias_tecnicas_evento','categorias_tecnicas','categorias_nivel'];
   foreach ($cands as $t) {
     if (table_exists($db, $t)) {
-      // detectar columnas id/nombre
       $rs = $db->query("SHOW COLUMNS FROM $t");
       if (!$rs) continue;
       $have = [];
@@ -197,6 +202,69 @@ if (($_POST['accion'] ?? '') === 'eliminar_comp') {
   header('Location: organizar_pelea.php?evento_id='.$evento_id); exit;
 }
 
+/* ========= Helpers de validación de reglas ========= */
+function cargar_info_competidores(mysqli $db, array $ids, array $ce_cols, array $cat_cols){
+  if (!$ids) return [];
+  $place = implode(',', array_fill(0, count($ids), '?'));
+  $types = str_repeat('i', count($ids));
+  // Notas:
+  // - disciplina_id, modalidad_id, division_id -> coincidir obligatorios
+  // - categoria_peso: usamos ce.categoria_peso_id si existe; si no, caemos a ce.categoria_tecnica_id (muchos esquemas lo usaron para peso)
+  // - técnica: id/texto
+  $catPesoCol = $ce_cols['cat_peso_id'] ?: 'categoria_tecnica_id'; // fallback por compatibilidad
+  $escuelaId  = $ce_cols['escuela_id'] ?: null;
+
+  $selEscuelaId = $escuelaId ? "ce.".bt($escuelaId)." AS escuela_id," : "NULL AS escuela_id,";
+  $selTecText   = !empty($ce_cols['cat_tec_text']) ? "ce.".bt($ce_cols['cat_tec_text'])." AS cat_tec_text," : "NULL AS cat_tec_text,";
+  $selTecId     = !empty($ce_cols['cat_tec_id'])   ? "ce.".bt($ce_cols['cat_tec_id'])."   AS cat_tec_id,"   : "NULL AS cat_tec_id,";
+
+  $sql = "
+    SELECT
+      ce.id,
+      ce.disciplina_id,
+      ce.modalidad_id,
+      ce.division_id,
+      $selTecText
+      $selTecId
+      ce.".bt($catPesoCol)." AS cat_peso_id,
+      ce.escuela_nombre
+    FROM competidores_evento ce
+    WHERE ce.id IN ($place)
+  ";
+  $st = $db->prepare($sql);
+  if (!$st) throw new Exception('SQL prepare (info competidores): '.$db->error);
+  $bind = []; $bind[]=$types; foreach ($ids as $i=>&$v) $bind[]=&$v;
+  call_user_func_array([$st,'bind_param'],$bind);
+  $st->execute();
+  $res = $st->get_result();
+  $out = [];
+  while($r = $res->fetch_assoc()){
+    $r['disciplina_id'] = (int)($r['disciplina_id'] ?? 0);
+    $r['modalidad_id']  = (int)($r['modalidad_id'] ?? 0);
+    $r['division_id']   = (int)($r['division_id'] ?? 0);
+    $r['cat_peso_id']   = is_null($r['cat_peso_id']) ? null : (int)$r['cat_peso_id'];
+    $r['cat_tec_id']    = isset($r['cat_tec_id']) ? (int)$r['cat_tec_id'] : null;
+    $r['cat_tec_text']  = isset($r['cat_tec_text']) ? trim((string)$r['cat_tec_text']) : null;
+    $out[(int)$r['id']] = $r;
+  }
+  $st->close();
+  return $out;
+}
+
+function ya_tiene_pelea(mysqli $db, int $evento_id, int $comp_id, array $pe_cols): bool {
+  $sql = "SELECT 1 FROM peleas_evento
+          WHERE ".bt($pe_cols['evento'])." = ?
+            AND (".bt($pe_cols['rojo'])." = ? OR ".bt($pe_cols['azul'])." = ?)
+          LIMIT 1";
+  $st = $db->prepare($sql);
+  if (!$st) return false;
+  $st->bind_param('iii', $evento_id, $comp_id, $comp_id);
+  $st->execute();
+  $ret = $st->get_result();
+  $st->close();
+  return $ret && $ret->num_rows > 0;
+}
+
 /* Crear pelea(s) */
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['accion'] ?? '') === 'crear_pelea') {
   $token = $_POST['csrf'] ?? '';
@@ -250,7 +318,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['accion'] ?? '') === 'crear
     if ($cOk !== count($todos)) { flash_err('Algún competidor no pertenece al evento.'); header('Location: organizar_pelea.php?evento_id='.$evento_id); exit; }
   }
 
-  // ✅ Validar MODALIDAD: todos con la misma
+  // ✅ Validar MODALIDAD: todos con la misma (Regla #6, bloquea)
   if ($todos) {
     $place = implode(',', array_fill(0, count($todos), '?'));
     $types = str_repeat('i', count($todos));
@@ -260,7 +328,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['accion'] ?? '') === 'crear
     $bind = []; $bind[] = $types; foreach ($todos as $i=>&$v) { $bind[] = &$v; }
     call_user_func_array([$st,'bind_param'],$bind);
     $st->execute(); $k = (int)($st->get_result()->fetch_assoc()['k'] ?? 0); $st->close();
-    if ($k !== 1) { flash_err('Los competidores no comparten la misma <b>modalidad</b>.'); header('Location: organizar_pelea.php?evento_id='.$evento_id); exit; }
+    if ($k !== 1) { flash_err('Los competidores no comparten la misma <b>modalidad</b> (Regla #6).'); header('Location: organizar_pelea.php?evento_id='.$evento_id); exit; }
 
     // obtener modalidad concreta
     $st = $conexion->prepare("SELECT modalidad_id FROM competidores_evento WHERE id IN ($place) LIMIT 1");
@@ -272,7 +340,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['accion'] ?? '') === 'crear
     } else { $modalidad_compartida = null; }
   }
 
-  // Duplicadas?
+  // Duplicadas exactas?
   foreach ($pairs as [$r,$a]) {
     $sql = "SELECT 1 FROM peleas_evento
             WHERE ".bt($pe_cols['evento'])." = ?
@@ -282,20 +350,89 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['accion'] ?? '') === 'crear
     if (!$st) { flash_err('SQL prepare (duplicadas): '.$conexion->error); header('Location: organizar_pelea.php?evento_id='.$evento_id); exit; }
     $st->bind_param('iiiii', $evento_id, $r, $a, $a, $r);
     $st->execute(); $dupe = $st->get_result(); $st->close();
-    if ($dupe && $dupe->num_rows > 0) { flash_err('Alguna pelea ya existe.'); header('Location: organizar_pelea.php?evento_id='.$evento_id); exit; }
+    if ($dupe && $dupe->num_rows > 0) { flash_err('Alguna pelea ya existe (mismas esquinas).'); header('Location: organizar_pelea.php?evento_id='.$evento_id); exit; }
+  }
+
+  /* ===== Carga y validación de REGLAS ===== */
+  // Cargamos toda la info necesaria una vez
+  $info = cargar_info_competidores($conexion, $todos, $ce_cols, $cat_cols);
+
+  // Reglas que BLOQUEAN: #3 (disciplina), #4 (división), #6 (ya validada), #7 (técnica)
+  foreach ($pairs as [$r,$a]) {
+    $R = $info[$r] ?? null; $A = $info[$a] ?? null;
+    if (!$R || !$A) { flash_err('No se pudo cargar info de competidores para validar reglas.'); header('Location: organizar_pelea.php?evento_id='.$evento_id); exit; }
+
+    // #3 misma disciplina (bloquea)
+    if ((int)$R['disciplina_id'] !== (int)$A['disciplina_id']) {
+      flash_err('Los competidores no comparten la misma <b>disciplina</b> (Regla #3).'); header('Location: organizar_pelea.php?evento_id='.$evento_id); exit;
+    }
+    // #4 misma división (bloquea)
+    if ((int)$R['division_id'] !== (int)$A['division_id']) {
+      flash_err('Los competidores no comparten la misma <b>división</b> (Regla #4).'); header('Location: organizar_pelea.php?evento_id='.$evento_id); exit;
+    }
+    // #7 misma categoría técnica (bloquea). Si hay ID, comparamos ID; si no, texto normalizado.
+    $tec_ok = true;
+    if (!is_null($R['cat_tec_id']) && !is_null($A['cat_tec_id'])) {
+      $tec_ok = ((int)$R['cat_tec_id'] === (int)$A['cat_tec_id']);
+    } else {
+      $tR = mb_strtoupper(trim((string)$R['cat_tec_text'])); 
+      $tA = mb_strtoupper(trim((string)$A['cat_tec_text']));
+      // si alguno está vacío, consideramos distinto
+      $tec_ok = ($tR !== '' && $tA !== '' && $tR === $tA);
+    }
+    if (!$tec_ok) {
+      flash_err('Los competidores no comparten la misma <b>categoría técnica</b> (Regla #7).'); header('Location: organizar_pelea.php?evento_id='.$evento_id); exit;
+    }
+  }
+
+  // Reglas que AVISAN/PERMITE: #1 ya tiene pelea, #2 misma escuela, #5 peso distinto => PACTADA
+  $avisos_globales = []; // para mostrar en flash_ok
+  $sufijos_por_pair = []; // sufijo de observaciones por cada par
+
+  foreach ($pairs as $idx => [$r,$a,$obsSuf]) {
+    $R = $info[$r]; $A = $info[$a];
+    $avisos = [];
+
+    // #1 Ya tiene pelea (rojo/azul)
+    if (ya_tiene_pelea($conexion, $evento_id, $r, $pe_cols)) { $avisos[] = 'Rojo ya tenía pelea en este evento'; }
+    if (ya_tiene_pelea($conexion, $evento_id, $a, $pe_cols)) { $avisos[] = 'Azul ya tenía pelea en este evento'; }
+
+    // #2 Misma escuela (avisar)
+    $escR = trim((string)($R['escuela_nombre'] ?? ''));
+    $escA = trim((string)($A['escuela_nombre'] ?? ''));
+    if ($escR !== '' && $escR === $escA) {
+      $avisos[] = 'Misma escuela';
+    }
+
+    // #5 Peso: si cat_peso_id distintos => PACTADA
+    $pactada = false;
+    $pesoR = $R['cat_peso_id']; $pesoA = $A['cat_peso_id'];
+    if (!is_null($pesoR) && !is_null($pesoA) && (int)$pesoR !== (int)$pesoA) {
+      $pactada = true;
+      $avisos[] = 'PACTADA por peso';
+    }
+
+    $suf = '';
+    if ($avisos) {
+      $avisos_globales[] = '• '.($formato==='simple' ? '1 vs 1' : (strpos($obsSuf,'Super 4')!==false?'Super 4':'Triangular')).": ".implode(' — ', $avisos);
+      $suf = ' ['.implode('] [', $avisos).']';
+    }
+    $sufijos_por_pair[$idx] = $suf;
   }
 
   // INSERT
   $conexion->begin_transaction();
   try {
-    foreach ($pairs as [$r,$a,$obsSuf]) {
+    foreach ($pairs as $i => [$r,$a,$obsSuf]) {
       $cols = [$pe_cols['evento'], $pe_cols['rojo'], $pe_cols['azul']];
       $vals = [$evento_id, $r, $a];
       $types = 'iii';
 
       if (!empty($pe_cols['modalidad']) && isset($modalidad_compartida)) { $cols[] = $pe_cols['modalidad']; $vals[] = $modalidad_compartida; $types .= 'i'; }
       if ($pe_cols['rondas']) { $cols[] = $pe_cols['rondas']; $vals[] = $rondas; $types .= 'i'; }
-      if ($pe_cols['obs'])    { $cols[] = $pe_cols['obs'];    $vals[] = trim($obsBase.$obsSuf); $types .= 's'; }
+
+      $obs_final = trim($obsBase.$obsSuf.$sufijos_por_pair[$i]);
+      if ($pe_cols['obs'])    { $cols[] = $pe_cols['obs']; $vals[] = $obs_final; $types .= 's'; }
 
       $cols_bt = array_map('bt', $cols);
       $ph = implode(',', array_fill(0, count($cols_bt), '?'));
@@ -317,7 +454,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['accion'] ?? '') === 'crear
 
   $creadas = count($pairs);
   $txtFmt = ($formato==='simple' ? '1 vs 1' : ($formato==='triangular' ? 'Triangular (SF + Libre)' : 'Super 4 (semifinales)'));
-  flash_ok("Se crearon $creadas pelea(s) — formato $txtFmt.");
+  $warnTxt = $avisos_globales ? "<br><small class=\"muted\">Avisos:<br>".implode('<br>', array_map('h',$avisos_globales))."</small>" : '';
+  flash_ok("Se crearon $creadas pelea(s) — formato $txtFmt.$warnTxt");
   header('Location: ver_peleas_evento.php?evento_id='.(int)$evento_id);
   exit;
 }
@@ -335,12 +473,13 @@ $selGenero = $cat_cols['genero']   ? "ct.".bt($cat_cols['genero'])."   AS ct_gen
 $selEmin   = $cat_cols['edad_min'] ? "ct.".bt($cat_cols['edad_min'])." AS ct_edad_min"  : "NULL AS ct_edad_min";
 $selEmax   = $cat_cols['edad_max'] ? "ct.".bt($cat_cols['edad_max'])." AS ct_edad_max"  : "NULL AS ct_edad_max";
 
-/* ====== Query de competidores ====== */
+/* ====== Query de competidores (listado) ====== */
 $selTecText = "NULL AS cat_tec_text";
 $selTecId   = "NULL AS cat_tec_id";
 if (!empty($ce_cols['cat_tec_text'])) $selTecText = "ce.".bt($ce_cols['cat_tec_text'])." AS cat_tec_text";
 if (!empty($ce_cols['cat_tec_id']))   $selTecId   = "ce.".bt($ce_cols['cat_tec_id'])."   AS cat_tec_id";
 
+/* Nombre técnica desde catálogo si existe */
 $selTecName = "NULL AS cat_tec_name";
 $joinTec    = "";
 if (!empty($ce_cols['cat_tec_id']) && $tec_catalog) {
@@ -348,6 +487,8 @@ if (!empty($ce_cols['cat_tec_id']) && $tec_catalog) {
   $selTecName = "tcat.".bt($tec_catalog['nombre'])." AS cat_tec_name";
 }
 
+/* AVISO: muchos esquemas guardaron el id de categoría de PESO en ce.categoria_tecnica_id.
+   Para mantener compatibilidad, dejamos el JOIN así. */
 $sql = "
 SELECT
   ce.id,
@@ -452,6 +593,8 @@ $placeholderLogo = 'assets/placeholder-logo.png';
     .btn-danger{background:#dc2626;color:#fff;border:0;padding:8px 12px;border-radius:8px;cursor:pointer}
     .muted { color:#475569; font-size:13px; }
     form.inline { display:inline; }
+    .slot-grid { display:grid; grid-template-columns: repeat(2,minmax(220px,1fr)); gap:10px; }
+    .slot-grid .full { grid-column: 1 / -1; }
   </style>
 </head>
 <body>
@@ -462,7 +605,7 @@ $placeholderLogo = 'assets/placeholder-logo.png';
     <div class="alert error"><?= h($_SESSION['flash_error']); unset($_SESSION['flash_error']); ?></div>
   <?php endif; ?>
   <?php if (isset($_SESSION['flash_ok'])): ?>
-    <div class="alert ok"><?= h($_SESSION['flash_ok']); unset($_SESSION['flash_ok']); ?></div>
+    <div class="alert ok"><?= $_SESSION['flash_ok']; unset($_SESSION['flash_ok']); ?></div>
   <?php endif; ?>
 
   <!-- Filtros -->
@@ -616,7 +759,6 @@ $placeholderLogo = 'assets/placeholder-logo.png';
           return '-';
         })($c['ct_peso_min'] ?? null, $c['ct_peso_max'] ?? null);
 
-        // Etiqueta para opción
         $min = isset($c['ct_peso_min']) ? fmt_kg($c['ct_peso_min']) : '';
         $max = isset($c['ct_peso_max']) ? fmt_kg($c['ct_peso_max']) : '';
         $pesoEtiqueta = ($min && $max) ? "{$min}–{$max} kg" : (($min || $max) ? (($min?:$max).' kg') : ($c['ct_nombre'] ?? '-'));
@@ -651,7 +793,6 @@ $placeholderLogo = 'assets/placeholder-logo.png';
 
   <!-- Opciones para los selects (sin PHP corto dentro de JS) -->
   <?php
-    // Pre-render de <option> seguros para inyectar en JS
     ob_start();
     echo '<option value="">Seleccioná competidor…</option>';
     foreach ($competidores as $c) {
@@ -714,11 +855,17 @@ $placeholderLogo = 'assets/placeholder-logo.png';
     validar();
   }
 
-  function getModId(selectEl){
+  function getAttr(selectEl, attr){
     const v = selectEl.value;
-    if (!v) return 0;
+    if (!v) return null;
     const opt = selectEl.querySelector(`option[value="${v}"]`);
-    return opt ? parseInt(opt.dataset.mod||'0') : 0;
+    if (!opt) return null;
+    const raw = opt.getAttribute(attr);
+    return raw === null ? null : raw;
+  }
+  function getIntAttr(selectEl, attr){
+    const raw = getAttr(selectEl, attr);
+    return raw === null ? 0 : parseInt(raw||'0');
   }
 
   function attachUniqueLogic(){
@@ -743,35 +890,41 @@ $placeholderLogo = 'assets/placeholder-logo.png';
 
     function getVal(name){ const s = document.querySelector(`[name="${name}"]`); return s ? parseInt(s.value||'0') : 0; }
     function getSel(name){ return document.querySelector(`[name="${name}"]`); }
-    function sameMod(selectNames){
-      const mods = selectNames.map(n => { const s = getSel(n); return s ? getModId(s) : 0; }).filter(Boolean);
-      if (mods.length < selectNames.length) return false;
-      return new Set(mods).size === 1;
+    function same(list, attr){
+      const vals = list.map(n => getIntAttr(getSel(n), attr)).filter(Boolean);
+      if (vals.length < list.length) return false;
+      return new Set(vals).size === 1;
     }
 
     if (fmt === 'simple'){
       const r = getVal('rojo_id'), a = getVal('azul_id');
       const okBase = (r && a && r!==a);
-      const okMod  = sameMod(['rojo_id','azul_id']);
-      btn.disabled = !(okBase && okMod);
-      btn.title = btn.disabled ? "Elegí Rojo y Azul distintos y con la MISMA modalidad." : "";
+      const okMod  = same(['rojo_id','azul_id'], 'data-mod'); // Regla 6 (cliente)
+      const okDiv  = same(['rojo_id','azul_id'], 'data-div'); // Regla 4 (cliente)
+      const okDis  = same(['rojo_id','azul_id'], 'data-disc'); // Regla 3 (cliente)
+      btn.disabled = !(okBase && okMod && okDiv && okDis);
+      btn.title = btn.disabled ? "Elegí Rojo y Azul distintos y con MISMA modalidad, división y disciplina." : "";
       return;
     }
     if (fmt === 'triangular'){
       const r = getVal('tri_rojo_id'), a = getVal('tri_azul_id'), l = getVal('tri_libre_id');
       const all = [r,a,l].filter(Boolean);
       const okBase = (r && a && l && (new Set(all).size===3));
-      const okMod  = sameMod(['tri_rojo_id','tri_azul_id','tri_libre_id']);
-      btn.disabled = !(okBase && okMod);
-      btn.title = btn.disabled ? "Los 3 deben ser distintos y compartir la MISMA modalidad." : "";
+      const okMod  = same(['tri_rojo_id','tri_azul_id','tri_libre_id'],'data-mod');
+      const okDiv  = same(['tri_rojo_id','tri_azul_id','tri_libre_id'],'data-div');
+      const okDis  = same(['tri_rojo_id','tri_azul_id','tri_libre_id'],'data-disc');
+      btn.disabled = !(okBase && okMod && okDiv && okDis);
+      btn.title = btn.disabled ? "Los 3 deben ser distintos y compartir MISMA modalidad, división y disciplina." : "";
       return;
     }
     const names = ['sf1_rojo_id','sf1_azul_id','sf2_rojo_id','sf2_azul_id'];
     const vals = names.map(getVal).filter(Boolean);
     const okBase = (vals.length===4 && (new Set(vals).size===4));
-    const okMod  = sameMod(names);
-    btn.disabled = !(okBase && okMod);
-    btn.title = btn.disabled ? "Completá SF1 y SF2 con 4 distintos y MISMA modalidad para todos." : "";
+    const okMod  = same(names,'data-mod');
+    const okDiv  = same(names,'data-div');
+    const okDis  = same(names,'data-disc');
+    btn.disabled = !(okBase && okMod && okDiv && okDis);
+    btn.title = btn.disabled ? "Completá SF1 y SF2 con 4 distintos y MISMA modalidad, división y disciplina para todos." : "";
   }
 
   formatoSel.addEventListener('change', renderSlots);
