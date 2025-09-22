@@ -159,7 +159,7 @@ function label_peso_cat($row){
   $suf = [];
   if ($gen !== '') $suf[] = $gen;
   if ($eMin !== '' || $eMax !== '') $suf[] = trim($eMin.'–'.$eMax);
-  return $peso.( $suf ? ' ('.implode(', ', $suf).')' : '' );
+  return $peso.( $suf ? '('.implode(', ', $suf).')' : '' );
 }
 
 /* =========================
@@ -566,107 +566,107 @@ $placeholderLogo = 'assets/placeholder-logo.png';
         <a class="btn-secondary" href="ver_peleas_evento.php?evento_id=<?= (int)$evento_id ?>">📋 Ver / Editar / Eliminar peleas</a>
       </div>
     </div>
+  </form> <!-- 👈 CERRADO ANTES DEL LISTADO PARA EVITAR ANIDAR FORMS -->
 
-    <!-- LISTADO -->
-    <div class="table-wrap" style="margin-top:12px;">
-      <table>
-        <thead>
-          <tr>
-            <th>Foto</th>
-            <th>Apellido y Nombre</th>
-            <th>DNI</th>
-            <th>Edad</th>
-            <th>Disciplina</th>
-            <th>Modalidad</th>
-            <th>Cat. Técnica</th>
-            <th>Cat. de Peso</th>
-            <th>Peso (min–max)</th>
-            <th>División</th>
-            <th>Escuela</th>
-            <th>Logo</th>
-            <th>Acciones</th>
-          </tr>
-        </thead>
-        <tbody>
-        <?php if (!$competidores): ?>
-          <tr><td colspan="13">No hay competidores con esos filtros.</td></tr>
-        <?php else: foreach ($competidores as $c):
-          $srcFoto = !empty($c['foto_competidor']) ? $c['foto_competidor'] : $placeholderFoto;
-          $srcLogo = !empty($c['escuela_logo'])    ? $c['escuela_logo']    : $placeholderLogo;
+  <!-- LISTADO (fuera del form de creación) -->
+  <div class="table-wrap" style="margin-top:12px;">
+    <table>
+      <thead>
+        <tr>
+          <th>Foto</th>
+          <th>Apellido y Nombre</th>
+          <th>DNI</th>
+          <th>Edad</th>
+          <th>Disciplina</th>
+          <th>Modalidad</th>
+          <th>Cat. Técnica</th>
+          <th>Cat. de Peso</th>
+          <th>Peso (min–max)</th>
+          <th>División</th>
+          <th>Escuela</th>
+          <th>Logo</th>
+          <th>Acciones</th>
+        </tr>
+      </thead>
+      <tbody>
+      <?php if (!$competidores): ?>
+        <tr><td colspan="13">No hay competidores con esos filtros.</td></tr>
+      <?php else: foreach ($competidores as $c):
+        $srcFoto = !empty($c['foto_competidor']) ? $c['foto_competidor'] : $placeholderFoto;
+        $srcLogo = !empty($c['escuela_logo'])    ? $c['escuela_logo']    : $placeholderLogo;
 
-          // Técnica real (texto directo o desde catálogo)
-          $catTec = '-';
-          if (!empty($c['cat_tec_name']))      $catTec = $c['cat_tec_name'];
-          elseif (!empty($c['cat_tec_text']))  $catTec = $c['cat_tec_text'];
+        // Técnica real (texto directo o desde catálogo)
+        $catTec = '-';
+        if (!empty($c['cat_tec_name']))      $catTec = $c['cat_tec_name'];
+        elseif (!empty($c['cat_tec_text']))  $catTec = $c['cat_tec_text'];
 
-          $catLbl  = label_peso_cat([
-            'ct_peso_min'=>$c['ct_peso_min'] ?? null,
-            'ct_peso_max'=>$c['ct_peso_max'] ?? null,
-            'ct_nombre'  =>$c['ct_nombre']   ?? '',
-            'ct_genero'  =>$c['ct_genero']   ?? '',
-            'ct_edad_min'=>$c['ct_edad_min'] ?? '',
-            'ct_edad_max'=>$c['ct_edad_max'] ?? '',
-          ]);
-          $pesoSolo = (function($min,$max){
-            $min = fmt_kg($min); $max = fmt_kg($max);
-            if ($min && $max) return $min.'–'.$max.' kg';
-            if ($min) return $min.' kg';
-            if ($max) return $max.' kg';
-            return '-';
-          })($c['ct_peso_min'] ?? null, $c['ct_peso_max'] ?? null);
+        $catLbl  = label_peso_cat([
+          'ct_peso_min'=>$c['ct_peso_min'] ?? null,
+          'ct_peso_max'=>$c['ct_peso_max'] ?? null,
+          'ct_nombre'  =>$c['ct_nombre']   ?? '',
+          'ct_genero'  =>$c['ct_genero']   ?? '',
+          'ct_edad_min'=>$c['ct_edad_min'] ?? '',
+          'ct_edad_max'=>$c['ct_edad_max'] ?? '',
+        ]);
+        $pesoSolo = (function($min,$max){
+          $min = fmt_kg($min); $max = fmt_kg($max);
+          if ($min && $max) return $min.'–'.$max.' kg';
+          if ($min) return $min.' kg';
+          if ($max) return $max.' kg';
+          return '-';
+        })($c['ct_peso_min'] ?? null, $c['ct_peso_max'] ?? null);
 
-          // Etiqueta para opción
-          $min = isset($c['ct_peso_min']) ? fmt_kg($c['ct_peso_min']) : '';
-          $max = isset($c['ct_peso_max']) ? fmt_kg($c['ct_peso_max']) : '';
-          $pesoEtiqueta = ($min && $max) ? "{$min}–{$max} kg" : (($min || $max) ? (($min?:$max).' kg') : ($c['ct_nombre'] ?? '-'));
-          $labelOption = trim(($c['apellido'].' '.$c['nombre']).' — '.$pesoEtiqueta.' / '.($c['division'] ?? '-').' / '.($c['modalidad'] ?? '-'));
-        ?>
-          <tr>
-            <td><img src="<?= h($srcFoto) ?>" class="avatar" alt="Foto"></td>
-            <td><?= h($c['apellido'].' '.$c['nombre']) ?></td>
-            <td><?= h($c['dni']) ?></td>
-            <td><?= h($c['edad']) ?></td>
-            <td><span class="muted"><?= h($c['disciplina'] ?? '-') ?></span></td>
-            <td><?= h($c['modalidad'] ?? '-') ?></td>
-            <td><?= h($catTec) ?></td>
-            <td><?= h($catLbl) ?></td>
-            <td><?= h($pesoSolo) ?></td>
-            <td><?= h($c['division'] ?? '-') ?></td>
-            <td><?= h($c['escuela_nombre'] ?? '-') ?></td>
-            <td><img src="<?= h($srcLogo) ?>" class="logo" alt="Logo"></td>
-            <td>
-              <form method="POST" class="inline" onsubmit="return confirm('¿Eliminar competidor del evento?');">
-                <input type="hidden" name="accion" value="eliminar_comp">
-                <input type="hidden" name="csrf" value="<?= h($CSRF) ?>">
-                <input type="hidden" name="comp_id" value="<?= (int)$c['id'] ?>">
-                <button type="submit" class="btn-danger">🗑️ Eliminar</button>
-              </form>
-            </td>
-          </tr>
-        <?php endforeach; endif; ?>
-        </tbody>
-      </table>
-    </div>
-
-    <!-- Opciones para los selects (sin PHP corto dentro de JS) -->
-    <?php
-      // Pre-render de <option> seguros para inyectar en JS
-      ob_start();
-      echo '<option value="">Seleccioná competidor…</option>';
-      foreach ($competidores as $c) {
+        // Etiqueta para opción
         $min = isset($c['ct_peso_min']) ? fmt_kg($c['ct_peso_min']) : '';
         $max = isset($c['ct_peso_max']) ? fmt_kg($c['ct_peso_max']) : '';
-        $peso = ($min && $max) ? "{$min}–{$max} kg" : (($min || $max) ? (($min?:$max).' kg') : ($c['ct_nombre'] ?? '-'));
-        $label = trim(($c['apellido'].' '.$c['nombre']).' — '.$peso.' / '.($c['division'] ?? '-').' / '.($c['modalidad'] ?? '-'));
-        $val   = (int)$c['id'];
-        $modId = (int)($c['mod_id'] ?? 0);
-        $divId = (int)($c['div_id'] ?? 0);
-        $disId = (int)($c['disc_id'] ?? 0);
-        echo '<option value="'.$val.'" data-mod="'.$modId.'" data-div="'.$divId.'" data-disc="'.$disId.'">'.h($label).'</option>';
-      }
-      $OPTIONS_HTML = ob_get_clean();
-    ?>
-  </form>
+        $pesoEtiqueta = ($min && $max) ? "{$min}–{$max} kg" : (($min || $max) ? (($min?:$max).' kg') : ($c['ct_nombre'] ?? '-'));
+        $labelOption = trim(($c['apellido'].' '.$c['nombre']).' — '.$pesoEtiqueta.' / '.($c['division'] ?? '-').' / '.($c['modalidad'] ?? '-'));
+      ?>
+        <tr>
+          <td><img src="<?= h($srcFoto) ?>" class="avatar" alt="Foto"></td>
+          <td><?= h($c['apellido'].' '.$c['nombre']) ?></td>
+          <td><?= h($c['dni']) ?></td>
+          <td><?= h($c['edad']) ?></td>
+          <td><span class="muted"><?= h($c['disciplina'] ?? '-') ?></span></td>
+          <td><?= h($c['modalidad'] ?? '-') ?></td>
+          <td><?= h($catTec) ?></td>
+          <td><?= h($catLbl) ?></td>
+          <td><?= h($pesoSolo) ?></td>
+          <td><?= h($c['division'] ?? '-') ?></td>
+          <td><?= h($c['escuela_nombre'] ?? '-') ?></td>
+          <td><img src="<?= h($srcLogo) ?>" class="logo" alt="Logo"></td>
+          <td>
+            <form method="POST" class="inline" onsubmit="return confirm('¿Eliminar competidor del evento?');">
+              <input type="hidden" name="accion" value="eliminar_comp">
+              <input type="hidden" name="csrf" value="<?= h($CSRF) ?>">
+              <input type="hidden" name="comp_id" value="<?= (int)$c['id'] ?>">
+              <button type="submit" class="btn-danger">🗑️ Eliminar</button>
+            </form>
+          </td>
+        </tr>
+      <?php endforeach; endif; ?>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Opciones para los selects (sin PHP corto dentro de JS) -->
+  <?php
+    // Pre-render de <option> seguros para inyectar en JS
+    ob_start();
+    echo '<option value="">Seleccioná competidor…</option>';
+    foreach ($competidores as $c) {
+      $min = isset($c['ct_peso_min']) ? fmt_kg($c['ct_peso_min']) : '';
+      $max = isset($c['ct_peso_max']) ? fmt_kg($c['ct_peso_max']) : '';
+      $peso = ($min && $max) ? "{$min}–{$max} kg" : (($min || $max) ? (($min?:$max).' kg') : ($c['ct_nombre'] ?? '-'));
+      $label = trim(($c['apellido'].' '.$c['nombre']).' — '.$peso.' / '.($c['division'] ?? '-').' / '.($c['modalidad'] ?? '-'));
+      $val   = (int)$c['id'];
+      $modId = (int)($c['mod_id'] ?? 0);
+      $divId = (int)($c['div_id'] ?? 0);
+      $disId = (int)($c['disc_id'] ?? 0);
+      echo '<option value="'.$val.'" data-mod="'.$modId.'" data-div="'.$divId.'" data-disc="'.$disId.'">'.h($label).'</option>';
+    }
+    $OPTIONS_HTML = ob_get_clean();
+  ?>
 </div>
 
 <script>

@@ -24,22 +24,32 @@ function bt($c){ return '`'.str_replace('`','``',$c).'`'; }
 function h($s){ return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); }
 
 /* ===== Contexto ===== */
-$juez_id   = (int)($_SESSION['juez_id'] ?? 0);
-$evento_id = (int)($_SESSION['evento_id_actual'] ?? 0);
-if ($juez_id <= 0) { header('Location: login_juez.php?err='.urlencode('Iniciá sesión.')); exit; }
+// ⚠️ NUNCA escribir juez_id en sesión: tomarlo sólo de GET para evitar “pisadas” entre pestañas
+$juez_id = isset($_GET['juez_id']) && is_numeric($_GET['juez_id']) ? (int)$_GET['juez_id'] : 0;
+if ($juez_id <= 0) { header('Location: login_juez.php?err='.urlencode('Iniciá sesión como juez.')); exit; }
+
+// evento_id puede venir por GET (si querés filtrar). No lo guardamos en sesión para mantener stateless también.
+$evento_id = isset($_GET['evento_id']) && is_numeric($_GET['evento_id']) ? (int)$_GET['evento_id'] : 0;
 
 /* ===== Datos del juez (opcional) ===== */
 $juez = null;
 if (table_exists($conexion,'jueces_evento')) {
-  $st=$conexion->prepare("SELECT id, dni, nombre, apellido,
-     (SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='jueces_evento' AND COLUMN_NAME='rol' LIMIT 1) AS t1
-   FROM jueces_evento WHERE id=? LIMIT 1");
-  if ($st){ $st->bind_param('i',$juez_id); $st->execute(); $r=$st->get_result(); $juez=$r?$r->fetch_assoc():null; $st->close(); }
+  if ($st=$conexion->prepare("SELECT id, dni, nombre, apellido FROM jueces_evento WHERE id=? LIMIT 1")) {
+    $st->bind_param('i',$juez_id);
+    $st->execute();
+    $r=$st->get_result();
+    $juez=$r?$r->fetch_assoc():null;
+    $st->close();
+  }
 }
 
 /* ===== Detectar tabla de peleas ===== */
 $peleas_tbl = first_table($conexion, ['peleas_evento','peleas','peleas_eventos']);
-$asig_tbl   = table_exists($conexion,'pelea_jueces') ? 'pelea_jueces' : (table_exists($conexion,'peleas_jueces') ? 'peleas_jueces' : null);
+
+/* Si tenés tabla de asignaciones, usala para filtrar las peleas del juez */
+$asig_tbl   = table_exists($conexion,'jueces_por_pelea') ? 'jueces_por_pelea'
+           : (table_exists($conexion,'pelea_jueces')     ? 'pelea_jueces'
+           : (table_exists($conexion,'peleas_jueces')    ? 'peleas_jueces' : null));
 
 /* ===== Columnas de peleas ===== */
 $C_AZUL_N = $C_ROJO_N = $C_TITULO = $C_CAT = $C_RING = $C_HORA = $C_EST = null;
@@ -49,18 +59,17 @@ if ($peleas_tbl) {
   $C_AZUL_N = has_col($conexion,$peleas_tbl,'azul_nombre') ? 'azul_nombre' : (has_col($conexion,$peleas_tbl,'competidor_a') ? 'competidor_a' : null);
   $C_ROJO_N = has_col($conexion,$peleas_tbl,'rojo_nombre') ? 'rojo_nombre' : (has_col($conexion,$peleas_tbl,'competidor_b') ? 'competidor_b' : null);
   $C_TITULO = has_col($conexion,$peleas_tbl,'titulo') ? 'titulo' : null;
-  foreach (['competidor_azul_id','azul_id','id_azul','id_competidor_azul','azul'] as $c) if (has_col($conexion,$peleas_tbl,$c)) { $C_AZUL_ID=$c; break; }
-  foreach (['competidor_rojo_id','rojo_id','id_rojo','id_competidor_rojo','rojo'] as $c) if (has_col($conexion,$peleas_tbl,$c)) { $C_ROJO_ID=$c; break; }
+
+  foreach (['competidor_azul_id','azul_id','id_azul','id_competidor_azul','azul'] as $c) { if (has_col($conexion,$peleas_tbl,$c)) { $C_AZUL_ID=$c; break; } }
+  foreach (['competidor_rojo_id','rojo_id','id_rojo','id_competidor_rojo','rojo'] as $c) { if (has_col($conexion,$peleas_tbl,$c)) { $C_ROJO_ID=$c; break; } }
+
   $C_CAT  = has_col($conexion,$peleas_tbl,'categoria')     ? 'categoria'     : null;
   $C_RING = has_col($conexion,$peleas_tbl,'ring')          ? 'ring'          : (has_col($conexion,$peleas_tbl,'tatami') ? 'tatami' : null);
   $C_HORA = has_col($conexion,$peleas_tbl,'programado_at') ? 'programado_at' : (has_col($conexion,$peleas_tbl,'horario') ? 'horario' : null);
   $C_EST  = has_col($conexion,$peleas_tbl,'estado')        ? 'estado'        : null;
 }
 
-/* ===== Query de peleas =====
-   1) Si hay tabla de asignaciones, intentamos traer asignadas.
-   2) Si NO hay result, caemos a TODAS las peleas del evento (o TODAS si $evento_id=0).
-   3) Siempre hacemos JOIN con competidores_evento si no tenemos nombres de texto. */
+/* ===== Query de peleas ===== */
 $peleas = [];
 $list_title = 'Peleas (modo juez)';
 
@@ -84,29 +93,41 @@ if ($peleas_tbl) {
 
   $order = $C_HORA ? " ORDER BY p.".bt($C_HORA)." ASC" : " ORDER BY p.`id` ASC";
 
-  $res_tmp = [];
   /* 1) Asignadas, si existe tabla */
   if ($asig_tbl) {
+    $C_ASIG_HAB = null;
+    if ($c=$conexion->query("SHOW COLUMNS FROM `$asig_tbl`")) {
+      while($col=$c->fetch_assoc()){
+        $lc=strtolower($col['Field']);
+        if (in_array($lc, ['habilitado','activo'], true)) { $C_ASIG_HAB=$col['Field']; break; }
+      }
+      $c->close();
+    }
+
     $sql = "SELECT ".implode(',', $cols)." FROM `".$conexion->real_escape_string($peleas_tbl)."` p
             INNER JOIN `$asig_tbl` pj ON pj.pelea_id = p.id
             WHERE pj.juez_id = ?".
+            ($C_ASIG_HAB ? " AND pj.`$C_ASIG_HAB`=1" : "").
             ($evento_id>0 && has_col($conexion,$peleas_tbl,'evento_id') ? " AND p.`evento_id` = ?" : "").
             $join.$order;
+
     if ($st=$conexion->prepare($sql)) {
       if ($evento_id>0 && has_col($conexion,$peleas_tbl,'evento_id')) { $st->bind_param('ii',$juez_id,$evento_id); }
       else { $st->bind_param('i',$juez_id); }
-      $st->execute(); $r=$st->get_result(); if($r) $res_tmp=$r->fetch_all(MYSQLI_ASSOC); $st->close();
+      $st->execute(); $r=$st->get_result(); $peleas = $r ? $r->fetch_all(MYSQLI_ASSOC) : [];
+      $st->close();
+      if ($peleas) $list_title = 'Mis peleas asignadas';
     }
-    if ($res_tmp) { $peleas = $res_tmp; $list_title = 'Mis peleas asignadas'; }
   }
 
-  /* 2) Fallback: todas del evento (o todas si no hay evento_id en sesión) */
+  /* 2) Fallback: todas del evento (o todas si no hay evento_id) */
   if (!$peleas) {
     $list_title = $evento_id>0 ? 'Peleas del evento' : 'Todas las peleas';
-    $sql = "SELECT ".implode(',', $cols)." FROM `".$conexion->real_escape_string($peleas_tbl)."` p ".
-           $join.
-           ($evento_id>0 && has_col($conexion,$peleas_tbl,'evento_id') ? " WHERE p.`evento_id` = ".(int)$evento_id : "").
+    $sql = "SELECT ".implode(',', $cols)." FROM `".$conexion->real_escape_string($peleas_tbl)."` p " .
+           $join .
+           ($evento_id>0 && has_col($conexion,$peleas_tbl,'evento_id') ? " WHERE p.`evento_id` = ".(int)$evento_id : "") .
            $order;
+
     if ($st=$conexion->prepare($sql)) {
       $st->execute(); $r=$st->get_result(); $peleas = $r ? $r->fetch_all(MYSQLI_ASSOC) : [];
       $st->close();
@@ -152,10 +173,30 @@ if (table_exists($conexion,'competidores_evento')) {
     @media (min-width:1000px){ .two{grid-template-columns:2fr 1fr} }
     input[type=search]{padding:8px 10px;border-radius:10px;border:1px solid #263341;background:#111a24;color:#e6eef4;width:100%}
     .top{display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap}
+    .pill{display:inline-block;padding:4px 8px;border-radius:999px;border:1px solid #1f2a33;font-size:12px}
   </style>
 </head>
 <body>
   <div class="wrap two">
+    <!-- HEADER DEL JUEZ -->
+    <div class="card" style="grid-column:1 / -1; display:flex; align-items:center; justify-content:space-between; gap:12px;">
+      <div>
+        <div class="title" style="margin:0">🧑‍⚖️ Juez actual: <b>#<?= (int)$juez_id ?></b>
+          <?php if ($juez): ?>
+            — <?= h(trim(($juez['apellido'] ?? '').' '.($juez['nombre'] ?? ''))) ?>
+            <?php if (!empty($juez['dni'])): ?> <span class="pill">DNI <?= h($juez['dni']) ?></span><?php endif; ?>
+          <?php endif; ?>
+        </div>
+        <div class="muted">Los enlaces de esta página llevan tu <code>juez_id</code>. No se usa sesión para el juez.</div>
+      </div>
+      <div>
+        <a class="btn gray" href="login_juez.php">Cambiar / salir</a>
+        <?php if ($evento_id>0): ?>
+          <span class="pill">Evento #<?= (int)$evento_id ?></span>
+        <?php endif; ?>
+      </div>
+    </div>
+
     <!-- PELEAS -->
     <div class="card">
       <div class="top">
@@ -180,26 +221,30 @@ if (table_exists($conexion,'competidores_evento')) {
             </tr>
           </thead>
           <tbody>
-          <?php foreach ($peleas as $p):
-            $az = $p['azul_nombre'] ?? ($p['azul_nombre_join'] ?? '');
-            $ro = $p['rojo_nombre'] ?? ($p['rojo_nombre_join'] ?? '');
-            $vs = trim(($az?:'') . (($az||$ro)?' vs ':'') . ($ro?:''));
-            if ($vs==='') $vs = $p['titulo'] ?? '—';
-            $cat  = $p['categoria'] ?? '—';
-            $ring = $p['ring'] ?? '—';
-            $hora = $p['horario'] ?? '—';
-            $est  = $p['estado'] ?? '—';
-          ?>
+          <?php foreach ($peleas as $p): ?>
+            <?php
+              $az = $p['azul_nombre'] ?? ($p['azul_nombre_join'] ?? '');
+              $ro = $p['rojo_nombre'] ?? ($p['rojo_nombre_join'] ?? '');
+              $vs = trim(($az?:'') . (($az||$ro)?' vs ':'') . ($ro?:''));
+              if ($vs==='') $vs = $p['titulo'] ?? '—';
+              $cat  = $p['categoria'] ?? '—';
+              $ring = $p['ring'] ?? '—';
+              $hora = $p['horario'] ?? '—';
+              $est  = $p['estado'] ?? '—';
+              $pid  = (int)$p['pelea_id'];
+
+              $qs = 'juez_id='.(int)$juez_id.($evento_id>0 ? '&evento_id='.(int)$evento_id : '');
+            ?>
             <tr>
-              <td><?= (int)$p['pelea_id'] ?></td>
+              <td><?= $pid ?></td>
               <td><?= h($vs) ?></td>
               <td><?= h((string)$cat) ?></td>
               <td><?= h((string)$ring) ?></td>
               <td><?= h((string)$hora) ?></td>
               <td><?= h((string)$est) ?></td>
               <td style="white-space:nowrap;display:flex;gap:8px">
-                <a class="btn" href="tarjeta_puntuar.php?pelea_id=<?= (int)$p['pelea_id'] ?>">Tarjeta (puntuar)</a>
-                <a class="btn gray" href="combate_en_vivo.php?pelea_id=<?= (int)$p['pelea_id'] ?>&modo=juez">Ver en vivo</a>
+                <a class="btn" href="<?= 'tarjeta_puntuar.php?pelea_id='.$pid.'&'.$qs ?>">Tarjeta (puntuar)</a>
+                <a class="btn gray" href="<?= 'combate_en_vivo.php?pelea_id='.$pid.'&modo=juez&'.$qs ?>">Ver en vivo</a>
               </td>
             </tr>
           <?php endforeach; ?>
@@ -211,6 +256,23 @@ if (table_exists($conexion,'competidores_evento')) {
     <!-- COMPETIDORES DEL EVENTO -->
     <div class="card">
       <h2 class="title">👥 Competidores del evento</h2>
+      <?php
+      $competidores = [];
+      if (table_exists($conexion,'competidores_evento')) {
+        $sql_comp = "SELECT ce.id, ce.nombre, ce.apellido, ce.escuela_nombre,
+                            dv.nombre AS division, cp.nombre AS peso, md.nombre AS modalidad
+                     FROM competidores_evento ce
+                     LEFT JOIN divisiones_evento dv ON dv.id=ce.division_id
+                     LEFT JOIN categorias_peso_evento cp ON cp.id=ce.categoria_peso_id
+                     LEFT JOIN modalidades_evento md ON md.id=ce.modalidad_id";
+        if ($evento_id>0 && has_col($conexion,'competidores_evento','evento_id')) $sql_comp .= " WHERE ce.evento_id = ".(int)$evento_id;
+        $sql_comp .= " ORDER BY ce.apellido, ce.nombre";
+        if ($st=$conexion->prepare($sql_comp)) {
+          $st->execute(); $r=$st->get_result(); $competidores = $r ? $r->fetch_all(MYSQLI_ASSOC) : [];
+          $st->close();
+        }
+      }
+      ?>
       <?php if (!$competidores): ?>
         <div class="muted">No se encontraron competidores para este evento.</div>
       <?php else: ?>
@@ -246,22 +308,27 @@ if (table_exists($conexion,'competidores_evento')) {
     </div>
   </div>
 
-<script>
-  // Filtros rápidos
-  const qP = document.getElementById('qpeleas'), tblP = document.getElementById('tblPeleas');
-  if (qP && tblP) {
-    qP.addEventListener('input', () => {
-      const t = qP.value.toLowerCase();
-      for (const tr of tblP.querySelectorAll('tbody tr')) tr.style.display = tr.innerText.toLowerCase().includes(t) ? '' : 'none';
-    });
-  }
-  const qC = document.getElementById('qcomp'), tblC = document.getElementById('tblComp');
-  if (qC && tblC) {
-    qC.addEventListener('input', () => {
-      const t = qC.value.toLowerCase();
-      for (const tr of tblC.querySelectorAll('tbody tr')) tr.style.display = tr.innerText.toLowerCase().includes(t) ? '' : 'none';
-    });
-  }
-</script>
+  <script>
+    (function(){
+      var q = document.getElementById('qpeleas'), t = document.getElementById('tblPeleas');
+      if (!q || !t) return;
+      q.addEventListener('input', function(){
+        var s = q.value.toLowerCase();
+        t.querySelectorAll('tbody tr').forEach(function(tr){
+          tr.style.display = tr.innerText.toLowerCase().indexOf(s) !== -1 ? '' : 'none';
+        });
+      });
+    })();
+    (function(){
+      var q = document.getElementById('qcomp'), t = document.getElementById('tblComp');
+      if (!q || !t) return;
+      q.addEventListener('input', function(){
+        var s = q.value.toLowerCase();
+        t.querySelectorAll('tbody tr').forEach(function(tr){
+          tr.style.display = tr.innerText.toLowerCase().indexOf(s) !== -1 ? '' : 'none';
+        });
+      });
+    })();
+  </script>
 </body>
 </html>
