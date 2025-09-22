@@ -15,7 +15,6 @@ const CLOUD_API_SECRET = 'TKo5BRiKCEjxSLFzn2DLbz_ji4c'; // ← tu API secret
 
 $CLOUD_ERR = null;
 
-// Inicializa el SDK si es necesario
 function cloud_init(): void {
   static $inited=false; if ($inited) return; $inited=true;
   $enabled = CLOUD_ENABLED || getenv('CLOUDINARY_URL');
@@ -85,7 +84,8 @@ function is_image_path($p): bool {
   $ext = strtolower(pathinfo((string)$p, PATHINFO_EXTENSION));
   return in_array($ext, ['jpg','jpeg','png','webp','gif'], true);
 }
-/** Guarda archivo local y, si hay Cloudinary, lo sube y devuelve secure_url */
+
+/** Guarda archivo local; intenta Cloudinary y guarda estado de subida por campo en $_SESSION['upload_status'] */
 function save_upload(string $field, int $evento_id): ?string {
   if (!isset($_FILES[$field]) || ($_FILES[$field]['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) return null;
   $tmp = $_FILES[$field]['tmp_name'];
@@ -99,20 +99,38 @@ function save_upload(string $field, int $evento_id): ?string {
   $base = preg_replace('/[^\p{L}\p{N}\-_]+/u','-', pathinfo($name, PATHINFO_FILENAME));
   $base = trim($base,'-_') ?: 'archivo';
 
-  // primero guardamos local (backup)
+  // 1) Guardar local (backup)
   $dir = __DIR__.'/uploads/evento_'.$evento_id;
   if (!is_dir($dir)) @mkdir($dir,0775,true);
   $filename = $field.'_'.date('Ymd_His').'_'.mt_rand(1000,9999).'.'.$ext;
   $abs_dest = $dir.'/'.$filename;
   if (!@move_uploaded_file($tmp,$abs_dest)) return null;
+  $final_url = 'uploads/evento_'.$evento_id.'/'.$filename;
 
-  // si hay Cloudinary, subimos y devolvemos su URL
-  $url = cloud_upload($abs_dest, 'multi_gimnasio/evento_'.$evento_id, $field.'_'.$base.'_'.date('Ymd_His'));
-  if ($url) return $url;
+  // 2) Intentar Cloudinary (si está configurado)
+  $cloud_attempted = false;
+  $cloud_ok = false;
+  if (cloud_configured()) {
+    $cloud_attempted = true;
+    $url = cloud_upload($abs_dest, 'multi_gimnasio/evento_'.$evento_id, $field.'_'.$base.'_'.date('Ymd_His'));
+    if ($url) { $cloud_ok = true; $final_url = $url; }
+  }
 
-  // fallback local (ruta pública relativa)
-  return 'uploads/evento_'.$evento_id.'/'.$filename;
+  // 3) Guardar estado para feedback bajo el input
+  if (!isset($_SESSION['upload_status'])) $_SESSION['upload_status'] = [];
+  if ($cloud_attempted) {
+    $_SESSION['upload_status'][$field] = [
+      'status'   => $cloud_ok ? 'ok' : 'fail',
+      'filename' => $name,
+    ];
+  } else {
+    // Si no se intentó (Cloudinary no configurado), no mostramos nada.
+    unset($_SESSION['upload_status'][$field]);
+  }
+
+  return $final_url;
 }
+
 function cat_tecnica_por_total(int $t): string { return $t>=10?'A':($t>=5?'B':($t>=1?'C':'N')); }
 
 /* ===== FK helpers ===== */
@@ -212,7 +230,7 @@ function get_evento_meta(mysqli $db, int $evento_id): array {
   if(!$bg){ foreach($bg_cloud as $k) if(!empty($row[$k])){ $bg=(string)$row[$k]; break; } }
   if(!$bg){ foreach($bg_local as $k) if(!empty($row[$k])){ $bg=(string)$row[$k]; break; } }
 
-  if($bg && !is_image_path($bg)) $bg=null; // evita PDF como fondo
+  if($bg && !is_image_path($bg)) $bg=null;
 
   return ['nombre'=>$nombre,'logo'=>$logo?:null,'bg'=>$bg?:null,'raw'=>$row];
 }
@@ -364,9 +382,13 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
 }
 
 /* ===== Vista (GET) ===== */
-$evento_id = $evento_id_ctx; // por comodidad con el nombre corto
+$evento_id = $evento_id_ctx;
 $wa_link = $_SESSION['wa_link'] ?? null;
 unset($_SESSION['wa_link']);
+
+/* Feedback de subidas Cloudinary (verde/rojo debajo de inputs) */
+$upload_status = $_SESSION['upload_status'] ?? [];
+unset($_SESSION['upload_status']);
 
 /* ID real de Muay Thai (si existe), o 7 como backup */
 $idMuay = cat_id_by_nombre($conexion,'modalidades_evento','Muay Thai') ?? 7;
@@ -407,7 +429,6 @@ $idMuay = cat_id_by_nombre($conexion,'modalidades_evento','Muay Thai') ?? 7;
     .alert.ok{background:var(--ok);border:1px solid var(--okbd);color:var(--oktx)}
     .alert.bad{background:var(--bad);border:1px solid var(--badbd);color:var(--badt)}
 
-    /* ====== Hero ====== */
     .hero{
       position:relative;border:1px solid var(--bd);border-radius:16px;overflow:hidden;margin-bottom:10px;
       background:#101820;min-height:120px;display:flex;align-items:flex-end;padding:12px;
@@ -420,10 +441,14 @@ $idMuay = cat_id_by_nombre($conexion,'modalidades_evento','Muay Thai') ?? 7;
     .hero .title{font-size:22px;font-weight:700;letter-spacing:.3px;text-shadow:0 2px 10px rgba(0,0,0,.5);}
     .share{display:flex;gap:8px;align-items:center;margin:8px 0 0}
     .share input{flex:1}
+
+    /* Mensajes de estado de Cloudinary bajo inputs */
+    .note-ok  { margin-top:6px; font-size:.9rem; color:#b6f3d1; }
+    .note-bad { margin-top:6px; font-size:.9rem; color:#ffb4b4; }
+    .mut { color:#cfe7ff; opacity:.9; }
   </style>
 <?php if ($EV_BG): ?>
   <style>
-    /* ====== FONDO DE PANTALLA: usa el FLYER/PORTADA del evento ====== */
     body::before{
       content:""; position:fixed; inset:0; z-index:-1;
       background-image:url('<?= h($EV_BG) ?>');
@@ -522,10 +547,25 @@ $idMuay = cat_id_by_nombre($conexion,'modalidades_evento','Muay Thai') ?? 7;
             <label>Logo de la Escuela (IMG/PDF)</label>
             <input type="file" id="escuela_logo" name="escuela_logo" accept="image/*,application/pdf">
             <div class="mut" style="font-size:.85rem;margin-top:4px">Se sube a Cloudinary si está activo.</div>
+            <?php if (!empty($upload_status['escuela_logo'])): ?>
+              <?php if ($upload_status['escuela_logo']['status']==='ok'): ?>
+                <div class="note-ok">☁️ Cloudinary: subido correctamente.</div>
+              <?php else: ?>
+                <div class="note-bad">☁️ Cloudinary: fallo al subir. Vuelva a intentar.</div>
+              <?php endif; ?>
+            <?php endif; ?>
           </div>
+
           <div>
             <label>Foto del Competidor</label>
             <input type="file" id="foto_competidor" name="foto_competidor" accept="image/*">
+            <?php if (!empty($upload_status['foto_competidor'])): ?>
+              <?php if ($upload_status['foto_competidor']['status']==='ok'): ?>
+                <div class="note-ok">☁️ Cloudinary: subido correctamente.</div>
+              <?php else: ?>
+                <div class="note-bad">☁️ Cloudinary: fallo al subir. Vuelva a intentar.</div>
+              <?php endif; ?>
+            <?php endif; ?>
           </div>
         </div>
       </div>
@@ -597,6 +637,13 @@ $idMuay = cat_id_by_nombre($conexion,'modalidades_evento','Muay Thai') ?? 7;
           <div>
             <label>Comprobante (imagen o PDF)</label>
             <input type="file" name="comprobante_pago" id="comprobante_pago" accept="image/*,application/pdf">
+            <?php if (!empty($upload_status['comprobante_pago'])): ?>
+              <?php if ($upload_status['comprobante_pago']['status']==='ok'): ?>
+                <div class="note-ok">☁️ Cloudinary: subido correctamente.</div>
+              <?php else: ?>
+                <div class="note-bad">☁️ Cloudinary: fallo al subir. Vuelva a intentar.</div>
+              <?php endif; ?>
+            <?php endif; ?>
           </div>
           <div>
             <label>Monto de inscripción ($)</label>
@@ -615,8 +662,12 @@ $idMuay = cat_id_by_nombre($conexion,'modalidades_evento','Muay Thai') ?? 7;
   /* ==== Copiar link de compartir ==== */
   function copyShare(){
     const el = document.getElementById('share_url');
-    el.select(); el.setSelectionRange(0, 99999);
-    try { document.execCommand('copy'); } catch(e){}
+    if (navigator.clipboard && window.isSecureContext) {
+      navigator.clipboard.writeText(el.value);
+    } else {
+      el.select(); el.setSelectionRange(0, 99999);
+      try { document.execCommand('copy'); } catch(e){}
+    }
   }
 
   /* ==== Provincias y Localidades (Argentina) ==== */
@@ -627,18 +678,56 @@ $idMuay = cat_id_by_nombre($conexion,'modalidades_evento','Muay Thai') ?? 7;
   cargarProvincias();
 
   /* ==== Edad, División auto y categorías por peso ==== */
-  function calcularEdad(){const f=document.getElementById("fecha_nacimiento").value; if(!f)return; const hoy=new Date(), nac=new Date(f); let e=hoy.getFullYear()-nac.getFullYear(); const m=hoy.getMonth()-nac.getMonth(); if(m<0||(m===0&&hoy.getDate()<nac.getDate())) e--; document.getElementById("edad").value=Math.max(0,e); let d="3"; if(e<12)d="1"; else if(e<18)d="2"; else if(e<26)d="3"; else if(e<46)d="4"; else d="5"; document.getElementById("division_id_view").value=d; document.getElementById("division_id").value=d; cargarCategoriasPeso();}
-  function cargarCategoriasPeso(){const e=document.getElementById("edad").value; const s=document.getElementById("sexo").value; if(!e||!s)return; fetch('obtener_categorias_por_peso.php?edad='+encodeURIComponent(e)+'&sexo='+encodeURIComponent(s)).then(r=>r.text()).then(html=>{document.getElementById("categoria_peso_id").innerHTML=html;}).catch(()=>{});}
+  function calcularEdad(){
+    const f=document.getElementById("fecha_nacimiento").value; if(!f)return;
+    const hoy=new Date(), nac=new Date(f);
+    let e=hoy.getFullYear()-nac.getFullYear();
+    const m=hoy.getMonth()-nac.getMonth();
+    if(m<0||(m===0&&hoy.getDate()<nac.getDate())) e--;
+    document.getElementById("edad").value=Math.max(0,e);
+    let d="3"; if(e<12)d="1"; else if(e<18)d="2"; else if(e<26)d="3"; else if(e<46)d="4"; else d="5";
+    document.getElementById("division_id_view").value=d; document.getElementById("division_id").value=d; cargarCategoriasPeso();
+  }
+  function cargarCategoriasPeso(){
+    const e=document.getElementById("edad").value; const s=document.getElementById("sexo").value; if(!e||!s)return;
+    fetch('obtener_categorias_por_peso.php?edad='+encodeURIComponent(e)+'&sexo='+encodeURIComponent(s))
+      .then(r=>r.text()).then(html=>{document.getElementById("categoria_peso_id").innerHTML=html;}).catch(()=>{});
+  }
   document.getElementById("sexo")?.addEventListener("change",cargarCategoriasPeso);
 
   /* ==== Ranking ==== */
-  function recalcRanking(){const w=+document.getElementById('wins').value||0, l=+document.getElementById('losses').value||0, d=+document.getElementById('draws').value||0, n=+document.getElementById('no_contest').value||0; const tot=w+l+d+n; document.getElementById('total_fights').value=tot; let cat='4'; if(tot>=10)cat='1'; else if(tot>=5)cat='2'; else if(tot>=1)cat='3'; document.getElementById('categoria_tecnica_id_view').value=cat; document.getElementById('categoria_tecnica_id').value=cat;}
+  function recalcRanking(){
+    const w=+document.getElementById('wins').value||0,
+          l=+document.getElementById('losses').value||0,
+          d=+document.getElementById('draws').value||0,
+          n=+document.getElementById('no_contest').value||0;
+    const tot=w+l+d+n;
+    document.getElementById('total_fights').value=tot;
+    let cat='4'; if(tot>=10)cat='1'; else if(tot>=5)cat='2'; else if(tot>=1)cat='3';
+    document.getElementById('categoria_tecnica_id_view').value=cat;
+    document.getElementById('categoria_tecnica_id').value=cat;
+  }
   ['wins','losses','draws','no_contest'].forEach(id=> document.getElementById(id)?.addEventListener('input',recalcRanking)); recalcRanking();
 
   /* ==== DNI en vivo ==== */
-  const dniInput=document.getElementById('dni'), dniMsg=document.getElementById('dni_msg'), btnSubmit=document.getElementById('btn_submit'), eventoId=document.getElementById('evento_id')?.value||'';
+  const dniInput=document.getElementById('dni'),
+        dniMsg=document.getElementById('dni_msg'),
+        btnSubmit=document.getElementById('btn_submit'),
+        eventoId=document.getElementById('evento_id')?.value||'';
   function setSubmitEnabled(x){ if(btnSubmit) btnSubmit.disabled=!x; }
-  async function validarDNI(){dniMsg.style.display='none'; setSubmitEnabled(true); const dni=dniInput?.value.trim(); if(!dni||!eventoId)return; try{const r=await fetch('validar_dni_evento.php?evento_id='+encodeURIComponent(eventoId)+'&dni='+encodeURIComponent(dni)); if(!r.ok)return; const data=await r.json(); if(data.exists){dniMsg.textContent='⚠️ Este DNI ya está inscripto en este evento.'; dniMsg.className='alert bad'; dniMsg.style.display='block'; setSubmitEnabled(false);} }catch{}}
+  async function validarDNI(){
+    dniMsg.style.display='none'; setSubmitEnabled(true);
+    const dni=dniInput?.value.trim(); if(!dni||!eventoId)return;
+    try{
+      const r=await fetch('validar_dni_evento.php?evento_id='+encodeURIComponent(eventoId)+'&dni='+encodeURIComponent(dni));
+      if(!r.ok)return;
+      const data=await r.json();
+      if(data.exists){
+        dniMsg.textContent='⚠️ Este DNI ya está inscripto en este evento.';
+        dniMsg.className='alert bad'; dniMsg.style.display='block'; setSubmitEnabled(false);
+      }
+    }catch{}
+  }
   dniInput?.addEventListener('input',e=>{e.target.value=(e.target.value||'').replace(/\D+/g,'');});
   dniInput?.addEventListener('blur',validarDNI);
   dniInput?.addEventListener('change',validarDNI);
