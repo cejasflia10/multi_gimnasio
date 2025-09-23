@@ -1,11 +1,13 @@
 <?php
-// guardar_rutina.php — Sube rutinas del profesor a Cloudinary (persistente) y guarda metadatos en MySQL
+// guardar_rutina.php — Sube rutinas del profesor a Cloudinary (persistente) y guarda en rutinas_clientes
 if (session_status() === PHP_SESSION_NONE) session_start();
 require_once __DIR__ . '/conexion.php';
 
 if (!isset($conexion) || !($conexion instanceof mysqli)) { http_response_code(500); exit('❌ Sin conexión BD'); }
 if (function_exists('mysqli_report')) { mysqli_report(MYSQLI_REPORT_OFF); }
 @$conexion->set_charset('utf8mb4');
+
+date_default_timezone_set('America/Argentina/San_Luis');
 
 $profesor_id = (int)($_SESSION['profesor_id'] ?? 0);
 $gimnasio_id = (int)($_SESSION['gimnasio_id'] ?? 0);
@@ -14,50 +16,68 @@ if ($profesor_id <= 0 || $gimnasio_id <= 0) { http_response_code(403); exit('❌
 /* =========================
    Cloudinary (persistente)
    ========================= */
-// Opción 1: usa CLOUDINARY_URL en variables de entorno
-// Opción 2: completa acá tus credenciale
-const CLOUD_ENABLED    = true;                 // ← activado
-const CLOUD_NAME       = 'ddfugds9b';          // ← tu cloud name
-const CLOUD_API_KEY    = '657814174747186';    // ← tu API key
-const CLOUD_API_SECRET = 'TKo5BRiKCEjxSLFzn2DLbz_ji4c'; // ← tu API secret
+// Opción 1 (recomendada): usar CLOUDINARY_URL en variables de entorno:
+//   CLOUDINARY_URL=cloudinary://API_KEY:API_SECRET@CLOUD_NAME
+//
+// Opción 2: credenciales en constantes (ya cargadas):
+const CLOUD_ENABLED    = true;                            // ← activado
+const CLOUD_NAME       = 'ddfugds9b';                     // ← tu cloud name
+const CLOUD_API_KEY    = '657814174747186';               // ← tu API key
+const CLOUD_API_SECRET = 'TKo5BRiKCEjxSLFzn2DLbz_ji4c';   // ← tu API secret
+
+function cloud_parse_env(): array {
+  $url = getenv('CLOUDINARY_URL') ?: '';
+  if ($url) {
+    $p = parse_url($url); // cloudinary://key:secret@cloud
+    if ($p && !empty($p['user']) && !empty($p['pass']) && !empty($p['host'])) {
+      return ['cloud_name' => $p['host'], 'api_key' => $p['user'], 'api_secret' => $p['pass']];
+    }
+  }
+  return ['cloud_name' => CLOUD_NAME, 'api_key' => CLOUD_API_KEY, 'api_secret' => CLOUD_API_SECRET];
+}
 
 function cloud_init(): void {
-  static $ok=false; if ($ok) return; $ok=true;
+  static $init = false; if ($init) return; $init = true;
   if (!CLOUD_ENABLED && !getenv('CLOUDINARY_URL')) return;
 
+  // autoload (proyecto o raíz)
   $autoload1 = __DIR__ . '/vendor/autoload.php';
   $autoload2 = dirname(__DIR__) . '/vendor/autoload.php';
   if (file_exists($autoload1)) require_once $autoload1;
   elseif (file_exists($autoload2)) require_once $autoload2;
 
   if (!class_exists('\Cloudinary\Configuration\Configuration')) {
-    throw new RuntimeException('Cloudinary SDK no encontrado. Ejecutá "composer require cloudinary/cloudinary_php".');
+    throw new RuntimeException('Cloudinary SDK no encontrado. Ejecutá: composer require cloudinary/cloudinary_php');
   }
 
-  // Si tenés CLOUDINARY_URL, podés omitir esto; igual lo dejamos explícito.
+  $cfg = cloud_parse_env();
   \Cloudinary\Configuration\Configuration::instance([
     'cloud' => [
-      'cloud_name' => CLOUD_NAME,
-      'api_key'    => CLOUD_API_KEY,
-      'api_secret' => CLOUD_API_SECRET,
+      'cloud_name' => $cfg['cloud_name'],
+      'api_key'    => $cfg['api_key'],
+      'api_secret' => $cfg['api_secret'],
     ],
     'url' => ['secure' => true]
   ]);
 }
 
-function subir_cloudinary_auto(string $tmpPath, string $publicId, string $folder): array {
+/**
+ * Sube usando SDK v2 (\Cloudinary\Api\Upload\UploadApi) o v1 (\Cloudinary\Uploader) según disponibilidad.
+ */
+function cloud_upload_auto(string $tmpPath, array $opts): array {
   cloud_init();
-  $uploader = new \Cloudinary\Uploader();
 
-  // resource_type:auto -> decide solo (imagenes como image, pdf/doc como raw)
-  return $uploader->upload($tmpPath, [
-    'resource_type'    => 'auto',
-    'public_id'        => $publicId,
-    'use_filename'     => false,
-    'unique_filename'  => false,
-    'overwrite'        => true,
-    'folder'           => $folder,   // ej: multi_gimnasio/rutinas/90
-  ]);
+  if (class_exists('\Cloudinary\Api\Upload\UploadApi')) {
+    // SDK v2
+    $api = new \Cloudinary\Api\Upload\UploadApi();
+    return $api->upload($tmpPath, $opts);
+  }
+  if (class_exists('\Cloudinary\Uploader')) {
+    // SDK v1
+    return \Cloudinary\Uploader::upload($tmpPath, $opts);
+  }
+
+  throw new RuntimeException('Cloudinary SDK no disponible tras cargar autoload.');
 }
 
 function redir_ok(int $ok = 1, string $extra = ''): void {
@@ -96,11 +116,11 @@ $cli = $stmt->get_result()->fetch_assoc();
 $stmt->close();
 if (!$cli) { redir_ok(0, 'El alumno no pertenece a este gimnasio.'); }
 
-// detectar mime
+// detectar mime permitido
 $mime = @mime_content_type($f['tmp_name']) ?: '';
 $permitidos = [
   'application/pdf',
-  'image/jpeg','image/png',
+  'image/jpeg', 'image/png',
   'application/msword',
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
 ];
@@ -123,26 +143,52 @@ $publicId = $timestamp . '_' . ($sanitized ?: 'rutina') . "_alumno-{$cliente_id}
 $folder = "multi_gimnasio/rutinas/{$cliente_id}";
 
 try {
-  $res = subir_cloudinary_auto($f['tmp_name'], $publicId, $folder);
+  $res = cloud_upload_auto($f['tmp_name'], [
+    'resource_type'   => 'auto',      // acepta imágenes, pdf/docx, etc.
+    'public_id'       => $publicId,
+    'folder'          => $folder,
+    'use_filename'    => false,
+    'unique_filename' => false,
+    'overwrite'       => true,
+  ]);
 
   // Datos devueltos
   $url    = $res['secure_url'] ?? ($res['url'] ?? '');
   $pid    = $res['public_id']  ?? ($folder . '/' . $publicId);
   $bytes  = (int)($res['bytes'] ?? $f['size']);
-  $format = (string)($res['format'] ?? '');
+  $format = strtolower((string)($res['format'] ?? ''));
+  if (!$format) { $format = strtolower(pathinfo($f['name'], PATHINFO_EXTENSION) ?: ''); }
   $nombre_original = $f['name'];
 
   if (!$url) {
     redir_ok(0, 'No se obtuvo URL de Cloudinary.');
   }
 
-  // Guardar metadatos
-  $stmt2 = $conexion->prepare("INSERT INTO cliente_archivos
-    (cliente_id, gimnasio_id, profesor_id, nombre_original, public_id, url, formato, mime, bytes)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)");
+  // Asegurar tabla destino (la que usa el panel del cliente)
+  $conexion->query("
+    CREATE TABLE IF NOT EXISTS rutinas_clientes (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      cliente_id INT NOT NULL,
+      gimnasio_id INT NOT NULL,
+      profesor_id INT NOT NULL,
+      nombre_archivo VARCHAR(255) NOT NULL,
+      url_archivo TEXT NOT NULL,
+      extension VARCHAR(16) DEFAULT '',
+      tamano_bytes INT DEFAULT 0,
+      creado_en DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      INDEX idx_cli (cliente_id),
+      INDEX idx_gym (gimnasio_id),
+      INDEX idx_fecha (creado_en)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+  ");
+
+  // Guardar metadatos para que el cliente lo vea en su panel
+  $stmt2 = $conexion->prepare("INSERT INTO rutinas_clientes
+    (cliente_id, gimnasio_id, profesor_id, nombre_archivo, url_archivo, extension, tamano_bytes)
+    VALUES (?, ?, ?, ?, ?, ?, ?)");
   $stmt2->bind_param(
-    'iiisssssi',
-    $cliente_id, $gimnasio_id, $profesor_id, $nombre_original, $pid, $url, $format, $mime, $bytes
+    'iiisssi',
+    $cliente_id, $gimnasio_id, $profesor_id, $nombre_original, $url, $format, $bytes
   );
   $ok = $stmt2->execute();
   $stmt2->close();
@@ -154,5 +200,9 @@ try {
   redir_ok(1);
 
 } catch (Throwable $e) {
-  redir_ok(0, 'Error subiendo: ' . $e->getMessage());
+  $msg = $e->getMessage();
+  if (stripos($msg, 'cloudinary') !== false && stripos($msg, 'sdk') !== false) {
+    $msg .= ' (instalar: composer require cloudinary/cloudinary_php)';
+  }
+  redir_ok(0, 'Error subiendo: ' . $msg);
 }
