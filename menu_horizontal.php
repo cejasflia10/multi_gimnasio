@@ -186,6 +186,8 @@ if (!function_exists('has_perm')) {
       <a href="disciplinas.php">Disciplinas</a>
       <a href="planes.php">Planes</a>
       <a href="adicionales.php">Adicionales</a>
+      <a href="admin_cena.php">🍽️ Cena (Admin)</a>
+
     </div>
   </div>
   <?php endif; ?>
@@ -237,6 +239,7 @@ if (!function_exists('has_perm')) {
       <a href="ver_productos.php">Ver Productos</a>
       <a href="ver_facturas.php">Ver Facturas</a>
       <a href="promociones_admin.php">Promociones</a>
+      <a href="admin_indum.php">🛍️ Indumentaria (Admin)</a>
     </div>
   </div>
   <?php endif; ?>
