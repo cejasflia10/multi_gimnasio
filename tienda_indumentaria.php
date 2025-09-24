@@ -15,13 +15,9 @@ $csrf=$_SESSION['csrf_token'];
 if (!isset($_SESSION['cart'])) $_SESSION['cart']=[];
 
 function h($s){ return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); }
-function must_prepare(mysqli $db, string $sql) {
-  $st = $db->prepare($sql);
-  if (!$st) die('❌ SQL prepare error: '.$db->error.'<br><code>'.$sql.'</code>');
-  return $st;
-}
+function must_prepare(mysqli $db, string $sql){ $st=$db->prepare($sql); if(!$st) die('❌ SQL prepare error: '.$db->error.'<br><code>'.$sql.'</code>'); return $st; }
 
-/* ===== ACCIONES CARRITO ===== */
+/* ===== CARRITO ===== */
 if ($_SERVER['REQUEST_METHOD']==='POST' && hash_equals($csrf, $_POST['csrf'] ?? '')) {
   $act = $_POST['__a'] ?? '';
 
@@ -33,18 +29,14 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && hash_equals($csrf, $_POST['csrf'] ?? 
     $tcalc= $_POST['talle_calc'] ?? null;
     $mjson= $_POST['medidas_json'] ?? null;
 
-    if ($pid <= 0) { header('Location: tienda_indumentaria.php?err=pid'); exit; }
-    if ($talle === '') { header('Location: tienda_indumentaria.php?err=talle'); exit; }
+    if ($pid <= 0 || $talle === '') { header('Location: tienda_indumentaria.php?err=datos'); exit; }
 
-    // ⬇️ Traigo también la foto del producto para guardarla en el carrito
-    $sql = "SELECT p.id, p.titulo, p.precio, p.foto_url, COALESCE(t.stock,0) AS stock
+    $sql = "SELECT p.id, p.titulo, p.precio
             FROM ind_productos p
-            LEFT JOIN ind_talles t
-              ON t.producto_id = p.id AND t.talle = ?
             WHERE p.id = ? AND p.gimnasio_id = ? AND p.activo = 1
             LIMIT 1";
     $st = must_prepare($conexion, $sql);
-    $st->bind_param('sii', $talle, $pid, $gimnasio_id);
+    $st->bind_param('ii', $pid, $gimnasio_id);
     $st->execute();
     $p = $st->get_result()->fetch_assoc();
     $st->close();
@@ -53,7 +45,6 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && hash_equals($csrf, $_POST['csrf'] ?? 
       $_SESSION['cart'][] = [
         'producto_id' => (int)$p['id'],
         'titulo'      => $p['titulo'],
-        'foto_url'    => $p['foto_url'] ?? null,   // ⬅️ guardo foto
         'talle'       => $talle,
         'cantidad'    => $qty,
         'precio'      => (float)$p['precio'],
@@ -80,19 +71,52 @@ $st->execute();
 $prods = $st->get_result()->fetch_all(MYSQLI_ASSOC);
 $st->close();
 
-/* Talles por producto */
+/* Talles por producto (BD) */
 $talles_por_prod = [];
 if (!empty($prods)) {
   $ids = array_column($prods, 'id');
   $in    = implode(',', array_fill(0, count($ids), '?'));
   $types = str_repeat('i', count($ids));
   $sql   = "SELECT producto_id, talle, stock FROM ind_talles WHERE producto_id IN ($in) ORDER BY talle";
-  $stmt = must_prepare($conexion, $sql);
+  $stmt  = must_prepare($conexion, $sql);
   $stmt->bind_param($types, ...$ids);
   $stmt->execute();
   $rs = $stmt->get_result();
   while ($r = $rs->fetch_assoc()) $talles_por_prod[$r['producto_id']][] = $r;
   $stmt->close();
+}
+
+/* ===== Fallback de talles por defecto ===== */
+$DEF_REMERA_UNISEX = ['XS','S','M','L','XL','2XL','3XL'];
+$DEF_REMERA_MUJER  = ['XS','S','M','L','XL','2XL','3XL'];
+$DEF_REMERA_NINOS  = ['2','4','6','8','10','12','14','16'];
+$DEF_SHORTS        = ['XS','S','M','L','XL','2XL'];
+
+function render_talle_select($pid, $categoria, $desde_bd){
+  global $DEF_REMERA_UNISEX,$DEF_REMERA_MUJER,$DEF_REMERA_NINOS,$DEF_SHORTS;
+  // Prioriza talles de BD si existen:
+  if (!empty($desde_bd)) {
+    foreach($desde_bd as $t){
+      $stk = isset($t['stock']) ? " (stk: {$t['stock']})" : '';
+      echo '<option value="'.h($t['talle']).'">'.h($t['talle']).$stk.'</option>';
+    }
+    return;
+  }
+  // Si no hay en BD, usar catálogo por defecto según categoría
+  $cat = strtolower($categoria);
+  if ($cat==='remera' || $cat==='otro'){
+    echo '<optgroup label="Unisex">';
+    foreach($DEF_REMERA_UNISEX as $t) echo '<option value="'.h($t).'">'.$t.'</option>';
+    echo '</optgroup>';
+    echo '<optgroup label="Mujer">';
+    foreach($DEF_REMERA_MUJER as $t) echo '<option value="'.h($t).'">'.$t.'</option>';
+    echo '</optgroup>';
+    echo '<optgroup label="Niños/as">';
+    foreach($DEF_REMERA_NINOS as $t) echo '<option value="'.h($t).'">'.$t.'</option>';
+    echo '</optgroup>';
+  } else { // short / pantalón
+    foreach($DEF_SHORTS as $t) echo '<option value="'.h($t).'">'.$t.'</option>';
+  }
 }
 ?>
 <!doctype html>
@@ -103,13 +127,13 @@ if (!empty($prods)) {
 <style>
  body{font-family:system-ui,Segoe UI,Roboto,Arial;background:#0f1320;color:#fff;margin:0}
  .wrap{max-width:1080px;margin:24px auto;padding:16px}
- .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px}
+ .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px}
  .card{background:#141a2a;border:1px solid #24314d;border-radius:14px;padding:16px}
  img{width:100%;height:220px;object-fit:cover;border-radius:10px;border:1px solid #24314d}
  label{display:block;margin:.5rem 0 .25rem}
- input,select{width:100%;padding:10px;border-radius:10px;border:1px solid #2a3550;background:#0d1322;color:#fff}
+ input,select,textarea{width:100%;padding:12px;border-radius:12px;border:1px solid #2a3550;background:#0d1322;color:#fff}
  .row{display:flex;gap:10px;align-items:end;flex-wrap:wrap}
- .btn{padding:10px 14px;border-radius:10px;border:0;background:#3b82f6;color:#fff;cursor:pointer;font-weight:700}
+ .btn{padding:12px 16px;border-radius:12px;border:0;background:#3b82f6;color:#fff;cursor:pointer;font-weight:700}
  table{width:100%;border-collapse:collapse} th,td{padding:8px;border-bottom:1px solid #24314d}
  .mini{font-size:12px;color:#9fb0d3}
  .pill{display:inline-block;padding:6px 10px;border:1px solid #3b82f6;border-radius:999px;font-size:12px;cursor:pointer}
@@ -119,8 +143,7 @@ if (!empty($prods)) {
  .tab.active{border-color:#3b82f6;background:#0f1a33}
  .hide{display:none}
  .sticky-top{position:sticky;top:0;background:#0f1320;padding:8px 0;z-index:5}
- .prodcell{display:flex;align-items:center;gap:10px}
- .thumb{width:48px;height:48px;object-fit:cover;border-radius:8px;border:1px solid #24314d;background:#0d1322}
+ @media (max-width:760px){ .grid{grid-template-columns:1fr} }
 </style>
 </head>
 <body>
@@ -138,9 +161,9 @@ if (!empty($prods)) {
       <?php $pid=(int)$p['id']; $cat=strtolower($p['categoria']); ?>
       <div class="card">
         <?php if(!empty($p['foto_url'])): ?><img src="<?=h($p['foto_url'])?>" alt="Foto"><?php endif; ?>
-        <h3><?=h($p['titulo'])?></h3>
+        <h3 style="margin:10px 0 0"><?=h($p['titulo'])?></h3>
         <div class="mini"><?=h($p['categoria'])?></div>
-        <div><strong>$<?=number_format($p['precio'],2,',','.')?></strong></div>
+        <div style="font-weight:700;margin:.25rem 0">$<?=number_format($p['precio'],2,',','.')?></div>
 
         <details style="margin:.5rem 0">
           <summary class="pill">📏 Medir y sugerir talle</summary>
@@ -169,7 +192,7 @@ if (!empty($prods)) {
             </div>
             <div class="mini" id="sugg_<?=$pid?>" style="margin-top:6px;color:#93c5fd"></div>
 
-          <?php elseif ($cat==='short'): ?>
+          <?php else: /* short/pantalón */ ?>
             <div class="row">
               <div style="flex:1;min-width:140px">
                 <label for="cintura_<?=$pid?>">Cintura</label>
@@ -206,9 +229,7 @@ if (!empty($prods)) {
             <label>Talle <span class="mini" id="hint_<?=$pid?>"></span></label>
             <select id="talle_sel_<?=$pid?>" name="talle" required>
               <option value="">Elegí…</option>
-              <?php foreach(($talles_por_prod[$p['id']]??[]) as $t): ?>
-                <option value="<?=h($t['talle'])?>"><?=h($t['talle'])?> (stk: <?=$t['stock']?>)</option>
-              <?php endforeach; ?>
+              <?php render_talle_select($pid,$p['categoria'],$talles_por_prod[$pid]??[]); ?>
             </select>
           </div>
 
@@ -238,20 +259,10 @@ if (!empty($prods)) {
       <table>
         <thead><tr><th>#</th><th>Producto</th><th>Talle</th><th>Cant.</th><th>Precio</th><th>Subtotal</th><th></th></tr></thead>
         <tbody>
-          <?php foreach(array_values($_SESSION['cart']) as $i=>$it):
-            $st=$it['cantidad']*$it['precio']; $total+=$st; ?>
+          <?php foreach(array_values($_SESSION['cart']) as $i=>$it): $st=$it['cantidad']*$it['precio']; $total+=$st; ?>
             <tr>
               <td><?=$i+1?></td>
-              <td>
-                <div class="prodcell">
-                  <?php if(!empty($it['foto_url'])): ?>
-                    <img class="thumb" src="<?=h($it['foto_url'])?>" alt="Foto">
-                  <?php else: ?>
-                    <div class="thumb" style="display:flex;align-items:center;justify-content:center;font-size:11px">N/A</div>
-                  <?php endif; ?>
-                  <div><?=h($it['titulo'])?></div>
-                </div>
-              </td>
+              <td><?=h($it['titulo'])?></td>
               <td><?=h($it['talle'])?></td>
               <td><?=$it['cantidad']?></td>
               <td>$<?=number_format($it['precio'],2,',','.')?></td>
@@ -297,7 +308,7 @@ if (!empty($prods)) {
     <?php endif; ?>
   </div>
 
-  <!-- ============ Guía de talles (estática informativa) ============ -->
+  <!-- ============ Guía de talles (informativa) ============ -->
   <div id="guia_talles" class="guide">
     <h2>📏 Guía de talles</h2>
     <p class="mini">Medidas orientativas en centímetros. Recomendamos medir una prenda propia.</p>
@@ -356,24 +367,11 @@ if (!empty($prods)) {
 </div>
 
 <script>
-// ===== Tablas (para sugerencia) =====
-const REMERA_UNISEX = {
-  XS:{ancho:48,largo:67}, S:{ancho:50,largo:70}, M:{ancho:53,largo:73},
-  L:{ancho:55,largo:77}, XL:{ancho:57,largo:79}, '2XL':{ancho:63,largo:82}, '3XL':{ancho:66,largo:84},
-};
-const REMERA_MUJER = {
-  XS:{ancho:37,largo:60}, S:{ancho:39,largo:62}, M:{ancho:41,largo:64},
-  L:{ancho:43,largo:66}, XL:{ancho:45,largo:68}, '2XL':{ancho:47,largo:70}, '3XL':{ancho:49,largo:72},
-};
-const REMERA_NINOS = {
-  2:{ancho:33,largo:42}, 4:{ancho:34,largo:44}, 6:{ancho:36,largo:46}, 8:{ancho:39,largo:51},
-  10:{ancho:41,largo:53}, 12:{ancho:42,largo:54}, 14:{ancho:45,largo:59}, 16:{ancho:45,largo:63},
-};
-const SHORT = {
-  XS:{cintura:[77,81], largo:29, pierna:29}, S:{cintura:[82,86], largo:30, pierna:29},
-  M:{cintura:[87,91], largo:32, pierna:30},  L:{cintura:[92,96], largo:34, pierna:31},
-  XL:{cintura:[97,101], largo:35, pierna:33}, '2XL':{cintura:[102,110], largo:37, pierna:36},
-};
+// ===== Tablas para sugerencia =====
+const REMERA_UNISEX = {XS:{ancho:48,largo:67}, S:{ancho:50,largo:70}, M:{ancho:53,largo:73}, L:{ancho:55,largo:77}, XL:{ancho:57,largo:79}, '2XL':{ancho:63,largo:82}, '3XL':{ancho:66,largo:84}};
+const REMERA_MUJER  = {XS:{ancho:37,largo:60}, S:{ancho:39,largo:62}, M:{ancho:41,largo:64}, L:{ancho:43,largo:66}, XL:{ancho:45,largo:68}, '2XL':{ancho:47,largo:70}, '3XL':{ancho:49,largo:72}};
+const REMERA_NINOS  = {'2':{ancho:33,largo:42}, '4':{ancho:34,largo:44}, '6':{ancho:36,largo:46}, '8':{ancho:39,largo:51}, '10':{ancho:41,largo:53}, '12':{ancho:42,largo:54}, '14':{ancho:45,largo:59}, '16':{ancho:45,largo:63}};
+const SHORT = {XS:{cintura:[77,81], largo:29, pierna:29}, S:{cintura:[82,86], largo:30, pierna:29}, M:{cintura:[87,91], largo:32, pierna:30}, L:{cintura:[92,96], largo:34, pierna:31}, XL:{cintura:[97,101], largo:35, pierna:33}, '2XL':{cintura:[102,110], largo:37, pierna:36}};
 
 const fmt = (n)=>Number(n||0);
 const guides = {}; // pid -> guía actual
@@ -401,7 +399,8 @@ function calcRemeraGeneric(pid){
   const talle = suggestFrom(tbl, A,B);
   document.getElementById('sugg_'+pid).textContent = 'Sugerencia: '+talle+' (A≈'+A+' / B≈'+B+')';
   const sel=document.getElementById('talle_sel_'+pid);
-  if ([...sel.options].some(o=>o.value==talle)) sel.value=talle;
+  // selecciona automáticamente si existe el talle entre las opciones (ya sea BD o fallback)
+  [...sel.options].forEach(o=>{ if(o.value==talle) sel.value=o.value; });
   document.getElementById('guia_tipo_'+pid).value=g;
   document.getElementById('medidas_json_'+pid).value=JSON.stringify({ancho:A,largo:B});
   document.getElementById('talle_calc_'+pid).value=talle;
@@ -425,14 +424,14 @@ function calcShort(pid){
   if (!C || !D || !E){ alert('Completá Cintura, Largo y Pierna'); return; }
   const talle = suggestShort(C,D,E);
   document.getElementById('sugg_'+pid).textContent = 'Sugerencia: '+talle+' (C≈'+C+' / D≈'+D+' / E≈'+E+')';
-  const sel=document.getElementById('talle_sel_'+pid); if ([...sel.options].some(o=>o.value===talle)) sel.value=talle;
+  const sel=document.getElementById('talle_sel_'+pid); [...sel.options].forEach(o=>{ if(o.value==talle) sel.value=o.value; });
   document.getElementById('guia_tipo_'+pid).value='short_muay_thai';
   document.getElementById('medidas_json_'+pid).value=JSON.stringify({cintura:C,largo:D,pierna:E});
   document.getElementById('talle_calc_'+pid).value=talle;
   const hint=document.getElementById('hint_'+pid); if(hint) hint.textContent='(sugerido: '+talle+')';
 }
 
-// tabs guía (informativas)
+// Tabs guía (informativas)
 document.querySelectorAll('.tabs .tab').forEach(tab=>{
   tab.addEventListener('click', ()=>{
     document.querySelectorAll('.tabs .tab').forEach(t=>t.classList.remove('active'));
