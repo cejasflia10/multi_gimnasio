@@ -174,7 +174,7 @@ function turno_habilitado_simple(array $t, bool $cerradoGlobal, array $cerradosP
 
   <h2>📅 Turnos del día: <?= h($dia_seleccionado) ?> (<?= h($fecha) ?>)</h2>
 
-  <!-- Filtros -->
+  <!-- Filtros (solo quité el texto confuso) -->
   <form method="GET" style="margin-bottom:12px;display:flex;gap:.5rem;align-items:end;flex-wrap:wrap">
     <div>
       <label for="dia">Día:</label>
@@ -188,7 +188,6 @@ function turno_habilitado_simple(array $t, bool $cerradoGlobal, array $cerradosP
     <div>
       <label for="fecha">Fecha:</label>
       <input type="date" id="fecha" name="fecha" value="<?= h($fecha) ?>" onchange="this.form.submit()">
-      <small>Si no elegís fecha, usamos la próxima <?= h($dia_seleccionado) ?>.</small>
     </div>
   </form>
 
