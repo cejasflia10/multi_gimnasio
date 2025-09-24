@@ -1,6 +1,7 @@
 <?php
 if (session_status() === PHP_SESSION_NONE) session_start();
 require_once __DIR__.'/conexion.php';
+require_once __DIR__ . '/menu_horizontal.php';
 
 /* ===== CLAVES CLOUDINARY (tal cual me las diste) ===== */
 if (!defined('CLOUD_ENABLED'))      define('CLOUD_ENABLED', true);
