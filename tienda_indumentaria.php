@@ -288,9 +288,9 @@ function render_talle_select($pid, $categoria, $desde_bd){
         <div style="flex:1;min-width:220px">
           <label>Forma de pago</label>
           <select name="pago" id="pago" required>
-            <option value="sena_efectivo">Seña 30% (Efectivo)</option>
+            <option value="sena_efectivo">Seña 80% (Efectivo)</option>
             <option value="total_efectivo">Total (Efectivo)</option>
-            <option value="sena_transferencia">Seña 30% (Transferencia)</option>
+            <option value="sena_transferencia">Seña 80% (Transferencia)</option>
             <option value="total_transferencia">Total (Transferencia)</option>
           </select>
         </div>

@@ -1,5 +1,5 @@
 <?php
-/* promociones_admin.php */
+/* promociones_admin.php — Cloudinary activado con tu bootstrap (sin Composer) */
 if (session_status() === PHP_SESSION_NONE) session_start();
 require_once __DIR__.'/conexion.php';
 @date_default_timezone_set('America/Argentina/San_Luis');
@@ -9,14 +9,43 @@ function h($s){ return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); }
 $gym_id = (int)($_SESSION['gimnasio_id'] ?? 0);
 if ($gym_id <= 0) { http_response_code(403); exit('Gimnasio no identificado.'); }
 
-/* ====== Asegurar tabla promociones (si no existe) ====== */
+/* ============================================================
+   Cloudy (Cloudinary) — Init con tu bootstrap existente
+   ============================================================ */
+if (!defined('CLOUD_ENABLED'))      define('CLOUD_ENABLED', true);
+if (!defined('CLOUD_NAME'))         define('CLOUD_NAME', 'ddfugds9b');         // tus claves
+if (!defined('CLOUD_API_KEY'))      define('CLOUD_API_KEY', '657814174747186'); // tus claves
+if (!defined('CLOUD_API_SECRET'))   define('CLOUD_API_SECRET', 'TKo5BRiKCEjxSLFzn2DLbz_ji4c'); // tus claves
+if (!defined('CLOUD_FOLDER_ROOT'))  define('CLOUD_FOLDER_ROOT', 'ROOT');
+
+/* Carga tu bootstrap (mismo que usás en las demás páginas) */
+$__cloud_ready = false;
+$__cloud_err   = null;
+
+@include_once __DIR__.'/cloudy_boot_constants.php'; // no rompe si no existe
+if (function_exists('cloud_init')) {
+  try { cloud_init(); } catch (Throwable $e) { $__cloud_err = 'Init Cloudy falló: '.$e->getMessage(); }
+}
+
+/* Marcamos listo si:
+   - hay helpers (cloud_upload / cloudy_upload), o
+   - el bootstrap ya cargó las clases del SDK */
+$__cloud_ready = (CLOUD_ENABLED === true) && (
+  function_exists('cloud_upload') ||
+  function_exists('cloudy_upload') ||
+  class_exists('\\Cloudinary\\Api\\Upload\\UploadApi')
+);
+
+/* ============================================================
+   DB: asegurar tabla
+   ============================================================ */
 $conexion->query("
   CREATE TABLE IF NOT EXISTS promociones (
     id INT AUTO_INCREMENT PRIMARY KEY,
     gimnasio_id INT NOT NULL,
     titulo VARCHAR(120) NOT NULL,
     descripcion TEXT DEFAULT NULL,
-    imagen_url VARCHAR(255) DEFAULT NULL,     -- puede ser URL o ruta local (uploads/promociones/...)
+    imagen_url VARCHAR(255) DEFAULT NULL,     -- URL Cloudinary o ruta local
     link_url VARCHAR(255) DEFAULT NULL,
     color_fondo VARCHAR(20) DEFAULT '#111111',
     color_texto VARCHAR(20) DEFAULT '#FFD700',
@@ -31,38 +60,121 @@ $conexion->query("
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 ");
 
-/* ====== Variables ====== */
 $msg = '';
 
-/* ====== Helper de guardado de archivo ====== */
-function guardar_imagen_promocion(?array $file): ?string {
+/* ============================================================
+   Helpers Cloudy / archivos
+   ============================================================ */
+function is_cloud_url(string $url): bool {
+  if ($url === '') return false;
+  $host = parse_url($url, PHP_URL_HOST) ?: '';
+  return (bool)preg_match('~(^|\.)res\.cloudinary\.com$~i', $host);
+}
+function cloud_public_id_from_url(string $url): ?string {
+  $path = parse_url($url, PHP_URL_PATH) ?: '';
+  if (!$path) return null;
+  $parts = explode('/upload/', $path, 2);
+  if (count($parts) < 2) return null;
+  $tail = $parts[1];
+  $tail = preg_replace('~\.[a-z0-9]+$~i', '', $tail);
+  return ltrim($tail, '/');
+}
+
+/**
+ * Sube imagen de promo a Cloudinary usando TU bootstrap (sin Composer).
+ * Si no está disponible, guarda local en /uploads/promociones.
+ */
+function subir_imagen_promocion(?array $file, int $gym_id, bool $cloud_ready): ?string {
   if (!$file || ($file['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_NO_FILE) return null;
   if (($file['error'] ?? 0) !== UPLOAD_ERR_OK) return null;
 
   // Validaciones básicas
-  $permitidos = ['image/jpeg'=>'jpg','image/png'=>'png','image/gif'=>'gif','image/webp'=>'webp'];
-  $mime = mime_content_type($file['tmp_name']);
-  if (!isset($permitidos[$mime])) return null;
+  $permitidos = [
+    'image/jpeg'=>'jpg','image/png'=>'png','image/gif'=>'gif','image/webp'=>'webp','image/heic'=>'heic','image/heif'=>'heif'
+  ];
+  $mime = @mime_content_type($file['tmp_name']);
+  if (!$mime || !isset($permitidos[$mime])) return null;
+  if (($file['size'] ?? 0) > 10*1024*1024) return null; // 10MB
 
-  // Límite (10MB)
-  if (($file['size'] ?? 0) > 10*1024*1024) return null;
+  // Intentar Cloudinary con tu bootstrap
+  if ($cloud_ready) {
+    $folder   = rtrim(CLOUD_FOLDER_ROOT ?: 'ROOT', '/').'/promociones/'.$gym_id;
+    $basename = 'promo_'.date('Ymd_His').'_'.bin2hex(random_bytes(4));
+    try {
+      // Caso 1: helper propio
+      if (function_exists('cloud_upload')) {
+        $res = cloud_upload($file['tmp_name'], [
+          'folder'=>$folder, 'public_id'=>$basename, 'resource_type'=>'image',
+          'overwrite'=>false, 'invalidate'=>true
+        ]);
+        if (is_array($res) && !empty($res['secure_url'])) return $res['secure_url'];
+        if (is_string($res) && str_starts_with($res, 'http')) return $res;
+      }
+      if (function_exists('cloudy_upload')) {
+        $res = cloudy_upload($file['tmp_name'], [
+          'folder'=>$folder, 'public_id'=>$basename, 'resource_type'=>'image',
+          'overwrite'=>false, 'invalidate'=>true
+        ]);
+        if (is_array($res) && !empty($res['secure_url'])) return $res['secure_url'];
+        if (is_string($res) && str_starts_with($res, 'http')) return $res;
+      }
+      // Caso 2: clases del SDK ya cargadas por tu bootstrap
+      if (class_exists('\\Cloudinary\\Api\\Upload\\UploadApi')) {
+        $uploader = new \Cloudinary\Api\Upload\UploadApi();
+        $res = $uploader->upload($file['tmp_name'], [
+          'folder'          => $folder,
+          'public_id'       => $basename,
+          'overwrite'       => false,
+          'resource_type'   => 'image',
+          'use_filename'    => true,
+          'unique_filename' => true,
+          'invalidate'      => true,
+          // normaliza entrega (opcionales):
+          'format'          => 'jpg',
+          'quality'         => 'auto',
+          'fetch_format'    => 'auto'
+        ]);
+        if (!empty($res['secure_url'])) return $res['secure_url'];
+      }
+    } catch (\Throwable $e) {
+      // si falla cloud, seguimos con local
+    }
+  }
 
-  // Carpeta
+  // Fallback local
   $dir = __DIR__ . '/uploads/promociones';
   if (!is_dir($dir)) @mkdir($dir, 0777, true);
-
-  // Nombre seguro
   $ext = $permitidos[$mime];
   $name = 'promo_'.date('Ymd_His').'_'.bin2hex(random_bytes(4)).'.'.$ext;
   $dest = $dir.'/'.$name;
-
   if (!move_uploaded_file($file['tmp_name'], $dest)) return null;
-
-  // Ruta pública relativa
   return 'uploads/promociones/'.$name;
 }
 
-/* ====== Crear / actualizar / activar / eliminar ====== */
+/** Elimina en Cloudinary si la URL es cloud y tu bootstrap está disponible */
+function borrar_en_cloudinary(string $url): void {
+  global $__cloud_ready;
+  if (!$__cloud_ready || !is_cloud_url($url)) return;
+  try {
+    $pid = cloud_public_id_from_url($url);
+    if ($pid) {
+      if (function_exists('cloud_destroy')) {
+        @cloud_destroy($pid, ['resource_type'=>'image','invalidate'=>true]);
+        return;
+      }
+      if (class_exists('\\Cloudinary\\Api\\Upload\\UploadApi')) {
+        $uploader = new \Cloudinary\Api\Upload\UploadApi();
+        $uploader->destroy($pid, ['resource_type'=>'image','invalidate'=>true]);
+      }
+    }
+  } catch (\Throwable $e) {
+    // no interrumpir
+  }
+}
+
+/* ============================================================
+   Crear / actualizar / activar / eliminar
+   ============================================================ */
 if ($_SERVER['REQUEST_METHOD']==='POST') {
   $act = $_POST['act'] ?? '';
 
@@ -70,7 +182,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
     $id  = (int)($_POST['id'] ?? 0);
     $tit = trim($_POST['titulo'] ?? '');
     $desc= trim($_POST['descripcion'] ?? '');
-    $img_url_form = trim($_POST['imagen_url'] ?? ''); // si eligen URL manual
+    $img_url_form = trim($_POST['imagen_url'] ?? ''); // URL manual (opcional)
     $lnk = trim($_POST['link_url'] ?? '');
     $bg  = trim($_POST['color_fondo'] ?? '#111111');
     $fg  = trim($_POST['color_texto'] ?? '#FFD700');
@@ -83,29 +195,47 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
 
     if ($tit==='') { $msg = '❌ Título requerido.'; }
     else {
-      // Si suben archivo, guardamos y priorizamos ese; si no, usamos URL de texto
-      $img_subida = guardar_imagen_promocion($_FILES['imagen_file'] ?? null);
+      // 1) Subida prioritaria a Cloudinary (o local fallback)
+      $img_subida = subir_imagen_promocion($_FILES['imagen_file'] ?? null, $gym_id, $__cloud_ready);
+      // 2) Si no subieron archivo, usar URL manual
       $img_final = $img_subida ?: ($img_url_form ?: null);
 
       if ($id>0) {
+        // Si estamos reemplazando imagen (archivo nuevo o URL nueva), borrar la previa
+        if ($img_subida || ($img_url_form && $img_url_form !== '')) {
+          $qprev = $conexion->query("SELECT imagen_url FROM promociones WHERE id={$id} AND gimnasio_id={$gym_id}");
+          if ($qprev && $prev = $qprev->fetch_assoc()) {
+            $prev_url = (string)$prev['imagen_url'];
+            if ($prev_url) {
+              if (is_cloud_url($prev_url)) borrar_en_cloudinary($prev_url);
+              elseif (str_starts_with($prev_url, 'uploads/promociones/')) {
+                $abs = __DIR__ . '/' . $prev_url;
+                if (is_file($abs)) @unlink($abs);
+              }
+            }
+          }
+        }
+
         $sql = "UPDATE promociones 
                 SET titulo=?, descripcion=?, imagen_url=?, link_url=?, color_fondo=?, color_texto=?, 
                     fecha_inicio=?, fecha_fin=?, prioridad=?, activo=?
                 WHERE id=? AND gimnasio_id=?";
         $st = $conexion->prepare($sql);
-        $st->bind_param(
-          'ssssssssiiii',
-          $tit,$desc,$img_final,$lnk,$bg,$fg,$fi,$ff,$pri,$actv,$id,$gym_id
-        );
+        if ($st) {
+          $st->bind_param('ssssssssiiii',
+            $tit,$desc,$img_final,$lnk,$bg,$fg,$fi,$ff,$pri,$actv,$id,$gym_id
+          );
+        }
       } else {
         $sql = "INSERT INTO promociones 
                 (gimnasio_id,titulo,descripcion,imagen_url,link_url,color_fondo,color_texto,fecha_inicio,fecha_fin,prioridad,activo)
                 VALUES (?,?,?,?,?,?,?,?,?,?,?)";
         $st = $conexion->prepare($sql);
-        $st->bind_param(
-          'issssssssii',
-          $gym_id,$tit,$desc,$img_final,$lnk,$bg,$fg,$fi,$ff,$pri,$actv
-        );
+        if ($st) {
+          $st->bind_param('issssssssii',
+            $gym_id,$tit,$desc,$img_final,$lnk,$bg,$fg,$fi,$ff,$pri,$actv
+          );
+        }
       }
 
       if ($st && $st->execute()) { $msg = '✅ Promoción guardada.'; }
@@ -122,20 +252,26 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
 
   if ($act === 'delete') {
     $id = (int)($_POST['id'] ?? 0);
-    // opcional: borrar archivo físico si la imagen_url apunta a uploads/promociones
+    // borrar del bucket/local si corresponde
     $q = $conexion->query("SELECT imagen_url FROM promociones WHERE id={$id} AND gimnasio_id={$gym_id}");
     if ($q && $row=$q->fetch_assoc()) {
       $url = (string)$row['imagen_url'];
-      if ($url && str_starts_with($url, 'uploads/promociones/')) {
-        $abs = __DIR__ . '/' . $url;
-        if (is_file($abs)) @unlink($abs);
+      if ($url) {
+        if (is_cloud_url($url)) {
+          borrar_en_cloudinary($url);
+        } elseif (str_starts_with($url, 'uploads/promociones/')) {
+          $abs = __DIR__ . '/' . $url;
+          if (is_file($abs)) @unlink($abs);
+        }
       }
     }
     $conexion->query("DELETE FROM promociones WHERE id={$id} AND gimnasio_id={$gym_id}");
   }
 }
 
-/* ====== Cargar para edición ====== */
+/* ============================================================
+   Cargar para edición + Listado
+   ============================================================ */
 $edit = null;
 if (!empty($_GET['edit'])) {
   $idEd = (int)$_GET['edit'];
@@ -143,7 +279,6 @@ if (!empty($_GET['edit'])) {
   $edit = $q? $q->fetch_assoc(): null;
 }
 
-/* ====== Listado ====== */
 $rs = $conexion->query("
   SELECT * 
   FROM promociones 
@@ -211,7 +346,7 @@ if ($rs) { while($r=$rs->fetch_assoc()) $items[]=$r; }
 
       <div class="grid">
         <div>
-          <label>Imagen (archivo)</label>
+          <label>Imagen (archivo → sube a Cloudinary con tu bootstrap)</label>
           <input type="file" name="imagen_file" accept="image/*">
           <?php if (!empty($edit['imagen_url'])): ?>
             <div class="muted" style="margin-top:6px">Actual: <?= h($edit['imagen_url']) ?></div>
@@ -240,7 +375,6 @@ if ($rs) { while($r=$rs->fetch_assoc()) $items[]=$r; }
         <div>
           <label style="display:block">Paletas rápidas</label>
           <div class="swatch">
-            <!-- Paletas: clic para aplicar -->
             <span class="dot" style="background:#111" data-bg="#111111" data-fg="#FFD700" title="Oscuro/Dorado"></span>
             <span class="dot" style="background:#001f3f" data-bg="#001f3f" data-fg="#66b2ff" title="Azul/Claro"></span>
             <span class="dot" style="background:#660000" data-bg="#660000" data-fg="#ffcccc" title="Rojo"></span>
@@ -338,7 +472,7 @@ if ($rs) { while($r=$rs->fetch_assoc()) $items[]=$r; }
 </div>
 
 <script>
-  // Paletas rápidas: setean color_fondo y color_texto al hacer clic
+  // Paletas rápidas
   document.addEventListener('DOMContentLoaded', () => {
     const dots = document.querySelectorAll('.dot[data-bg]');
     const bgInp = document.querySelector('input[name="color_fondo"]');

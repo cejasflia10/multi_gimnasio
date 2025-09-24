@@ -240,6 +240,8 @@ if (!function_exists('has_perm')) {
       <a href="ver_facturas.php">Ver Facturas</a>
       <a href="promociones_admin.php">Promociones</a>
       <a href="admin_indum.php">🛍️ Indumentaria (Admin)</a>
+      <a href="admin_pedidos_indum.php">🧾 Pedidos indumentaria</a>
+
     </div>
   </div>
   <?php endif; ?>
