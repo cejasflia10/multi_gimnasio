@@ -1,6 +1,15 @@
 <?php
 if (session_status() === PHP_SESSION_NONE) session_start();
 require_once __DIR__.'/conexion.php';
+
+/* ===== CLAVES CLOUDINARY (tal cual me las diste) ===== */
+if (!defined('CLOUD_ENABLED'))      define('CLOUD_ENABLED', true);
+if (!defined('CLOUD_NAME'))         define('CLOUD_NAME', 'ddfugds9b');
+if (!defined('CLOUD_API_KEY'))      define('CLOUD_API_KEY', '657814174747186');
+if (!defined('CLOUD_API_SECRET'))   define('CLOUD_API_SECRET', 'TKo5BRiKCEjxSLFzn2DLbz_ji4c');
+if (!defined('CLOUD_FOLDER_ROOT'))  define('CLOUD_FOLDER_ROOT', 'ROOT');
+
+/* ===== Inicializador de Cloudinary (no modificado) ===== */
 require_once __DIR__.'/cloudy_boot_constants.php';
 
 if (!isset($conexion) || !($conexion instanceof mysqli)) { http_response_code(500); exit('❌ Sin conexión a BD'); }
@@ -12,32 +21,58 @@ if ($gimnasio_id<=0){ header('Location: login.php'); exit; }
 
 if (empty($_SESSION['csrf_token'])) $_SESSION['csrf_token']=bin2hex(random_bytes(32));
 $csrf=$_SESSION['csrf_token'];
-function h($s){ return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); }
 
-/* Helper prepare con diagnóstico */
+function h($s){ return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); }
 function must_prepare(mysqli $db, string $sql){
   $st = $db->prepare($sql);
   if (!$st) die('❌ SQL prepare error: '.$db->error.'<br><code>'.$sql.'</code>');
   return $st;
 }
 
-$CLOUDY = cloudy_constants_init();
+/* ==== Cloudinary init + fallback (sin Composer) ==== */
+$CLOUDY      = cloudy_constants_init();
+$cloud_ok    = (bool)($CLOUDY['ok'] ?? false);
+$cloud_mode  = $CLOUDY['mode']  ?? 'n/a';
+$cloud_reason= $CLOUDY['reason']?? null;
+$cloud_hint  = $CLOUDY['hint']  ?? null;
+
+/* Si falta el SDK, habilitamos el FALLBACK cURL sin tocar tu init */
+$use_fallback = false;
+if (!$cloud_ok && $cloud_reason === 'sdk_missing') {
+  require_once __DIR__.'/cloudy_uploader_fallback.php'; // ← archivo fallback sin Composer
+  $use_fallback = true;
+  $cloud_ok   = true;
+  $cloud_mode = 'curl_fallback';
+}
 
 /* ===== ACCIONES ===== */
 if ($_SERVER['REQUEST_METHOD']==='POST' && isset($_POST['__form'])) {
   if (!hash_equals($csrf, $_POST['csrf'] ?? '')) { http_response_code(400); exit('❌ CSRF'); }
   $f = $_POST['__form'];
 
+  /* === Alta de producto === */
   if ($f==='add_producto') {
-    $categoria = $_POST['categoria'] ?? 'remera';
-    $titulo = trim($_POST['titulo'] ?? '');
+    $categoria   = $_POST['categoria'] ?? 'remera';
+    $titulo      = trim($_POST['titulo'] ?? '');
     $descripcion = trim($_POST['descripcion'] ?? '');
-    $precio = (float)($_POST['precio'] ?? 0);
-    $activo = isset($_POST['activo']) ? 1 : 0;
+    $precio      = (float)($_POST['precio'] ?? 0);
+    $activo      = isset($_POST['activo']) ? 1 : 0;
 
     $foto_url=null; $foto_pid=null;
-    if (!empty($_FILES['foto']['name']) && $_FILES['foto']['error']===UPLOAD_ERR_OK && ($CLOUDY['ok']??false)) {
-      [$foto_url,$foto_pid] = cloudy_upload($_FILES['foto']['tmp_name'], "indumentaria/productos/gym_$gimnasio_id");
+    if (!empty($_FILES['foto']['name']) && $_FILES['foto']['error']===UPLOAD_ERR_OK && $cloud_ok) {
+      if ($use_fallback) {
+        [$foto_url,$foto_pid] = cloudy_upload_fallback(
+          $_FILES['foto']['tmp_name'],
+          "indumentaria/productos/gym_$gimnasio_id",
+          ['resource_type'=>'image']
+        );
+      } else {
+        [$foto_url,$foto_pid] = cloudy_upload(
+          $_FILES['foto']['tmp_name'],
+          "indumentaria/productos/gym_$gimnasio_id",
+          ['resource_type'=>'image']
+        );
+      }
     }
 
     $sql = "INSERT INTO ind_productos
@@ -50,19 +85,34 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && isset($_POST['__form'])) {
     header('Location: admin_indum.php?ok=1'); exit;
   }
 
+  /* === Alta/actualización de talle === */
   if ($f==='add_talle') {
     $producto_id = (int)($_POST['producto_id']??0);
-    $talle = trim($_POST['talle']??'');
-    $stock = (int)($_POST['stock']??0);
+    $talle       = trim($_POST['talle']??'');
+    $stock       = (int)($_POST['stock']??0);
 
     $foto_u=null; $foto_pid=null;
-    if (!empty($_FILES['foto_talle']['name']) && $_FILES['foto_talle']['error']===UPLOAD_ERR_OK && ($CLOUDY['ok']??false)) {
-      [$foto_u,$foto_pid] = cloudy_upload($_FILES['foto_talle']['tmp_name'], "indumentaria/talles/gym_$gimnasio_id/prod_$producto_id", ['resource_type'=>'image']);
+    if (!empty($_FILES['foto_talle']['name']) && $_FILES['foto_talle']['error']===UPLOAD_ERR_OK && $cloud_ok) {
+      if ($use_fallback) {
+        [$foto_u,$foto_pid] = cloudy_upload_fallback(
+          $_FILES['foto_talle']['tmp_name'],
+          "indumentaria/talles/gym_$gimnasio_id/prod_$producto_id",
+          ['resource_type'=>'image']
+        );
+      } else {
+        [$foto_u,$foto_pid] = cloudy_upload(
+          $_FILES['foto_talle']['tmp_name'],
+          "indumentaria/talles/gym_$gimnasio_id/prod_$producto_id",
+          ['resource_type'=>'image']
+        );
+      }
     }
 
     $sql="INSERT INTO ind_talles (producto_id,talle,stock,foto_talle_url,foto_talle_public_id)
           VALUES (?,?,?,?,?)
-          ON DUPLICATE KEY UPDATE stock=VALUES(stock), foto_talle_url=VALUES(foto_talle_url), foto_talle_public_id=VALUES(foto_talle_public_id)";
+          ON DUPLICATE KEY UPDATE stock=VALUES(stock),
+                                  foto_talle_url=VALUES(foto_talle_url),
+                                  foto_talle_public_id=VALUES(foto_talle_public_id)";
     $st = must_prepare($conexion,$sql);
     $st->bind_param('isiss',$producto_id,$talle,$stock,$foto_u,$foto_pid);
     $st->execute(); $st->close();
@@ -70,9 +120,10 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && isset($_POST['__form'])) {
     header('Location: admin_indum.php?ok=1&pid='.$producto_id.'#talles'); exit;
   }
 
+  /* === Activar/Desactivar producto === */
   if ($f==='toggle_activo') {
-    $pid=(int)($_POST['producto_id']??0);
-    $activo = isset($_POST['activo']) ? 1 : 0;
+    $pid   = (int)($_POST['producto_id']??0);
+    $activo= isset($_POST['activo']) ? 1 : 0;
 
     $st = must_prepare($conexion, "UPDATE ind_productos SET activo=? WHERE id=? AND gimnasio_id=?");
     $st->bind_param('iii',$activo,$pid,$gimnasio_id);
@@ -112,6 +163,8 @@ if ($pid_sel>0){
  .mini{font-size:12px;color:#9fb0d3}
  table{width:100%;border-collapse:collapse} th,td{padding:10px;border-bottom:1px solid #22304d}
  img{max-width:80px;border-radius:8px}
+ .note{background:#0b1220;border-left:4px solid #3b82f6;padding:10px 12px;border-radius:10px;margin-top:8px}
+ .ok{color:#34d399}.bad{color:#fca5a5}
 </style>
 </head>
 <body>
@@ -138,7 +191,17 @@ if ($pid_sel>0){
       <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" name="activo" checked> Activo</label>
       <div><button class="btn">Guardar producto</button></div>
     </form>
-    <p class="mini">Cloudinary <?=($CLOUDY['ok']??false)?'habilitado':'NO habilitado'?>.</p>
+    <div class="note">
+      <?php if($cloud_ok): ?>
+        <span class="ok">
+          Cloudinary habilitado <?=($cloud_mode==='curl_fallback'?'(modo: cURL sin SDK)':'(modo: '.$cloud_mode.')')?>
+        </span>
+      <?php else: ?>
+        <span class="bad">Cloudinary NO habilitado</span>
+        <?= $cloud_reason ? ' — Motivo: '.h($cloud_reason) : '' ?>
+        <?= $cloud_hint   ? ' — Sugerencia: '.h($cloud_hint)   : '' ?>
+      <?php endif; ?>
+    </div>
   </div>
 
   <div class="card">

@@ -36,7 +36,8 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && hash_equals($csrf, $_POST['csrf'] ?? 
     if ($pid <= 0) { header('Location: tienda_indumentaria.php?err=pid'); exit; }
     if ($talle === '') { header('Location: tienda_indumentaria.php?err=talle'); exit; }
 
-    $sql = "SELECT p.id, p.titulo, p.precio, COALESCE(t.stock,0) AS stock
+    // ⬇️ Traigo también la foto del producto para guardarla en el carrito
+    $sql = "SELECT p.id, p.titulo, p.precio, p.foto_url, COALESCE(t.stock,0) AS stock
             FROM ind_productos p
             LEFT JOIN ind_talles t
               ON t.producto_id = p.id AND t.talle = ?
@@ -52,6 +53,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && hash_equals($csrf, $_POST['csrf'] ?? 
       $_SESSION['cart'][] = [
         'producto_id' => (int)$p['id'],
         'titulo'      => $p['titulo'],
+        'foto_url'    => $p['foto_url'] ?? null,   // ⬅️ guardo foto
         'talle'       => $talle,
         'cantidad'    => $qty,
         'precio'      => (float)$p['precio'],
@@ -117,6 +119,8 @@ if (!empty($prods)) {
  .tab.active{border-color:#3b82f6;background:#0f1a33}
  .hide{display:none}
  .sticky-top{position:sticky;top:0;background:#0f1320;padding:8px 0;z-index:5}
+ .prodcell{display:flex;align-items:center;gap:10px}
+ .thumb{width:48px;height:48px;object-fit:cover;border-radius:8px;border:1px solid #24314d;background:#0d1322}
 </style>
 </head>
 <body>
@@ -234,10 +238,20 @@ if (!empty($prods)) {
       <table>
         <thead><tr><th>#</th><th>Producto</th><th>Talle</th><th>Cant.</th><th>Precio</th><th>Subtotal</th><th></th></tr></thead>
         <tbody>
-          <?php foreach(array_values($_SESSION['cart']) as $i=>$it): $st=$it['cantidad']*$it['precio']; $total+=$st; ?>
+          <?php foreach(array_values($_SESSION['cart']) as $i=>$it):
+            $st=$it['cantidad']*$it['precio']; $total+=$st; ?>
             <tr>
               <td><?=$i+1?></td>
-              <td><?=h($it['titulo'])?></td>
+              <td>
+                <div class="prodcell">
+                  <?php if(!empty($it['foto_url'])): ?>
+                    <img class="thumb" src="<?=h($it['foto_url'])?>" alt="Foto">
+                  <?php else: ?>
+                    <div class="thumb" style="display:flex;align-items:center;justify-content:center;font-size:11px">N/A</div>
+                  <?php endif; ?>
+                  <div><?=h($it['titulo'])?></div>
+                </div>
+              </td>
               <td><?=h($it['talle'])?></td>
               <td><?=$it['cantidad']?></td>
               <td>$<?=number_format($it['precio'],2,',','.')?></td>
