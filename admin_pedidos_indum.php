@@ -1,8 +1,7 @@
 <?php
-/* admin_pedidos_indum.php — Panel admin pedidos indumentaria */
+/* admin_pedidos_indum.php — Panel admin pedidos indumentaria (con eliminar) */
 if (session_status() === PHP_SESSION_NONE) session_start();
 require_once __DIR__.'/conexion.php';
-// Podés requerir tu menu_admin si lo tenés:
 // require_once __DIR__.'/menu_admin.php';
 
 if (!isset($conexion) || !($conexion instanceof mysqli)) { http_response_code(500); exit('❌ Sin conexión a BD'); }
@@ -11,9 +10,52 @@ if (!isset($conexion) || !($conexion instanceof mysqli)) { http_response_code(50
 $gimnasio_id = (int)($_SESSION['gimnasio_id'] ?? 0);
 if ($gimnasio_id<=0){ http_response_code(403); exit('Gimnasio no identificado'); }
 
+/* ===== Helpers ===== */
 function h($s){ return htmlspecialchars((string)$s, ENT_QUOTES,'UTF-8'); }
 function must_p(mysqli $db,string $sql){ $st=$db->prepare($sql); if(!$st) die($db->error); return $st; }
 
+/* CSRF */
+if (empty($_SESSION['csrf_token'])) $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+$csrf = $_SESSION['csrf_token'];
+
+/* ====== BORRAR PEDIDO ====== */
+$msg = '';
+if ($_SERVER['REQUEST_METHOD']==='POST' && hash_equals($csrf, $_POST['csrf'] ?? '')) {
+  $act = $_POST['__a'] ?? '';
+  if ($act === 'del_pedido') {
+    $pid = (int)($_POST['pedido_id'] ?? 0);
+    if ($pid > 0) {
+      // Traer info para limpiar comprobante si corresponde
+      $st = must_p($conexion, "SELECT comprobante_url FROM ind_pedidos WHERE id=? AND gimnasio_id=? LIMIT 1");
+      $st->bind_param('ii', $pid, $gimnasio_id);
+      $st->execute();
+      $row = $st->get_result()->fetch_assoc();
+      $st->close();
+
+      // Borrar pedido (items se borran por ON DELETE CASCADE)
+      $st = must_p($conexion, "DELETE FROM ind_pedidos WHERE id=? AND gimnasio_id=?");
+      $st->bind_param('ii', $pid, $gimnasio_id);
+      $ok = $st->execute();
+      $st->close();
+
+      if ($ok) {
+        // Limpiar archivo local si era ruta local
+        if (!empty($row['comprobante_url'])) {
+          $url = (string)$row['comprobante_url'];
+          if (str_starts_with($url, 'uploads/')) {
+            $abs = __DIR__ . '/' . $url;
+            if (is_file($abs)) @unlink($abs);
+          }
+        }
+        $msg = '✅ Pedido eliminado correctamente.';
+      } else {
+        $msg = '❌ No se pudo eliminar el pedido.';
+      }
+    }
+  }
+}
+
+/* ===== Filtros ===== */
 $desde = preg_match('/^\d{4}-\d{2}-\d{2}$/', $_GET['desde']??'') ? $_GET['desde'] : date('Y-m-01');
 $hasta = preg_match('/^\d{4}-\d{2}-\d{2}$/', $_GET['hasta']??'') ? $_GET['hasta'] : date('Y-m-d');
 $estado= trim($_GET['estado'] ?? '');
@@ -25,6 +67,7 @@ $params = [$gimnasio_id,$desde,$hasta]; $types='iss';
 if ($estado!==''){ $where.=" AND p.estado=?"; $params[]=$estado; $types.='s'; }
 if ($pago!==''){   $where.=" AND p.pago_tipo=?"; $params[]=$pago;   $types.='s'; }
 
+/* ===== Consulta ===== */
 $sql = "
  SELECT p.*, c.nombre AS cliente_nombre
  FROM ind_pedidos p
@@ -38,17 +81,17 @@ $st->execute();
 $pedidos = $st->get_result()->fetch_all(MYSQLI_ASSOC);
 $st->close();
 
-/* Totales */
-$total_facturado = 0.0;     // suma de 'total'
-$total_senas     = 0.0;     // suma de 'sena_monto'
-$total_cobrado   = 0.0;     // si pago es total_* => total, si es sena_* => sena_monto
+/* ===== Totales ===== */
+$total_facturado = 0.0;
+$total_senas     = 0.0;
+$total_cobrado   = 0.0;
 foreach($pedidos as $p){
   $total_facturado += (float)$p['total'];
   $total_senas     += (float)$p['sena_monto'];
   $total_cobrado   += str_starts_with($p['pago_tipo']??'', 'total_') ? (float)$p['total'] : (float)$p['sena_monto'];
 }
 
-/* Export CSV */
+/* ===== Export CSV ===== */
 if (isset($_GET['export']) && $_GET['export']==='csv') {
   header('Content-Type: text/csv; charset=utf-8');
   header('Content-Disposition: attachment; filename=pedidos_'.$desde.'_a_'.$hasta.'.csv');
@@ -80,17 +123,25 @@ if (isset($_GET['export']) && $_GET['export']==='csv') {
   input,select{padding:10px;border-radius:10px;border:1px solid #2a3550;background:#0d1322;color:#fff}
   .row{display:flex;gap:10px;flex-wrap:wrap;align-items:end}
   .btn{padding:10px 14px;border:0;border-radius:10px;background:#3b82f6;color:#fff;cursor:pointer;text-decoration:none;display:inline-block}
+  .btn.gray{background:#475569}
+  .btn.danger{background:#dc2626}
   .muted{color:#9fb0d3;font-size:12px}
   .right{text-align:right}
   .nowrap{white-space:nowrap}
+  .msg{padding:10px;border-radius:10px;margin:8px 0}
+  .ok{background:#12321c;border:1px solid #1f7a3b}
 </style>
 </head>
 <body>
 <div class="wrap">
   <h1>🧾 Pedidos de Indumentaria</h1>
 
+  <?php if ($msg): ?>
+    <div class="card msg ok"><?= h($msg) ?></div>
+  <?php endif; ?>
+
   <div class="card">
-    <form class="row">
+    <form class="row" method="get">
       <div><label>Desde</label><br><input type="date" name="desde" value="<?=h($desde)?>"></div>
       <div><label>Hasta</label><br><input type="date" name="hasta" value="<?=h($hasta)?>"></div>
       <div><label>Estado</label><br>
@@ -133,7 +184,7 @@ if (isset($_GET['export']) && $_GET['export']==='csv') {
           <thead>
             <tr>
               <th>ID</th><th>Fecha</th><th>Cliente</th><th>Estado</th><th>Pago</th>
-              <th class="right">Total</th><th class="right">Seña</th><th>Comp.</th><th>Acciones</th>
+              <th class="right">Total</th><th class="right">Seña</th><th>Comp.</th><th class="nowrap">Acciones</th>
             </tr>
           </thead>
           <tbody>
@@ -148,13 +199,19 @@ if (isset($_GET['export']) && $_GET['export']==='csv') {
                 <td class="right">$<?= number_format($p['sena_monto'],2,',','.') ?></td>
                 <td>
                   <?php if (!empty($p['comprobante_url'])): ?>
-                    <a class="btn" style="background:#475569" target="_blank" href="<?=h($p['comprobante_url'])?>">Ver</a>
+                    <a class="btn gray" target="_blank" href="<?=h($p['comprobante_url'])?>">Ver</a>
                   <?php else: ?>
                     <span class="muted">—</span>
                   <?php endif; ?>
                 </td>
                 <td class="nowrap">
                   <a class="btn" href="factura_pedido.php?id=<?= (int)$p['id'] ?>">🧾 Imprimir</a>
+                  <form method="post" style="display:inline" onsubmit="return confirm('¿Eliminar pedido #<?= (int)$p['id'] ?>? Esta acción no se puede deshacer.');">
+                    <input type="hidden" name="csrf" value="<?= h($csrf) ?>">
+                    <input type="hidden" name="__a" value="del_pedido">
+                    <input type="hidden" name="pedido_id" value="<?= (int)$p['id'] ?>">
+                    <button class="btn danger" type="submit">🗑️ Eliminar</button>
+                  </form>
                 </td>
               </tr>
             <?php endforeach; ?>
