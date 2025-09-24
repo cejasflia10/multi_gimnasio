@@ -1,71 +1,72 @@
 <?php
+/* ============================================================
+   ver_turnos_clientes.php — Listado y Reservar/Cancelar
+   - La FECHA se completa por defecto con HOY
+   - No cambia tu vista ni el flujo
+   ============================================================ */
 if (session_status() === PHP_SESSION_NONE) session_start();
 require_once __DIR__.'/conexion.php';
 
 $gimnasio_id = (int)($_SESSION['gimnasio_id'] ?? 0);
 $cliente_id  = (int)($_SESSION['cliente_id']  ?? 0);
+if ($cliente_id<=0){ header('Location: login.php'); exit; }
 
-// ===== CSRF token por sesión (se renueva si no existe) =====
+/* ===== CSRF token ===== */
 if (empty($_SESSION['csrf_token'])) {
   $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
 }
 $csrf = $_SESSION['csrf_token'];
 
-// ==== helpers ====
+/* ===== helpers ===== */
 function h($s){ return htmlspecialchars((string)$s, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'); }
 $en2es = ['Monday'=>'Lunes','Tuesday'=>'Martes','Wednesday'=>'Miércoles','Thursday'=>'Jueves','Friday'=>'Viernes','Saturday'=>'Sábado','Sunday'=>'Domingo'];
-
 function nombreDiaEs(string $fechaYmd): string {
   $map = ['Sunday'=>'Domingo','Monday'=>'Lunes','Tuesday'=>'Martes','Wednesday'=>'Miércoles','Thursday'=>'Jueves','Friday'=>'Viernes','Saturday'=>'Sábado'];
   return $map[date('l', strtotime($fechaYmd))] ?? 'Lunes';
 }
-function proximaFechaDelDia(string $diaEs, string $desdeYmd): string {
-  // 0=Domingo..6=Sábado
-  $es2num = ['Domingo'=>0,'Lunes'=>1,'Martes'=>2,'Miércoles'=>3,'Jueves'=>4,'Viernes'=>5,'Sábado'=>6];
-  $target = $es2num[$diaEs] ?? 1;
-  $ts = strtotime($desdeYmd);
-  for ($i=0; $i<7; $i++) {
-    $cand = strtotime("+$i day", $ts);
-    if ((int)date('w',$cand) === $target) return date('Y-m-d',$cand);
-  }
-  return $desdeYmd;
-}
-function norm_hora($h){ $h = trim((string)$h); return $h==='' ? null : substr($h,0,8); }
 
-// ==== UI params: día y fecha (como ya venías usando) ====
-$dia_hoy = $en2es[date('l')] ?? 'Lunes';
-$dia_seleccionado = $_GET['dia'] ?? $dia_hoy;
-
-$fecha = $_GET['fecha'] ?? ''; // si no mandan fecha, usamos la próxima del día elegido
-if ($fecha) {
-  $dt = DateTime::createFromFormat('Y-m-d', $fecha);
-  if (!$dt || $dt->format('Y-m-d') !== $fecha) $fecha = '';
+/* ===== Parámetros de UI =====
+   FECHA: por defecto HOY (lo que pediste)
+   Día mostrado = día de la fecha seleccionada
+   ============================================================ */
+$fecha = $_GET['fecha'] ?? date('Y-m-d');
+$dt = DateTime::createFromFormat('Y-m-d', $fecha);
+if (!$dt || $dt->format('Y-m-d') !== $fecha) {
+  $fecha = date('Y-m-d');
 }
-if ($fecha === '') {
-  $fecha = proximaFechaDelDia($dia_seleccionado, date('Y-m-d'));
-}
-$dia_seleccionado = nombreDiaEs($fecha); // la fecha manda
+$dia_seleccionado = nombreDiaEs($fecha);
 
-// ==== membresía y reservas del cliente ====
+/* ===== membresía (informativa) ===== */
 $membresia = $conexion->query("
   SELECT * FROM membresias 
   WHERE cliente_id = {$cliente_id} AND fecha_vencimiento >= CURDATE()
   ORDER BY fecha_inicio DESC LIMIT 1
-")->fetch_assoc();
+")?->fetch_assoc();
 
-$reservas = [];
-$res_q = $conexion->query("
-  SELECT turno_id FROM reservas_clientes 
-  WHERE cliente_id = {$cliente_id} AND gimnasio_id = {$gimnasio_id}
+/* ===== reservas del cliente (para esa fecha) =====
+   Usamos tu tabla reservas_clientes como nos pasaste el esquema
+   Guardamos map: turno_id => ['id'=>reserva_id]
+   ============================================================ */
+$reservas = []; // por turno en esa fecha
+$qres = $conexion->prepare("
+  SELECT id, turno_id 
+  FROM reservas_clientes 
+  WHERE cliente_id=? AND gimnasio_id=? AND fecha_reserva=?
 ");
-while ($r = $res_q->fetch_assoc()) { $reservas[(int)$r['turno_id']] = true; }
+$qres->bind_param('iis', $cliente_id, $gimnasio_id, $fecha);
+$qres->execute();
+$rs = $qres->get_result();
+while($r=$rs->fetch_assoc()){
+  $reservas[(int)$r['turno_id']] = ['id'=>(int)$r['id']];
+}
+$qres->close();
 
-// ==== menú ====
+/* ===== menú ===== */
 require_once __DIR__.'/menu_cliente.php';
 
-/* ============================================================
-   EXCEPCIONES (modo simple: solo cierres bloquean)
-   ============================================================ */
+/* ===== Excepciones (sólo cierres) ===== */
+$cerradoGlobal = false;
+$cerradosPorProfe = [];
 $stmtExc = $conexion->prepare("
   SELECT e.profesor_id, e.cerrado
   FROM turnos_profesor_excepciones e
@@ -75,9 +76,6 @@ $stmtExc->bind_param("is", $gimnasio_id, $fecha);
 $stmtExc->execute();
 $rowsExc = $stmtExc->get_result()->fetch_all(MYSQLI_ASSOC);
 $stmtExc->close();
-
-$cerradoGlobal = false;
-$cerradosPorProfe = [];
 foreach ($rowsExc as $ex) {
   $pid  = (int)$ex['profesor_id'];
   $cerr = ((int)$ex['cerrado'] === 1);
@@ -85,9 +83,9 @@ foreach ($rowsExc as $ex) {
   if ($pid > 0  && $cerr) $cerradosPorProfe[$pid] = true;
 }
 
-/* ============================================================
-   LISTA BLANCA (activa solo con bandera pid=0 00:00–00:00)
-   ============================================================ */
+/* ===== Lista blanca (si está activa con bandera pid=0 00:00–00:00) ===== */
+$hayListaBlanca = false;
+$permitidos = [];
 $flagLB = $conexion->prepare("
   SELECT 1 FROM turnos_permitidos_fecha
   WHERE gimnasio_id=? AND fecha=? AND profesor_id=0
@@ -99,7 +97,6 @@ $flagLB->execute();
 $hayListaBlanca = (bool)$flagLB->get_result()->num_rows;
 $flagLB->close();
 
-$permitidos = [];
 if ($hayListaBlanca) {
   $stmtP = $conexion->prepare("
     SELECT profesor_id, hora_inicio, hora_fin
@@ -115,9 +112,7 @@ if ($hayListaBlanca) {
   $stmtP->close();
 }
 
-/* ============================================================
-   Base semanal del día
-   ============================================================ */
+/* ===== Base semanal del día (según la FECHA elegida) ===== */
 $qBase = $conexion->prepare("
   SELECT td.*, p.nombre, p.apellido
   FROM turnos_disponibles td
@@ -132,7 +127,6 @@ $rsBase = $qBase->get_result();
 $baseRows = $rsBase->fetch_all(MYSQLI_ASSOC);
 $qBase->close();
 
-// Si hay lista blanca, filtramos SOLO a lo permitido
 if ($hayListaBlanca) {
   $filtrados = [];
   foreach ($baseRows as $t) {
@@ -143,9 +137,7 @@ if ($hayListaBlanca) {
   $baseRows = $filtrados;
 }
 
-/* ============================================================
-   Reglas de habilitación por turno (solo cierre explícito)
-   ============================================================ */
+/* ===== Habilitado simple por cierres ===== */
 function turno_habilitado_simple(array $t, bool $cerradoGlobal, array $cerradosPorProfe): array {
   $pid = (int)$t['profesor_id'];
   if ($cerradoGlobal) return [false, 'Día cerrado por feriado'];
@@ -174,17 +166,8 @@ function turno_habilitado_simple(array $t, bool $cerradoGlobal, array $cerradosP
 
   <h2>📅 Turnos del día: <?= h($dia_seleccionado) ?> (<?= h($fecha) ?>)</h2>
 
-  <!-- Filtros (solo quité el texto confuso) -->
+  <!-- Filtros: fecha por defecto = HOY -->
   <form method="GET" style="margin-bottom:12px;display:flex;gap:.5rem;align-items:end;flex-wrap:wrap">
-    <div>
-      <label for="dia">Día:</label>
-      <select name="dia" id="dia" onchange="this.form.submit()">
-        <?php foreach (['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado','Domingo'] as $d):
-          $sel = $d==$dia_seleccionado?'selected':''; ?>
-          <option value="<?= h($d) ?>" <?= $sel ?>><?= h($d) ?></option>
-        <?php endforeach; ?>
-      </select>
-    </div>
     <div>
       <label for="fecha">Fecha:</label>
       <input type="date" id="fecha" name="fecha" value="<?= h($fecha) ?>" onchange="this.form.submit()">
@@ -208,7 +191,9 @@ function turno_habilitado_simple(array $t, bool $cerradoGlobal, array $cerradosP
       </tr>
       <?php foreach ($baseRows as $t):
         $tid = (int)$t['id'];
-        $reservado = isset($reservas[$tid]);
+        $reservado   = isset($reservas[$tid]);
+        $reserva_id  = $reservado ? $reservas[$tid]['id'] : null;
+
         [$habilitado, $motivoBloqueo] = turno_habilitado_simple($t, $cerradoGlobal, $cerradosPorProfe);
       ?>
         <tr>
@@ -216,19 +201,21 @@ function turno_habilitado_simple(array $t, bool $cerradoGlobal, array $cerradosP
           <td><?= h($t['apellido'].' '.$t['nombre']) ?></td>
           <td>
             <?php if ($reservado): ?>
-              <form method="POST" action="cancelar_reserva.php">
+              <form method="POST" action="cancelar_reserva.php" style="display:inline">
+                <?php if (!empty($reserva_id)): ?>
+                  <input type="hidden" name="reserva_id" value="<?= (int)$reserva_id ?>">
+                <?php endif; ?>
                 <input type="hidden" name="turno_id" value="<?= $tid ?>">
+                <input type="hidden" name="fecha" value="<?= h($fecha) ?>">
                 <input type="hidden" name="csrf" value="<?= h($csrf) ?>">
                 <button type="submit" class="cancelar btn">Cancelar</button>
               </form>
             <?php else: ?>
               <?php if ($habilitado): ?>
-                <form method="POST" action="reservar_turno.php">
+                <form method="POST" action="reservar_turno.php" style="display:inline">
                   <input type="hidden" name="turno_id" value="<?= $tid ?>">
-                  <input type="hidden" name="fecha" value="<?= h($fecha) ?>">
-                  <!-- 🔒 TOKEN anti auto-llamadas -->
-                  <input type="hidden" name="csrf" value="<?= h($csrf) ?>">
-                  <!-- 👇 Solo si el usuario CLICKEA este botón se procesa -->
+                  <input type="hidden" name="fecha"    value="<?= h($fecha) ?>">
+                  <input type="hidden" name="csrf"     value="<?= h($csrf) ?>">
                   <button type="submit" class="reservar btn" name="reservar" value="1">Reservar</button>
                 </form>
               <?php else: ?>
