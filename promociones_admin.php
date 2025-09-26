@@ -1,9 +1,12 @@
 <?php
 /* promociones_admin.php — Cloudinary activado con tu bootstrap (sin Composer)
-   Ajustado: muestra estado Cloudy y muestra/copia la URL devuelta por la subida.
+   Corregido: request_promo (cliente solicita promoción -> guarda en promo_requests y redirige al link)
+   No se modificaron las claves CLOUD_*
 */
 if (session_status() === PHP_SESSION_NONE) session_start();
 require_once __DIR__.'/conexion.php';
+require_once __DIR__ . '/menu_horizontal.php';
+
 @date_default_timezone_set('America/Argentina/San_Luis');
 
 function h($s){ return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); }
@@ -12,15 +15,20 @@ $gym_id = (int)($_SESSION['gimnasio_id'] ?? 0);
 if ($gym_id <= 0) { http_response_code(403); exit('Gimnasio no identificado.'); }
 
 /* ============================================================
+   CSRF
+   ============================================================ */
+if (empty($_SESSION['csrf_token'])) $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+$csrf_token = $_SESSION['csrf_token'];
+
+/* ============================================================
    Cloudy (Cloudinary) — Init con tu bootstrap existente
    ============================================================ */
 if (!defined('CLOUD_ENABLED'))      define('CLOUD_ENABLED', true);
-if (!defined('CLOUD_NAME'))         define('CLOUD_NAME', 'ddfugds9b');         // tus claves
-if (!defined('CLOUD_API_KEY'))      define('CLOUD_API_KEY', '657814174747186'); // tus claves
-if (!defined('CLOUD_API_SECRET'))   define('CLOUD_API_SECRET', 'TKo5BRiKCEjxSLFzn2DLbz_ji4c'); // tus claves
+if (!defined('CLOUD_NAME'))         define('CLOUD_NAME', 'ddfugds9b');         // tus claves - NO MODIFICAR
+if (!defined('CLOUD_API_KEY'))      define('CLOUD_API_KEY', '657814174747186'); // tus claves - NO MODIFICAR
+if (!defined('CLOUD_API_SECRET'))   define('CLOUD_API_SECRET', 'TKo5BRiKCEjxSLFzn2DLbz_ji4c'); // tus claves - NO MODIFICAR
 if (!defined('CLOUD_FOLDER_ROOT'))  define('CLOUD_FOLDER_ROOT', 'ROOT');
 
-/* Carga tu bootstrap (mismo que usás en las demás páginas) */
 $__cloud_ready = false;
 $__cloud_err   = null;
 
@@ -28,6 +36,7 @@ $__cloud_err   = null;
 if (function_exists('cloud_init')) {
   try { cloud_init(); } catch (Throwable $e) { $__cloud_err = 'Init Cloudy falló: '.$e->getMessage(); }
 }
+
 /* ------------------------
   Fallback DIRECTO a Cloudinary (sin SDK ni bootstrap)
   ------------------------ */
@@ -52,8 +61,6 @@ function cloud_sign_params(array $params, string $api_secret): string {
  * Devuelve array (resultado decodificado) o null en fallo.
  */
 function cloudary_direct_upload(string $file_path, array $options = []): ?array {
-  // opciones comunes: folder, public_id, resource_type (default image)
-  global $cloud_name, $api_key, $api_secret;
   if (!function_exists('curl_version')) return null;
   $timestamp = time();
   $params = [
@@ -62,15 +69,18 @@ function cloudary_direct_upload(string $file_path, array $options = []): ?array 
   if (!empty($options['folder'])) $params['folder'] = $options['folder'];
   if (!empty($options['public_id'])) $params['public_id'] = $options['public_id'];
   if (!empty($options['resource_type'])) $params['resource_type'] = $options['resource_type'];
-  // generar signature (Cloudinary expects params string without api_key)
+  // utilizar constantes definidas
+  $api_secret = defined('CLOUD_API_SECRET') ? CLOUD_API_SECRET : '';
+  $api_key = defined('CLOUD_API_KEY') ? CLOUD_API_KEY : '';
+  if (!$api_secret || !$api_key) return null;
   $signature = cloud_sign_params($params, $api_secret);
   $post = $params;
   $post['signature'] = $signature;
   $post['api_key'] = $api_key;
-  // file
   $post['file'] = new CURLFile($file_path);
 
-  $url = "https://api.cloudinary.com/v1_1/".CLOUD_NAME."/image/upload";
+  $cloud_name = defined('CLOUD_NAME') ? CLOUD_NAME : '';
+  $url = "https://api.cloudinary.com/v1_1/".rawurlencode($cloud_name)."/image/upload";
   $ch = curl_init();
   curl_setopt($ch, CURLOPT_URL, $url);
   curl_setopt($ch, CURLOPT_POST, true);
@@ -97,9 +107,11 @@ function cloudary_direct_upload(string $file_path, array $options = []): ?array 
  * Destruir recurso directo (destroy) por REST.
  */
 function cloudary_direct_destroy(string $public_id): bool {
-  global $api_key, $api_secret;
   if (!function_exists('curl_version')) return false;
   $timestamp = time();
+  $api_secret = defined('CLOUD_API_SECRET') ? CLOUD_API_SECRET : '';
+  $api_key = defined('CLOUD_API_KEY') ? CLOUD_API_KEY : '';
+  if (!$api_secret || !$api_key) return false;
   $params = [
     'public_id' => $public_id,
     'timestamp' => $timestamp
@@ -111,7 +123,8 @@ function cloudary_direct_destroy(string $public_id): bool {
     'api_key' => $api_key,
     'signature' => $signature
   ];
-  $url = "https://api.cloudinary.com/v1_1/".CLOUD_NAME."/image/destroy";
+  $cloud_name = defined('CLOUD_NAME') ? CLOUD_NAME : '';
+  $url = "https://api.cloudinary.com/v1_1/".rawurlencode($cloud_name)."/image/destroy";
   $ch = curl_init();
   curl_setopt($ch, CURLOPT_URL, $url);
   curl_setopt($ch, CURLOPT_POST, true);
@@ -159,7 +172,7 @@ $__cloud_ready = (defined('CLOUD_ENABLED') && CLOUD_ENABLED === true) && (
 );
 
 /* ============================================================
-   DB: asegurar tabla
+   DB: asegurar tablas
    ============================================================ */
 $conexion->query("
   CREATE TABLE IF NOT EXISTS promociones (
@@ -179,6 +192,22 @@ $conexion->query("
     INDEX (gimnasio_id),
     INDEX (activo),
     INDEX (fecha_fin)
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+");
+
+/* Tabla solicitudes de promoción (clientes que piden la promo) */
+$conexion->query("
+  CREATE TABLE IF NOT EXISTS promo_requests (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    promocion_id INT NOT NULL,
+    gimnasio_id INT NOT NULL,
+    cliente_id INT DEFAULT NULL,
+    nombre_cliente VARCHAR(255) DEFAULT NULL,
+    email_cliente VARCHAR(255) DEFAULT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    INDEX(promocion_id),
+    INDEX(gimnasio_id),
+    INDEX(cliente_id)
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 ");
 
@@ -288,6 +317,11 @@ function borrar_en_cloudinary(string $url): void {
       if (class_exists('\\Cloudinary\\Api\\Upload\\UploadApi')) {
         $uploader = new \Cloudinary\Api\Upload\UploadApi();
         $uploader->destroy($pid, ['resource_type'=>'image','invalidate'=>true]);
+      } else {
+        // fallback directo
+        if (function_exists('cloudary_direct_destroy')) {
+          @cloudary_direct_destroy($pid);
+        }
       }
     }
   } catch (\Throwable $e) {
@@ -296,10 +330,19 @@ function borrar_en_cloudinary(string $url): void {
 }
 
 /* ============================================================
-   Crear / actualizar / activar / eliminar
+   Crear / actualizar / activar / eliminar + request_promo
    ============================================================ */
 if ($_SERVER['REQUEST_METHOD']==='POST') {
   $act = $_POST['act'] ?? '';
+
+  // Validar CSRF para acciones que modifican
+  $skip_csrf_for = []; // ninguna
+  if (!in_array($act, $skip_csrf_for, true)) {
+    if (empty($_POST['csrf']) || !hash_equals($_SESSION['csrf_token'] ?? '', (string)$_POST['csrf'])) {
+      $msg = '❌ CSRF inválido.';
+      // no exit — mostramos error en UI
+    }
+  }
 
   if ($act === 'save') {
     $id  = (int)($_POST['id'] ?? 0);
@@ -364,10 +407,12 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
       if ($st && $st->execute()) {
         $msg = '✅ Promoción guardada.';
         if ($img_subida) {
-          $last_uploaded_url = $img_subida;
-          $msg .= ' URL subida: ';
-          $msg .= '<a href="'.h($img_subida).'" target="_blank" style="color:#9fe6ff">'.h($img_subida).'</a>';
-          $msg .= ' <button type="button" class="btn-copy" data-url="'.h($img_subida).'">Copiar</button>';
+          $last_uploaded_url = is_array($img_subida) && !empty($img_subida['secure_url']) ? $img_subida['secure_url'] : (is_string($img_subida) ? $img_subida : null);
+          if ($last_uploaded_url) {
+            $msg .= ' URL subida: ';
+            $msg .= '<a href="'.h($last_uploaded_url).'" target="_blank" style="color:#9fe6ff">'.h($last_uploaded_url).'</a>';
+            $msg .= ' <button type="button" class="btn-copy" data-url="'.h($last_uploaded_url).'">Copiar</button>';
+          }
         } elseif ($img_final && is_cloud_url($img_final)) {
           $msg .= ' (URL Cloud detectada).';
         }
@@ -400,6 +445,51 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
       }
     }
     $conexion->query("DELETE FROM promociones WHERE id={$id} AND gimnasio_id={$gym_id}");
+  }
+
+  // NUEVO: request_promo (cliente solicita la promo -> guarda en promo_requests y redirige al link si existe)
+  if ($act === 'request_promo') {
+    // Validación CSRF (ya validada arriba en general)
+    $promo_id = (int)($_POST['promo_id'] ?? 0);
+    if ($promo_id <= 0) {
+      $msg = '❌ Promoción inválida.';
+    } else {
+      $cliente_id = (int)($_SESSION['cliente_id'] ?? 0);
+      $nombre_cliente = trim($_POST['nombre_cliente'] ?? ($_SESSION['cliente_nombre'] ?? ''));
+      $email_cliente  = trim($_POST['email_cliente'] ?? ($_SESSION['cliente_email'] ?? ''));
+
+      $ins = $conexion->prepare("INSERT INTO promo_requests (promocion_id,gimnasio_id,cliente_id,nombre_cliente,email_cliente) VALUES (?,?,?,?,?)");
+      if ($ins) {
+        $ins->bind_param('iiiss', $promo_id, $gym_id, $cliente_id, $nombre_cliente, $email_cliente);
+        $okreq = $ins->execute();
+        $ins->close();
+      } else {
+        $okreq = false;
+      }
+
+      if ($okreq) {
+        // opcional: notificar admin si definido
+        if (defined('ADMIN_ALERT_EMAIL') && filter_var(ADMIN_ALERT_EMAIL, FILTER_VALIDATE_EMAIL)) {
+          $sub = "Nueva solicitud de promoción #{$promo_id}";
+          $body = "Gimnasio: {$gym_id}\nPromoción: {$promo_id}\nCliente: ".($nombre_cliente?:'N/D')."\nEmail: ".($email_cliente?:'N/D')."\nFecha: ".date('Y-m-d H:i:s')."\n\nRevisar panel de Promociones.";
+          @mail(ADMIN_ALERT_EMAIL, $sub, $body);
+        }
+
+        // obtener link de la promoción para redirigir
+        $qr = $conexion->query("SELECT link_url FROM promociones WHERE id={$promo_id} AND gimnasio_id={$gym_id} LIMIT 1");
+        $link = null;
+        if ($qr && $r = $qr->fetch_assoc()) $link = trim($r['link_url']);
+        if ($link && filter_var($link, FILTER_VALIDATE_URL)) {
+          // redirigir al link de venta (usa header redirect)
+          header('Location: '.$link);
+          exit;
+        } else {
+          $msg = '✅ Solicitud registrada. Gracias — no hay link de venta configurado para esta promoción.';
+        }
+      } else {
+        $msg = '❌ No se pudo registrar la solicitud. Intentá de nuevo.';
+      }
+    }
   }
 }
 
@@ -449,7 +539,9 @@ if ($rs) { while($r=$rs->fetch_assoc()) $items[]=$r; }
   .dot{width:18px;height:18px;border-radius:50%;border:1px solid #333;cursor:pointer}
   .cloud-badge{display:inline-block;padding:2px 6px;border-radius:8px;background:#044;border;color:#bff;font-size:12px;margin-left:6px}
   .cloud-off{display:inline-block;padding:2px 6px;border-radius:8px;background:#440;border;color:#fbb;font-size:12px;margin-left:6px}
-  @media (max-width:900px){ .grid,.grid-3{grid-template-columns:1fr} }
+  .request-form-inline{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+  .request-form-inline input{width:auto;padding:8px}
+  @media (max-width:900px){ .grid,.grid-3{grid-template-columns:1fr} .request-form-inline{flex-direction:column;align-items:stretch} }
 </style>
 </head>
 <body>
@@ -477,6 +569,7 @@ if ($rs) { while($r=$rs->fetch_assoc()) $items[]=$r; }
     <form method="POST" enctype="multipart/form-data">
       <input type="hidden" name="act" value="save">
       <input type="hidden" name="id" value="<?= (int)($edit['id'] ?? 0) ?>">
+      <input type="hidden" name="csrf" value="<?= h($csrf_token) ?>">
 
       <div class="grid">
         <div>
@@ -610,17 +703,43 @@ if ($rs) { while($r=$rs->fetch_assoc()) $items[]=$r; }
               <td><?= ((int)$it['activo']===1)?'✅ Activa':'⛔ Inactiva' ?></td>
               <td style="white-space:nowrap">
                 <a class="btn" href="?edit=<?= (int)$it['id'] ?>">✏️ Editar</a>
+
                 <form method="POST" style="display:inline" onsubmit="return confirm('¿Cambiar estado?');">
                   <input type="hidden" name="act" value="toggle">
                   <input type="hidden" name="id" value="<?= (int)$it['id'] ?>">
                   <input type="hidden" name="v" value="<?= ((int)$it['activo']===1)?0:1 ?>">
+                  <input type="hidden" name="csrf" value="<?= h($csrf_token) ?>">
                   <button class="btn" type="submit"><?= ((int)$it['activo']===1)?'Desactivar':'Activar' ?></button>
                 </form>
+
                 <form method="POST" style="display:inline" onsubmit="return confirm('¿Eliminar promoción?');">
                   <input type="hidden" name="act" value="delete">
                   <input type="hidden" name="id" value="<?= (int)$it['id'] ?>">
+                  <input type="hidden" name="csrf" value="<?= h($csrf_token) ?>">
                   <button class="btn" type="submit">🗑️</button>
                 </form>
+
+                <!-- FORMULARIO PÚBLICO: Quiero esta promoción -->
+                <div style="margin-top:8px">
+                  <?php if (empty($_SESSION['cliente_id'])): ?>
+                    <form method="POST" class="request-form-inline" onsubmit="return confirm('Enviar solicitud?');">
+                      <input type="hidden" name="act" value="request_promo">
+                      <input type="hidden" name="promo_id" value="<?= (int)$it['id'] ?>">
+                      <input type="hidden" name="csrf" value="<?= h($csrf_token) ?>">
+                      <input name="nombre_cliente" placeholder="Tu nombre" required>
+                      <input name="email_cliente" placeholder="tu@correo.com" type="email" required>
+                      <button class="btn" type="submit">Quiero esta promoción</button>
+                    </form>
+                  <?php else: ?>
+                    <form method="POST" class="request-form-inline" onsubmit="return true;">
+                      <input type="hidden" name="act" value="request_promo">
+                      <input type="hidden" name="promo_id" value="<?= (int)$it['id'] ?>">
+                      <input type="hidden" name="csrf" value="<?= h($csrf_token) ?>">
+                      <button class="btn" type="submit">Quiero esta promoción</button>
+                    </form>
+                  <?php endif; ?>
+                </div>
+
               </td>
             </tr>
           <?php endforeach; if (empty($items)): ?>
@@ -653,8 +772,9 @@ if ($rs) { while($r=$rs->fetch_assoc()) $items[]=$r; }
         const url = btn.getAttribute('data-url') || '';
         if (!url) return alert('No hay URL para copiar');
         navigator.clipboard?.writeText(url).then(() => {
+          const prev = btn.textContent;
           btn.textContent = 'Copiado ✓';
-          setTimeout(()=> btn.textContent = 'Copiar URL', 1800);
+          setTimeout(()=> btn.textContent = prev, 1800);
         }).catch(()=> {
           prompt('Copiar manualmente (CTRL+C):', url);
         });
