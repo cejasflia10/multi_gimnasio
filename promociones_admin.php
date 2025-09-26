@@ -1,5 +1,7 @@
 <?php
-/* promociones_admin.php — Cloudinary activado con tu bootstrap (sin Composer) */
+/* promociones_admin.php — Cloudinary activado con tu bootstrap (sin Composer)
+   Ajustado: muestra estado Cloudy y muestra/copia la URL devuelta por la subida.
+*/
 if (session_status() === PHP_SESSION_NONE) session_start();
 require_once __DIR__.'/conexion.php';
 @date_default_timezone_set('America/Argentina/San_Luis');
@@ -26,11 +28,131 @@ $__cloud_err   = null;
 if (function_exists('cloud_init')) {
   try { cloud_init(); } catch (Throwable $e) { $__cloud_err = 'Init Cloudy falló: '.$e->getMessage(); }
 }
+/* ------------------------
+  Fallback DIRECTO a Cloudinary (sin SDK ni bootstrap)
+  ------------------------ */
+
+/**
+ * Firma para Cloudinary: recibir array de params (no incluir api_key ni file),
+ * ordenarlos por key y concatenar "k1=v1&k2=v2..."+api_secret -> sha1.
+ */
+function cloud_sign_params(array $params, string $api_secret): string {
+  ksort($params);
+  $pairs = [];
+  foreach ($params as $k => $v) {
+    if ($v === null || $v === '') continue;
+    $pairs[] = $k . '=' . $v;
+  }
+  $to_sign = implode('&', $pairs) . $api_secret;
+  return sha1($to_sign);
+}
+
+/**
+ * Subida directa por REST a Cloudinary usando cURL.
+ * Devuelve array (resultado decodificado) o null en fallo.
+ */
+function cloudary_direct_upload(string $file_path, array $options = []): ?array {
+  // opciones comunes: folder, public_id, resource_type (default image)
+  global $cloud_name, $api_key, $api_secret;
+  if (!function_exists('curl_version')) return null;
+  $timestamp = time();
+  $params = [
+    'timestamp' => $timestamp,
+  ];
+  if (!empty($options['folder'])) $params['folder'] = $options['folder'];
+  if (!empty($options['public_id'])) $params['public_id'] = $options['public_id'];
+  if (!empty($options['resource_type'])) $params['resource_type'] = $options['resource_type'];
+  // generar signature (Cloudinary expects params string without api_key)
+  $signature = cloud_sign_params($params, $api_secret);
+  $post = $params;
+  $post['signature'] = $signature;
+  $post['api_key'] = $api_key;
+  // file
+  $post['file'] = new CURLFile($file_path);
+
+  $url = "https://api.cloudinary.com/v1_1/".CLOUD_NAME."/image/upload";
+  $ch = curl_init();
+  curl_setopt($ch, CURLOPT_URL, $url);
+  curl_setopt($ch, CURLOPT_POST, true);
+  curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+  curl_setopt($ch, CURLOPT_POSTFIELDS, $post);
+  curl_setopt($ch, CURLOPT_TIMEOUT, 60);
+  $resp = curl_exec($ch);
+  $http = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+  $err = curl_errno($ch) ? curl_error($ch) : null;
+  curl_close($ch);
+  if ($err) {
+    error_log('Cloud direct upload curl err: '.$err);
+    return null;
+  }
+  if ($http < 200 || $http >= 300) {
+    error_log('Cloud direct upload http '.$http.' resp: '.$resp);
+    return null;
+  }
+  $j = json_decode($resp, true);
+  return is_array($j) ? $j : null;
+}
+
+/**
+ * Destruir recurso directo (destroy) por REST.
+ */
+function cloudary_direct_destroy(string $public_id): bool {
+  global $api_key, $api_secret;
+  if (!function_exists('curl_version')) return false;
+  $timestamp = time();
+  $params = [
+    'public_id' => $public_id,
+    'timestamp' => $timestamp
+  ];
+  $signature = cloud_sign_params($params, $api_secret);
+  $post = [
+    'public_id' => $public_id,
+    'timestamp' => $timestamp,
+    'api_key' => $api_key,
+    'signature' => $signature
+  ];
+  $url = "https://api.cloudinary.com/v1_1/".CLOUD_NAME."/image/destroy";
+  $ch = curl_init();
+  curl_setopt($ch, CURLOPT_URL, $url);
+  curl_setopt($ch, CURLOPT_POST, true);
+  curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+  curl_setopt($ch, CURLOPT_POSTFIELDS, $post);
+  curl_setopt($ch, CURLOPT_TIMEOUT, 30);
+  $resp = curl_exec($ch);
+  $http = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+  $err = curl_errno($ch) ? curl_error($ch) : null;
+  curl_close($ch);
+  if ($err) { error_log('Cloud destroy curl err: '.$err); return false; }
+  if ($http < 200 || $http >= 300) { error_log('Cloud destroy http '.$http.' resp: '.$resp); return false; }
+  $j = json_decode($resp, true);
+  return !empty($j['result']) && in_array($j['result'], ['ok','not_found','deleted'], true);
+}
+
+/* Si no hay helpers ni SDK, exponemos nuestras funciones directas como helpers:
+   cloud_upload, cloud_destroy — así tu código ya escrito las detectará */
+if (!function_exists('cloud_upload')) {
+  function cloud_upload($file_path, $opts = []) {
+    $res = cloudary_direct_upload($file_path, $opts);
+    if (is_array($res) && !empty($res['secure_url'])) return $res;
+    return $res ? $res : null;
+  }
+}
+if (!function_exists('cloud_destroy')) {
+  function cloud_destroy($public_id, $opts = []) {
+    return cloudary_direct_destroy($public_id);
+  }
+}
+
+/* Re-evaluar disponibilidad Cloudy: si CURL existe y credenciales parecen puestas */
+if (function_exists('curl_version') && defined('CLOUD_NAME') && defined('CLOUD_API_KEY') && defined('CLOUD_API_SECRET')
+    && CLOUD_NAME && CLOUD_API_KEY && CLOUD_API_SECRET) {
+  $__cloud_ready = true;
+}
 
 /* Marcamos listo si:
    - hay helpers (cloud_upload / cloudy_upload), o
    - el bootstrap ya cargó las clases del SDK */
-$__cloud_ready = (CLOUD_ENABLED === true) && (
+$__cloud_ready = (defined('CLOUD_ENABLED') && CLOUD_ENABLED === true) && (
   function_exists('cloud_upload') ||
   function_exists('cloudy_upload') ||
   class_exists('\\Cloudinary\\Api\\Upload\\UploadApi')
@@ -45,7 +167,7 @@ $conexion->query("
     gimnasio_id INT NOT NULL,
     titulo VARCHAR(120) NOT NULL,
     descripcion TEXT DEFAULT NULL,
-    imagen_url VARCHAR(255) DEFAULT NULL,     -- URL Cloudinary o ruta local
+    imagen_url VARCHAR(255) DEFAULT NULL,
     link_url VARCHAR(255) DEFAULT NULL,
     color_fondo VARCHAR(20) DEFAULT '#111111',
     color_texto VARCHAR(20) DEFAULT '#FFD700',
@@ -61,6 +183,7 @@ $conexion->query("
 ");
 
 $msg = '';
+$last_uploaded_url = null;
 
 /* ============================================================
    Helpers Cloudy / archivos
@@ -129,7 +252,6 @@ function subir_imagen_promocion(?array $file, int $gym_id, bool $cloud_ready): ?
           'use_filename'    => true,
           'unique_filename' => true,
           'invalidate'      => true,
-          // normaliza entrega (opcionales):
           'format'          => 'jpg',
           'quality'         => 'auto',
           'fetch_format'    => 'auto'
@@ -137,7 +259,8 @@ function subir_imagen_promocion(?array $file, int $gym_id, bool $cloud_ready): ?
         if (!empty($res['secure_url'])) return $res['secure_url'];
       }
     } catch (\Throwable $e) {
-      // si falla cloud, seguimos con local
+      // guardamos error en log y seguimos con fallback local
+      error_log('Cloud upload error: '.$e->getMessage());
     }
   }
 
@@ -222,7 +345,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
                 WHERE id=? AND gimnasio_id=?";
         $st = $conexion->prepare($sql);
         if ($st) {
-          $st->bind_param('ssssssssiiii',
+          $st->bind_param('ssssssssiii',
             $tit,$desc,$img_final,$lnk,$bg,$fg,$fi,$ff,$pri,$actv,$id,$gym_id
           );
         }
@@ -238,8 +361,19 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
         }
       }
 
-      if ($st && $st->execute()) { $msg = '✅ Promoción guardada.'; }
-      else { $msg = '❌ Error al guardar.'; }
+      if ($st && $st->execute()) {
+        $msg = '✅ Promoción guardada.';
+        if ($img_subida) {
+          $last_uploaded_url = $img_subida;
+          $msg .= ' URL subida: ';
+          $msg .= '<a href="'.h($img_subida).'" target="_blank" style="color:#9fe6ff">'.h($img_subida).'</a>';
+          $msg .= ' <button type="button" class="btn-copy" data-url="'.h($img_subida).'">Copiar</button>';
+        } elseif ($img_final && is_cloud_url($img_final)) {
+          $msg .= ' (URL Cloud detectada).';
+        }
+      } else {
+        $msg = '❌ Error al guardar.';
+      }
       if ($st) $st->close();
     }
   }
@@ -304,6 +438,8 @@ if ($rs) { while($r=$rs->fetch_assoc()) $items[]=$r; }
   .grid-3{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
   .btn{display:inline-block;padding:8px 12px;border-radius:8px;border:1px solid var(--line);background:#1a1f2b;color:#fff;text-decoration:none;cursor:pointer}
   .btn:hover{background:#21293a}
+  .btn-copy{padding:4px 8px;margin-left:6px;background:#0a6;border:color:#0a6;border-radius:6px;border:0;color:#000;cursor:pointer}
+  .btn-copy:hover{opacity:0.9}
   table{width:100%;border-collapse:collapse}
   th,td{border:1px solid var(--line);padding:8px;text-align:left}
   th{background:#141824}
@@ -311,6 +447,8 @@ if ($rs) { while($r=$rs->fetch_assoc()) $items[]=$r; }
   .thumb{width:70px;height:40px;object-fit:cover;border-radius:6px;border:1px solid #333;background:#000}
   .swatch{display:flex;gap:6px;align-items:center;margin-top:6px;flex-wrap:wrap}
   .dot{width:18px;height:18px;border-radius:50%;border:1px solid #333;cursor:pointer}
+  .cloud-badge{display:inline-block;padding:2px 6px;border-radius:8px;background:#044;border;color:#bff;font-size:12px;margin-left:6px}
+  .cloud-off{display:inline-block;padding:2px 6px;border-radius:8px;background:#440;border;color:#fbb;font-size:12px;margin-left:6px}
   @media (max-width:900px){ .grid,.grid-3{grid-template-columns:1fr} }
 </style>
 </head>
@@ -318,8 +456,20 @@ if ($rs) { while($r=$rs->fetch_assoc()) $items[]=$r; }
 <div class="wrap">
   <h1>📣 Promociones</h1>
 
+  <!-- Cloudy status -->
+  <div style="margin-bottom:8px">
+    <?php if ($__cloud_ready): ?>
+      <span class="cloud-badge">Cloudy activo: <?= h(defined('CLOUD_NAME')?CLOUD_NAME:'(sin nombre)') ?></span>
+    <?php else: ?>
+      <span class="cloud-off">Cloudy no disponible</span>
+      <?php if (!empty($__cloud_err)): ?>
+        <span class="muted" style="margin-left:8px">Error: <?= h($__cloud_err) ?></span>
+      <?php endif; ?>
+    <?php endif; ?>
+  </div>
+
   <?php if (!empty($msg)): ?>
-    <div class="card"><?= h($msg) ?></div>
+    <div class="card"><?= $msg ?></div>
   <?php endif; ?>
 
   <div class="card">
@@ -349,7 +499,11 @@ if ($rs) { while($r=$rs->fetch_assoc()) $items[]=$r; }
           <label>Imagen (archivo → sube a Cloudinary con tu bootstrap)</label>
           <input type="file" name="imagen_file" accept="image/*">
           <?php if (!empty($edit['imagen_url'])): ?>
-            <div class="muted" style="margin-top:6px">Actual: <?= h($edit['imagen_url']) ?></div>
+            <div class="muted" style="margin-top:6px">Actual: <?= h($edit['imagen_url']) ?>
+              <?php if (is_cloud_url($edit['imagen_url'])): ?>
+                <span class="cloud-badge">Cloudy</span>
+              <?php endif; ?>
+            </div>
           <?php endif; ?>
         </div>
         <div>
@@ -425,6 +579,14 @@ if ($rs) { while($r=$rs->fetch_assoc()) $items[]=$r; }
               <td>
                 <?php if (!empty($it['imagen_url'])): ?>
                   <img class="thumb" src="<?= h($it['imagen_url']) ?>" alt="thumb">
+                  <?php if (is_cloud_url($it['imagen_url'])): ?>
+                    <div style="margin-top:6px">
+                      <span class="cloud-badge">Cloudy</span>
+                      <button class="btn-copy" data-url="<?= h($it['imagen_url']) ?>">Copiar URL</button>
+                    </div>
+                  <?php else: ?>
+                    <div style="margin-top:6px"><button class="btn-copy" data-url="<?= h($it['imagen_url']) ?>">Copiar URL</button></div>
+                  <?php endif; ?>
                 <?php else: ?>
                   <span class="muted">—</span>
                 <?php endif; ?>
@@ -482,6 +644,20 @@ if ($rs) { while($r=$rs->fetch_assoc()) $items[]=$r; }
         if (!bgInp || !fgInp) return;
         bgInp.value = d.getAttribute('data-bg') || '#111111';
         fgInp.value = d.getAttribute('data-fg') || '#FFD700';
+      });
+    });
+
+    // copiar URL
+    document.querySelectorAll('.btn-copy').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const url = btn.getAttribute('data-url') || '';
+        if (!url) return alert('No hay URL para copiar');
+        navigator.clipboard?.writeText(url).then(() => {
+          btn.textContent = 'Copiado ✓';
+          setTimeout(()=> btn.textContent = 'Copiar URL', 1800);
+        }).catch(()=> {
+          prompt('Copiar manualmente (CTRL+C):', url);
+        });
       });
     });
   });
