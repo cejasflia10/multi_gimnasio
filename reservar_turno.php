@@ -1,5 +1,5 @@
 <?php
-// reservar_turno.php — versión con cutoff: mañana hasta 23:59:59 del día anterior
+// reservar_turno.php — versión SIN cutoffs: se permite reservar en cualquier horario
 if (session_status() === PHP_SESSION_NONE) session_start();
 require_once __DIR__ . '/conexion.php';
 
@@ -57,37 +57,12 @@ $hora_fin    = substr((string)$turno['hora_fin'],0,8);
 $profesor_id = (int)$turno['profesor_id'];
 
 /* ---------------------------
-   REGLA DE CIERRES (cutoffs)
+   CUT-OFFS DESACTIVADOS
    ---------------------------
-   - Mañana: cutoff = 23:59:59 del día anterior  (cambio solicitado)
-   - Tarde : cutoff = 12:00:00 del mismo día
-   - Noche : cutoff = 18:00:00 del mismo día
-   --------------------------------- */
-
-// Determinar periodo según hora de inicio
-$h = intval(substr($hora_inicio,0,2)); // hora como entero 0..23
-
-if ($h < 12) {
-  // MAÑANA: cutoff = 23:59:59 del día anterior (para que puedas ver la gente la noche anterior)
-  $cutoff_dt = new DateTime($fecha_turno . ' 23:59:59');
-  $cutoff_dt->modify('-1 day');
-  $cutoff_label = "23:59 (día anterior)";
-} elseif ($h < 18) {
-  // TARDE => cutoff = 12:00 del mismo día
-  $cutoff_dt = new DateTime($fecha_turno . ' 12:00:00');
-  $cutoff_label = "12:00 (mismo día)";
-} else {
-  // NOCHE => cutoff = 18:00 del mismo día
-  $cutoff_dt = new DateTime($fecha_turno . ' 18:00:00');
-  $cutoff_label = "18:00 (mismo día)";
-}
-
-// Comparar con ahora (zona horaria del servidor)
-$now = new DateTime();
-
-if ($now >= $cutoff_dt) {
-  volver(['fecha'=>$fecha_turno, 'err'=>'El plazo de reserva cerró: '.$cutoff_label.'.']);
-}
+   Se quita la regla que impedía reservar tras ciertos horarios.
+   Ahora se permite reservar en cualquier horario (siempre que
+   las demás reglas — lista blanca, excepciones, duplicados — lo permitan).
+*/
 
 /* Lista blanca (si existe bandera pid=0 00:00–00:00) */
 $flagLB = $conexion->prepare("
@@ -152,7 +127,7 @@ $ins->close();
 
 if (!$ok) {
   if (stripos($err, 'incorrect')!==false || stripos($err, 'enum')!==false) {
-    volver(['fecha'=>$fecha_turno,'err'=>'El valor de "día" no está permitido por el ENUM (¿falta "Domingo"?).']);
+    volver(['fecha'=>$fecha_turno,'err'=>'El valor de \"día\" no está permitido por el ENUM (¿falta \"Domingo\"?).']);
   }
   volver(['fecha'=>$fecha_turno,'err'=>'No se pudo guardar la reserva.']);
 }

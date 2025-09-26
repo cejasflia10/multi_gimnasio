@@ -2,6 +2,8 @@
 /* admin_pedidos_indum.php — Panel admin pedidos indumentaria (con eliminar) */
 if (session_status() === PHP_SESSION_NONE) session_start();
 require_once __DIR__.'/conexion.php';
+require_once __DIR__ . '/menu_horizontal.php';
+
 // require_once __DIR__.'/menu_admin.php';
 
 if (!isset($conexion) || !($conexion instanceof mysqli)) { http_response_code(500); exit('❌ Sin conexión a BD'); }
