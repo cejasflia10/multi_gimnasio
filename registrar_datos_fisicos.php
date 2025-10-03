@@ -104,6 +104,14 @@ $is_prof = in_array($rol, ['profesor','admin'], true);
 $mensaje  = '';
 $coincidencias = [];   // para listados manuales si se usa el POST fallback
 
+/* ==== Restringir acceso: solo profesor/admin ==== */
+if (!$is_prof) {
+  echo "<!DOCTYPE html><html lang='es'><head><meta charset='UTF-8'><title>Acceso restringido</title></head><body style='background:#000;color:gold;font-family:Arial;margin:0;padding:24px'>".
+       err('Acceso solo para profesores/admin.').
+       "</body></html>";
+  exit;
+}
+
 /* ================= Resolver cliente objetivo ================= */
 $target_cliente_id = 0;
 
@@ -148,8 +156,6 @@ if ($is_prof) {
       }
     }
   }
-} else {
-  $target_cliente_id = (int)$cliente_id_sesion;
 }
 
 /* ======= Si aún no hay cliente, mostrar buscador con LIVE SEARCH ======= */
@@ -209,7 +215,7 @@ if ($target_cliente_id <= 0 && empty($_GET['cliente'])) {
           if (!term || term.trim()===''){ box.innerHTML='Comenzá a escribir…'; return; }
           try{
             const res  = await fetch('buscar_clientes_ajax.php?q='+encodeURIComponent(term));
-            const text = await res.text(); // leemos texto para poder mostrar errores HTML si los hay
+            const text = await res.text();
             try { 
               const data = JSON.parse(text);
               renderRows(Array.isArray(data)?data:[]);
@@ -448,7 +454,7 @@ if ($is_prof && isset($_GET['edit'])) {
 <body>
 
 <?php
-if (is_file(__DIR__.'/menu_horizontal.php')) { include __DIR__.'/menu_horizontal.php'; }
+// SOLO menú del profesor (sin menú horizontal)
 if ($is_prof && is_file(__DIR__.'/menu_profesor.php')) { include __DIR__.'/menu_profesor.php'; }
 ?>
 
@@ -502,7 +508,7 @@ if ($is_prof && is_file(__DIR__.'/menu_profesor.php')) { include __DIR__.'/menu_
 
   <?php if (!empty($historial)): ?>
     <div class="card">
-      <h3 style="margin-top:0)">📌 Último registro</h3>
+      <h3 style="margin-top:0">📌 Último registro</h3>
       <div class="grid">
         <div>
           <div>Peso: <b><?= h($ultimo['peso'] ?? '—') ?> kg</b></div>
