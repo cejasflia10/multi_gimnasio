@@ -96,6 +96,8 @@ $backUrl = safe_back_url();
         <li><a href="resultados_combates.php">🥇 Resultados</a></li>
         <li><a href="ranking_competidores.php">📊 score</a></li>
         <li><a href="recibir_competidores.php">📊 Caga de competidores </a></li>
+          <li><a href="pesajes.php">⚖️ Pesaje</a></li>
+
 
       </ul>
     </li>
