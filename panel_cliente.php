@@ -1,5 +1,5 @@
 <?php
-// panel_cliente.php — versión moderna + PROMOS "flash" + RUTINAS/ARCHIVOS persistentes
+// panel_cliente.php — versión moderna + PROMOS + RUTINAS/ARCHIVOS con soporte móvil (descarga forzada de PDFs)
 if (session_status() === PHP_SESSION_NONE) session_start();
 require_once __DIR__ . '/conexion.php';
 
@@ -26,25 +26,48 @@ function fmt_bytes($b){
   while($b>=1024 && $i<count($u)-1){ $b/=1024; $i++; }
   return number_format($b, ($i>1?2:0), ',', '.') . ' ' . $u[$i];
 }
+/* Deducir extensión desde la URL si BD no la tiene */
+function guess_ext(string $url, string $fallback=''): string {
+  $path = parse_url($url, PHP_URL_PATH) ?: '';
+  $ext  = strtolower(pathinfo($path, PATHINFO_EXTENSION));
+  return $ext ?: strtolower($fallback);
+}
 
-/* === Helpers para visor y Cloudinary (no modifican BD) === */
+/* === Helpers visor y Cloudinary (NO modifican BD) === */
 function is_image_ext(string $ext): bool {
   $ext = strtolower($ext);
   return in_array($ext, ['jpg','jpeg','png','gif','webp'], true);
 }
-function is_pdf_ext(string $ext): bool {
-  return strtolower($ext) === 'pdf';
-}
-/**
- * Corrige al vuelo URLs de Cloudinary para ver PDFs inline.
- * Si detecta /image/upload/ en una URL cuyo archivo es PDF, la cambia a /raw/upload/.
- * No guarda cambios, solo para el <iframe>.
+function is_pdf_ext(string $ext): bool { return strtolower($ext) === 'pdf'; }
+
+/** Corrige al vuelo URLs de Cloudinary para ver PDFs inline.
+ *  Si detecta /image/upload/ en una URL cuyo archivo es PDF, la cambia a /raw/upload/.
  */
 function cld_viewer_url(string $url, string $ext): string {
   if (!is_pdf_ext($ext)) return $url;
-  // Solo tocar si es de Cloudinary
   if (preg_match('#^https?://res\.cloudinary\.com/[^/]+/image/upload/#i', $url)) {
     $url = preg_replace('#/image/upload/#i', '/raw/upload/', $url, 1);
+  }
+  return $url;
+}
+
+/** Genera URL de Cloudinary con fl_attachment:nombre para forzar descarga de PDF (especial móvil) */
+function cld_force_attachment(string $url, string $ext, string $filename=''): string {
+  if (!is_pdf_ext($ext)) return $url;
+  // nombre amigable para el adjunto
+  if ($filename === '' ) {
+    $path = parse_url($url, PHP_URL_PATH) ?: '';
+    $base = basename($path);
+    $filename = preg_replace('/\?.*$/', '', $base);
+    if (stripos($filename, '.pdf') === false) $filename .= '.pdf';
+  }
+  // insertar fl_attachment justo después de /raw/upload/ (o corregir si viene /image/upload/)
+  if (preg_match('#/raw/upload/#i', $url)) {
+    // Si ya hubiera otras transformaciones, anteponer fl_attachment
+    $url = preg_replace('#/raw/upload/(?!fl_attachment)([^?]*)#i', '/raw/upload/fl_attachment:'.rawurlencode($filename).'/$1', $url, 1);
+  } else {
+    // si viene /image/upload/, pasamos a raw + attachment
+    $url = preg_replace('#/image/upload/#i', '/raw/upload/fl_attachment:'.rawurlencode($filename).'/', $url, 1);
   }
   return $url;
 }
@@ -58,47 +81,28 @@ if (!function_exists('str_starts_with')) {
 
 /* ===== Resolver de foto de cliente (robusto) ===== */
 function resolve_cliente_foto(array $cli): string {
-  // 1) Si hay base64 válida, usarla
   $b64 = (string)($cli['foto_base64'] ?? '');
   if ($b64 !== '' && str_starts_with($b64, 'data:image')) return $b64;
 
-  // 2) Candidatos de columna (AGREGADO: foto_path primero)
   $candidatos = [];
   foreach (['foto_path','foto_url','foto','avatar','imagen','perfil_foto'] as $k) {
     if (!empty($cli[$k])) $candidatos[] = (string)$cli[$k];
   }
 
-  // 3) Probar cada candidato
-  $carpetas = [
-    '', // por si el valor ya incluye la subcarpeta correcta
-    'fotos_clientes',
-    'uploads',
-    'public/uploads',
-    'img',
-    'images',
-    'fotos',
-    'clientes',
-    'media',
-  ];
+  $carpetas = ['','fotos_clientes','uploads','public/uploads','img','images','fotos','clientes','media'];
 
   foreach ($candidatos as $cand) {
     $cand = trim($cand);
-
-    // URL absoluta
     if (preg_match('#^https?://#i', $cand)) return $cand;
 
-    // Si ya viene con subcarpeta (ej: uploads/nico.jpg), probar tal cual
     if (strpos($cand, '/') !== false) {
       $abs = __DIR__ . '/' . $cand;
       if (is_file($abs)) {
         $mtime = @filemtime($abs) ?: time();
-        // Normalizar cada segmento con rawurlencode
         $parts = array_map('rawurlencode', array_filter(explode('/', $cand), 'strlen'));
         return implode('/', $parts) . '?v=' . $mtime;
       }
     }
-
-    // Probar en carpetas conocidas
     foreach ($carpetas as $dir) {
       $rel = ($dir ? ($dir . '/') : '') . $cand;
       $abs = __DIR__ . '/' . $rel;
@@ -109,15 +113,11 @@ function resolve_cliente_foto(array $cli): string {
       }
     }
   }
-
-  // 4) Fallback: default local si existe
   $default = __DIR__ . '/fotos_clientes/default.png';
   if (is_file($default)) {
     $v = @filemtime($default) ?: time();
     return 'fotos_clientes/default.png?v='.$v;
   }
-
-  // 5) Fallback final: data-URI SVG (círculo gris con iniciales)
   $nombre = trim(($cli['apellido'] ?? '').' '.($cli['nombre'] ?? ''));
   $inic   = '';
   foreach (explode(' ', $nombre) as $w) { $w = trim($w); if ($w!=='') { $inic .= mb_strtoupper(mb_substr($w,0,1,'UTF-8'),'UTF-8'); } }
@@ -194,7 +194,7 @@ if ((int)($cliente['datos_completos'] ?? 0) === 0) {
         .card{width:100%;max-width:420px;background:rgba(255,255,255,.05);border:1px solid var(--border);border-radius:18px;padding:20px}
         h2{margin:0 0 12px;font:800 22px/1.2 Inter,system-ui} p{margin:0 0 16px;color:var(--muted)}
         label{display:block;margin:10px 0 6px;font-weight:700;font-size:14px}
-        input,textarea{width:100%;padding:10px;border-radius:12px;border:1px solid var(--border);background:#0f1115;color:var(--fg);font-size:14px}
+        input,textarea{width:100%;padding:10px;border-radius:12px;border:1px solid var(--border);background:#0f1115;color:#fg;font-size:14px}
         textarea{min-height:70px}
         .btn{width:100%;margin-top:12px;padding:12px;border:none;border-radius:14px;background:var(--acc);color:#111;font-weight:800;cursor:pointer}
         .msg{margin-bottom:10px;color:#ff6b6b;font-weight:700}
@@ -359,8 +359,7 @@ if ($rsP) {
   $rsP->free();
 }
 
-/* ====== RUTINAS/ARCHIVOS (con persistencia por URL externa) ====== */
-/* Tabla de “visto” (idempotente) */
+/* ====== RUTINAS/ARCHIVOS ====== */
 $conexion->query("
   CREATE TABLE IF NOT EXISTS rutinas_vistas (
     id INT AUTO_INCREMENT PRIMARY KEY,
@@ -372,8 +371,6 @@ $conexion->query("
     INDEX idx_rut (rutina_id)
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 ");
-
-/* Tabla de rutinas/archivos enviados por el profesor (si no existe) */
 $conexion->query("
   CREATE TABLE IF NOT EXISTS rutinas_clientes (
     id INT AUTO_INCREMENT PRIMARY KEY,
@@ -391,10 +388,9 @@ $conexion->query("
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 ");
 
-/* Marcar como visto (POST al mismo archivo) */
+/* Marcar como visto */
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['marcar_visto'], $_POST['rutina_id'])) {
   $rid = (int)$_POST['rutina_id'];
-  // Validar pertenencia
   $okRut = false;
   if ($st = $conexion->prepare("SELECT 1 FROM rutinas_clientes WHERE id=? AND cliente_id=? AND gimnasio_id=? LIMIT 1")) {
     $st->bind_param('iii', $rid, $cliente_id, $gimnasio_id);
@@ -409,13 +405,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['marcar_visto'], $_POS
       $st2->execute(); $st2->close();
     }
   }
-  // Volver al panel para evitar reenvío
   header("Location: panel_cliente.php");
   exit;
 }
 
-/* Traer rutinas/archivos del profesor con flag visto
-   - Por defecto 10; si ?todo=1, hasta 100 (para historial). */
+/* Traer rutinas */
 $rut_limit = (isset($_GET['todo']) && $_GET['todo'] == '1') ? 100 : 10;
 $rutinas = [];
 if ($stmtN = $conexion->prepare("
@@ -606,18 +600,27 @@ include __DIR__ . '/menu_cliente.php';
         <ul id="contenedor-reservas" class="res-list"><li class="muted">Cargando reservas...</li></ul>
       </article>
 
-      <!-- ===== Rutinas / Archivos enviados por tu profesor ===== -->
+      <!-- ===== Rutinas / Archivos del profesor ===== -->
       <article class="glass card col-span-2">
         <h2>📄 Rutinas y Archivos del Profesor</h2>
         <?php if (empty($rutinas)): ?>
           <p class="muted">No tenés rutinas/archivos disponibles por ahora.</p>
         <?php else: ?>
           <ul class="noti-list" id="lista-rutinas" style="max-height:480px; overflow:auto">
-            <?php foreach ($rutinas as $n): 
-              $ext = strtolower((string)($n['extension'] ?? ''));
+            <?php foreach ($rutinas as $n):
               $url = (string)$n['url_archivo'];
-              $viewerUrl = cld_viewer_url($url, $ext);
-              $rid = (int)$n['id'];
+              $extDb = strtolower((string)($n['extension'] ?? ''));
+              $ext   = $extDb ?: guess_ext($url, '');
+              $rid   = (int)$n['id'];
+
+              // URL para visor inline (desktop): corrige image->raw si es PDF
+              $viewerUrl = is_pdf_ext($ext) ? cld_viewer_url($url, $ext) : $url;
+
+              // URL desktop (acción principal)
+              $actionDesktop = $viewerUrl;
+
+              // URL móvil (descarga forzada para PDF)
+              $downloadMobile = is_pdf_ext($ext) ? cld_force_attachment($url, $ext, $n['nombre_archivo'] ?? 'archivo.pdf') : $url;
             ?>
             <li class="noti-item" data-rid="<?= $rid ?>">
               <span class="noti-dot <?= $n['visto'] ? 'visto':'' ?>"></span>
@@ -630,7 +633,7 @@ include __DIR__ . '/menu_cliente.php';
                   · <span class="muted"><?= h($n['creado_en']) ?></span>
                 </div>
 
-                <!-- Visor inline opcional -->
+                <!-- Visor inline -->
                 <div id="viewer-<?= $rid ?>" class="viewer">
                   <?php if (is_pdf_ext($ext)): ?>
                     <iframe src="<?= h($viewerUrl) ?>" title="PDF"></iframe>
@@ -643,10 +646,15 @@ include __DIR__ . '/menu_cliente.php';
               </div>
 
               <div class="actions">
-                <a href="<?= h($url) ?>" target="_blank" rel="noopener">Ver/Descargar</a>
+                <!-- Desktop: href normal; Móvil: se reemplaza por data-mobile-href -->
+                <a id="action-<?= $rid ?>" href="<?= h($actionDesktop) ?>" target="_blank" rel="noopener"
+                   data-mobile-href="<?= h($downloadMobile) ?>"
+                   data-ext="<?= h($ext) ?>">Ver/Descargar</a>
+
                 <?php if (is_pdf_ext($ext) || is_image_ext($ext)): ?>
                   <button type="button" onclick="toggleViewer(<?= $rid ?>)">Ver aquí</button>
                 <?php endif; ?>
+
                 <?php if (!$n['visto']): ?>
                   <form method="post" style="display:inline">
                     <input type="hidden" name="rutina_id" value="<?= $rid ?>">
@@ -658,7 +666,7 @@ include __DIR__ . '/menu_cliente.php';
             <?php endforeach; ?>
           </ul>
 
-          <!-- Mostrar más / menos sin salir del panel -->
+          <!-- Mostrar más / menos -->
           <div style="margin-top:10px; display:flex; gap:8px; flex-wrap:wrap">
             <?php if (!isset($_GET['todo']) || $_GET['todo'] != '1'): ?>
               <a class="btn" href="panel_cliente.php?todo=1">📁 Ver historial completo</a>
@@ -748,6 +756,27 @@ include __DIR__ . '/menu_cliente.php';
     if (!el) return;
     el.classList.toggle('open');
   }
+
+  // ======== Modo móvil: forzar descarga para PDFs y ocultar visores ========
+  (function(){
+    const isMobile = /Android|webOS|iPhone|iPad|iPod|Opera Mini|IEMobile|Mobile/i.test(navigator.userAgent);
+    if (!isMobile) return;
+
+    // Ocultar cualquier visor inline por defecto en móvil (evita PDF en blanco)
+    document.querySelectorAll('.viewer').forEach(v => v.classList.remove('open'));
+
+    // Cambiar href del botón principal a data-mobile-href si es PDF
+    document.querySelectorAll('[id^="action-"]').forEach(a => {
+      const ext = (a.getAttribute('data-ext') || '').toLowerCase();
+      const mobileHref = a.getAttribute('data-mobile-href');
+      if (ext === 'pdf' && mobileHref) {
+        a.setAttribute('href', mobileHref);
+        a.removeAttribute('target');   // usar gestor nativo del SO
+        a.setAttribute('rel', 'noopener');
+        a.setAttribute('download', ''); // hint de descarga
+      }
+    });
+  })();
   </script>
 </body>
 </html>
