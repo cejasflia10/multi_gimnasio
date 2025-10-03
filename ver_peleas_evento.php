@@ -23,10 +23,15 @@ function col_required(mysqli $cx, $tabla, $col): bool {
   return (strtoupper($r['Null']??'')==='NO') && ($r['Default']===null) && !$isAuto;
 }
 
-/* ========= evento_id ========= */
-$evento_id = (int)($_GET['evento_id'] ?? $_SESSION['evento_id_actual'] ?? $_SESSION['evento_id'] ?? 0);
+/* ========= evento_id: GET → POST → SESSION ========= */
+$evento_id = 0;
+if (isset($_GET['evento_id']))        $evento_id = (int)$_GET['evento_id'];
+elseif (isset($_POST['evento_id']))    $evento_id = (int)$_POST['evento_id'];
+elseif (isset($_SESSION['evento_id_actual'])) $evento_id = (int)$_SESSION['evento_id_actual'];
+elseif (isset($_SESSION['evento_id']))        $evento_id = (int)$_SESSION['evento_id'];
+
 if ($evento_id <= 0) {
-  echo '<div style="max-width:900px;margin:16px auto;padding:12px;border:1px solid #f5c6cb;background:#fdecea;color:#b71c1c;border-radius:8px;">Falta <b>evento_id</b>. Volvé desde el evento.</div>';
+  echo '<div style="max-width:900px;margin:16px auto;padding:12px;border:1px solid #f5c6cb;background:#fdecea;color:#b71c1c;border-radius:8px;">Falta <b>evento_id</b>. Abrí esta página desde el evento.</div>';
   exit;
 }
 $_SESSION['evento_id_actual'] = $evento_id;
@@ -46,7 +51,6 @@ $C_RONDAS   = $pick(['rondas','rounds']);
 $C_OBS      = $pick(['observaciones','obs','comentarios','comentario','nota']);
 $C_FECHA    = $pick(['fecha','creado_en','created_at','created','fh_creacion']);
 $C_ORDEN    = $pick(['orden','orden_manual','nro','nro_orden','posicion','position','sequence','rank','numero','nro_pelea','sort']);
-
 /* columnas opcionales de pesaje real */
 $C_PESO_REAL_R = $pick(['peso_real_rojo','rojo_peso_real','peso_real_r']);
 $C_PESO_REAL_A = $pick(['peso_real_azul','azul_peso_real','peso_real_a']);
@@ -78,7 +82,6 @@ $CE_FOTO     = $pickC(['foto_competidor','foto','imagen','avatar','foto_url','im
 $CE_CAT_TEC  = $pickC(['categoria_tecnica_id','id_categoria_tecnica']);
 $CE_SEXO     = $pickC(['sexo','genero','sexo_id']);
 
-/* ========= requerimientos ========= */
 $REQ_DISC  = $CE_DISC  ? col_required($conexion,'competidores_evento',$CE_DISC)  : false;
 $REQ_MODAL = $CE_MODAL ? col_required($conexion,'competidores_evento',$CE_MODAL) : false;
 $REQ_DIV   = $CE_DIV   ? col_required($conexion,'competidores_evento',$CE_DIV)   : false;
@@ -146,7 +149,7 @@ if (($chkT=$conexion->query("SHOW TABLES LIKE 'categorias_tecnicas_evento'")) &&
   }
 }
 
-/* ========= advertencias ========= */
+/* ========= helpers/consultas de apoyo ========= */
 function encontrar_competidor_existente(mysqli $cx, $map, int $evento_id, string $dni, string $ape, string $nom, string $sexo=''){
   [$CE_ID,$CE_EVENTO,$CE_DNI,$CE_APE,$CE_NOM,$CE_SEXO] = $map;
   if(!$CE_ID || !$CE_EVENTO) return null;
@@ -184,8 +187,6 @@ function obtener_o_crear_bye(mysqli $cx, $mapCols, int $evento_id, string $sexo=
   if(!$ok || $id<=0) throw new RuntimeException('Crear BYE falló: '.($err?:'sin detalle'));
   return $id;
 }
-
-/* ========= insertar competidor ========= */
 function insertar_competidor_min(mysqli $cx, $mapCols, $data): int {
   [$CE_ID,$CE_APE,$CE_NOM,$CE_ESC,$CE_EDAD,$CE_PESO,$CE_EVENTO,$CE_OBS,$CE_DNI,$CE_DISC,$CE_MODAL,$CE_DIV,$CE_FOTO,$CE_CAT_TEC,$CE_SEXO] = $mapCols;
   $cols=[]; $vals=[]; $types='';
@@ -214,6 +215,10 @@ function insertar_competidor_min(mysqli $cx, $mapCols, $data): int {
 
 /* ========= acciones POST ========= */
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+  // reasegurar evento_id desde POST por si llegan sin querystring
+  $evento_id = (int)($_POST['evento_id'] ?? $evento_id);
+  $_SESSION['evento_id_actual'] = $evento_id;
+
   $accion   = $_POST['accion'] ?? '';
   $pelea_id = isset($_POST['pelea_id']) && is_numeric($_POST['pelea_id']) ? (int)$_POST['pelea_id'] : 0;
 
@@ -224,7 +229,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     else { $pelea_id=0; }
   }
 
-  /* guardar orden manual */
   if ($accion === 'guardar_orden') {
     if (!$C_ORDEN) {
       $_SESSION['flash_error'] = 'No existe una columna de orden en <b>peleas_evento</b> (ej. <code>orden</code>). Creá una para habilitar la numeración manual.';
@@ -260,7 +264,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     header('Location: ver_peleas_evento.php?evento_id='.$evento_id); exit;
   }
 
-  /* guardar pesajes reales (si hay columnas o tabla auxiliar) */
   if ($accion === 'guardar_pesajes') {
     $pesosR = $_POST['peso_real_r'] ?? [];
     $pesosA = $_POST['peso_real_a'] ?? [];
@@ -272,7 +275,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       $guardados = 0;
 
       if ($C_PESO_REAL_R || $C_PESO_REAL_A) {
-        // Guardar directo en peleas_evento si existen columnas
         foreach ($pesosR as $pid => $valR) {
           if (!is_numeric($pid)) continue;
           $pid = (int)$pid;
@@ -292,7 +294,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
           $st->execute(); $guardados += max(0, $st->affected_rows); $st->close();
         }
       } else {
-        // Intentar tabla auxiliar pesajes_evento
         $tieneTabla = false;
         if (($chk=$conexion->query("SHOW TABLES LIKE 'pesajes_evento'")) && $chk->num_rows>0) $tieneTabla = true;
 
@@ -315,7 +316,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $st->close();
           }
         } else {
-          // Fallback en sesión
           foreach ($pesosR as $pid => $valR) {
             if (!is_numeric($pid)) continue;
             $pid = (int)$pid;
@@ -324,7 +324,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $_SESSION['pesajes'][$evento_id][$pid]['a'] = ($valA!=='' ? fmt_num($valA) : null);
             $guardados++;
           }
-          $_SESSION['flash_warn'] = 'ℹ️ Se guardaron los pesajes en esta sesión porque no hay columnas en <b>peleas_evento</b> ni tabla <b>pesajes_evento</b>. Para persistirlos, agregá columnas <code>peso_real_rojo</code>/<code>peso_real_azul</code> o la tabla <code>pesajes_evento</code>.';
+          $_SESSION['flash_warn'] = 'ℹ️ Pesajes guardados en sesión (no hay columnas en <b>peleas_evento</b> ni tabla <b>pesajes_evento</b>).';
         }
       }
 
@@ -337,7 +337,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     header('Location: ver_peleas_evento.php?evento_id='.(int)$evento_id); exit;
   }
 
-  /* crear pelea manual */
   if ($accion === 'crear_manual') {
     $es_espera = isset($_POST['solo_rojo']) ? 1 : 0;
     $formato   = trim((string)($_POST['formato'] ?? ''));
@@ -397,7 +396,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       $_SESSION['flash_error'] = 'Completá Apellido y Nombre en esquina azul (o tildá "Solo rojo (en espera)").'; header('Location: ver_peleas_evento.php?evento_id='.$evento_id); exit;
     }
 
-    /* -------- Advertencias (no bloquean) -------- */
     $warnings = [];
     $mapComp = [$CE_ID,$CE_EVENTO,$CE_DNI,$CE_APE,$CE_NOM,$CE_SEXO];
     $mapFght = [$C_ID,$C_EVENTO,$C_ROJO,$C_AZUL];
@@ -415,7 +413,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       }
     }
 
-    /* -------- Inserción -------- */
     $conexion->begin_transaction();
     try {
       $r_id = insertar_competidor_min(
@@ -489,7 +486,6 @@ $selectRondas = $C_RONDAS ? (', p.'.bt($C_RONDAS).' AS rondas') : ', NULL AS ron
 $selectObs    = $C_OBS    ? (', p.'.bt($C_OBS).' AS observaciones') : ', NULL AS observaciones';
 $selectOrden  = $C_ORDEN  ? (', p.'.bt($C_ORDEN).' AS orden_manual') : ', NULL AS orden_manual';
 
-/* Selección base */
 $selectParts = [];
 $joins = [];
 $selectParts[] = 'p.'.bt($C_ID ?: 'id').' AS pelea_id';
@@ -497,11 +493,9 @@ $selectParts[] = substr($selectOrden, 2);
 $selectParts[] = substr($selectRondas, 2);
 $selectParts[] = substr($selectObs, 2);
 
-/* pesos reales (si existen columnas en peleas_evento) */
-if ($C_PESO_REAL_R) $selectParts[] = 'p.'.bt($C_PESO_REAL_R).' AS peso_real_r';
-else $selectParts[] = "NULL AS peso_real_r";
-if ($C_PESO_REAL_A) $selectParts[] = 'p.'.bt($C_PESO_REAL_A).' AS peso_real_a';
-else $selectParts[] = "NULL AS peso_real_a";
+/* pesos reales */
+$selectParts[] = $C_PESO_REAL_R ? 'p.'.bt($C_PESO_REAL_R).' AS peso_real_r' : "NULL AS peso_real_r";
+$selectParts[] = $C_PESO_REAL_A ? 'p.'.bt($C_PESO_REAL_A).' AS peso_real_a' : "NULL AS peso_real_a";
 
 /* competidores */
 $selectParts[] = 'cr.'.bt($CE_APE ?: 'apellido').' AS r_apellido';
@@ -528,7 +522,7 @@ if ($tablaDiv && $CE_DIV) {
   $selectParts[] = "NULL AS a_division";
 }
 
-/* modalidad (para clasificar/label) */
+/* modalidad */
 if ($tablaModal && $CE_MODAL) {
   $joins[] = "LEFT JOIN $tablaModal mr ON mr.id = cr.".bt($CE_MODAL);
   $joins[] = "LEFT JOIN $tablaModal ma ON ma.id = ca.".bt($CE_MODAL);
@@ -571,7 +565,7 @@ $st->execute();
 $peleas = $st->get_result()->fetch_all(MYSQLI_ASSOC);
 $st->close();
 
-/* ========= clasificación/orden secundario (solo label del bloque) ========= */
+/* ========= clasificación/etiqueta por bloque ========= */
 function clasificar_bloque($row){
   $modR = norm($row['r_modalidad'] ?? '');
   $modA = norm($row['a_modalidad'] ?? '');
@@ -616,38 +610,25 @@ $ph = 'assets/placeholder-user.png';
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
     :root{
-      --bg:#ffffff;
-      --card:#ffffff;
-      --text:#000000;
-      --muted:#000000;
-      --line:#cbd5e1;
-      --pill-bg:#e2e8f0;
-      --pill-text:#000000;
-      --ok-bg:#e8f5e9; --ok-bd:#c8e6c9;
-      --er-bg:#ffebee; --er-bd:#ffcdd2;
-      --wa-bg:#fff3cd; --wa-bd:#ffeeba;
-      --btn:#1e88e5; --btn-text:#000000;
-      --btn-sec-bg:#e5e7eb; --btn-sec-tx:#000000;
-      --btn-dg:#d32f2f; --btn-dg-tx:#000000;
-      --thead:#e2e8f0; --thead-text:#000000;
-      --zebra:#f9fbff;
+      --bg:#ffffff; --card:#ffffff; --text:#000000; --muted:#000000; --line:#cbd5e1;
+      --pill-bg:#e2e8f0; --pill-text:#000000;
+      --ok-bg:#e8f5e9; --ok-bd:#c8e6c9; --er-bg:#ffebee; --er-bd:#ffcdd2; --wa-bg:#fff3cd; --wa-bd:#ffeeba;
+      --btn:#1e88e5; --btn-text:#000000; --btn-sec-bg:#e5e7eb; --btn-sec-tx:#000000; --btn-dg:#d32f2f; --btn-dg-tx:#000000;
+      --thead:#e2e8f0; --thead-text:#000000; --zebra:#f9fbff;
     }
     *,*::before,*::after{box-sizing:border-box}
     html,body{background:var(--bg);color:var(--text);line-height:1.4}
     a{color:inherit}
-
     .contenedor{max-width:1150px;margin:0 auto;padding:14px;}
     .toolbar{display:flex;gap:8px;align-items:center;justify-content:space-between;flex-wrap:wrap;margin-bottom:10px;background:#fff;border:1px solid #cbd5e1;border-radius:10px;padding:8px 10px}
     .toolbar h2{margin:0;color:#000;font-weight:700;letter-spacing:.2px}
     .orden-tools{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
-
     .btn{display:inline-block;padding:7px 10px;border-radius:10px;border:0;cursor:pointer;text-decoration:none}
     .btn-primary{background:var(--btn);color:#fff !important}
     .btn-secondary{background:var(--btn-sec-bg);color:#000 !important}
     .btn-danger{background:var(--btn-dg);color:#fff !important}
     .btn-mini{padding:4px 8px;font-size:11px;border-radius:6px}
     .btn-xxs{padding:3px 6px;font-size:10.5px;border-radius:6px}
-
     .card{border:1px solid var(--line);border-radius:12px;padding:12px;margin-bottom:12px;background:var(--card);box-shadow:0 1px 2px rgba(0,0,0,.03)}
     .grid{display:grid;gap:8px}
     .grid-2{grid-template-columns:repeat(2,minmax(0,1fr))}
@@ -658,7 +639,6 @@ $ph = 'assets/placeholder-user.png';
     .field label{font-size:12px;color:#111;font-weight:600;line-height:1.25}
     .field input,.field select,.orden-input{width:100%;height:38px;padding:8px 10px;border:1px solid #94a3b8;border-radius:8px;background:#fff;color:#000;line-height:1.25}
     .helper{font-size:11.5px;color:#111}
-
     .table-wrap{width:100%;overflow-x:auto;margin-top:6px}
     table{width:100%;border-collapse:collapse;min-width:1120px;background:var(--card)}
     th,td{border:1px solid var(--line);padding:8px 10px;vertical-align:middle}
@@ -673,56 +653,22 @@ $ph = 'assets/placeholder-user.png';
     .row-actions{display:flex;gap:6px;align-items:center;justify-content:center;flex-wrap:wrap}
     .bloque{font-size:11.5px;color:#111}
     .num{font-weight:700}
-
-    /* numeración manual */
     #form-orden .orden-input{width:64px;text-align:center;border-radius:8px;border:1px solid #94a3b8;padding:6px 8px;opacity:.85;pointer-events:none}
     #form-orden.editing .orden-input{opacity:1;pointer-events:auto}
     #orden-actions{display:none}
     #form-orden.editing #orden-actions{display:flex}
-
-    /* Inputs de pesaje + resultado */
     .pesaje{display:block;font-size:12px;margin-top:4px}
     .pesaje input{width:90px;height:30px;padding:4px 6px;border:1px solid #94a3b8;border-radius:6px}
     .delta-pill{display:inline-block;padding:2px 8px;border-radius:999px;font-size:12px;margin-left:6px;border:1px solid #cbd5e1}
-    .delta-ok{background:#e8f5e9}
-    .delta-1{background:#fff3cd}
-    .delta-2{background:#ffe0b2}
-    .delta-dq{background:#ffebee}
-
-    /* Colgroup widths (desktop) */
-    .table-wrap table col.num     { width: 68px }
-    .table-wrap table col.bloque  { width: 170px }
-    .table-wrap table col.foto    { width: 58px }
-    .table-wrap table col.nombre  { width: 220px }
-    .table-wrap table col.info    { width: 320px }
-    .table-wrap table col.escuela { width: 200px }
-    .table-wrap table col.tecnica { width: 240px }
-    .table-wrap table col.vs      { width: 56px }
-    .table-wrap table col.rondas  { width: 84px }
-    .table-wrap table col.obs     { width: auto }
-    .table-wrap table col.acc     { width: 220px }
-
-    th.num,td.num,th.vs,td.vs,th.rondas,td.rondas{ text-align:center }
-    td.acc{text-align:left}
-
-    /* Responsive */
-    @media (max-width: 980px){
-      .grid-4{ grid-template-columns:1fr 1fr }
-      table{min-width:980px}
-    }
-    @media (max-width: 640px){
-      .grid-4,.grid-3,.grid-2{ grid-template-columns:1fr }
-      .toolbar{ gap:10px }
-      table{min-width:900px}
-      .pesaje input{width:84px}
-    }
-
-    /* Modo impresión */
-    @media print{
-      .toolbar,.form-actions,.row-actions,.btn{ display:none !important }
-      body{ background:#fff }
-      table{ min-width:100% }
-    }
+    .delta-ok{background:#e8f5e9} .delta-1{background:#fff3cd} .delta-2{background:#ffe0b2} .delta-dq{background:#ffebee}
+    .table-wrap table col.num{ width:68px } .table-wrap table col.bloque{ width:170px } .table-wrap table col.foto{ width:58px }
+    .table-wrap table col.nombre{ width:220px } .table-wrap table col.info{ width:320px } .table-wrap table col.escuela{ width:200px }
+    .table-wrap table col.tecnica{ width:240px } .table-wrap table col.vs{ width:56px } .table-wrap table col.rondas{ width:84px }
+    .table-wrap table col.obs{ width:auto } .table-wrap table col.acc{ width:220px }
+    th.num,td.num,th.vs,td.vs,th.rondas,td.rondas{ text-align:center } td.acc{text-align:left}
+    @media (max-width:980px){ .grid-4{grid-template-columns:1fr 1fr} table{min-width:980px} }
+    @media (max-width:640px){ .grid-4,.grid-3,.grid-2{grid-template-columns:1fr} .toolbar{gap:10px} table{min-width:900px} .pesaje input{width:84px} }
+    @media print{ .toolbar,.form-actions,.row-actions,.btn{display:none !important} body{background:#fff} table{min-width:100%} }
   </style>
   <colgroup>
     <col class="num"><col class="bloque">
@@ -755,6 +701,7 @@ $ph = 'assets/placeholder-user.png';
     <h3 style="margin:0 0 10px 0">⚡ Alta manual rápida de competidores + pelea</h3>
     <form method="POST" autocomplete="off" id="form-pelea">
       <input type="hidden" name="accion" value="crear_manual">
+      <input type="hidden" name="evento_id" value="<?= (int)$evento_id ?>"><!-- persistir -->
       <div class="grid grid-2">
         <div>
           <h4 style="margin:0 0 6px 0">🔴 Esquina Roja</h4>
@@ -882,6 +829,7 @@ $ph = 'assets/placeholder-user.png';
     <!-- Un solo form para orden y pesajes: cambiamos la acción por JS -->
     <form method="POST" id="form-orden">
       <input type="hidden" id="accionInput" name="accion" value="guardar_orden">
+      <input type="hidden" name="evento_id" value="<?= (int)$evento_id ?>"><!-- persistir -->
       <table>
         <thead>
           <tr>
@@ -918,7 +866,6 @@ $ph = 'assets/placeholder-user.png';
           $aTec = trim((string)($p['a_cat_tec'] ?? '')); if (!empty($p['a_cat_tec_desc'])) { $aTec .= ($aTec!==''?' — ':'').$p['a_cat_tec_desc']; }
           $nroMostrar = $p['orden_manual']!==null ? (int)$p['orden_manual'] : (int)$p['_n_auto'];
 
-          // prefills de peso real
           $pref_r = $p['peso_real_r'] ?? ($_SESSION['pesajes'][$evento_id][$p['pelea_id']]['r'] ?? '');
           $pref_a = $p['peso_real_a'] ?? ($_SESSION['pesajes'][$evento_id][$p['pelea_id']]['a'] ?? '');
         ?>
@@ -970,6 +917,7 @@ $ph = 'assets/placeholder-user.png';
               <div class="row-actions">
                 <a class="btn btn-xxs btn-primary" title="Editar" href="editar_pelea.php?evento_id=<?= (int)$evento_id ?>&pelea_id=<?= (int)$p['pelea_id'] ?>">✏️ Editar</a>
                 <form method="POST" class="inline" onsubmit="return confirm('¿Eliminar esta pelea? Esta acción no se puede deshacer.');">
+                  <input type="hidden" name="evento_id" value="<?= (int)$evento_id ?>">
                   <input type="hidden" name="pelea_id" value="<?= (int)$p['pelea_id'] ?>">
                   <input type="hidden" name="accion" value="delete">
                   <button type="submit" class="btn btn-xxs btn-danger" title="Eliminar">🗑️ Eliminar</button>
@@ -988,7 +936,7 @@ $ph = 'assets/placeholder-user.png';
       </div>
 
       <div class="form-actions" style="margin-top:10px; justify-content:space-between">
-        <div class="helper">Las sanciones se aplican así: ≤0.5kg ✅ en peso · ≤1.0kg −1 punto · ≤1.5kg −2 puntos · ≥2.0kg ❌ descalificado.</div>
+        <div class="helper">Regla de pesaje: ≤0.5kg ✅ en peso · ≤1.0kg −1 punto · ≤1.5kg −2 puntos · ≥2.0kg ❌ descalificado.</div>
         <div>
           <button class="btn btn-primary" type="button" id="btnGuardarPesajes">💾 Guardar pesajes</button>
         </div>
@@ -1012,7 +960,7 @@ $ph = 'assets/placeholder-user.png';
   }
   if(chk){ chk.addEventListener('change', ()=> setBlue(chk.checked)); setBlue(chk.checked); }
 
-  // Numeración manual: habilitar/deshabilitar inputs sin ocultar la tabla
+  // Numeración manual
   const btnEditar = document.getElementById('btnEditarOrden');
   const formOrden = document.getElementById('form-orden');
   const inputsOrden = document.querySelectorAll('#form-orden .orden-input');
@@ -1048,10 +996,9 @@ $ph = 'assets/placeholder-user.png';
       formOrden.submit();
     });
   }
-  // inicio: solo lectura
   setEditing(false);
 
-  // === Pesaje: calcula diferencia contra declarado y muestra sanción ===
+  // Pesaje: diferencia vs declarado
   function parseKg(s){ const n = parseFloat((s||'').toString().replace(',', '.')); return isNaN(n)?null:n; }
   function regla(diffKg){
     if (diffKg === null) return {txt:'Δ —', cls:''};
@@ -1080,7 +1027,6 @@ $ph = 'assets/placeholder-user.png';
       deltaEl.classList.remove('delta-ok','delta-1','delta-2','delta-dq');
       if (res.cls) deltaEl.classList.add(res.cls);
     }
-    // Guardar en localStorage (dispositivo)
     try{
       const key = `pesaje:<?= (int)$evento_id ?>:${peleaId}:${side}`;
       if (input.value === '') localStorage.removeItem(key); else localStorage.setItem(key, input.value);
