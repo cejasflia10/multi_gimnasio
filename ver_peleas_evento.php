@@ -687,9 +687,10 @@ $ph = 'assets/placeholder-user.png';
         <button class="btn btn-secondary" type="button" id="btnEditarOrden">✏️ Editar numeración</button>
       <?php } else { ?>
         <span class="helper">ℹ️ Para numeración manual, agregá una columna <code>orden</code> (INT) en <b>peleas_evento</b>.</span>
-      <?php } ?>
-      <a class="btn btn-mini btn-secondary" href="organizar_pelea.php?evento_id=<?= (int)$evento_id ?>">➕ Nueva pelea</a>
-      <button class="btn btn-mini btn-secondary" type="button" onclick="window.print()">🖨️ Imprimir / PDF</button>
+      <?php } ?><a class="btn btn-mini btn-secondary" href="organizar_pelea.php?evento_id=<?= (int)$evento_id ?>">➕ Nueva pelea</a>
+<a class="btn btn-mini btn-secondary" href="pesajes.php?evento_id=<?= (int)$evento_id ?>">⚖️ Pesajes</a>
+<button class="btn btn-mini btn-secondary" type="button" onclick="window.print()">🖨️ Imprimir / PDF</button>
+
     </div>
   </div>
 
