@@ -41,12 +41,16 @@ function is_image_ext(string $ext): bool {
 function is_pdf_ext(string $ext): bool { return strtolower($ext) === 'pdf'; }
 
 /** Corrige al vuelo URLs de Cloudinary para ver PDFs inline.
- *  Si detecta /image/upload/ en una URL cuyo archivo es PDF, la cambia a /raw/upload/.
+ *  Si detecta /image/upload/ o /upload/ en una URL cuyo archivo es PDF, la cambia a /raw/upload/.
  */
 function cld_viewer_url(string $url, string $ext): string {
   if (!is_pdf_ext($ext)) return $url;
-  if (preg_match('#^https?://res\.cloudinary\.com/[^/]+/image/upload/#i', $url)) {
+  // image -> raw
+  if (preg_match('#/image/upload/#i', $url)) {
     $url = preg_replace('#/image/upload/#i', '/raw/upload/', $url, 1);
+  } elseif (preg_match('#/upload/#i', $url) && !preg_match('#/raw/upload/#i', $url)) {
+    // fallback por si llega sin resource_type
+    $url = preg_replace('#/upload/#i', '/raw/upload/', $url, 1);
   }
   return $url;
 }
@@ -61,13 +65,15 @@ function cld_force_attachment(string $url, string $ext, string $filename=''): st
     $filename = preg_replace('/\?.*$/', '', $base);
     if (stripos($filename, '.pdf') === false) $filename .= '.pdf';
   }
-  // insertar fl_attachment justo después de /raw/upload/ (o corregir si viene /image/upload/)
-  if (preg_match('#/raw/upload/#i', $url)) {
-    // Si ya hubiera otras transformaciones, anteponer fl_attachment
-    $url = preg_replace('#/raw/upload/(?!fl_attachment)([^?]*)#i', '/raw/upload/fl_attachment:'.rawurlencode($filename).'/$1', $url, 1);
-  } else {
-    // si viene /image/upload/, pasamos a raw + attachment
-    $url = preg_replace('#/image/upload/#i', '/raw/upload/fl_attachment:'.rawurlencode($filename).'/', $url, 1);
+  // normalizar a raw/upload/
+  if (preg_match('#/image/upload/#i', $url)) {
+    $url = preg_replace('#/image/upload/#i', '/raw/upload/', $url, 1);
+  } elseif (preg_match('#/upload/#i', $url) && !preg_match('#/raw/upload/#i', $url)) {
+    $url = preg_replace('#/upload/#i', '/raw/upload/', $url, 1);
+  }
+  // insertar fl_attachment si no está
+  if (!preg_match('#/raw/upload/(?:[^/]*,)?fl_attachment#i', $url)) {
+    $url = preg_replace('#/raw/upload/#i', '/raw/upload/fl_attachment:'.rawurlencode($filename).'/', $url, 1);
   }
   return $url;
 }
@@ -145,7 +151,7 @@ if (!$cliente) {
     exit;
 }
 
-/* ===== Completar Datos Físicos (idéntico a tu versión) ===== */
+/* ===== Completar Datos Físicos ===== */
 if ((int)($cliente['datos_completos'] ?? 0) === 0) {
     $mensaje = "";
     if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['guardar_datos_fisicos'])) {
@@ -194,7 +200,7 @@ if ((int)($cliente['datos_completos'] ?? 0) === 0) {
         .card{width:100%;max-width:420px;background:rgba(255,255,255,.05);border:1px solid var(--border);border-radius:18px;padding:20px}
         h2{margin:0 0 12px;font:800 22px/1.2 Inter,system-ui} p{margin:0 0 16px;color:var(--muted)}
         label{display:block;margin:10px 0 6px;font-weight:700;font-size:14px}
-        input,textarea{width:100%;padding:10px;border-radius:12px;border:1px solid var(--border);background:#0f1115;color:#fg;font-size:14px}
+        input,textarea{width:100%;padding:10px;border-radius:12px;border:1px solid var(--border);background:#0f1115;color:var(--fg);font-size:14px}
         textarea{min-height:70px}
         .btn{width:100%;margin-top:12px;padding:12px;border:none;border-radius:14px;background:var(--acc);color:#111;font-weight:800;cursor:pointer}
         .msg{margin-bottom:10px;color:#ff6b6b;font-weight:700}
@@ -646,8 +652,10 @@ include __DIR__ . '/menu_cliente.php';
               </div>
 
               <div class="actions">
-                <!-- Desktop: href normal; Móvil: se reemplaza por data-mobile-href -->
-                <a id="action-<?= $rid ?>" href="<?= h($actionDesktop) ?>" target="_blank" rel="noopener"
+                <!-- Desktop: href normal; Móvil: se reemplaza por data-mobile-href SOLO al hacer click -->
+                <a id="action-<?= $rid ?>" class="action-link"
+                   href="<?= h($actionDesktop) ?>" target="_blank" rel="noopener"
+                   data-desktop-href="<?= h($actionDesktop) ?>"
                    data-mobile-href="<?= h($downloadMobile) ?>"
                    data-ext="<?= h($ext) ?>">Ver/Descargar</a>
 
@@ -757,24 +765,39 @@ include __DIR__ . '/menu_cliente.php';
     el.classList.toggle('open');
   }
 
-  // ======== Modo móvil: forzar descarga para PDFs y ocultar visores ========
+  // ======== Click controlado: en móvil, forzar descarga SOLO al hacer click ========
   (function(){
     const isMobile = /Android|webOS|iPhone|iPad|iPod|Opera Mini|IEMobile|Mobile/i.test(navigator.userAgent);
-    if (!isMobile) return;
 
-    // Ocultar cualquier visor inline por defecto en móvil (evita PDF en blanco)
-    document.querySelectorAll('.viewer').forEach(v => v.classList.remove('open'));
+    // En móvil, no abrimos visores por defecto para evitar "pantalla blanca" en webview
+    if (isMobile) {
+      document.querySelectorAll('.viewer').forEach(v => v.classList.remove('open'));
+    }
 
-    // Cambiar href del botón principal a data-mobile-href si es PDF
-    document.querySelectorAll('[id^="action-"]').forEach(a => {
-      const ext = (a.getAttribute('data-ext') || '').toLowerCase();
-      const mobileHref = a.getAttribute('data-mobile-href');
-      if (ext === 'pdf' && mobileHref) {
-        a.setAttribute('href', mobileHref);
-        a.removeAttribute('target');   // usar gestor nativo del SO
-        a.setAttribute('rel', 'noopener');
-        a.setAttribute('download', ''); // hint de descarga
-      }
+    // Manejamos click en los enlaces de acción; no navegamos automáticamente al cargar
+    document.querySelectorAll('.action-link').forEach(a => {
+      const ext         = (a.getAttribute('data-ext') || '').toLowerCase();
+      const mobileHref  = a.getAttribute('data-mobile-href') || '';
+      const desktopHref = a.getAttribute('data-desktop-href') || a.getAttribute('href') || '#';
+
+      a.addEventListener('click', function (ev) {
+        // En móvil + PDF => forzar descarga con la URL de Cloudinary (fl_attachment)
+        if (isMobile && ext === 'pdf' && mobileHref) {
+          ev.preventDefault();
+          // Navegar en la MISMA pestaña para que el webview del SO gestione la descarga
+          window.location.assign(mobileHref);
+          return;
+        }
+
+        // En desktop o si no es PDF -> comportamiento normal
+        a.setAttribute('href', desktopHref);
+        if (!isMobile) {
+          a.setAttribute('target', '_blank');
+          a.setAttribute('rel', 'noopener');
+        } else {
+          a.removeAttribute('target');
+        }
+      }, { passive: false });
     });
   })();
   </script>
