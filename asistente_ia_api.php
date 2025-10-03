@@ -123,6 +123,7 @@ $altura_m = ($altura_raw !== null && (float)$altura_raw > 0)
 
 /* ---------- Peso de referencia (dinámico en progreso_cliente) ---------- */
 $peso_ref = null;
+$resTmp = $conexion->query("SHOW_TABLES_PLACEHOLDER");
 $resTmp = $conexion->query("SHOW TABLES LIKE 'progreso_cliente'");
 if ($resTmp && $resTmp->num_rows) {
   $pesoCols = existing_cols($conexion, 'progreso_cliente', ['peso_despues','peso_fin','peso_post','peso']);
@@ -405,7 +406,7 @@ $st->close();
 $quemadas_hoy = 0.0;
 $resTmp = $conexion->query("SHOW TABLES LIKE 'progreso_cliente'");
 if ($resTmp && $resTmp->num_rows) {
-  $calCols = existing_cols($conexion, 'progreso_cliente', ['calorias_estimadas','calorias_quemadas','kcal']);
+  $calCols = existing_cols($conexion, 'progreso_cliente', ['calorias_estimadas','calorias_quemadas','kcal','calorias','calorias_ejercicio']);
   $dateCol = first_col($conexion, 'progreso_cliente', ['fecha','created_at','fecha_registro','dia','id']);
   $cliCol  = first_col($conexion, 'progreso_cliente', ['cliente_id','id_cliente']);
   $gymCol  = first_col($conexion, 'progreso_cliente', ['gimnasio_id','id_gimnasio']);
@@ -426,6 +427,67 @@ if ($resTmp && $resTmp->num_rows) {
     if ($st->fetch()) $quemadas_hoy = (float)$t_quem;
     $st->close();
   }
+}
+
+/* ---------- EJERCICIOS DE HOY (INTENTO DE TRAER "PROGRESO INTELIGENTE") ---------- */
+// Busca posibles nombres de columna para ejercicio, calorías por ejercicio y duración
+$ejCol = first_col($conexion, 'progreso_cliente', ['ejercicios','ejercicio','detalle','actividad','ejercicio_detalle','actividad_realizada','nombre_ejercicio'], false);
+$calEjCol = first_col($conexion, 'progreso_cliente', ['calorias_ejercicio','calorias_quemadas','calorias_estimadas','kcal_ejercicio','kcal','calorias'], false);
+$durCol = first_col($conexion, 'progreso_cliente', ['duracion','tiempo','minutos','dur_min'], false);
+$dateColEj = first_col($conexion, 'progreso_cliente', ['fecha','created_at','fecha_registro','dia','id'], false);
+$cliColEj  = first_col($conexion, 'progreso_cliente', ['cliente_id','id_cliente'], false);
+$gymColEj  = first_col($conexion, 'progreso_cliente', ['gimnasio_id','id_gimnasio'], false);
+
+$ejercicios_hoy = [];
+$quemadas_desglosadas = 0.0;
+
+if ($ejCol || $calEjCol) {
+    // construir SELECT dinámico
+    $sel = [];
+    $sel[] = ($dateColEj ? "`$dateColEj`" : '`id`') . " AS `fecha_reg`";
+    $sel[] = ($ejCol ? "`$ejCol`" : "''") . " AS `ejercicio`";
+    $sel[] = ($calEjCol ? "COALESCE(`$calEjCol`,0)" : "0") . " AS `kcal_ej`";
+    if ($durCol) $sel[] = "`$durCol` AS `duracion`";
+
+    $sqlEj = "SELECT " . implode(', ', $sel) . " FROM `progreso_cliente` WHERE ";
+    $conds = []; $types=''; $vars=[];
+    if ($cliColEj) { $conds[] = "`$cliColEj` = ?"; $types .= 'i'; $vars[] = $cliente_id; }
+    if ($gymColEj) { $conds[] = "`$gymColEj` = ?"; $types .= 'i'; $vars[] = $gimnasio_id; }
+    if ($dateColEj) { $conds[] = "DATE(`$dateColEj`) = ?"; $types .= 's'; $vars[] = $hoy; }
+
+    if (empty($conds)) {
+        // fallback: si no hay columnas de relación, intentamos filtrar por cliente_id/gimnasio_id (si existen en tabla)
+        $sqlEj .= "1=1";
+    } else {
+        $sqlEj .= implode(' AND ', $conds);
+    }
+    $sqlEj .= " ORDER BY " . ($dateColEj ?: 'id') . " DESC";
+
+    $stEj = prepare_or_fail($conexion, $sqlEj, 'select_ejercicios_hoy');
+    if ($types) bind_params($stEj, $types, $vars);
+    $stEj->execute();
+
+    // bind_result dinámico:  fecha_reg, ejercicio, kcal_ej, [duracion]
+    if ($durCol) $stEj->bind_result($freg, $ejtxt, $kcalEj, $durEj);
+    else         $stEj->bind_result($freg, $ejtxt, $kcalEj);
+
+    while ($stEj->fetch()) {
+        $kcalEj = is_numeric($kcalEj) ? floatval($kcalEj) : 0.0;
+        $durEj = isset($durEj) ? (is_numeric($durEj) ? floatval($durEj) : 0) : null;
+        $ejercicios_hoy[] = [
+            'fecha' => $freg,
+            'ejercicio' => $ejtxt,
+            'kcal' => $kcalEj,
+            'duracion' => $durEj
+        ];
+        $quemadas_desglosadas += $kcalEj;
+    }
+    $stEj->close();
+}
+
+// Si hay calorías desglosadas, priorizamos esa suma como quemadas del día
+if ($quemadas_desglosadas > 0) {
+    $quemadas_hoy = $quemadas_desglosadas;
 }
 
 $balance_neto = (float)$consumidas_hoy - (float)$quemadas_hoy;
@@ -494,6 +556,30 @@ $estado_neto  = ($balance_neto > 250) ? 'Superávit' : (($balance_neto < -250) ?
       </div>
       <?php $pct = max(0, min(100, $kcal_obj>0 ? round($consumidas_hoy*100/$kcal_obj) : 0)); ?>
       <div class="progress"><span style="width:<?= $pct ?>%"></span></div>
+
+      <!-- Mostrar ejercicios de hoy si existen -->
+      <?php if (!empty($ejercicios_hoy)): ?>
+        <h4 style="margin-top:12px">🏋️ Ejercicios de hoy</h4>
+        <table style="margin-top:8px">
+          <thead><tr><th>Ejercicio</th><th>Duración</th><th>kcal</th></tr></thead>
+          <tbody>
+            <?php foreach($ejercicios_hoy as $r): ?>
+              <tr>
+                <td><?= h($r['ejercicio']) ?: '—' ?></td>
+                <td><?= $r['duracion'] ? (int)$r['duracion'] . ' min' : '—' ?></td>
+                <td><?= $r['kcal'] ? (int)round($r['kcal']) . ' kcal' : '—' ?></td>
+              </tr>
+            <?php endforeach; ?>
+            <tr>
+              <td><strong>Total</strong></td>
+              <td></td>
+              <td><strong><?= (int)round($quemadas_desglosadas) ?> kcal</strong></td>
+            </tr>
+          </tbody>
+        </table>
+      <?php else: ?>
+        <p class="muted" style="margin-top:12px">No se encontraron registros de ejercicios hoy en la tabla <code>progreso_cliente</code>.</p>
+      <?php endif; ?>
     </div>
   </section>
 

@@ -1,149 +1,108 @@
 <?php
+// guardar_progreso.php
 if (session_status() === PHP_SESSION_NONE) session_start();
-include 'conexion.php';
+require_once __DIR__ . '/conexion.php';
 
-$cliente_id = $_SESSION['cliente_id'] ?? 0;
-$gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
-
-if ($cliente_id == 0 || $gimnasio_id == 0) {
-    echo "<div style='color:red; text-align:center;'>❌ Acceso denegado.</div>";
-    exit;
+$cliente_id  = (int)($_SESSION['cliente_id'] ?? 0);
+$gimnasio_id = (int)($_SESSION['gimnasio_id'] ?? 0);
+if ($cliente_id === 0 || $gimnasio_id === 0) {
+  http_response_code(403);
+  exit('Acceso denegado');
 }
 
-$peso_antes = floatval($_POST['peso_antes'] ?? 0);
-$peso_despues = floatval($_POST['peso_despues'] ?? 0);
-$altura_cm = floatval($_POST['altura'] ?? 0);
-$duracion = intval($_POST['duracion'] ?? 0);
-$esfuerzo = $_POST['esfuerzo'] ?? 'medio';
-$enfermedades = trim($_POST['enfermedades'] ?? '');
-$calorias_quemadas = intval($_POST['calorias_quemadas'] ?? 0);
-$fecha = date('Y-m-d');
-$hora = date('H:i:s');
+/** Rangos y helpers (mismo parser robusto de antes) */
+const PESO_MIN    = 0.10;
+const PESO_MAX    = 9999.99;
+const ALTURA_MIN  = 30.00;
+const ALTURA_MAX  = 300.00;
+const DUR_MIN     = 0;
+const DUR_MAX     = 1440;
 
-// Calcular IMC
-$altura_m = $altura_cm / 100;
-$peso_actual = $peso_despues > 0 ? $peso_despues : $peso_antes;
-$imc = $altura_m > 0 ? round($peso_actual / ($altura_m * $altura_m), 2) : 0;
-
-// Objetivo basado en IMC
-$objetivo = '';
-if ($imc < 18.5) {
-    $objetivo = 'subir de peso';
-} elseif ($imc > 25) {
-    $objetivo = 'bajar de peso';
-} else {
-    $objetivo = 'mantener peso';
+function normalizar_decimal($rawVal, string $key, float $min, float $max): array {
+  if ($rawVal === null) return [false, "Falta el campo {$key}", null];
+  $raw = trim((string)$rawVal);
+  if ($raw === '') return [false, "El campo {$key} es requerido", null];
+  $clean = preg_replace('/[^0-9\.,]/u', '', $raw);
+  if ($clean === '' || preg_match('/^[\.,]+$/', $clean)) return [false, "El campo {$key} es requerido", null];
+  $clean = preg_replace('/\.(?=\d{3}(\D|$))/', '', $clean);
+  $clean = str_replace(',', '.', $clean);
+  if ($clean[0] === '.') $clean = '0'.$clean;
+  if (!is_numeric($clean)) return [false, "Valor inválido en {$key}", null];
+  $num = (float)$clean;
+  if (!is_finite($num) || $num < $min || $num > $max) return [false, "Valor fuera de rango en {$key} (min {$min}, max {$max})", null];
+  return [true, null, number_format($num, 2, '.', '')];
+}
+function normalizar_int($rawVal, string $key, int $min, int $max): array {
+  if ($rawVal === null) return [false, "Falta el campo {$key}", null];
+  $raw = trim((string)$rawVal);
+  if ($raw === '') return [false, "El campo {$key} es requerido", null];
+  $raw = str_replace([' ', "'"], '', $raw);
+  $raw = str_replace(',', '.', $raw);
+  if (!is_numeric($raw)) return [false, "Valor inválido en {$key}", null];
+  $val = (int)round((float)$raw);
+  if ($val < $min || $val > $max) return [false, "Valor fuera de rango en {$key} (min {$min}, max {$max})", null];
+  return [true, null, $val];
+}
+function txt($k){ return trim((string)($_POST[$k] ?? '')); }
+function objetivo_normalizado($raw) {
+  $raw = strtolower(trim((string)$raw));
+  if (in_array($raw, ['mantener','bajar','subir'], true)) return $raw;
+  if (in_array($raw, ['down','baja','perder'], true)) return 'bajar';
+  if (in_array($raw, ['up','ganar','aumentar'], true)) return 'subir';
+  return 'mantener';
 }
 
-// Guardar datos en tabla (crea si no existe antes)
-$conexion->query("CREATE TABLE IF NOT EXISTS progreso_cliente (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    cliente_id INT,
-    gimnasio_id INT,
-    fecha DATE,
-    hora TIME,
-    peso_antes DECIMAL(5,2),
-    peso_despues DECIMAL(5,2),
-    altura_cm DECIMAL(5,2),
-    duracion INT,
-    esfuerzo VARCHAR(10),
-    enfermedades TEXT,
-    calorias INT,
-    imc DECIMAL(5,2),
-    objetivo VARCHAR(50)
-)");
+/** Captura */
+list($ok1, $e1, $peso_antes)     = normalizar_decimal($_POST['peso_antes']   ?? null, 'peso_antes',   PESO_MIN, PESO_MAX);
+list($ok2, $e2, $peso_despues)   = normalizar_decimal($_POST['peso_despues'] ?? null, 'peso_despues', PESO_MIN, PESO_MAX);
+list($ok3, $e3, $altura_cm)      = normalizar_decimal($_POST['altura']       ?? null, 'altura',       ALTURA_MIN, ALTURA_MAX);
+list($ok4, $e4, $duracion_min)   = normalizar_int    ($_POST['duracion']     ?? null, 'duracion',     DUR_MIN, DUR_MAX);
 
-$stmt = $conexion->prepare("INSERT INTO progreso_cliente
-    (cliente_id, gimnasio_id, fecha, hora, peso_antes, peso_despues, altura_cm, duracion, esfuerzo, enfermedades, calorias, imc, objetivo)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
-$stmt->bind_param("iissddidssids", 
-    $cliente_id, $gimnasio_id, $fecha, $hora, 
-    $peso_antes, $peso_despues, $altura_cm, $duracion, 
-    $esfuerzo, $enfermedades, $calorias_quemadas, $imc, $objetivo
+$esfuerzo = strtolower(txt('esfuerzo'));          // no se guarda
+$objetivo = objetivo_normalizado(txt('objetivo')); // ENUM
+$notas    = txt('notas');
+
+$errores = array_filter([$e1,$e2,$e3,$e4]);
+if (!($ok1 && $ok2 && $ok3 && $ok4)) {
+  http_response_code(400);
+  echo "Errores: " . implode(' | ', $errores);
+  exit;
+}
+
+/** Recalcular calorías servidor */
+$factor = 7; if ($esfuerzo==='bajo') $factor=4; if ($esfuerzo==='alto') $factor=10;
+$calorias_quemadas = max(0, (int)round($duracion_min * $factor));
+
+/** INSERT */
+$sql = "INSERT INTO progreso
+  (cliente_id, gimnasio_id, peso_antes, peso_despues, altura_cm, duracion_min, calorias_quemadas, objetivo, notas)
+  VALUES (?,?,?,?,?,?,?,?,?)";
+$st = $conexion->prepare($sql);
+if (!$st) { http_response_code(500); exit('Error preparando SQL: '.$conexion->error); }
+
+$st->bind_param(
+  "iisssiiss",
+  $cliente_id,
+  $gimnasio_id,
+  $peso_antes,        // s "##.##"
+  $peso_despues,      // s
+  $altura_cm,         // s
+  $duracion_min,      // i
+  $calorias_quemadas, // i
+  $objetivo,          // s
+  $notas              // s
 );
-$stmt->execute();
-$stmt->close();
 
-?>
+$ok = $st->execute();
+$err = $st->error;
+$new_id = $conexion->insert_id ?? 0;
+$st->close();
 
-<!DOCTYPE html>
-<html lang="es">
-<head>
-    <meta charset="UTF-8">
-    <title>Progreso Registrado</title>
-    <style>
-        body {
-            background: black;
-            color: gold;
-            font-family: Arial;
-            padding: 30px;
-            text-align: center;
-        }
-        .recuadro {
-            background: #111;
-            padding: 20px;
-            margin: auto;
-            border-radius: 10px;
-            border: 1px solid gold;
-            max-width: 600px;
-        }
-        .recomendacion {
-            background: #222;
-            margin-top: 20px;
-            padding: 15px;
-            border-radius: 8px;
-            color: #90ee90;
-        }
-        .boton {
-            display: inline-block;
-            margin-top: 30px;
-            padding: 10px 20px;
-            background: gold;
-            color: black;
-            border: none;
-            border-radius: 8px;
-            font-weight: bold;
-            text-decoration: none;
-        }
-    </style>
-</head>
-<body>
-
-<div class="recuadro">
-    <h2>✅ Progreso registrado con éxito</h2>
-    <p><strong>IMC:</strong> <?= $imc ?> - Objetivo: <strong><?= $objetivo ?></strong></p>
-    <p><strong>Calorías estimadas quemadas:</strong> <?= $calorias_quemadas ?> kcal</p>
-
-    <div class="recomendacion">
-        <?php
-        echo "<h3>🍽️ Recomendación Semanal</h3>";
-
-        if ($objetivo === 'bajar de peso') {
-            echo "<p>- Dieta rica en vegetales, proteínas magras, bajo en harinas.<br>
-            - Evitar azúcares simples y frituras.<br>
-            - Tomar 2-3 L de agua por día.</p>";
-        } elseif ($objetivo === 'subir de peso') {
-            echo "<p>- Incorporar frutos secos, batidos post entrenamiento.<br>
-            - Dieta rica en proteínas y carbohidratos buenos.<br>
-            - Comer cada 3 horas.</p>";
-        } else {
-            echo "<p>- Seguir con alimentación balanceada.<br>
-            - Buen consumo de frutas, verduras y proteínas.<br>
-            - Mantener actividad física regular.</p>";
-        }
-
-        if (stripos($enfermedades, 'diab') !== false) {
-            echo "<p><strong>⚠️ Nota por diabetes:</strong> evitar harinas y azúcares. Preferir alimentos integrales y controlar índice glucémico.</p>";
-        }
-
-        if (stripos($enfermedades, 'hiperten') !== false) {
-            echo "<p><strong>⚠️ Nota por hipertensión:</strong> reducir sodio, evitar embutidos y grasas saturadas. Consumir frutas frescas.</p>";
-        }
-        ?>
-    </div>
-
-    <a href="panel_cliente.php" class="boton">Volver al Panel</a>
-</div>
-
-</body>
-</html>
+if ($ok) {
+  // Tras guardar, vamos al asistente pasando el id recién creado:
+  header('Location: asistente_nutricional.php?ok=1&progreso_id='.(int)$new_id);
+  exit;
+} else {
+  http_response_code(500);
+  echo '❌ Error al guardar: ' . $err;
+}

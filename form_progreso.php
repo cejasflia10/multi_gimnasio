@@ -1,4 +1,5 @@
 <?php
+// registrar_progreso.php
 if (session_status() === PHP_SESSION_NONE) session_start();
 require_once __DIR__ . '/conexion.php';
 include __DIR__ . '/menu_cliente.php';
@@ -13,94 +14,44 @@ if ($cliente_id === 0 || $gimnasio_id === 0) {
 
 // helpers
 function h($s){ return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); }
-
-// ==== helpers DB (introspección segura) ====
 function db_has_table(mysqli $db, string $t): bool {
   $t = $db->real_escape_string($t);
   $res = $db->query("SHOW TABLES LIKE '{$t}'");
   return ($res && $res->num_rows > 0);
-}
-function db_has_col(mysqli $db, string $t, string $c): bool {
-  $t = $db->real_escape_string($t);
-  $c = $db->real_escape_string($c);
-  $res = $db->query("SHOW COLUMNS FROM `{$t}` LIKE '{$c}'");
-  return ($res && $res->num_rows > 0);
-}
-function pick_col(mysqli $db, string $t, array $candidates): ?string {
-  foreach ($candidates as $c) if (db_has_col($db, $t, $c)) return $c;
-  return null;
 }
 
 // === Prefill desde datos_fisicos (último registro) ===
 $peso_prefill = '';
 $altura_prefill = '';
 if (db_has_table($conexion, 'datos_fisicos')) {
-  $pesoCol   = pick_col($conexion, 'datos_fisicos', ['peso','peso_kg']);
-  $alturaCol = pick_col($conexion, 'datos_fisicos', ['altura_cm','altura']);
-  $fechaCol  = pick_col($conexion, 'datos_fisicos', ['fecha','created_at','fecha_registro']);
-  if ($pesoCol && $alturaCol && $fechaCol) {
-    $sqlPF = "SELECT `$pesoCol` AS peso, `$alturaCol` AS altura
-              FROM `datos_fisicos`
-              WHERE cliente_id=? AND gimnasio_id=?
-              ORDER BY `$fechaCol` DESC
-              LIMIT 1";
-    if ($stPF = @$conexion->prepare($sqlPF)) {
-      $stPF->bind_param("ii", $cliente_id, $gimnasio_id);
-      if ($stPF->execute()) {
-        if ($row = $stPF->get_result()->fetch_assoc()) {
-          $peso_prefill   = trim((string)($row['peso'] ?? ''));
-          $altura_prefill = trim((string)($row['altura'] ?? ''));
-        }
+  $sqlPF = "SELECT peso AS p, altura_cm AS a
+            FROM datos_fisicos
+            WHERE cliente_id=? AND gimnasio_id=?
+            ORDER BY fecha DESC, id DESC
+            LIMIT 1";
+  // si tus columnas son otras (peso_kg / altura), cambia el SELECT de arriba
+  if ($stPF = @$conexion->prepare($sqlPF)) {
+    $stPF->bind_param("ii", $cliente_id, $gimnasio_id);
+    if ($stPF->execute()) {
+      if ($row = $stPF->get_result()->fetch_assoc()) {
+        $peso_prefill   = trim((string)($row['p'] ?? ''));
+        $altura_prefill = trim((string)($row['a'] ?? ''));
       }
-      $stPF->close();
     }
+    $stPF->close();
   }
 }
 
-// === Historial robusto (detecta tabla/columnas y evita fatales) ===
+// === Historial (tabla fija: progreso) ===
 $historial = [];
-$tables = ['progreso','progreso_fisico','progresos'];
-$t = null;
-foreach ($tables as $tb) { if (db_has_table($conexion, $tb)) { $t = $tb; break; } }
-
-if ($t) {
-  // columnas posibles
-  $cFecha = pick_col($conexion, $t, ['fecha','created_at','fecha_registro']);
-  $cPA    = pick_col($conexion, $t, ['peso_antes','peso_inicio']);
-  $cPD    = pick_col($conexion, $t, ['peso_despues','peso_fin','peso_post']);
-  $cAlt   = pick_col($conexion, $t, ['altura_cm','altura']);
-  $cDur   = pick_col($conexion, $t, ['duracion_min','duracion']);
-  $cCal   = pick_col($conexion, $t, ['calorias_quemadas','calorias']);
-
-  // filtros (por si alguna tabla no tuviera las dos columnas)
-  $cCli   = pick_col($conexion, $t, ['cliente_id','id_cliente']);
-  $cGym   = pick_col($conexion, $t, ['gimnasio_id','id_gimnasio']);
-
-  // SELECT parts solo con columnas existentes; lo que no exista, lo suplimos con NULL/constante
-  $parts = [];
-  $parts[] = $cFecha ? "`$cFecha` AS fecha"           : "'0000-00-00' AS fecha";
-  $parts[] = $cPA    ? "`$cPA` AS peso_antes"         : "NULL AS peso_antes";
-  $parts[] = $cPD    ? "`$cPD` AS peso_despues"       : "NULL AS peso_despues";
-  $parts[] = $cAlt   ? "`$cAlt` AS altura_cm"         : "NULL AS altura_cm";
-  $parts[] = $cDur   ? "`$cDur` AS duracion_min"      : "NULL AS duracion_min";
-  $parts[] = $cCal   ? "`$cCal` AS calorias_quemadas" : "NULL AS calorias_quemadas";
-
-  $sql = "SELECT ".implode(", ", $parts)." FROM `{$t}` WHERE 1";
-  $bindType = ''; $bindVals = [];
-
-  if ($cCli) { $sql .= " AND `$cCli` = ?"; $bindType .= 'i'; $bindVals[] = $cliente_id; }
-  if ($cGym) { $sql .= " AND `$cGym` = ?"; $bindType .= 'i'; $bindVals[] = $gimnasio_id; }
-
-  $orderCol = $cFecha ?: (db_has_col($conexion,$t,'id') ? 'id' : null);
-  if ($orderCol) $sql .= " ORDER BY `$orderCol` DESC";
-  $sql .= " LIMIT 10";
-
-  if ($st = @$conexion->prepare($sql)) {
-    if ($bindType !== '') {
-      // bindeo simple (dos casos) para evitar call_user_func_array
-      if ($bindType === 'i')      { $st->bind_param('i', $bindVals[0]); }
-      elseif ($bindType === 'ii') { $st->bind_param('ii', $bindVals[0], $bindVals[1]); }
-    }
+if (db_has_table($conexion, 'progreso')) {
+  $sqlH = "SELECT fecha, objetivo, notas, peso_antes, peso_despues, altura_cm, duracion_min, calorias_quemadas
+           FROM progreso
+           WHERE cliente_id=? AND gimnasio_id=?
+           ORDER BY fecha DESC, id DESC
+           LIMIT 10";
+  if ($st = @$conexion->prepare($sqlH)) {
+    $st->bind_param("ii", $cliente_id, $gimnasio_id);
     if ($st->execute()) {
       $res = $st->get_result();
       while ($r = $res->fetch_assoc()) $historial[] = $r;
@@ -122,14 +73,15 @@ if ($t) {
     body{ margin:0; background:var(--bg); color:var(--fg); font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Arial }
     .contenedor{ max-width:1100px; margin:16px auto 48px; padding:0 16px; }
     h2{ text-align:center; margin:10px 0 18px; }
+    .alert{ background:#112b1a; border:1px solid #1f6f3d; color:#a7f3d0; padding:10px 12px; border-radius:10px; margin:8px 0 18px; }
     .grid{ display:grid; gap:16px; grid-template-columns: 1fr; }
     @media (min-width:900px){ .grid{ grid-template-columns: 1fr 1fr; } }
     .card{ background:#111; border:1px solid var(--border); border-radius:16px; padding:16px; }
     .formulario label{ display:block; margin:12px 0 6px; font-weight:700; color:var(--acc); }
     .control{ position:relative }
-    .control input, .control select{
+    .control input, .control select, .control textarea{
       width:100%; padding:12px 42px 12px 12px; border:1px solid #333; border-radius:12px;
-      background:#1a1d24; color:var(--fg); font-size:16px;
+      background:#1a1d24; color:var(--fg); font-size:16px; resize:vertical;
     }
     .unit{
       position:absolute; right:10px; top:50%; transform:translateY(-50%);
@@ -147,6 +99,7 @@ if ($t) {
     th,td{ padding:10px; border-bottom:1px solid rgba(255,255,255,.08); text-align:left }
     th{ color:var(--muted); font-weight:700 }
     .ok{ color:#22c55e } .warn{ color:#f59e0b } .bad{ color:#ef4444 }
+    .nowrap{ white-space:nowrap }
   </style>
   <script>
     function calcAll() {
@@ -195,45 +148,63 @@ if ($t) {
   <div class="contenedor">
     <h2>📈 Registrar Progreso Físico</h2>
 
+    <?php if (isset($_GET['ok'])): ?>
+      <div class="alert">✅ Progreso guardado correctamente.</div>
+    <?php endif; ?>
+
     <div class="grid">
       <!-- Formulario -->
-      <form method="POST" action="guardar_progreso.php" oninput="calcAll()" class="card formulario" autocomplete="off" novalidate>
+      <form id="progresoForm" method="POST" action="guardar_progreso.php" oninput="calcAll()" class="card formulario" autocomplete="off" novalidate>
         <label for="peso_antes">Peso antes del entrenamiento</label>
         <div class="control">
-          <input type="number" name="peso_antes" id="peso_antes" step="0.1" min="0" inputmode="decimal" placeholder="Ej: 78.5" value="<?= h($peso_prefill) ?>" required>
+          <input form="progresoForm" type="number" name="peso_antes" id="peso_antes" step="0.1" min="0.1" inputmode="decimal" placeholder="Ej: 78.5" value="<?= h($peso_prefill) ?>" required>
           <span class="unit">kg</span>
         </div>
 
         <label for="peso_despues">Peso después del entrenamiento</label>
         <div class="control">
-          <input type="number" name="peso_despues" id="peso_despues" step="0.1" min="0" inputmode="decimal" placeholder="Ej: 78.0" required>
+          <input form="progresoForm" type="number" name="peso_despues" id="peso_despues" step="0.1" min="0.1" inputmode="decimal" placeholder="Ej: 78.0" required>
           <span class="unit">kg</span>
         </div>
 
         <label for="altura">Altura</label>
         <div class="control">
-          <input type="number" name="altura" id="altura" step="0.1" min="0" inputmode="decimal" placeholder="Ej: 175" value="<?= h($altura_prefill) ?>" required>
+          <input form="progresoForm" type="number" name="altura" id="altura" step="0.1" min="30" inputmode="decimal" placeholder="Ej: 175" value="<?= h($altura_prefill) ?>" required>
           <span class="unit">cm</span>
         </div>
 
         <label for="duracion">Duración del entrenamiento</label>
         <div class="control">
-          <input type="number" name="duracion" id="duracion" step="1" min="0" inputmode="numeric" placeholder="Ej: 60" required>
+          <input form="progresoForm" type="number" name="duracion" id="duracion" step="1" min="0" inputmode="numeric" placeholder="Ej: 60" required>
           <span class="unit">min</span>
         </div>
 
         <label for="esfuerzo">Nivel de esfuerzo físico</label>
         <div class="control">
-          <select name="esfuerzo" id="esfuerzo" required>
+          <select form="progresoForm" name="esfuerzo" id="esfuerzo" required>
             <option value="bajo">Bajo</option>
             <option value="medio" selected>Medio</option>
             <option value="alto">Alto</option>
           </select>
         </div>
 
+        <label for="objetivo">Objetivo</label>
+        <div class="control">
+          <select form="progresoForm" name="objetivo" id="objetivo" required>
+            <option value="mantener" selected>Mantener</option>
+            <option value="bajar">Bajar de peso</option>
+            <option value="subir">Subir de peso</option>
+          </select>
+        </div>
+
         <label for="enfermedades">Condiciones médicas (ej: diabetes, hipertensión) <span class="muted">(opcional)</span></label>
         <div class="control">
-          <input type="text" name="enfermedades" id="enfermedades" placeholder="Si aplica">
+          <input form="progresoForm" type="text" name="enfermedades" id="enfermedades" placeholder="Si aplica">
+        </div>
+
+        <label for="notas">Notas / Observaciones <span class="muted">(opcional)</span></label>
+        <div class="control">
+          <textarea form="progresoForm" name="notas" id="notas" rows="3" placeholder="Anota sensaciones, ejercicios clave, carga, etc."></textarea>
         </div>
 
         <!-- Outputs en vivo -->
@@ -245,8 +216,8 @@ if ($t) {
           <div class="out ok" id="hidr_msg">Hidratación OK</div>
         </div>
 
-        <input type="hidden" name="calorias_quemadas" id="calorias_quemadas" value="0">
-        <button type="submit" class="btn">Guardar Progreso</button>
+        <input form="progresoForm" type="hidden" name="calorias_quemadas" id="calorias_quemadas" value="0">
+        <button form="progresoForm" type="submit" class="btn">Guardar Progreso</button>
       </form>
 
       <!-- Historial -->
@@ -256,7 +227,8 @@ if ($t) {
           <table>
             <thead>
               <tr>
-                <th>Fecha</th>
+                <th class="nowrap">Fecha</th>
+                <th class="nowrap">Objetivo</th>
                 <th>Peso antes</th>
                 <th>Peso después</th>
                 <th>Δ kg</th>
@@ -264,18 +236,21 @@ if ($t) {
                 <th>IMC↓</th>
                 <th>Dur.</th>
                 <th>Kcal</th>
+                <th>Notas</th>
               </tr>
             </thead>
             <tbody>
               <?php foreach ($historial as $r):
-                $pa = (float)($r['peso_antes'] ?? 0);
-                $pd = (float)($r['peso_despues'] ?? 0);
+                $pa  = (float)($r['peso_antes'] ?? 0);
+                $pd  = (float)($r['peso_despues'] ?? 0);
                 $acm = (float)($r['altura_cm'] ?? 0);
                 $delta = $pd - $pa;
                 $imc = ($acm>0) ? $pd / pow($acm/100,2) : 0;
+                $obj = (string)($r['objetivo'] ?? '');
               ?>
               <tr>
                 <td><?= h($r['fecha'] ?? '') ?></td>
+                <td><?= h($obj ?: '—') ?></td>
                 <td><?= number_format($pa,1,',','.') ?> kg</td>
                 <td><?= number_format($pd,1,',','.') ?> kg</td>
                 <td><?= ($delta>=0?'+':'−').number_format(abs($delta),2,',','.') ?> kg</td>
@@ -283,6 +258,7 @@ if ($t) {
                 <td><?= number_format($imc,1,',','.') ?></td>
                 <td><?= (int)($r['duracion_min'] ?? 0) ?> min</td>
                 <td><?= (int)($r['calorias_quemadas'] ?? 0) ?> kcal</td>
+                <td><?= h((string)($r['notas'] ?? '')) ?></td>
               </tr>
               <?php endforeach; ?>
             </tbody>

@@ -27,6 +27,28 @@ function fmt_bytes($b){
   return number_format($b, ($i>1?2:0), ',', '.') . ' ' . $u[$i];
 }
 
+/* === Helpers para visor y Cloudinary (no modifican BD) === */
+function is_image_ext(string $ext): bool {
+  $ext = strtolower($ext);
+  return in_array($ext, ['jpg','jpeg','png','gif','webp'], true);
+}
+function is_pdf_ext(string $ext): bool {
+  return strtolower($ext) === 'pdf';
+}
+/**
+ * Corrige al vuelo URLs de Cloudinary para ver PDFs inline.
+ * Si detecta /image/upload/ en una URL cuyo archivo es PDF, la cambia a /raw/upload/.
+ * No guarda cambios, solo para el <iframe>.
+ */
+function cld_viewer_url(string $url, string $ext): string {
+  if (!is_pdf_ext($ext)) return $url;
+  // Solo tocar si es de Cloudinary
+  if (preg_match('#^https?://res\.cloudinary\.com/[^/]+/image/upload/#i', $url)) {
+    $url = preg_replace('#/image/upload/#i', '/raw/upload/', $url, 1);
+  }
+  return $url;
+}
+
 /* Polyfill str_starts_with para PHP < 8 */
 if (!function_exists('str_starts_with')) {
   function str_starts_with($haystack, $needle) {
@@ -268,7 +290,7 @@ if ($membresia) {
   </div>';
 }
 
-/* ===== PROMOCIONES (idéntico a tu lógica) ===== */
+/* ===== PROMOCIONES ===== */
 $promos = [];
 $hasCols = [
   'gimnasio_id' => col_exists($conexion,'promociones','gimnasio_id'),
@@ -490,6 +512,10 @@ include __DIR__ . '/menu_cliente.php';
     .noti-name{ font-weight:700 }
     .chip{display:inline-block;padding:2px 8px;border-radius:999px;border:1px solid #334155;background:#0f172a;font-size:.8rem}
     .actions a, .actions button{display:inline-block;padding:6px 10px;border-radius:8px;border:1px solid #334155;background:#0f172a;color:#e5e7eb;text-decoration:none}
+    .viewer{display:none;margin-top:10px;width:100%}
+    .viewer.open{display:block}
+    .viewer iframe{width:100%;height:520px;border:0;border-radius:12px}
+    .viewer img{max-width:100%;height:auto;border-radius:12px;border:1px solid var(--border)}
   </style>
 </head>
 <body>
@@ -537,7 +563,7 @@ include __DIR__ . '/menu_cliente.php';
       </div>
       <div style="display:flex; gap:8px; flex-wrap:wrap; justify-content:center">
         <a class="btn" href="cliente_editar.php">Editar perfil</a>
-        <a class="btn" href="generar_qr_individual.php?id=<?= (int)$cliente['id'] ?>" target="_blank">📲 Mi QR</a>
+        <a class="btn" href="generar_qr_individual.php?id=<?= (int)$cliente['id'] ?>" target="_blank" rel="noopener">📲 Mi QR</a>
         <a class="btn" href="cliente_acceso.php?logout=1">🚪 Salir</a>
       </div>
     </section>
@@ -587,23 +613,43 @@ include __DIR__ . '/menu_cliente.php';
           <p class="muted">No tenés rutinas/archivos disponibles por ahora.</p>
         <?php else: ?>
           <ul class="noti-list" id="lista-rutinas" style="max-height:480px; overflow:auto">
-            <?php foreach ($rutinas as $n): ?>
-            <li class="noti-item">
+            <?php foreach ($rutinas as $n): 
+              $ext = strtolower((string)($n['extension'] ?? ''));
+              $url = (string)$n['url_archivo'];
+              $viewerUrl = cld_viewer_url($url, $ext);
+              $rid = (int)$n['id'];
+            ?>
+            <li class="noti-item" data-rid="<?= $rid ?>">
               <span class="noti-dot <?= $n['visto'] ? 'visto':'' ?>"></span>
               <div style="flex:1 1 auto">
                 <div class="noti-name"><?= h($n['nombre_archivo']) ?></div>
                 <div class="muted" style="font-size:.9rem">
-                  <span class="chip"><?= strtoupper(h($n['extension'] ?: 'archivo')) ?></span>
+                  <span class="chip"><?= strtoupper(h($ext ?: 'archivo')) ?></span>
                   · <?= h(fmt_bytes($n['tamano_bytes'])) ?>
                   · Subido por <?= h($n['profesor']) ?>
                   · <span class="muted"><?= h($n['creado_en']) ?></span>
                 </div>
+
+                <!-- Visor inline opcional -->
+                <div id="viewer-<?= $rid ?>" class="viewer">
+                  <?php if (is_pdf_ext($ext)): ?>
+                    <iframe src="<?= h($viewerUrl) ?>" title="PDF"></iframe>
+                  <?php elseif (is_image_ext($ext)): ?>
+                    <img src="<?= h($url) ?>" alt="<?= h($n['nombre_archivo']) ?>">
+                  <?php else: ?>
+                    <div class="muted">Vista previa no disponible para este tipo de archivo.</div>
+                  <?php endif; ?>
+                </div>
               </div>
+
               <div class="actions">
-                <a href="<?= h($n['url_archivo']) ?>" target="_blank" rel="noopener">Ver/Descargar</a>
+                <a href="<?= h($url) ?>" target="_blank" rel="noopener">Ver/Descargar</a>
+                <?php if (is_pdf_ext($ext) || is_image_ext($ext)): ?>
+                  <button type="button" onclick="toggleViewer(<?= $rid ?>)">Ver aquí</button>
+                <?php endif; ?>
                 <?php if (!$n['visto']): ?>
                   <form method="post" style="display:inline">
-                    <input type="hidden" name="rutina_id" value="<?= (int)$n['id'] ?>">
+                    <input type="hidden" name="rutina_id" value="<?= $rid ?>">
                     <button type="submit" name="marcar_visto">Marcar visto</button>
                   </form>
                 <?php endif; ?>
@@ -695,6 +741,13 @@ include __DIR__ . '/menu_cliente.php';
         ulReservas.innerHTML = '<li class="res-item" style="color:#ff6b6b">Error al cargar reservas.</li>';
       });
   });
+
+  // ======== Visor inline (PDF/Imagen) ========
+  function toggleViewer(id){
+    const el = document.getElementById('viewer-'+id);
+    if (!el) return;
+    el.classList.toggle('open');
+  }
   </script>
 </body>
 </html>

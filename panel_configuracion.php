@@ -8,6 +8,11 @@ if (session_status() === PHP_SESSION_NONE) session_start();
 require_once __DIR__ . '/conexion.php';
 @include __DIR__ . '/menu_horizontal.php';
 
+$logDir = __DIR__ . '/tmp';
+if (!is_dir($logDir)) @mkdir($logDir, 0755, true);
+$logFile = $logDir . '/panel_configuracion.log';
+function gp_log($m){ global $logFile; @file_put_contents($logFile, '['.date('Y-m-d H:i:s').'] '.$m.PHP_EOL, FILE_APPEND | LOCK_EX); }
+
 $gimnasio_id = (int)($_SESSION['gimnasio_id'] ?? 0);
 if ($gimnasio_id <= 0) exit("❌ Acceso denegado.");
 
@@ -29,7 +34,27 @@ function ensure_col(mysqli $db, string $table, string $col, string $definition):
   $t = $db->real_escape_string($table);
   $c = $db->real_escape_string($col);
   $check = $db->query("SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = '{$t}' AND COLUMN_NAME = '{$c}' LIMIT 1");
-  if (!$check || $check->num_rows === 0) { @$db->query("ALTER TABLE {$t} ADD COLUMN {$col} {$definition}"); }
+  if (!$check || $check->num_rows === 0) { @$db->query("ALTER TABLE `{$t}` ADD COLUMN `{$col}` {$definition}"); }
+}
+
+/**
+ * bind_params_auto: infiere tipos y hace bind_param con referencias.
+ * Devuelve true si bind_result tuvo éxito.
+ */
+function bind_params_auto(mysqli_stmt $stmt, array $params): bool {
+    if (!$stmt) return false;
+    if (empty($params)) return true;
+    $types = '';
+    foreach ($params as $p) {
+        if (is_int($p)) $types .= 'i';
+        elseif (is_float($p) || is_double($p)) $types .= 'd';
+        else $types .= 's';
+    }
+    // construir referencias
+    $refs = [];
+    $refs[] = $types;
+    foreach ($params as $k => $v) $refs[] = &$params[$k];
+    return (bool) call_user_func_array([$stmt, 'bind_param'], $refs);
 }
 
 /* ====== Auto-migración: columnas de diseño + menús ====== */
@@ -99,9 +124,9 @@ if (!$config) {
        mensaje_bienvenida, sitio_web, facebook, instagram)
     VALUES (?, ?, 1, 1, 1, ?, ?, ?, ?)
   ");
-  if (!$ins) die("Error prepare INSERT config: ".$conexion->error);
+  if (!$ins) { gp_log("Error prepare INSERT config: " . $conexion->error); die("Error prepare INSERT config: ".$conexion->error); }
   $ins->bind_param('isssss', $gimnasio_id, $default_color, $default_msg, $default_web, $default_fb, $default_ig);
-  if (!$ins->execute()) die("Error exec INSERT config: ".$ins->error);
+  if (!$ins->execute()) { gp_log("Error exec INSERT config: " . $ins->error); die("Error exec INSERT config: ".$ins->error); }
   $ins->close();
 
   $st = $conexion->prepare("SELECT * FROM configuracion_gimnasio WHERE gimnasio_id = ? LIMIT 1");
@@ -177,33 +202,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   $menu_prof_brand_text  = trim($_POST['menu_prof_brand_text']  ?? ($config['menu_prof_brand_text']  ?? ''));
   $menu_cli_brand_text   = trim($_POST['menu_cli_brand_text']   ?? ($config['menu_cli_brand_text']   ?? ''));
 
-  // UPDATE (incluye menús)
+  // UPDATE (incluye menús) - usaremos bind_params_auto para evitar errores en la cadena de tipos
   $sql = "
     UPDATE configuracion_gimnasio
-       SET color_encabezado=?, mostrar_logo_pdf=?, mostrar_cuit_pdf=?, mostrar_datos_contacto_pdf=?,
-           mensaje_bienvenida=?, sitio_web=?, facebook=?, instagram=?,
+       SET color_encabezado = ?, mostrar_logo_pdf = ?, mostrar_cuit_pdf = ?, mostrar_datos_contacto_pdf = ?,
+           mensaje_bienvenida = ?, sitio_web = ?, facebook = ?, instagram = ?,
 
-           theme_palette=?, primary_color=?, secondary_color=?, accent_color=?, bg_color=?, text_color=?,
-           font_family=?, font_size_base=?, layout_style=?,
+           theme_palette = ?, primary_color = ?, secondary_color = ?, accent_color = ?, bg_color = ?, text_color = ?,
+           font_family = ?, font_size_base = ?, layout_style = ?,
 
-           hero_title=?, hero_subtitle=?, hero_cta_text=?, hero_cta_link=?, hero_bg_image_url=?,
+           hero_title = ?, hero_subtitle = ?, hero_cta_text = ?, hero_cta_link = ?, hero_bg_image_url = ?,
 
-           favicon_url=?, logo_url=?, icon_style=?, show_social_icons=?, footer_text=?, custom_css=?,
+           favicon_url = ?, logo_url = ?, icon_style = ?, show_social_icons = ?, footer_text = ?, custom_css = ?,
 
-           menu_top_bg_color=?, menu_top_text_color=?, menu_top_hover_color=?,
-           menu_prof_bg_color=?, menu_prof_text_color=?, menu_prof_hover_color=?,
-           menu_cli_bg_color=?, menu_cli_text_color=?, menu_cli_hover_color=?,
-           menu_top_brand_text=?, menu_prof_brand_text=?, menu_cli_brand_text=?
+           menu_top_bg_color = ?, menu_top_text_color = ?, menu_top_hover_color = ?,
+           menu_prof_bg_color = ?, menu_prof_text_color = ?, menu_prof_hover_color = ?,
+           menu_cli_bg_color = ?, menu_cli_text_color = ?, menu_cli_hover_color = ?,
+           menu_top_brand_text = ?, menu_prof_brand_text = ?, menu_cli_brand_text = ?
 
-     WHERE gimnasio_id=?
+     WHERE gimnasio_id = ?
   ";
   $upd = $conexion->prepare($sql);
-  if (!$upd) die("Error prepare UPDATE config: ".$conexion->error);
+  if (!$upd) {
+    gp_log("Error prepare UPDATE config: " . $conexion->error);
+    die("Error prepare UPDATE config: ".$conexion->error);
+  }
 
-  $upd->bind_param(
-    /* tipos */
-    'siiissssssssssssisssssssisssssssssssssssssi',
-    /* existentes */
+  $params = [
     $color, $logo, $cuit, $contact,
     $mensaje_bienvenida, $sitio_web, $facebook, $instagram,
 
@@ -214,15 +239,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     $favicon_url, $logo_url, $icon_style, $show_social, $footer_text, $custom_css,
 
-    /* menús */
     $menu_top_bg_color, $menu_top_text_color, $menu_top_hover_color,
     $menu_prof_bg_color, $menu_prof_text_color, $menu_prof_hover_color,
     $menu_cli_bg_color, $menu_cli_text_color, $menu_cli_hover_color,
     $menu_top_brand_text, $menu_prof_brand_text, $menu_cli_brand_text,
 
     $gimnasio_id
-  );
-  if (!$upd->execute()) die("Error exec UPDATE config: ".$upd->error);
+  ];
+
+  if (!bind_params_auto($upd, $params)) {
+    gp_log("bind_params_auto failed for UPDATE - params: ".json_encode($params));
+    die("Error en bind de parámetros.");
+  }
+
+  if (!$upd->execute()) {
+    gp_log("Error exec UPDATE config: " . $upd->error);
+    die("Error exec UPDATE config: ".$upd->error);
+  }
   $upd->close();
 
   // WhatsApp (upsert/delete)
@@ -235,17 +268,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if ($exists) {
       $st = $conexion->prepare("UPDATE links_gimnasio SET enlace_whatsapp=? WHERE gimnasio_id=?");
-      $st->bind_param('si', $enlace_whatsapp, $gimnasio_id);
+      bind_params_auto($st, [$enlace_whatsapp, $gimnasio_id]);
       $st->execute(); $st->close();
     } else {
       $st = $conexion->prepare("INSERT INTO links_gimnasio (gimnasio_id, enlace_whatsapp) VALUES (?,?)");
-      $st->bind_param('is', $gimnasio_id, $enlace_whatsapp);
+      bind_params_auto($st, [$gimnasio_id, $enlace_whatsapp]);
       $st->execute(); $st->close();
     }
     $enlace_whatsapp_actual = $enlace_whatsapp;
   } else {
     $del = $conexion->prepare("DELETE FROM links_gimnasio WHERE gimnasio_id=?");
-    $del->bind_param('i', $gimnasio_id);
+    bind_params_auto($del, [$gimnasio_id]);
     $del->execute(); $del->close();
     $enlace_whatsapp_actual = '';
   }
@@ -260,7 +293,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   $mensaje = "✅ Configuración guardada correctamente.";
 }
 
-/* ---------- Cargar valores ---------- */
+/* ---------- Cargar valores (defaults + config) ---------- */
 $cfg = array_merge([
   'color_encabezado' => '#FFD700',
   'mensaje_bienvenida' => '',
@@ -315,30 +348,30 @@ $cfg = array_merge([
   <?php endif; ?>
   <style>
     :root{
-      --c-primary: <?= h($cfg['primary_color']) ?>;
-      --c-secondary: <?= h($cfg['secondary_color']) ?>;
-      --c-accent: <?= h($cfg['accent_color']) ?>;
-      --c-bg: <?= h($cfg['bg_color']) ?>;
-      --c-text: <?= h($cfg['text_color']) ?>;
-      --ff: <?= h($cfg['font_family']) ?>, system-ui, -apple-system, Segoe UI, Roboto, Arial;
-      --fz: <?= (int)$cfg['font_size_base'] ?>px;
+      --c-primary: <?= h($cfg['primary_color'] ?? '#FFD700') ?>;
+      --c-secondary: <?= h($cfg['secondary_color'] ?? '#111111') ?>;
+      --c-accent: <?= h($cfg['accent_color'] ?? '#00D1B2') ?>;
+      --c-bg: <?= h($cfg['bg_color'] ?? '#000000') ?>;
+      --c-text: <?= h($cfg['text_color'] ?? '#F5F5F5') ?>;
+      --ff: <?= h($cfg['font_family'] ?? 'Inter') ?>, system-ui, -apple-system, Segoe UI, Roboto, Arial;
+      --fz: <?= (int)($cfg['font_size_base'] ?? 16) ?>px;
 
       /* variables de menú (nuevo) */
-      --menu-top-bg: <?= h($cfg['menu_top_bg_color']) ?>;
-      --menu-top-text: <?= h($cfg['menu_top_text_color']) ?>;
-      --menu-top-hover: <?= h($cfg['menu_top_hover_color']) ?>;
+      --menu-top-bg: <?= h($cfg['menu_top_bg_color'] ?? '#0B0B0B') ?>;
+      --menu-top-text: <?= h($cfg['menu_top_text_color'] ?? '#FFFFFF') ?>;
+      --menu-top-hover: <?= h($cfg['menu_top_hover_color'] ?? '#FFD700') ?>;
 
-      --menu-prof-bg: <?= h($cfg['menu_prof_bg_color']) ?>;
-      --menu-prof-text: <?= h($cfg['menu_prof_text_color']) ?>;
-      --menu-prof-hover: <?= h($cfg['menu_prof_hover_color']) ?>;
+      --menu-prof-bg: <?= h($cfg['menu_prof_bg_color'] ?? '#0B1220') ?>;
+      --menu-prof-text: <?= h($cfg['menu_prof_text_color'] ?? '#E5E7EB') ?>;
+      --menu-prof-hover: <?= h($cfg['menu_prof_hover_color'] ?? '#60A5FA') ?>;
 
-      --menu-cli-bg: <?= h($cfg['menu_cli_bg_color']) ?>;
-      --menu-cli-text: <?= h($cfg['menu_cli_text_color']) ?>;
-      --menu-cli-hover: <?= h($cfg['menu_cli_hover_color']) ?>;
+      --menu-cli-bg: <?= h($cfg['menu_cli_bg_color'] ?? '#111111') ?>;
+      --menu-cli-text: <?= h($cfg['menu_cli_text_color'] ?? '#F5F5F5') ?>;
+      --menu-cli-hover: <?= h($cfg['menu_cli_hover_color'] ?? '#A7F3D0') ?>;
     }
     * { box-sizing: border-box; }
     html, body { margin:0; padding:0; background:var(--c-bg); color:var(--c-text); font-family:var(--ff); font-size:var(--fz); }
-    a { color: var(--c-primary); }
+    a { color: var(--c-primary); text-decoration:none }
     .panel { max-width:1100px; margin:24px auto; background: #0b0b0b; border:1px solid #222; border-radius:14px; box-shadow: 0 10px 30px rgba(0,0,0,.35); }
     .head { padding:18px 20px; display:flex; align-items:center; gap:12px; border-bottom:1px solid #222; background: linear-gradient(90deg, var(--c-secondary), #0b0b0b); }
     .head h2 { margin:0; font-size:1.2rem; letter-spacing:.3px; }
@@ -366,6 +399,7 @@ $cfg = array_merge([
     .cta a { display:inline-block; padding:10px 16px; background:var(--c-primary); color:#000; border-radius:10px; text-decoration:none; font-weight:700; }
     .cards { display:grid; grid-template-columns: 1fr 1fr; gap:12px; margin-top:12px; }
     .footer { margin-top:8px; opacity:.8; }
+    @media(max-width:980px){ .wrap{ grid-template-columns:1fr } .row{ grid-template-columns:1fr } .row3{ grid-template-columns:1fr } }
   </style>
 </head>
 <body>
@@ -401,55 +435,55 @@ $cfg = array_merge([
             <div>
               <label>Paleta</label>
               <select name="theme_palette" id="theme_palette">
-                <option value="gold-dark"     <?= $cfg['theme_palette']==='gold-dark'?'selected':'' ?>>Gold / Dark</option>
-                <option value="blue-dark"     <?= $cfg['theme_palette']==='blue-dark'?'selected':'' ?>>Azul / Dark</option>
-                <option value="emerald-dark"  <?= $cfg['theme_palette']==='emerald-dark'?'selected':'' ?>>Esmeralda / Dark</option>
-                <option value="rose-light"    <?= $cfg['theme_palette']==='rose-light'?'selected':'' ?>>Rosa / Light</option>
-                <option value="graphite"      <?= $cfg['theme_palette']==='graphite'?'selected':'' ?>>Grafito</option>
+                <option value="gold-dark"     <?= ($cfg['theme_palette']==='gold-dark')?'selected':'' ?>>Gold / Dark</option>
+                <option value="blue-dark"     <?= ($cfg['theme_palette']==='blue-dark')?'selected':'' ?>>Azul / Dark</option>
+                <option value="emerald-dark"  <?= ($cfg['theme_palette']==='emerald-dark')?'selected':'' ?>>Esmeralda / Dark</option>
+                <option value="rose-light"    <?= ($cfg['theme_palette']==='rose-light')?'selected':'' ?>>Rosa / Light</option>
+                <option value="graphite"      <?= ($cfg['theme_palette']==='graphite')?'selected':'' ?>>Grafito</option>
               </select>
             </div>
             <div>
               <label>Layout</label>
               <select name="layout_style" id="layout_style">
-                <option value="classic"     <?= $cfg['layout_style']==='classic'?'selected':'' ?>>Clásico</option>
-                <option value="cards"       <?= $cfg['layout_style']==='cards'?'selected':'' ?>>Cards</option>
-                <option value="glass"       <?= $cfg['layout_style']==='glass'?'selected':'' ?>>Glass</option>
-                <option value="neumorphic"  <?= $cfg['layout_style']==='neumorphic'?'selected':'' ?>>Neumorphic</option>
+                <option value="classic"     <?= ($cfg['layout_style']==='classic')?'selected':'' ?>>Clásico</option>
+                <option value="cards"       <?= ($cfg['layout_style']==='cards')?'selected':'' ?>>Cards</option>
+                <option value="glass"       <?= ($cfg['layout_style']==='glass')?'selected':'' ?>>Glass</option>
+                <option value="neumorphic"  <?= ($cfg['layout_style']==='neumorphic')?'selected':'' ?>>Neumorphic</option>
               </select>
             </div>
           </div>
 
           <div class="row3">
-            <div><label>Primario</label><div class="inline"><input type="color" name="primary_color" id="primary_color" value="<?= h($cfg['primary_color']) ?>"><input type="text" id="primary_txt" value="<?= h($cfg['primary_color']) ?>"></div></div>
-            <div><label>Secundario</label><div class="inline"><input type="color" name="secondary_color" id="secondary_color" value="<?= h($cfg['secondary_color']) ?>"><input type="text" id="secondary_txt" value="<?= h($cfg['secondary_color']) ?>"></div></div>
-            <div><label>Accent</label><div class="inline"><input type="color" name="accent_color" id="accent_color" value="<?= h($cfg['accent_color']) ?>"><input type="text" id="accent_txt" value="<?= h($cfg['accent_color']) ?>"></div></div>
+            <div><label>Primario</label><div class="inline"><input type="color" name="primary_color" id="primary_color" value="<?= h($cfg['primary_color'] ?? '#FFD700') ?>"><input type="text" id="primary_txt" value="<?= h($cfg['primary_color'] ?? '#FFD700') ?>"></div></div>
+            <div><label>Secundario</label><div class="inline"><input type="color" name="secondary_color" id="secondary_color" value="<?= h($cfg['secondary_color'] ?? '#111111') ?>"><input type="text" id="secondary_txt" value="<?= h($cfg['secondary_color'] ?? '#111111') ?>"></div></div>
+            <div><label>Accent</label><div class="inline"><input type="color" name="accent_color" id="accent_color" value="<?= h($cfg['accent_color'] ?? '#00D1B2') ?>"><input type="text" id="accent_txt" value="<?= h($cfg['accent_color'] ?? '#00D1B2') ?>"></div></div>
           </div>
           <div class="row3">
-            <div><label>Fondo</label><div class="inline"><input type="color" name="bg_color" id="bg_color" value="<?= h($cfg['bg_color']) ?>"><input type="text" id="bg_txt" value="<?= h($cfg['bg_color']) ?>"></div></div>
-            <div><label>Texto</label><div class="inline"><input type="color" name="text_color" id="text_color" value="<?= h($cfg['text_color']) ?>"><input type="text" id="text_txt" value="<?= h($cfg['text_color']) ?>"></div></div>
-            <div><label>Tamaño base</label><input type="number" name="font_size_base" id="font_size_base" min="12" max="22" value="<?= (int)$cfg['font_size_base'] ?>"></div>
+            <div><label>Fondo</label><div class="inline"><input type="color" name="bg_color" id="bg_color" value="<?= h($cfg['bg_color'] ?? '#000000') ?>"><input type="text" id="bg_txt" value="<?= h($cfg['bg_color'] ?? '#000000') ?>"></div></div>
+            <div><label>Texto</label><div class="inline"><input type="color" name="text_color" id="text_color" value="<?= h($cfg['text_color'] ?? '#F5F5F5') ?>"><input type="text" id="text_txt" value="<?= h($cfg['text_color'] ?? '#F5F5F5') ?>"></div></div>
+            <div><label>Tamaño base</label><input type="number" name="font_size_base" id="font_size_base" min="12" max="22" value="<?= (int)($cfg['font_size_base'] ?? 16) ?>"></div>
           </div>
           <div class="row">
             <div><label>Tipografía</label>
               <select name="font_family" id="font_family">
                 <?php foreach(['Inter','Poppins','Roboto','Oswald','Montserrat'] as $ff): ?>
-                  <option value="<?= h($ff) ?>" <?= $cfg['font_family']===$ff?'selected':'' ?>><?= h($ff) ?></option>
+                  <option value="<?= h($ff) ?>" <?= ($cfg['font_family']===$ff)?'selected':'' ?>><?= h($ff) ?></option>
                 <?php endforeach; ?>
               </select>
             </div>
-            <div><label>Logo (URL)</label><input type="url" name="logo_url" id="logo_url" placeholder="https://..." value="<?= h($cfg['logo_url']) ?>"></div>
+            <div><label>Logo (URL)</label><input type="url" name="logo_url" id="logo_url" placeholder="https://..." value="<?= h($cfg['logo_url'] ?? '') ?>"></div>
           </div>
 
           <hr style="border-color:#222;margin:14px 0">
 
           <h3>🏁 Hero / Portada</h3>
-          <label>Título</label><input type="text" name="hero_title" id="hero_title" value="<?= h($cfg['hero_title']) ?>">
-          <label>Subtítulo</label><input type="text" name="hero_subtitle" id="hero_subtitle" value="<?= h($cfg['hero_subtitle']) ?>">
+          <label>Título</label><input type="text" name="hero_title" id="hero_title" value="<?= h($cfg['hero_title'] ?? '') ?>">
+          <label>Subtítulo</label><input type="text" name="hero_subtitle" id="hero_subtitle" value="<?= h($cfg['hero_subtitle'] ?? '') ?>">
           <div class="row">
-            <div><label>Texto CTA</label><input type="text" name="hero_cta_text" id="hero_cta_text" value="<?= h($cfg['hero_cta_text']) ?>"></div>
-            <div><label>Link CTA</label><input type="url" name="hero_cta_link" id="hero_cta_link" value="<?= h($cfg['hero_cta_link']) ?>"></div>
+            <div><label>Texto CTA</label><input type="text" name="hero_cta_text" id="hero_cta_text" value="<?= h($cfg['hero_cta_text'] ?? '') ?>"></div>
+            <div><label>Link CTA</label><input type="url" name="hero_cta_link" id="hero_cta_link" value="<?= h($cfg['hero_cta_link'] ?? '') ?>"></div>
           </div>
-          <label>Fondo (imagen URL)</label><input type="url" name="hero_bg_image_url" id="hero_bg_image_url" value="<?= h($cfg['hero_bg_image_url']) ?>">
+          <label>Fondo (imagen URL)</label><input type="url" name="hero_bg_image_url" id="hero_bg_image_url" value="<?= h($cfg['hero_bg_image_url'] ?? '') ?>">
 
           <hr style="border-color:#222;margin:14px 0">
 
@@ -457,26 +491,26 @@ $cfg = array_merge([
           <div class="row">
             <div>
               <strong>Menú Horizontal</strong>
-              <label>Brand / Título</label><input type="text" name="menu_top_brand_text" value="<?= h($cfg['menu_top_brand_text']) ?>" placeholder="Ej: Fight Academy">
-              <label>Fondo</label><div class="inline"><input type="color" name="menu_top_bg_color" value="<?= h($cfg['menu_top_bg_color']) ?>"><input type="text" value="<?= h($cfg['menu_top_bg_color']) ?>"></div>
-              <label>Texto</label><div class="inline"><input type="color" name="menu_top_text_color" value="<?= h($cfg['menu_top_text_color']) ?>"><input type="text" value="<?= h($cfg['menu_top_text_color']) ?>"></div>
-              <label>Hover</label><div class="inline"><input type="color" name="menu_top_hover_color" value="<?= h($cfg['menu_top_hover_color']) ?>"><input type="text" value="<?= h($cfg['menu_top_hover_color']) ?>"></div>
+              <label>Brand / Título</label><input type="text" name="menu_top_brand_text" value="<?= h($cfg['menu_top_brand_text'] ?? '') ?>" placeholder="Ej: Fight Academy">
+              <label>Fondo</label><div class="inline"><input type="color" name="menu_top_bg_color" value="<?= h($cfg['menu_top_bg_color'] ?? '#0B0B0B') ?>"><input type="text" value="<?= h($cfg['menu_top_bg_color'] ?? '#0B0B0B') ?>"></div>
+              <label>Texto</label><div class="inline"><input type="color" name="menu_top_text_color" value="<?= h($cfg['menu_top_text_color'] ?? '#FFFFFF') ?>"><input type="text" value="<?= h($cfg['menu_top_text_color'] ?? '#FFFFFF') ?>"></div>
+              <label>Hover</label><div class="inline"><input type="color" name="menu_top_hover_color" value="<?= h($cfg['menu_top_hover_color'] ?? '#FFD700') ?>"><input type="text" value="<?= h($cfg['menu_top_hover_color'] ?? '#FFD700') ?>"></div>
             </div>
             <div>
               <strong>Menú Profesor</strong>
-              <label>Brand / Título</label><input type="text" name="menu_prof_brand_text" value="<?= h($cfg['menu_prof_brand_text']) ?>" placeholder="Ej: Panel Profesor">
-              <label>Fondo</label><div class="inline"><input type="color" name="menu_prof_bg_color" value="<?= h($cfg['menu_prof_bg_color']) ?>"><input type="text" value="<?= h($cfg['menu_prof_bg_color']) ?>"></div>
-              <label>Texto</label><div class="inline"><input type="color" name="menu_prof_text_color" value="<?= h($cfg['menu_prof_text_color']) ?>"><input type="text" value="<?= h($cfg['menu_prof_text_color']) ?>"></div>
-              <label>Hover</label><div class="inline"><input type="color" name="menu_prof_hover_color" value="<?= h($cfg['menu_prof_hover_color']) ?>"><input type="text" value="<?= h($cfg['menu_prof_hover_color']) ?>"></div>
+              <label>Brand / Título</label><input type="text" name="menu_prof_brand_text" value="<?= h($cfg['menu_prof_brand_text'] ?? '') ?>" placeholder="Ej: Panel Profesor">
+              <label>Fondo</label><div class="inline"><input type="color" name="menu_prof_bg_color" value="<?= h($cfg['menu_prof_bg_color'] ?? '#0B1220') ?>"><input type="text" value="<?= h($cfg['menu_prof_bg_color'] ?? '#0B1220') ?>"></div>
+              <label>Texto</label><div class="inline"><input type="color" name="menu_prof_text_color" value="<?= h($cfg['menu_prof_text_color'] ?? '#E5E7EB') ?>"><input type="text" value="<?= h($cfg['menu_prof_text_color'] ?? '#E5E7EB') ?>"></div>
+              <label>Hover</label><div class="inline"><input type="color" name="menu_prof_hover_color" value="<?= h($cfg['menu_prof_hover_color'] ?? '#60A5FA') ?>"><input type="text" value="<?= h($cfg['menu_prof_hover_color'] ?? '#60A5FA') ?>"></div>
             </div>
           </div>
           <div class="row">
             <div>
               <strong>Menú Cliente</strong>
-              <label>Brand / Título</label><input type="text" name="menu_cli_brand_text" value="<?= h($cfg['menu_cli_brand_text']) ?>" placeholder="Ej: Mi Cuenta">
-              <label>Fondo</label><div class="inline"><input type="color" name="menu_cli_bg_color" value="<?= h($cfg['menu_cli_bg_color']) ?>"><input type="text" value="<?= h($cfg['menu_cli_bg_color']) ?>"></div>
-              <label>Texto</label><div class="inline"><input type="color" name="menu_cli_text_color" value="<?= h($cfg['menu_cli_text_color']) ?>"><input type="text" value="<?= h($cfg['menu_cli_text_color']) ?>"></div>
-              <label>Hover</label><div class="inline"><input type="color" name="menu_cli_hover_color" value="<?= h($cfg['menu_cli_hover_color']) ?>"><input type="text" value="<?= h($cfg['menu_cli_hover_color']) ?>"></div>
+              <label>Brand / Título</label><input type="text" name="menu_cli_brand_text" value="<?= h($cfg['menu_cli_brand_text'] ?? '') ?>" placeholder="Ej: Mi Cuenta">
+              <label>Fondo</label><div class="inline"><input type="color" name="menu_cli_bg_color" value="<?= h($cfg['menu_cli_bg_color'] ?? '#111111') ?>"><input type="text" value="<?= h($cfg['menu_cli_bg_color'] ?? '#111111') ?>"></div>
+              <label>Texto</label><div class="inline"><input type="color" name="menu_cli_text_color" value="<?= h($cfg['menu_cli_text_color'] ?? '#F5F5F5') ?>"><input type="text" value="<?= h($cfg['menu_cli_text_color'] ?? '#F5F5F5') ?>"></div>
+              <label>Hover</label><div class="inline"><input type="color" name="menu_cli_hover_color" value="<?= h($cfg['menu_cli_hover_color'] ?? '#A7F3D0') ?>"><input type="text" value="<?= h($cfg['menu_cli_hover_color'] ?? '#A7F3D0') ?>"></div>
             </div>
           </div>
 
@@ -484,13 +518,13 @@ $cfg = array_merge([
 
           <h3>💬 Contenido & Redes</h3>
           <label>Mensaje de bienvenida</label>
-          <textarea name="mensaje_bienvenida" rows="2" id="mensaje_bienvenida"><?= h($cfg['mensaje_bienvenida']) ?></textarea>
+          <textarea name="mensaje_bienvenida" rows="2" id="mensaje_bienvenida"><?= h($cfg['mensaje_bienvenida'] ?? '') ?></textarea>
           <div class="row">
-            <div><label>Sitio Web</label><input type="url" name="sitio_web" value="<?= h($cfg['sitio_web']) ?>"></div>
-            <div><label>Facebook</label><input type="text" name="facebook" value="<?= h($cfg['facebook']) ?>"></div>
+            <div><label>Sitio Web</label><input type="url" name="sitio_web" value="<?= h($cfg['sitio_web'] ?? '') ?>"></div>
+            <div><label>Facebook</label><input type="text" name="facebook" value="<?= h($cfg['facebook'] ?? '') ?>"></div>
           </div>
           <div class="row">
-            <div><label>Instagram</label><input type="text" name="instagram" value="<?= h($cfg['instagram']) ?>"></div>
+            <div><label>Instagram</label><input type="text" name="instagram" value="<?= h($cfg['instagram'] ?? '') ?>"></div>
             <div class="inline" style="margin-top:28px">
               <input type="checkbox" name="show_social_icons" id="show_social_icons" <?= !empty($cfg['show_social_icons'])?'checked':'' ?>>
               <label for="show_social_icons">Mostrar íconos sociales</label>
@@ -501,7 +535,7 @@ $cfg = array_merge([
           <input type="url" name="enlace_whatsapp" placeholder="https://chat.whatsapp.com/XXXXXX" value="<?= h($enlace_whatsapp_actual) ?>">
 
           <label>Texto de pie de página</label>
-          <input type="text" name="footer_text" value="<?= h($cfg['footer_text']) ?>">
+          <input type="text" name="footer_text" value="<?= h($cfg['footer_text'] ?? '') ?>">
 
           <hr style="border-color:#222;margin:14px 0">
           <h3>🖨️ Facturación (PDF)</h3>
@@ -511,7 +545,7 @@ $cfg = array_merge([
 
           <hr style="border-color:#222;margin:14px 0">
           <h3>🎯 CSS personalizado</h3>
-          <textarea name="custom_css" rows="4" placeholder="/* CSS adicional */"><?= h($cfg['custom_css']) ?></textarea>
+          <textarea name="custom_css" rows="4" placeholder="/* CSS adicional */"><?= h($cfg['custom_css'] ?? '') ?></textarea>
 
           <div style="margin-top:12px; display:flex; gap:10px;">
             <button type="submit" class="btn">💾 Guardar Configuración</button>
@@ -548,13 +582,13 @@ $cfg = array_merge([
         <div class="card">
           <h3>👀 Vista previa de Hero</h3>
           <div style="position:relative; min-height:240px; border:1px solid #222; border-radius:14px; overflow:hidden;">
-            <div style="position:absolute; inset:0; background-image:url('<?= h($cfg['hero_bg_image_url']) ?>'); background-size:cover; background-position:center; opacity:.35"></div>
+            <div style="position:absolute; inset:0; background-image:url('<?= h($cfg['hero_bg_image_url'] ?? '') ?>'); background-size:cover; background-position:center; opacity:.35"></div>
             <div style="position:relative; padding:24px; max-width:70%;">
               <span style="display:inline-block; padding:6px 10px; background:var(--c-accent); color:#000; border-radius:999px; font-weight:700;">Nuevo</span>
-              <h2 style="margin:10px 0 6px 0; font-size:1.6rem;"><?= h($cfg['hero_title']) ?></h2>
-              <p style="opacity:.9"><?= h($cfg['hero_subtitle']) ?></p>
-              <div style="margin-top:14px;"><a href="<?= h($cfg['hero_cta_link']) ?>" style="display:inline-block; padding:10px 16px; background:var(--c-primary); color:#000; border-radius:10px; text-decoration:none; font-weight:700;"><?= h($cfg['hero_cta_text']) ?></a></div>
-              <div style="margin-top:8px; opacity:.8;"><?= h($cfg['footer_text']) ?></div>
+              <h2 style="margin:10px 0 6px 0; font-size:1.6rem;"><?= h($cfg['hero_title'] ?? '') ?></h2>
+              <p style="opacity:.9"><?= h($cfg['hero_subtitle'] ?? '') ?></p>
+              <div style="margin-top:14px;"><a href="<?= h($cfg['hero_cta_link'] ?? '#') ?>" style="display:inline-block; padding:10px 16px; background:var(--c-primary); color:#000; border-radius:10px; text-decoration:none; font-weight:700;"><?= h($cfg['hero_cta_text'] ?? '') ?></a></div>
+              <div style="margin-top:8px; opacity:.8;"><?= h($cfg['footer_text'] ?? '') ?></div>
             </div>
           </div>
         </div>
@@ -562,11 +596,11 @@ $cfg = array_merge([
         <div class="card">
           <h3>🎛️ Variables de Menú actuales</h3>
           <pre style="font-family:monospace; font-size:.9rem; background:#0e0e0e; border:1px solid #222; padding:12px; border-radius:10px; white-space:pre-line;">
-menu-top:  bg <?= h($cfg['menu_top_bg_color']) ?> | text <?= h($cfg['menu_top_text_color']) ?> | hover <?= h($cfg['menu_top_hover_color']) ?>
+menu-top:  bg <?= h($cfg['menu_top_bg_color'] ?? '') ?> | text <?= h($cfg['menu_top_text_color'] ?? '') ?> | hover <?= h($cfg['menu_top_hover_color'] ?? '') ?>
 
-menu-prof: bg <?= h($cfg['menu_prof_bg_color']) ?> | text <?= h($cfg['menu_prof_text_color']) ?> | hover <?= h($cfg['menu_prof_hover_color']) ?>
+menu-prof: bg <?= h($cfg['menu_prof_bg_color'] ?? '') ?> | text <?= h($cfg['menu_prof_text_color'] ?? '') ?> | hover <?= h($cfg['menu_prof_hover_color'] ?? '') ?>
 
-menu-cli:  bg <?= h($cfg['menu_cli_bg_color']) ?> | text <?= h($cfg['menu_cli_text_color']) ?> | hover <?= h($cfg['menu_cli_hover_color']) ?>
+menu-cli:  bg <?= h($cfg['menu_cli_bg_color'] ?? '') ?> | text <?= h($cfg['menu_cli_text_color'] ?? '') ?> | hover <?= h($cfg['menu_cli_hover_color'] ?? '') ?>
           </pre>
         </div>
       </div>

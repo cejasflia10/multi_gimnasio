@@ -171,6 +171,331 @@ function label_peso_cat($row){
    POST: Acciones (eliminar/crear)
    ========================= */
 
+/* ---------- NUEVO: Crear pelea(s) desde CSV (import) ---------- */
+/* Esta sección procesa un CSV subido con filas que describen peleas.
+   Formato CSV por fila (valores separados por comas):
+     formato, a, b, c?, rondas?, observaciones?
+   - formato: simple | triangular | super4
+   - simple: simple,rojo_id,azul_id
+   - triangular: triangular,tri_rojo_id,tri_azul_id,tri_libre_id
+   - super4: super4,sf1_rojo_id,sf1_azul_id,sf2_rojo_id,sf2_azul_id
+   Las columnas rondas y observaciones son opcionales.
+*/
+if ( ($_SERVER['REQUEST_METHOD']==='POST') && (($_POST['accion'] ?? '') === 'import_csv') ) {
+  $token = $_POST['csrf'] ?? '';
+  if (!csrf_ok($token)) { flash_err('CSRF inválido.'); header('Location: organizar_pelea.php?evento_id='.$evento_id); exit; }
+
+  if (!isset($_FILES['csv_file']) || $_FILES['csv_file']['error'] !== UPLOAD_ERR_OK) {
+    flash_err('No se recibió archivo CSV válido.');
+    header('Location: organizar_pelea.php?evento_id='.$evento_id); exit;
+  }
+
+  $tmp = $_FILES['csv_file']['tmp_name'];
+  $h = fopen($tmp,'r');
+  if (!$h) {
+    flash_err('No se pudo leer el archivo subido.');
+    header('Location: organizar_pelea.php?evento_id='.$evento_id); exit;
+  }
+
+  $line = 0;
+  $pairs_all = []; // array de arrays [$rojo,$azul,$obs,$formato,$rondas]
+  $errores = [];
+  while(($row = fgetcsv($h)) !== false) {
+    $line++;
+    // Ignorar filas vacías
+    $allEmpty = true; foreach ($row as $c) if (trim($c) !== '') { $allEmpty = false; break; }
+    if ($allEmpty) continue;
+
+    // Normalizar elementos (el usuario puede usar ; en vez de , si su CSV regional está así)
+    // ya que fgetcsv usó comas, asumimos coma. Si tu CSV usa otro separador, exporta con coma.
+    $row = array_map('trim', $row);
+    $fmt = strtolower($row[0] ?? '');
+    try {
+      if ($fmt === 'simple') {
+        if (!isset($row[1]) || !isset($row[2])) throw new Exception("Línea $line: falta rojo/azul para formato simple.");
+        $r = (int)$row[1]; $a = (int)$row[2];
+        if ($r<=0 || $a<=0) throw new Exception("Línea $line: IDs inválidos (simple).");
+        if ($r === $a) throw new Exception("Línea $line: mismo competidor en ambas esquinas (simple).");
+        $rondas = isset($row[4]) && is_numeric($row[4]) ? (int)$row[4] : 3;
+        $obs = $row[5] ?? ($row[3] ?? '');
+        $pairs_all[] = ['pairs'=>[[$r,$a,'']],'todos'=>[$r,$a],'formato'=>'simple','rondas'=>$rondas,'obs'=>$obs];
+      } elseif ($fmt === 'triangular') {
+        if (!isset($row[1]) || !isset($row[2]) || !isset($row[3])) throw new Exception("Línea $line: falta alguno de los 3 competidores (triangular).");
+        $tri_r = (int)$row[1]; $tri_a = (int)$row[2]; $tri_l = (int)$row[3];
+        if ($tri_r<=0 || $tri_a<=0 || $tri_l<=0) throw new Exception("Línea $line: IDs inválidos (triangular).");
+        if (count(array_unique([$tri_r,$tri_a,$tri_l])) !== 3) throw new Exception("Línea $line: competidores repetidos (triangular).");
+        $rondas = isset($row[4]) && is_numeric($row[4]) ? (int)$row[4] : 3;
+        $obs = $row[5] ?? '';
+        $pairs_all[] = ['pairs'=>[[$tri_r,$tri_a,' (Triangular - Semifinal)']],'todos'=>[$tri_r,$tri_a,$tri_l],'formato'=>'triangular','rondas'=>$rondas,'obs'=>$obs];
+      } elseif ($fmt === 'super4') {
+        // super4 expects 4 ids in positions 1..4 (sf1r,sf1a,sf2r,sf2a)
+        if (!isset($row[1])||!isset($row[2])||!isset($row[3])||!isset($row[4])) throw new Exception("Línea $line: faltan IDs para Super4.");
+        $sf1r=(int)$row[1]; $sf1a=(int)$row[2]; $sf2r=(int)$row[3]; $sf2a=(int)$row[4];
+        if (min($sf1r,$sf1a,$sf2r,$sf2a) <= 0) throw new Exception("Línea $line: IDs inválidos (Super4).");
+        if (count(array_unique([$sf1r,$sf1a,$sf2r,$sf2a])) !== 4) throw new Exception("Línea $line: IDs repetidos (Super4).");
+        $rondas = isset($row[5]) && is_numeric($row[5]) ? (int)$row[5] : 3;
+        $obs = $row[6] ?? '';
+        $pairs_all[] = ['pairs'=>[[$sf1r,$sf1a,' (Super 4 - SF1)'],[$sf2r,$sf2a,' (Super 4 - SF2)']],'todos'=>[$sf1r,$sf1a,$sf2r,$sf2a],'formato'=>'super4','rondas'=>$rondas,'obs'=>$obs];
+      } else {
+        throw new Exception("Línea $line: formato desconocido '$fmt'. Usar simple|triangular|super4.");
+      }
+    } catch (Exception $e) {
+      $errores[] = $e->getMessage();
+    }
+  }
+  fclose($h);
+
+  if (empty($pairs_all)) {
+    $msg = 'No se detectaron filas válidas en el CSV.';
+    if ($errores) $msg .= ' Errores: '.implode(' | ', $errores);
+    flash_err($msg);
+    header('Location: organizar_pelea.php?evento_id='.$evento_id); exit;
+  }
+
+  // Ahora validamos todas las entradas y armamos una lista final de pairs para insertar (reutilizamos muchas validaciones del código original)
+  $to_insert_batches = []; // cada elemento será como ['pairs'=>..., 'formato'=>..., 'rondas'=>..., 'obsBase'=>...]
+  $any_error = false;
+  $errors_report = [];
+
+  foreach ($pairs_all as $entry_idx => $entry) {
+    $pairs = $entry['pairs'];
+    $todos = $entry['todos'];
+    $formato = $entry['formato'];
+    $rondas = $entry['rondas'] ?? 3;
+    $obsBase = $entry['obs'] ?? '';
+
+    // Pertenencia al evento (requerido)
+    if ($todos) {
+      $place = implode(',', array_fill(0, count($todos), '?'));
+      $types = str_repeat('i', count($todos) + 1);
+      $sql = "SELECT COUNT(*) AS c FROM competidores_evento WHERE evento_id = ? AND id IN ($place)";
+      $st = $conexion->prepare($sql);
+      if (!$st) { $errors_report[] = 'SQL prepare (pertenencia import): '.$conexion->error; $any_error = true; continue; }
+      $bind = []; $bind[] = $types; $ev_copy = $evento_id; $bind[] = &$ev_copy; foreach ($todos as $i=>&$v) { $bind[] = &$v; }
+      call_user_func_array([$st,'bind_param'],$bind);
+      $st->execute(); $cOk = (int)($st->get_result()->fetch_assoc()['c'] ?? 0); $st->close();
+      if ($cOk !== count($todos)) { $errors_report[] = "Al menos un competidor en la fila #".($entry_idx+1)." no pertenece al evento."; $any_error = true; continue; }
+    }
+
+    // Validaciones por par (modalidad/división/disciplica/categoria técnica) - cargamos info
+    $info = cargar_info_competidores($conexion, $todos, $ce_cols, $cat_cols);
+    $bad = false;
+    foreach ($pairs as [$r,$a,$obsSuf]) {
+      $R = $info[$r] ?? null; $A = $info[$a] ?? null;
+      if (!$R || !$A) { $errors_report[] = "Fila #".($entry_idx+1).": no se pudo cargar info de competidores para validar reglas."; $bad = true; break; }
+      if ((int)$R['disciplina_id'] !== (int)$A['disciplina_id']) { $errors_report[] = "Fila #".($entry_idx+1).": competidores no comparten disciplina."; $bad = true; break; }
+      if ((int)$R['division_id'] !== (int)$A['division_id']) { $errors_report[] = "Fila #".($entry_idx+1).": competidores no comparten división."; $bad = true; break; }
+      $tec_ok = true;
+      if (!is_null($R['cat_tec_id']) && !is_null($A['cat_tec_id'])) {
+        $tec_ok = ((int)$R['cat_tec_id'] === (int)$A['cat_tec_id']);
+      } else {
+        $tR = mb_strtoupper(trim((string)$R['cat_tec_text'])); 
+        $tA = mb_strtoupper(trim((string)$A['cat_tec_text']));
+        $tec_ok = ($tR !== '' && $tA !== '' && $tR === $tA);
+      }
+      if (!$tec_ok) { $errors_report[] = "Fila #".($entry_idx+1).": competidores no comparten categoría técnica."; $bad = true; break; }
+    }
+    if ($bad) { $any_error = true; continue; }
+
+    // Duplicadas exactas?
+    $dupe_found = false;
+    foreach ($pairs as [$r,$a,$obsSuf]) {
+      $sql = "SELECT 1 FROM peleas_evento
+              WHERE ".bt($pe_cols['evento'])." = ?
+                AND ((".bt($pe_cols['rojo'])." = ? AND ".bt($pe_cols['azul'])." = ?) OR (".bt($pe_cols['rojo'])." = ? AND ".bt($pe_cols['azul'])." = ?))
+              LIMIT 1";
+      $st = $conexion->prepare($sql);
+      if (!$st) { $errors_report[] = 'SQL prepare (duplicadas import): '.$conexion->error; $dupe_found=true; break; }
+      $st->bind_param('iiiii', $evento_id, $r, $a, $a, $r);
+      $st->execute(); $dupe = $st->get_result(); $st->close();
+      if ($dupe && $dupe->num_rows > 0) { $errors_report[] = "Fila #".($entry_idx+1).": pelea ya existe (mismas esquinas)."; $dupe_found=true; break; }
+    }
+    if ($dupe_found) { $any_error = true; continue; }
+
+    // si todo ok, agrego al lote final
+    $to_insert_batches[] = ['pairs'=>$pairs,'formato'=>$formato,'rondas'=>$rondas,'obsBase'=>$obsBase,'modalidad_compartida'=>isset($modalidad_compartida)?$modalidad_compartida:null,'todos'=>$todos,'info'=>$info];
+  }
+
+  if (empty($to_insert_batches)) {
+    $msg = 'No se importó ninguna pelea. ';
+    if ($errors_report) $msg .= 'Errores: '.implode(' | ', $errors_report);
+    flash_err($msg);
+    header('Location: organizar_pelea.php?evento_id='.$evento_id); exit;
+  }
+
+  // INSERT en transacción (todas las peleas importadas)
+  $conexion->begin_transaction();
+  try {
+    foreach ($to_insert_batches as $b) {
+      foreach ($b['pairs'] as $iPair => [$r,$a,$obsSuf]) {
+        $cols = [$pe_cols['evento'], $pe_cols['rojo'], $pe_cols['azul']];
+        $vals = [$evento_id, $r, $a];
+        $types = 'iii';
+        if (!empty($pe_cols['modalidad']) && isset($b['modalidad_compartida'])) { $cols[] = $pe_cols['modalidad']; $vals[] = $b['modalidad_compartida']; $types .= 'i'; }
+        if ($pe_cols['rondas']) { $cols[] = $pe_cols['rondas']; $vals[] = $b['rondas']; $types .= 'i'; }
+        $obs_final = trim(($b['obsBase'] ?? '').$obsSuf);
+        if ($pe_cols['obs'])    { $cols[] = $pe_cols['obs']; $vals[] = $obs_final; $types .= 's'; }
+        $cols_bt = array_map('bt', $cols);
+        $ph = implode(',', array_fill(0, count($cols_bt), '?'));
+        $sql = "INSERT INTO peleas_evento (".implode(',', $cols_bt).") VALUES ($ph)";
+        $st = $conexion->prepare($sql);
+        if (!$st) throw new Exception('SQL prepare (insert import): '.$conexion->error);
+        $bind = []; $bind[] = $types; foreach ($vals as $k=>&$v) { $bind[] = &$v; }
+        call_user_func_array([$st, 'bind_param'], $bind);
+        if (!$st->execute()) { $err = $st->error; $st->close(); throw new Exception('No se pudo guardar una pelea (import): '.$err); }
+        $st->close();
+      }
+    }
+    $conexion->commit();
+  } catch (Throwable $e) {
+    $conexion->rollback();
+    flash_err('Error al insertar import: '.$e->getMessage());
+    header('Location: organizar_pelea.php?evento_id='.$evento_id); exit;
+  }
+
+  $creadas = 0; foreach ($to_insert_batches as $b) $creadas += count($b['pairs']);
+  $msg = "Import exitoso: se crearon $creadas pelea(s).";
+  if ($errors_report) $msg .= " (Se omitieron filas con errores: ".implode(' | ', $errors_report).")";
+  flash_ok($msg);
+  header('Location: ver_peleas_evento.php?evento_id='.(int)$evento_id);
+  exit;
+}
+
+// ================== PELEA MANUAL (INICIO) ==================
+if (isset($_POST['accion']) && $_POST['accion'] === 'crear_pelea_manual') {
+    $rojo_nombre   = trim($_POST['rojo_nombre']);
+    $rojo_edad     = intval($_POST['rojo_edad']);
+    $rojo_peso     = floatval($_POST['rojo_peso']);
+    $rojo_academia = trim($_POST['rojo_academia']);
+
+    $azul_nombre   = trim($_POST['azul_nombre']);
+    $azul_edad     = intval($_POST['azul_edad']);
+    $azul_peso     = floatval($_POST['azul_peso']);
+    $azul_academia = trim($_POST['azul_academia']);
+
+    $rondas        = intval($_POST['rondas']);
+    $observaciones = trim($_POST['observaciones']);
+
+    $sql = "INSERT INTO peleas 
+        (rojo_nombre, rojo_edad, rojo_peso, rojo_academia, 
+         azul_nombre, azul_edad, azul_peso, azul_academia,
+         rondas, observaciones, estado) 
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pendiente')";
+
+    $stmt = $conexion->prepare($sql);
+    $stmt->bind_param(
+        "sidsidsiss",
+        $rojo_nombre, $rojo_edad, $rojo_peso, $rojo_academia,
+        $azul_nombre, $azul_edad, $azul_peso, $azul_academia,
+        $rondas, $observaciones
+    );
+    $stmt->execute();
+    $stmt->close();
+
+    header("Location: organizar_pelea.php?ok=1");
+    exit();
+}
+// ================== PELEA MANUAL (FIN) ==================
+  // Reutilizamos la misma estrategia de validación e inserción del CSV:
+  $to_insert_batches = []; $errors_report=[]; $any_error=false;
+  foreach ($pairs_all as $entry_idx => $entry) {
+    $pairs = $entry['pairs']; $todos = $entry['todos']; $formato = $entry['formato']; $rondas = $entry['rondas']; $obsBase = $entry['obs'];
+
+    // pertenencia
+    if ($todos) {
+      $place = implode(',', array_fill(0, count($todos), '?'));
+      $types = str_repeat('i', count($todos) + 1);
+      $sql = "SELECT COUNT(*) AS c FROM competidores_evento WHERE evento_id = ? AND id IN ($place)";
+      $st = $conexion->prepare($sql);
+      if (!$st) { $errors_report[] = 'SQL prepare (pertenencia manual): '.$conexion->error; $any_error=true; continue; }
+      $bind = []; $bind[] = $types; $ev_copy = $evento_id; $bind[] = &$ev_copy; foreach ($todos as $i=>&$v) { $bind[] = &$v; }
+      call_user_func_array([$st,'bind_param'],$bind);
+      $st->execute(); $cOk = (int)($st->get_result()->fetch_assoc()['c'] ?? 0); $st->close();
+      if ($cOk !== count($todos)) { $errors_report[] = "Al menos un competidor en la línea #".($entry_idx+1)." no pertenece al evento."; $any_error = true; continue; }
+    }
+
+    $info = cargar_info_competidores($conexion, $todos, $ce_cols, $cat_cols);
+    $bad = false;
+    foreach ($pairs as [$r,$a,$obsSuf]) {
+      $R = $info[$r] ?? null; $A = $info[$a] ?? null;
+      if (!$R || !$A) { $errors_report[] = "Línea #".($entry_idx+1).": no se pudo cargar info de competidores."; $bad=true; break; }
+      if ((int)$R['disciplina_id'] !== (int)$A['disciplina_id']) { $errors_report[] = "Línea #".($entry_idx+1).": competidores no comparten disciplina."; $bad=true; break; }
+      if ((int)$R['division_id'] !== (int)$A['division_id']) { $errors_report[] = "Línea #".($entry_idx+1).": competidores no comparten división."; $bad=true; break; }
+      $tec_ok = true;
+      if (!is_null($R['cat_tec_id']) && !is_null($A['cat_tec_id'])) {
+        $tec_ok = ((int)$R['cat_tec_id'] === (int)$A['cat_tec_id']);
+      } else {
+        $tR = mb_strtoupper(trim((string)$R['cat_tec_text'])); 
+        $tA = mb_strtoupper(trim((string)$A['cat_tec_text']));
+        $tec_ok = ($tR !== '' && $tA !== '' && $tR === $tA);
+      }
+      if (!$tec_ok) { $errors_report[] = "Línea #".($entry_idx+1).": competidores no comparten categoría técnica."; $bad=true; break; }
+    }
+    if ($bad) { $any_error=true; continue; }
+
+    // duplicadas
+    $dupe_found=false;
+    foreach ($pairs as [$r,$a,$obsSuf]) {
+      $sql = "SELECT 1 FROM peleas_evento
+              WHERE ".bt($pe_cols['evento'])." = ?
+                AND ((".bt($pe_cols['rojo'])." = ? AND ".bt($pe_cols['azul'])." = ?) OR (".bt($pe_cols['rojo'])." = ? AND ".bt($pe_cols['azul'])." = ?))
+              LIMIT 1";
+      $st = $conexion->prepare($sql);
+      if (!$st) { $errors_report[] = 'SQL prepare (duplicadas manual): '.$conexion->error; $dupe_found=true; break; }
+      $st->bind_param('iiiii', $evento_id, $r, $a, $a, $r);
+      $st->execute(); $dupe = $st->get_result(); $st->close();
+      if ($dupe && $dupe->num_rows > 0) { $errors_report[] = "Línea #".($entry_idx+1).": pelea ya existe (mismas esquinas)."; $dupe_found=true; break; }
+    }
+    if ($dupe_found) { $any_error=true; continue; }
+
+    $to_insert_batches[] = ['pairs'=>$pairs,'formato'=>$formato,'rondas'=>$rondas,'obsBase'=>$obsBase,'modalidad_compartida'=>isset($modalidad_compartida)?$modalidad_compartida:null,'todos'=>$todos,'info'=>$info];
+  }
+
+  if (empty($to_insert_batches)) {
+    $msg = 'No se crearon peleas desde el textarea.';
+    if ($errors_report) $msg .= ' Errores: '.implode(' | ', $errors_report);
+    flash_err($msg);
+    header('Location: organizar_pelea.php?evento_id='.$evento_id); exit;
+  }
+
+  // Insert
+  $conexion->begin_transaction();
+  try {
+    foreach ($to_insert_batches as $b) {
+      foreach ($b['pairs'] as $iPair => [$r,$a,$obsSuf]) {
+        $cols = [$pe_cols['evento'], $pe_cols['rojo'], $pe_cols['azul']];
+        $vals = [$evento_id, $r, $a];
+        $types = 'iii';
+        if (!empty($pe_cols['modalidad']) && isset($b['modalidad_compartida'])) { $cols[] = $pe_cols['modalidad']; $vals[] = $b['modalidad_compartida']; $types .= 'i'; }
+        if ($pe_cols['rondas']) { $cols[] = $pe_cols['rondas']; $vals[] = $b['rondas']; $types .= 'i'; }
+        $obs_final = trim(($b['obsBase'] ?? '').$obsSuf);
+        if ($pe_cols['obs'])    { $cols[] = $pe_cols['obs']; $vals[] = $obs_final; $types .= 's'; }
+        $cols_bt = array_map('bt', $cols);
+        $ph = implode(',', array_fill(0, count($cols_bt), '?'));
+        $sql = "INSERT INTO peleas_evento (".implode(',', $cols_bt).") VALUES ($ph)";
+        $st = $conexion->prepare($sql);
+        if (!$st) throw new Exception('SQL prepare (insert manual): '.$conexion->error);
+        $bind = []; $bind[] = $types; foreach ($vals as $k=>&$v) { $bind[] = &$v; }
+        call_user_func_array([$st, 'bind_param'], $bind);
+        if (!$st->execute()) { $err = $st->error; $st->close(); throw new Exception('No se pudo guardar una pelea (manual): '.$err); }
+        $st->close();
+      }
+    }
+    $conexion->commit();
+  } catch (Throwable $e) {
+    $conexion->rollback();
+    flash_err('Error al guardar manual: '.$e->getMessage());
+    header('Location: organizar_pelea.php?evento_id='.$evento_id); exit;
+  }
+
+  $creadas = 0; foreach ($to_insert_batches as $b) $creadas += count($b['pairs']);
+  $msg = "Se crearon $creadas pelea(s) desde textarea.";
+  if (!empty($errors_report)) $msg .= " (Se omitieron líneas con errores: ".implode(' | ', $errors_report).")";
+  flash_ok($msg);
+  header('Location: ver_peleas_evento.php?evento_id='.(int)$evento_id);
+  exit;
+
+/* ================= EXISTENTE: eliminar_comp (sin cambios) ================= */
 if (($_POST['accion'] ?? '') === 'eliminar_comp') {
   $token = $_POST['csrf'] ?? '';
   $comp_id = isset($_POST['comp_id']) && is_numeric($_POST['comp_id']) ? (int)$_POST['comp_id'] : 0;
@@ -202,7 +527,7 @@ if (($_POST['accion'] ?? '') === 'eliminar_comp') {
   header('Location: organizar_pelea.php?evento_id='.$evento_id); exit;
 }
 
-/* ========= Helpers de validación de reglas ========= */
+/* ========= Helpers de validación de reglas (existen ya en tu archivo, mantenidos tal cual) ========= */
 function cargar_info_competidores(mysqli $db, array $ids, array $ce_cols, array $cat_cols){
   if (!$ids) return [];
   $place = implode(',', array_fill(0, count($ids), '?'));
@@ -265,7 +590,14 @@ function ya_tiene_pelea(mysqli $db, int $evento_id, int $comp_id, array $pe_cols
   return $ret && $ret->num_rows > 0;
 }
 
-/* Crear pelea(s) */
+/* =========================
+   CREAR PELEA(S) (ORIGINAL)
+   ========================= */
+/* Aquí dejamos el resto tal cual estaba en tu archivo: la lógica para crear peleas
+   desde el formulario normal (accion = crear_pelea). No modifiqué nada de este bloque.
+   (Lo copio exactamente como lo tenías para mantener compatibilidad)
+*/
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['accion'] ?? '') === 'crear_pelea') {
   $token = $_POST['csrf'] ?? '';
   if (!csrf_ok($token)) { flash_err('CSRF inválido.'); header('Location: organizar_pelea.php?evento_id='.$evento_id); exit; }
@@ -578,7 +910,7 @@ $placeholderLogo = 'assets/placeholder-logo.png';
     @media (max-width: 1000px){ .filters{ grid-template-columns: repeat(3,1fr);} }
     @media (max-width: 640px){ .filters{ grid-template-columns: 1fr;} }
     label { font-weight:600; font-size:14px; }
-    select, button, input[type=number], input[type=text] { width:100%; padding:8px 10px; border:1px solid #ddd; border-radius:8px; }
+    select, button, input[type=number], input[type=text], textarea { width:100%; padding:8px 10px; border:1px solid #ddd; border-radius:8px; }
     .table-wrap { width:100%; overflow-x:auto; }
     table { width:100%; border-collapse:collapse; min-width: 1200px; }
     th, td { border:1px solid #e7e7e7; padding:8px 10px; vertical-align:middle; }
@@ -595,6 +927,7 @@ $placeholderLogo = 'assets/placeholder-logo.png';
     form.inline { display:inline; }
     .slot-grid { display:grid; grid-template-columns: repeat(2,minmax(220px,1fr)); gap:10px; }
     .slot-grid .full { grid-column: 1 / -1; }
+    .small-note{ font-size:12px; color:#6b7280; margin-top:6px;}
   </style>
 </head>
 <body>
@@ -710,6 +1043,49 @@ $placeholderLogo = 'assets/placeholder-logo.png';
       </div>
     </div>
   </form> <!-- 👈 CERRADO ANTES DEL LISTADO PARA EVITAR ANIDAR FORMS -->
+
+<!-- ==================== FORMULARIO PELEA MANUAL ==================== -->
+<h2>Cargar Pelea Manual</h2>
+<form method="post" action="organizar_pelea.php">
+    <input type="hidden" name="accion" value="crear_pelea_manual">
+
+    <fieldset style="border:1px solid #c00; padding:10px; margin:10px;">
+        <legend>Rincón Rojo</legend>
+        <label>Nombre: <input type="text" name="rojo_nombre" required></label><br>
+        <label>Edad: <input type="number" name="rojo_edad" required></label><br>
+        <label>Peso (kg): <input type="number" step="0.1" name="rojo_peso" required></label><br>
+        <label>Academia: <input type="text" name="rojo_academia" required></label>
+    </fieldset>
+
+    <fieldset style="border:1px solid #00c; padding:10px; margin:10px;">
+        <legend>Rincón Azul</legend>
+        <label>Nombre: <input type="text" name="azul_nombre" required></label><br>
+        <label>Edad: <input type="number" name="azul_edad" required></label><br>
+        <label>Peso (kg): <input type="number" step="0.1" name="azul_peso" required></label><br>
+        <label>Academia: <input type="text" name="azul_academia" required></label>
+    </fieldset>
+
+    <label>Rondas: <input type="number" name="rondas" min="1" max="12" value="3"></label><br>
+    <label>Observaciones: <textarea name="observaciones"></textarea></label><br>
+
+    <button type="submit">Guardar Pelea Manual</button>
+</form>
+<!-- ==================== FIN FORMULARIO PELEA MANUAL ==================== -->
+
+  <!-- ======== NUEVO: Formulario para subir CSV (Excel -> CSV) ======== -->
+  <div style="margin-top:12px;padding:10px;border:1px dashed #e5e7eb;border-radius:8px;">
+    <h3 style="margin:0 0 8px 0;">📥 Importar desde CSV (exportado desde Excel)</h3>
+    <form method="POST" action="" enctype="multipart/form-data">
+      <input type="hidden" name="csrf" value="<?= h($CSRF) ?>">
+      <input type="hidden" name="accion" value="import_csv">
+      <label>Archivo (.csv):</label>
+      <input type="file" name="csv_file" accept=".csv" required style="margin-top:8px;">
+      <div class="small-note">Cada fila: <code>formato,rojo,azul,...</code>. Ver instrucciones arriba.</div>
+      <div style="margin-top:8px;">
+        <button class="btn-primary" type="submit">Subir CSV e importar</button>
+      </div>
+    </form>
+  </div>
 
   <!-- LISTADO (fuera del form de creación) -->
   <div class="table-wrap" style="margin-top:12px;">
