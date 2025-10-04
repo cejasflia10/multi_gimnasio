@@ -69,6 +69,57 @@ function bind_params(mysqli_stmt $stmt, string $types, array &$vars){
   return call_user_func_array([$stmt, 'bind_param'], $params);
 }
 
+/* ===== Gemini con CACHE + manejo 429 (Retry-After) ===== */
+function gem_call_with_cache(string $apiKey, string $payload_b64, string $mime, string $prompt, string $model='gemini-2.0-flash'){
+  $hash = hash('sha256', $payload_b64.$mime.$model.$prompt);
+  $dir  = __DIR__ . '/cache_gemini';
+  if (!is_dir($dir)) @mkdir($dir, 0775, true);
+  $file = $dir . "/{$hash}.json";
+
+  if (is_file($file)) {
+    return ['ok'=>true, 'data'=>json_decode(file_get_contents($file), true), 'cached'=>true, 'retry_after'=>0];
+  }
+
+  $endpoint = "https://generativelanguage.googleapis.com/v1beta/models/{$model}:generateContent";
+  $json_payload = json_encode([
+    "contents" => [[ "parts" => [
+      ["inline_data" => ["mime_type" => $mime, "data" => $payload_b64]],
+      ["text" => $prompt]
+    ]]],
+    "generationConfig" => ["temperature" => 0.2, "maxOutputTokens" => 180]
+  ], JSON_UNESCAPED_UNICODE);
+
+  $ch = curl_init($endpoint);
+  curl_setopt_array($ch, [
+    CURLOPT_RETURNTRANSFER => true,
+    CURLOPT_HTTPHEADER     => ['Content-Type: application/json','X-goog-api-key: '.$apiKey],
+    CURLOPT_POSTFIELDS     => $json_payload,
+    CURLOPT_TIMEOUT        => 30,
+    CURLOPT_HEADER         => true, // para leer headers y Retry-After
+  ]);
+  $resp = curl_exec($ch);
+  $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+  $hsz  = curl_getinfo($ch, CURLINFO_HEADER_SIZE);
+  $rawH = substr($resp, 0, $hsz);
+  $body = substr($resp, $hsz);
+  curl_close($ch);
+
+  if ($code === 200) {
+    // cachear éxito
+    @file_put_contents($file, $body);
+    return ['ok'=>true, 'data'=>json_decode($body,true), 'cached'=>false, 'retry_after'=>0];
+  }
+
+  // Lee Retry-After si viene (segundos)
+  $retryAfter = 0;
+  foreach (explode("\r\n", $rawH) as $h) {
+    if (stripos($h, 'Retry-After:') === 0) { $retryAfter = (float)trim(substr($h, 12)); break; }
+  }
+  $json = json_decode($body, true);
+  $msg  = $json['error']['message'] ?? 'Error desconocido';
+  return ['ok'=>false, 'code'=>$code, 'message'=>$msg, 'retry_after'=>$retryAfter];
+}
+
 /* ---------- Datos de sesión ---------- */
 $cliente_id  = isset($_SESSION['cliente_id'])  ? (int)$_SESSION['cliente_id']  : 0;
 $gimnasio_id = isset($_SESSION['gimnasio_id']) ? (int)$_SESSION['gimnasio_id'] : 0;
@@ -180,7 +231,7 @@ if ($prog_cli && $prog_gym && !empty($prog_pesos)) {
   $st->close();
 }
 
-/* ---------- Peso de referencia (si hoy no hay, uso último registro global, si tampoco, uso clientes.peso) ---------- */
+/* ---------- Peso de referencia ---------- */
 $peso_ref = null;
 if ($peso_hoy && $peso_hoy > 0) {
   $peso_ref = $peso_hoy;
@@ -238,20 +289,29 @@ $sug_porcion_cant = null;
 $sug_porcion_uni  = null;
 $kcal_por_100g    = null;
 $gem_json_bruto   = '';
+$retry_after_ui   = 0; // para countdown en UI
 
-/* ---------- Procesar imagen con Gemini ---------- */
+/* ---------- Procesar imagen con Gemini (CACHE + 429 + rate-limit sesión) ---------- */
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['imagen_base64'])) {
-  $base64 = (string)$_POST['imagen_base64'];
-  $mime   = (stripos($base64, 'image/png') !== false) ? 'image/png' : 'image/jpeg';
-  $payload_b64 = preg_replace('#^data:image/[^;]+;base64,#', '', $base64);
-
-  if (!$apiKey) {
-    $error_modelo = "⚠️ Falta configurar GEMINI_API_KEY en el servidor.";
-  } elseif (!function_exists('curl_init')) {
-    $error_modelo = "⚠️ cURL no está habilitado en el servidor. Activá la extensión php-curl.";
+  // Rate limit de sesión (evita ráfagas)
+  $minGap = 3.0; // segundos
+  $now = microtime(true);
+  if (!isset($_SESSION['last_gem_call'])) $_SESSION['last_gem_call'] = 0;
+  if (($now - $_SESSION['last_gem_call']) < $minGap) {
+    $error_modelo = "Estás enviando muy seguido. Probá de nuevo en unos segundos.";
   } else {
-    $endpoint = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent";
-    $prompt = "Analiza la imagen de comida y devuelve SOLO un JSON minificado (sin texto extra) con este esquema:
+    $_SESSION['last_gem_call'] = $now;
+
+    $base64 = (string)$_POST['imagen_base64'];
+    $mime   = (stripos($base64, 'image/png') !== false) ? 'image/png' : 'image/jpeg';
+    $payload_b64 = preg_replace('#^data:image/[^;]+;base64,#', '', $base64);
+
+    if (!$apiKey) {
+      $error_modelo = "⚠️ Falta configurar GEMINI_API_KEY en el servidor.";
+    } elseif (!function_exists('curl_init')) {
+      $error_modelo = "⚠️ cURL no está habilitado en el servidor. Activá la extensión php-curl.";
+    } else {
+      $prompt = "Analiza la imagen de comida y devuelve SOLO un JSON minificado (sin texto extra) con este esquema:
 {
   \"nombre\": string,
   \"kcal_por_porcion\": number,
@@ -259,64 +319,45 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['imagen_base64'])) {
   \"kcal_por_100g\": number
 }
 Responde únicamente el JSON, sin backticks, sin explicación.";
+      $res = gem_call_with_cache($apiKey, $payload_b64, $mime, $prompt, 'gemini-2.0-flash');
 
-    $json_payload = json_encode([
-      "contents" => [[
-        "parts" => [
-          ["inline_data" => ["mime_type" => $mime, "data" => $payload_b64]],
-          ["text" => $prompt]
-        ]
-      ]]],
-      JSON_UNESCAPED_UNICODE
-    );
-
-    $ch = curl_init($endpoint);
-    curl_setopt_array($ch, [
-      CURLOPT_RETURNTRANSFER => true,
-      CURLOPT_HTTPHEADER     => [
-        'Content-Type: application/json',
-        'X-goog-api-key: ' . $apiKey
-      ],
-      CURLOPT_POSTFIELDS     => $json_payload,
-      CURLOPT_TIMEOUT        => 30
-    ]);
-    $resp = curl_exec($ch);
-    $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    $err  = curl_error($ch);
-    curl_close($ch);
-
-    if ($resp === false) {
-      $error_modelo = "⚠️ Error de conexión con Gemini: ".$err;
-    } else {
-      $data = json_decode($resp, true);
-      if ($code === 200 && isset($data['candidates'][0]['content']['parts'][0]['text'])) {
-        $texto = trim($data['candidates'][0]['content']['parts'][0]['text']);
-        $texto = preg_replace('/^```(?:json)?/i', '', $texto);
-        $texto = preg_replace('/```$/', '', $texto);
-        $texto = trim($texto);
-        $gem_json_bruto = $texto;
-
-        $parsed = json_decode($texto, true);
-        if (is_array($parsed)) {
-          $nombre_detectado = isset($parsed['nombre']) ? (string)$parsed['nombre'] : $nombre_detectado;
-          if (isset($parsed['kcal_por_porcion'])) $kcal_detectadas = (int)round((float)$parsed['kcal_por_porcion']);
-          if (isset($parsed['kcal_por_100g']))    $kcal_por_100g   = (float)$parsed['kcal_por_100g'];
-          if (isset($parsed['porcion_sugerida']['cantidad'])) $sug_porcion_cant = (float)$parsed['porcion_sugerida']['cantidad'];
-          if (isset($parsed['porcion_sugerida']['unidad']))   $sug_porcion_uni  = strtolower((string)$parsed['porcion_sugerida']['unidad']);
-          $resultado_modelo = "Detectado: {$nombre_detectado}. kcal/porción aprox: {$kcal_detectadas}".($sug_porcion_cant? " | Porción sugerida: {$sug_porcion_cant} ".h($sug_porcion_uni):"");
+      if (!$res['ok']) {
+        if (($res['code'] ?? 0) == 429) {
+          $retry_after_ui = (int)ceil($res['retry_after'] ?: 20); // fallback 20s si no viene
+          $error_modelo = "Límite temporal alcanzado. Esperá " . $retry_after_ui . " s y probá de nuevo.";
         } else {
-          // Fallback a texto libre
-          $resultado_modelo = $texto;
-          if (preg_match('/(\d{2,5})\s?k?cal/i', $texto, $m)) $kcal_detectadas = (int)$m[1];
-          if (preg_match('/^(.{3,80}?)(?:\s+(?:contiene|tiene|aprox|aprox\.|≈))/iu', $texto, $n)) {
-            $nombre_detectado = trim($n[1]);
-          } elseif (preg_match('/^([A-ZÁÉÍÓÚÑa-záéíóúñ ]{3,80})/u', $texto, $n2)) {
-            $nombre_detectado = trim($n2[1]);
-          }
+          $error_modelo = "No se pudo procesar la imagen (HTTP ".($res['code'] ?? '?')."). ".$res['message'];
         }
       } else {
-        $error_text = $data['error']['message'] ?? 'Respuesta inesperada de Gemini';
-        $error_modelo = "⚠️ No se pudo procesar la imagen (HTTP {$code}). ".$error_text;
+        $data = $res['data'];
+        if (isset($data['candidates'][0]['content']['parts'][0]['text'])) {
+          $texto = trim($data['candidates'][0]['content']['parts'][0]['text']);
+          $texto = preg_replace('/^```(?:json)?/i', '', $texto);
+          $texto = preg_replace('/```$/', '', $texto);
+          $texto = trim($texto);
+          $gem_json_bruto = $texto;
+
+          $parsed = json_decode($texto, true);
+          if (is_array($parsed)) {
+            $nombre_detectado = isset($parsed['nombre']) ? (string)$parsed['nombre'] : $nombre_detectado;
+            if (isset($parsed['kcal_por_porcion'])) $kcal_detectadas = (int)round((float)$parsed['kcal_por_porcion']);
+            if (isset($parsed['kcal_por_100g']))    $kcal_por_100g   = (float)$parsed['kcal_por_100g'];
+            if (isset($parsed['porcion_sugerida']['cantidad'])) $sug_porcion_cant = (float)$parsed['porcion_sugerida']['cantidad'];
+            if (isset($parsed['porcion_sugerida']['unidad']))   $sug_porcion_uni  = strtolower((string)$parsed['porcion_sugerida']['unidad']);
+            $resultado_modelo = "Detectado: {$nombre_detectado}. kcal/porción aprox: {$kcal_detectadas}".($sug_porcion_cant? " | Porción sugerida: {$sug_porcion_cant} ".h($sug_porcion_uni):"");
+          } else {
+            // Fallback a texto libre
+            $resultado_modelo = $texto;
+            if (preg_match('/(\d{2,5})\s?k?cal/i', $texto, $m)) $kcal_detectadas = (int)$m[1];
+            if (preg_match('/^(.{3,80}?)(?:\s+(?:contiene|tiene|aprox|aprox\.|≈))/iu', $texto, $n)) {
+              $nombre_detectado = trim($n[1]);
+            } elseif (preg_match('/^([A-ZÁÉÍÓÚÑa-záéíóúñ ]{3,80})/u', $texto, $n2)) {
+              $nombre_detectado = trim($n2[1]);
+            }
+          }
+        } else {
+          $error_modelo = "Respuesta inesperada del modelo.";
+        }
       }
     }
   }
@@ -564,7 +605,6 @@ $estado_neto  = ($balance_neto > 250) ? 'Superávit' : (($balance_neto < -250) ?
 
       <!-- Mostrar ejercicios de hoy si existen -->
       <?php
-        // Listado ejercicios de hoy (si querés, mantené lo que ya tenías).
         $ejercicios_hoy = [];
         if ($prog_cli && $prog_gym) {
           $ejCol = first_col($conexion, $prog_tbl, ['ejercicios','ejercicio','detalle','actividad','ejercicio_detalle','actividad_realizada','nombre_ejercicio'], false);
@@ -645,7 +685,14 @@ $estado_neto  = ($balance_neto > 250) ? 'Superávit' : (($balance_neto < -250) ?
           <?php if ($kcal_por_100g): ?><span class="pill-info">⚖️ <?= num($kcal_por_100g,0) ?> kcal/100g</span><?php endif; ?>
         </div>
       <?php elseif ($error_modelo): ?>
-        <p style="color:#ff6b6b"><?= h($error_modelo) ?></p>
+        <div style="color:#fca5a5" id="retryBox" data-retry-after="<?= (int)$retry_after_ui ?>">
+          <?= h($error_modelo) ?><br>
+          <?php if ($retry_after_ui): ?>
+            Reintentá en <b id="retryCountdown"><?= (int)$retry_after_ui ?></b> s…
+          <?php else: ?>
+            <small class="muted">Si el límite persiste, activá facturación o usá una clave con cuota paga.</small>
+          <?php endif; ?>
+        </div>
       <?php else: ?>
         <p class="muted">Tomá una foto o subí una imagen para analizar la comida.</p>
       <?php endif; ?>
@@ -851,6 +898,28 @@ $estado_neto  = ($balance_neto > 250) ? 'Superávit' : (($balance_neto < -250) ?
     }
   }
   if (btnAplicar) btnAplicar.addEventListener('click', aplicarSugerencia);
+
+  // ======== Countdown si hubo 429 (Retry-After) ========
+  (function(){
+    var box = document.getElementById('retryBox');
+    if(!box) return;
+    var secs = parseFloat(box.dataset.retryAfter || '0');
+    if(!secs || secs <= 0) return;
+    var btn = document.querySelector('#form_enviar button[type=submit]');
+    if(btn) btn.disabled = true;
+    var cnt = document.getElementById('retryCountdown');
+    function tick(){
+      if(secs <= 0){
+        if(btn) btn.disabled = false;
+        box.style.display = 'none';
+        return;
+      }
+      if(cnt) cnt.textContent = Math.ceil(secs);
+      secs -= 1;
+      setTimeout(tick, 1000);
+    }
+    tick();
+  })();
 })();
 </script>
 </body>
