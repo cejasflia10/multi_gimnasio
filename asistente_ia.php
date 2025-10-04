@@ -1,5 +1,5 @@
 <?php
-// asistente_ia.php
+// asistente_nutricional.php
 if (session_status() === PHP_SESSION_NONE) session_start();
 require_once __DIR__ . '/conexion.php';
 include __DIR__ . '/menu_cliente.php';
@@ -8,78 +8,69 @@ $cliente_id  = (int)($_SESSION['cliente_id'] ?? 0);
 $gimnasio_id = (int)($_SESSION['gimnasio_id'] ?? 0);
 if (!$cliente_id || !$gimnasio_id) { echo "<div style='color:red;text-align:center;padding:12px'>❌ Acceso denegado.</div>"; exit; }
 
-/* ================= Helpers ================= */
 function h($s){ return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); }
 function num($n,$d=1){ return number_format((float)$n,$d,',','.'); }
 function db_has_table(mysqli $db, string $t): bool { $t=$db->real_escape_string($t); $r=$db->query("SHOW TABLES LIKE '{$t}'"); return ($r && $r->num_rows>0); }
 function db_has_col(mysqli $db, string $t, string $c): bool { $t=$db->real_escape_string($t); $c=$db->real_escape_string($c); $r=$db->query("SHOW COLUMNS FROM `{$t}` LIKE '{$c}'"); return ($r && $r->num_rows>0); }
 function pick_col(mysqli $db, string $t, array $cands): ?string { foreach ($cands as $c) if (db_has_col($db,$t,$c)) return $c; return null; }
-function mysql_today(mysqli $db): string { $res=$db->query("SELECT CURRENT_DATE() AS hoy"); if($res && ($row=$res->fetch_assoc())) return $row['hoy']; return date('Y-m-d'); }
-function valid_ymd($s){ return preg_match('/^\d{4}-\d{2}-\d{2}$/', (string)$s) === 1; }
 
-/* ================ Cliente ================ */
+// === Cliente
 $cliente=null;
 if($st=$conexion->prepare("SELECT * FROM clientes WHERE id=? AND gimnasio_id=? LIMIT 1")){
   $st->bind_param("ii",$cliente_id,$gimnasio_id);
   $st->execute(); $cliente=$st->get_result()->fetch_assoc(); $st->close();
 }
 if(!$cliente){ echo "<p style='color:red;padding:20px'>⚠️ No se encontró el cliente.</p>"; exit; }
+$nombre = trim(($cliente['apellido']??'').' '.($cliente['nombre']??''));
 
-$nombre     = trim(($cliente['apellido']??'').' '.($cliente['nombre']??''));
+// Altura base
 $altura_raw = $cliente['altura_cm'] ?? $cliente['altura'] ?? null;
-$altura_m   = 1.70;
+$altura_m = 1.70;
 if ($altura_raw!==null && (float)$altura_raw>0) $altura_m = ((float)$altura_raw>3)? ((float)$altura_raw/100.0) : (float)$altura_raw;
 
-/* ================ Progreso: por id o último ================ */
-if (!db_has_table($conexion,'progreso')) { echo "<p style='color:red;padding:20px'>⚠️ Falta la tabla <b>progreso</b>.</p>"; exit; }
-
+// === Progreso seleccionado (por id) o último
 $progreso_id = (int)($_GET['progreso_id'] ?? 0);
 $ult = null;
-
-if ($progreso_id>0) {
-  $sql = "SELECT id, fecha, peso_antes, peso_despues, altura_cm, duracion_min, calorias_quemadas, objetivo, notas
-          FROM progreso WHERE id=? AND cliente_id=? AND gimnasio_id=? LIMIT 1";
-  if($st=$conexion->prepare($sql)){
-    $st->bind_param("iii",$progreso_id,$cliente_id,$gimnasio_id);
-    if($st->execute()) $ult=$st->get_result()->fetch_assoc();
-    $st->close();
+if (db_has_table($conexion,'progreso')) {
+  if ($progreso_id>0) {
+    $sql = "SELECT id, fecha, peso_antes, peso_despues, altura_cm, duracion_min, calorias_quemadas, objetivo, notas
+            FROM progreso WHERE id=? AND cliente_id=? AND gimnasio_id=? LIMIT 1";
+    if($st=$conexion->prepare($sql)){
+      $st->bind_param("iii",$progreso_id,$cliente_id,$gimnasio_id);
+      if($st->execute()) $ult=$st->get_result()->fetch_assoc();
+      $st->close();
+    }
+  }
+  if(!$ult){
+    $sql = "SELECT id, fecha, peso_antes, peso_despues, altura_cm, duracion_min, calorias_quemadas, objetivo, notas
+            FROM progreso WHERE cliente_id=? AND gimnasio_id=? ORDER BY fecha DESC, id DESC LIMIT 1";
+    if($st=$conexion->prepare($sql)){
+      $st->bind_param("ii",$cliente_id,$gimnasio_id);
+      if($st->execute()) $ult=$st->get_result()->fetch_assoc();
+      $st->close();
+    }
   }
 }
-if(!$ult){
-  $sql = "SELECT id, fecha, peso_antes, peso_despues, altura_cm, duracion_min, calorias_quemadas, objetivo, notas
-          FROM progreso WHERE cliente_id=? AND gimnasio_id=? ORDER BY fecha DESC, id DESC LIMIT 1";
-  if($st=$conexion->prepare($sql)){
-    $st->bind_param("ii",$cliente_id,$gimnasio_id);
-    if($st->execute()) $ult=$st->get_result()->fetch_assoc();
-    $st->close();
-  }
-}
 
-/* Fecha de referencia principal: HOY por defecto (para cruzar comidas del día) */
-$hoy_db     = mysql_today($conexion);
-$fecha_ref  = isset($_GET['fecha']) && valid_ymd($_GET['fecha']) ? $_GET['fecha'] : $hoy_db;
-$is_hoy     = ($fecha_ref === $hoy_db);
-
-/* Si el progreso trae altura, usarla */
+// Si en el progreso hay altura, la uso
 if ($ult && (float)($ult['altura_cm']??0)>0) $altura_m = ((float)$ult['altura_cm'])/100.0;
 
-/* Peso de referencia */
+// Peso ref
 $peso_ref = 70.0;
 if ($ult && (float)($ult['peso_despues']??0)>0)      $peso_ref = (float)$ult['peso_despues'];
 elseif (isset($cliente['peso']) && (float)$cliente['peso']>0) $peso_ref = (float)$cliente['peso'];
 
-/* Enfermedades (si existe en clientes) */
+// Enfermedades (si existe en clientes)
 $enfermedades = trim((string)($cliente['enfermedades'] ?? ''));
 $es_diabetico = stripos($enfermedades, 'diab') !== false;
 
-/* IMC y categorías */
+// IMC
 $imc = ($altura_m>0) ? round($peso_ref/($altura_m*$altura_m),1) : 0.0;
-$cat='Desconocido';
-if($imc>0){ if($imc<18.5)$cat='Bajo peso'; elseif($imc<25)$cat='Saludable'; elseif($imc<30)$cat='Sobrepeso'; else $cat='Obesidad'; }
+$cat='Desconocido'; if($imc>0){ if($imc<18.5)$cat='Bajo peso'; elseif($imc<25)$cat='Saludable'; elseif($imc<30)$cat='Sobrepeso'; else $cat='Obesidad'; }
 $peso_min = round(18.5*$altura_m*$altura_m,1);
 $peso_max = round(24.9*$altura_m*$altura_m,1);
 
-/* Objetivo (progreso → override; si no, por IMC) */
+// Objetivo (según progreso o IMC)
 $objetivo = strtolower(trim((string)($_GET['objetivo'] ?? '')));
 if(!in_array($objetivo,['bajar peso','mantener','subir peso'],true)){
   $obj_prog = strtolower(trim((string)($ult['objetivo'] ?? '')));
@@ -90,26 +81,36 @@ if(!in_array($objetivo,['bajar peso','mantener','subir peso'],true)){
   }
 }
 
-/* =================== QUEMADAS del día ===================
-   IMPORTANTE: usar DATE(fecha)=? por si la columna es DATETIME */
-$kcal_burn_dia=0; $min_dia=0; $sesiones_dia=0;
-$sqlK="SELECT COUNT(*) sesiones,
-              COALESCE(SUM(calorias_quemadas),0) kcal,
-              COALESCE(SUM(duracion_min),0) minutos
-       FROM progreso
-       WHERE cliente_id=? AND gimnasio_id=? AND DATE(fecha)=?";
-if($st=$conexion->prepare($sqlK)){
-  $st->bind_param("iis",$cliente_id,$gimnasio_id,$fecha_ref);
-  if($st->execute()){
-    $r=$st->get_result()->fetch_assoc();
-    $sesiones_dia=(int)($r['sesiones']??0);
-    $kcal_burn_dia=(int)($r['kcal']??0);
-    $min_dia=(int)($r['minutos']??0);
+// Stats últimos 7 días
+$tz = new DateTimeZone('America/Argentina/San_Luis');
+$hoyDT = new DateTime('today',$tz);
+$hoy   = $hoyDT->format('Y-m-d');
+$desde = (clone $hoyDT)->modify('-6 days')->format('Y-m-d');
+$hasta = $hoy;
+
+$stats7 = ['sesiones'=>0,'minutos'=>0,'kcal'=>0];
+if(db_has_table($conexion,'progreso')){
+  $sqlS="SELECT COUNT(*) sesiones, COALESCE(SUM(duracion_min),0) minutos, COALESCE(SUM(calorias_quemadas),0) kcal
+         FROM progreso WHERE cliente_id=? AND gimnasio_id=? AND fecha BETWEEN ? AND ?";
+  if($st=$conexion->prepare($sqlS)){
+    $st->bind_param("iiss",$cliente_id,$gimnasio_id,$desde,$hasta);
+    if($st->execute()) $stats7=$st->get_result()->fetch_assoc() ?: $stats7; $st->close();
   }
-  $st->close();
 }
 
-/* =================== Objetivo calórico + macros =================== */
+// Calorías ejercicio HOY
+$kcal_burn_hoy=0; $min_hoy=0;
+if(db_has_table($conexion,'progreso')){
+  $sqlK="SELECT COALESCE(SUM(calorias_quemadas),0) kcal, COALESCE(SUM(duracion_min),0) minutos
+         FROM progreso WHERE cliente_id=? AND gimnasio_id=? AND fecha=?";
+  if($st=$conexion->prepare($sqlK)){
+    $st->bind_param("iis",$cliente_id,$gimnasio_id,$hoy);
+    if($st->execute()){ $r=$st->get_result()->fetch_assoc(); $kcal_burn_hoy=(int)($r['kcal']??0); $min_hoy=(int)($r['minutos']??0); }
+    $st->close();
+  }
+}
+
+// Objetivo calórico y macros
 $kcal_base = (int)round($peso_ref*30);
 $kcal_obj  = $kcal_base + (($objetivo==='subir peso')?+300:(($objetivo==='bajar peso')?-400:0));
 if($objetivo==='bajar peso'){ $p=0.30;$c=0.40;$g=0.30; }
@@ -119,20 +120,15 @@ $g_prot=(int)round(($kcal_obj*$p)/4);
 $g_carb=(int)round(($kcal_obj*$c)/4);
 $g_gras=(int)round(($kcal_obj*$g)/9);
 
-/* =================== COMIDAS del día (detección flexible) =================== */
+// Buscar tabla de comidas del día
 function detectar_tabla_comidas(mysqli $db): ?array {
-  $candidatas=[
-    'ingesta_diaria','ingestas','ingesta',
-    'registro_comidas','comidas','comidas_diarias',
-    'alimentos_consumidos','dieta_diaria','nutricion_diaria',
-    'diario_comidas','diario_alimentos','comida_dia','nutricion','dietas'
-  ];
+  $candidatas=['ingesta_diaria','ingestas','ingesta','registro_comidas','comidas','comidas_diarias','alimentos_consumidos','dieta_diaria','nutricion_diaria'];
   foreach($candidatas as $t){
-    if(!db_has_table($db,$t)) continue;
-    $cCli  = pick_col($db,$t,['cliente_id','id_cliente','user_id','id_usuario','usuario_id','persona_id']);
+    $exists = db_has_table($db,$t); if(!$exists) continue;
+    $cCli  = pick_col($db,$t,['cliente_id','id_cliente','user_id']);
     $cGym  = pick_col($db,$t,['gimnasio_id','id_gimnasio']);
     $cFec  = pick_col($db,$t,['fecha','dia','created_at','fecha_registro']);
-    $cKcal = pick_col($db,$t,['kcal','kcal_total','kcal_totales','calorias','calorias_totales','kilocalorias']);
+    $cKcal = pick_col($db,$t,['kcal','calorias','calorias_totales','kilocalorias']);
     $cProt = pick_col($db,$t,['proteina','proteinas','proteinas_g','protein_g','g_proteina']);
     $cCarb = pick_col($db,$t,['carbohidratos','carbs','carbohidratos_g','carbs_g','g_carbohidrato']);
     $cGras = pick_col($db,$t,['grasas','fat','grasas_g','fat_g','g_grasa']);
@@ -142,93 +138,89 @@ function detectar_tabla_comidas(mysqli $db): ?array {
   }
   return null;
 }
-
-$ingesta_dia=['kcal'=>0,'prot'=>0,'carb'=>0,'gras'=>0,'origen'=>null,'cols'=>[]];
+$ingesta_hoy=['kcal'=>0,'prot'=>0,'carb'=>0,'gras'=>0,'origen'=>null];
 if($det=detectar_tabla_comidas($conexion)){
   $cols=["COALESCE(SUM(`{$det['kcal']}`),0) AS kcal"];
   if($det['prot']) $cols[]="COALESCE(SUM(`{$det['prot']}`),0) AS prot";
   if($det['carb']) $cols[]="COALESCE(SUM(`{$det['carb']}`),0) AS carb";
   if($det['gras']) $cols[]="COALESCE(SUM(`{$det['gras']}`),0) AS gras";
-
-  $sqlC="SELECT ".implode(', ',$cols)." FROM `{$det['t']}` WHERE 1";
+  $sqlC="SELECT ".implode(',',$cols)." FROM `{$det['t']}` WHERE 1";
   $bind=''; $args=[];
   if($det['cli']){ $sqlC.=" AND `{$det['cli']}`=?"; $bind.='i'; $args[]=$cliente_id; }
   if($det['gym']){ $sqlC.=" AND `{$det['gym']}`=?"; $bind.='i'; $args[]=$gimnasio_id; }
-  // Igual que arriba: usar DATE(...) para ser robustos con DATETIME
-  $sqlC.=" AND DATE(`{$det['fec']}`)=?"; $bind.='s'; $args[]=$fecha_ref;
+  $sqlC.=" AND DATE(`{$det['fec']}`)=?"; $bind.='s'; $args[]=$hoy;
 
   if($st=$conexion->prepare($sqlC)){
     if($bind==='i') $st->bind_param('i',$args[0]);
     elseif($bind==='ii') $st->bind_param('ii',$args[0],$args[1]);
-    elseif($bind==='is') $st->bind_param('is',$args[0],$args[1]);
     elseif($bind==='iis') $st->bind_param('iis',$args[0],$args[1],$args[2]);
-    else if ($bind!=='') $st->bind_param($bind, ...$args);
-
+    elseif($bind==='is') $st->bind_param('is',$args[0],$args[1]);
+    else $st->bind_param($bind, ...$args);
     if($st->execute()){
       $r=$st->get_result()->fetch_assoc() ?: [];
-      $ingesta_dia['kcal']=(int)($r['kcal']??0);
-      $ingesta_dia['prot']=(float)($r['prot']??0);
-      $ingesta_dia['carb']=(float)($r['carb']??0);
-      $ingesta_dia['gras']=(float)($r['gras']??0);
-      $ingesta_dia['origen']=$det['t'];
-      $ingesta_dia['cols']=['fec'=>$det['fec'],'kcal'=>$det['kcal'],'prot'=>$det['prot'],'carb'=>$det['carb'],'gras'=>$det['gras']];
+      $ingesta_hoy['kcal']=(int)($r['kcal']??0);
+      $ingesta_hoy['prot']=(float)($r['prot']??0);
+      $ingesta_hoy['carb']=(float)($r['carb']??0);
+      $ingesta_hoy['gras']=(float)($r['gras']??0);
+      $ingesta_hoy['origen']=$det['t'];
     }
     $st->close();
   }
 }
 
-/* =================== Balance y “estudio” entrenamiento vs comidas =================== */
-$kcal_comidas_dia = (int)$ingesta_dia['kcal'];
-$kcal_netas_dia   = $kcal_comidas_dia - $kcal_burn_dia;        // comidas - ejercicio
-$kcal_restantes   = $kcal_obj - $kcal_netas_dia;               // distancia al objetivo del día
+// Balance diario
+$kcal_comidas_hoy=(int)$ingesta_hoy['kcal'];
+$kcal_netas_hoy  = $kcal_comidas_hoy - $kcal_burn_hoy;
+$kcal_restantes  = $kcal_obj - $kcal_netas_hoy;
 
-// Estado del día
-if ($kcal_netas_dia > ($kcal_obj + 100))      { $estado='Superávit alto'; $estado_cls='bad'; }
-elseif ($kcal_netas_dia > ($kcal_obj - 100))  { $estado='Superávit leve'; $estado_cls='warn'; }
-elseif ($kcal_netas_dia < ($kcal_obj - 300))  { $estado='Déficit alto';   $estado_cls='bad'; }
-elseif ($kcal_netas_dia < ($kcal_obj - 100))  { $estado='Déficit leve';   $estado_cls='warn'; }
-else                                          { $estado='Equilibrado';    $estado_cls='ok'; }
-
-// Comentarios rápidos
-$comentarios=[];
-if($kcal_comidas_dia===0) $comentarios[]='No hay comidas registradas en la fecha.';
-if($kcal_burn_dia===0)    $comentarios[]='No hay entrenamiento registrado en la fecha.';
-if($ingesta_dia['prot']>0 && $g_prot>0){
-  $pctP = round(($ingesta_dia['prot']/$g_prot)*100);
-  $comentarios[] = "Proteínas: {$pctP}% del objetivo (" . (int)$ingesta_dia['prot'] . " / {$g_prot} g)";
-}
-
-/* Agua y proteínas guía */
+// Agua y proteínas guía
 $agua_l = max(1.5, round($peso_ref*0.035,1));
 $prot_gkg = ($objetivo==='bajar peso')?1.6:(($objetivo==='subir peso')?2.0:1.4);
 $prot_total = round($peso_ref*$prot_gkg);
 
-/* Mensaje principal */
+// Plan semanal (idéntico al previo, resumido)
+function dieta_base($goal){
+  $bajar=['desayuno'=>['Infusión sin azúcar + 2 tostadas integrales con queso untable light','Yogur descremado + granola sin azúcar + fruta','Mate/te sin azúcar + omelette de 2 claras + 1 yema + tomate'],
+          'almuerzo'=>['Pechuga a la plancha + ensalada verde + 1 cda aceite de oliva','Atún + mix de hojas + quinoa (~70g cocida)','Pollo salteado + verduras al wok + arroz integral pequeño'],
+          'merienda'=>['Infusión con leche descremada + 2 galletas de arroz','Yogur + fruta','Batido de agua + proteína (opcional) + 1 banana'],
+          'cena'=>['Sopa de verduras + tortilla de espinaca al horno','Filet de merluza + puré de calabaza','Carne magra + ensalada variada + 1 cda aceite']];
+  $subir=['desayuno'=>['Tostadas integrales con palta y huevo + batido con leche + banana','Avena cocida con leche + fruta + mantequilla de maní','Yogur entero + granola + frutos secos'],
+          'almuerzo'=>['Arroz integral + pollo al horno + ensalada + fruta','Pasta + salsa de tomate + atún + aceite de oliva','Wrap integral de pollo + queso + verduras'],
+          'merienda'=>['Sandwich integral de jamón/queso + fruta','Yogur + frutos secos','Batido con leche + banana + avena'],
+          'cena'=>['Pasta con atún y aceite de oliva + pan integral','Tarta integral de verduras + ensalada','Guiso magro con papa y verduras']];
+  $mant=['desayuno'=>['Infusión + 2 tostadas integrales con queso','Avena con leche + fruta','Omelette + pan integral'],
+         'almuerzo'=>['Carne magra + ensalada + arroz integral pequeño','Pollo al horno + papas + ensalada','Merluza + puré + ensalada'],
+         'merienda'=>['Yogur + fruta','Infusión + 2 galletas de arroz','Sandwich integral pequeño'],
+         'cena'=>['Sopa + tortilla de verduras','Salteado de pollo + verduras + quinoa','Carne magra + ensalada + 1 cda aceite']];
+  return $goal==='subir peso' ? $subir : ($goal==='bajar peso' ? $bajar : $mant);
+}
+function ajustar_diabetes($plan){ foreach($plan as $t=>$ops){ foreach($ops as $i=>$txt){ $txt=str_ireplace(['mermelada','azúcar','dulce','galletas'],['queso descremado','sin azúcar','fruta','galletas de arroz'],$txt); $txt=preg_replace('/(jugo|gaseosa)/i','agua/infusión sin azúcar',$txt); $plan[$t][$i]=$txt; } } return $plan; }
+$base=dieta_base($objetivo); if($es_diabetico) $base=ajustar_diabetes($base);
+$dias=['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado','Domingo'];
+$plan=[]; for($i=0;$i<7;$i++){ $plan[$dias[$i]]=['Desayuno'=>$base['desayuno'][$i%3],'Almuerzo'=>$base['almuerzo'][$i%3],'Merienda'=>$base['merienda'][$i%3],'Cena'=>$base['cena'][$i%3]]; }
+
+// Mensaje
 $mensaje="Hola {$nombre}. Tu IMC actual es {$imc} ({$cat}). Rango saludable aprox: {$peso_min}–{$peso_max} kg.";
 
-/* Última sesión formateada (para mostrar detalle) */
+// Última sesión formateada
 $ult_fmt=null;
 if($ult){
   $pa=(float)($ult['peso_antes']??0); $pd=(float)($ult['peso_despues']??0); $delta=$pd-$pa;
   $ult_fmt=[
-    'id'   => (int)($ult['id'] ?? 0),
-    'fecha'=> h($ult['fecha']??''),
-    'peso' => num($pa,1)." → ".num($pd,1)." kg (Δ ".(($delta>=0?'+':'−').num(abs($delta),2))." kg)",
-    'dur'  => (int)($ult['duracion_min']??0),
-    'kcal' => (int)($ult['calorias_quemadas']??0),
-    'obj'  => h((string)($ult['objetivo']??'')),
-    'notas'=> h((string)($ult['notas']??'')),
+    'fecha'=>h($ult['fecha']??''),
+    'peso'=>num($pa,1)." → ".num($pd,1)." kg (Δ ".(($delta>=0?'+':'−').num(abs($delta),2))." kg)",
+    'dur'=>(int)($ult['duracion_min']??0),
+    'kcal'=>(int)($ult['calorias_quemadas']??0),
+    'obj'=>h((string)($ult['objetivo']??'')),
+    'notas'=>h((string)($ult['notas']??'')),
   ];
 }
-
-/* Debug opcional */
-$DEBUG = isset($_GET['debug']) && $_GET['debug']=='1';
 ?>
 <!doctype html>
 <html lang="es">
 <head>
   <meta charset="utf-8">
-  <title>Asistente IA — Análisis Entrenamiento vs Comidas</title>
+  <title>Asistente IA — Plan Nutricional</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
     :root{ --bg:#0b0b0b; --card:#111; --fg:#f1f5f9; --muted:#a0a7b4; --acc:#f5c542; --border:rgba(255,255,255,.12); }
@@ -241,132 +233,129 @@ $DEBUG = isset($_GET['debug']) && $_GET['debug']=='1';
     .card{ background:var(--card); border:1px solid var(--border); border-radius:16px; padding:14px }
     .flex{ display:flex; gap:8px; flex-wrap:wrap; align-items:center }
     label{ font-weight:700 }
-    input,select,button{ padding:8px 10px; border-radius:12px; border:1px solid var(--border); background:#1a1d24; color:#fff }
+    select,button{ padding:8px 10px; border-radius:12px; border:1px solid var(--border); background:#1a1d24; color:var(--fg) }
     .btn{ background:var(--acc); color:#111; border:none; font-weight:800 }
     .msg{ background:#14161c; border:1px solid var(--border); padding:12px; border-radius:12px; margin-top:8px }
-    .grid4{ display:grid; gap:8px; grid-template-columns:1fr; } @media (min-width:700px){ .grid4{ grid-template-columns:repeat(4,1fr);} }
-    .grid3{ display:grid; gap:8px; grid-template-columns:1fr; } @media (min-width:680px){ .grid3{ grid-template-columns: repeat(3,1fr); } }
+    .grid3{ display:grid; gap:8px; grid-template-columns:1fr; }
+    @media (min-width:680px){ .grid3{ grid-template-columns: repeat(3,1fr); } }
     .kpi{ text-align:center; background:#1a1d24; border:1px solid var(--border); border-radius:12px; padding:10px }
     .kpi b{ display:block; font-size:18px; margin-top:4px }
+    table{ width:100%; border-collapse:collapse; margin-top:10px; font-size:14px }
+    th,td{ padding:10px; border-bottom:1px solid rgba(255,255,255,.08); text-align:left }
+    th{ color:var(--muted); font-weight:700; background:#0f1118 }
     .muted{ color:var(--muted) }
     .pill{ display:inline-block; padding:2px 8px; border-radius:999px; border:1px solid var(--border); font-size:12px; margin-left:6px }
     .ok{ color:#22c55e } .bad{ color:#ef4444 } .warn{ color:#f59e0b }
-    a{ color:#f5c542; text-decoration:none }
-    .dbg{ font-size:12px; background:#161922; border:1px dashed #334; padding:8px; border-radius:10px; margin:8px 0 }
   </style>
 </head>
 <body>
 <div class="container">
-  <h2>🤖 Asistente Nutricional — Entrenamiento vs Comidas</h2>
+  <h2>🤖 Asistente Nutricional</h2>
 
   <?php if (isset($_GET['ok'])): ?>
-    <div class="msg">✅ ¡Progreso guardado! (desde <b>form_progreso.php</b>)</div>
+    <div class="msg">✅ ¡Progreso guardado! Mostrando la última carga de <b>form_progreso.php</b>.</div>
   <?php endif; ?>
 
-  <!-- Barra de filtros -->
-  <section class="card">
-    <form method="GET" class="flex">
-      <input type="hidden" name="progreso_id" value="<?= (int)$progreso_id ?>">
-      <label>Objetivo:</label>
-      <select name="objetivo">
-        <option value="bajar peso" <?= $objetivo==='bajar peso'?'selected':'' ?>>Bajar peso</option>
-        <option value="mantener"   <?= $objetivo==='mantener'  ?'selected':'' ?>>Mantener</option>
-        <option value="subir peso" <?= $objetivo==='subir peso'?'selected':'' ?>>Subir peso</option>
-      </select>
-      <label style="margin-left:10px">Fecha (comidas/entrenos):</label>
-      <input type="date" name="fecha" value="<?= h($fecha_ref) ?>" />
-      <button class="btn" type="submit">Aplicar</button>
-
-      <?php if ($ult): ?>
-        <a class="pill" href="?progreso_id=<?= (int)$ult['id'] ?>&fecha=<?= h($ult['fecha']) ?>&objetivo=<?= urlencode($objetivo) ?>">Usar fecha del progreso</a>
-      <?php endif; ?>
-      <?php if (!$is_hoy): ?>
-        <a class="pill" href="?fecha=<?= h($hoy_db) ?>&objetivo=<?= urlencode($objetivo) ?>">Usar HOY</a>
-      <?php endif; ?>
-      <?php if ($ingesta_dia['origen']): ?><span class="pill">🍽️ Comidas: <?= h($ingesta_dia['origen']) ?></span><?php endif; ?>
-      <?php if ($ult): ?><span class="pill">🏷️ progreso_id: <?= (int)$ult['id'] ?></span><?php endif; ?>
-      <a class="pill" href="?<?= http_build_query(['fecha'=>$fecha_ref,'objetivo'=>$objetivo,'debug'=>1]) ?>">Debug</a>
-    </form>
-  </section>
-
-  <!-- Resumen superior -->
-  <section class="card">
-    <div class="grid4">
-      <div class="kpi">IMC<b><?= num($imc,1) ?></b></div>
-      <div class="kpi">Objetivo ingesta<b><?= (int)$kcal_obj ?> kcal</b></div>
-      <div class="kpi">Proteínas<b><?= (int)$g_prot ?> g/día</b></div>
-      <div class="kpi">Agua<b><?= num($agua_l,1) ?> L/día</b></div>
-    </div>
-
-    <div class="grid3" style="margin-top:10px">
-      <div class="kpi">📅 Fecha<b><?= h($is_hoy?'Hoy':$fecha_ref) ?></b></div>
-      <div class="kpi">Ingeridas<b><?= (int)$kcal_comidas_dia ?> kcal</b></div>
-      <div class="kpi">Quemadas<b><?= (int)$kcal_burn_dia ?> kcal</b><span class="muted"><br><?= (int)$min_dia ?> min · <?= (int)$sesiones_dia ?> sesión/es</span></div>
-    </div>
-
-    <?php $estado_cls_print = $estado_cls; ?>
-    <div class="grid3" style="margin-top:8px">
-      <div class="kpi">Balance neto (ingeridas − quemadas)<b><?= (int)$kcal_netas_dia ?> kcal</b></div>
-      <div class="kpi">Estado<b class="<?= $estado_cls_print ?>"><?= h($estado) ?></b></div>
-      <div class="kpi">Progreso ingesta<b><?= (int)$kcal_comidas_dia ?> / <?= (int)$kcal_obj ?> kc</b></div>
-    </div>
-
-    <?php if (!empty($comentarios)): ?>
-      <div class="msg" style="margin-top:8px">
-        <?php foreach($comentarios as $c) echo "• ".h($c)."<br>"; ?>
-      </div>
-    <?php endif; ?>
-
-    <?php if ($DEBUG): ?>
-      <div class="dbg">
-        <b>DEBUG</b><br>
-        fecha_ref: <?= h($fecha_ref) ?> (hoy_db: <?= h($hoy_db) ?>)<br>
-        quemadas_dia: <?= (int)$kcal_burn_dia ?> | min_dia: <?= (int)$min_dia ?> | sesiones: <?= (int)$sesiones_dia ?><br>
-        comidas: origen=<?= h($ingesta_dia['origen']??'N/D') ?> cols=<?= h(json_encode($ingesta_dia['cols'])) ?><br>
-        ingeridas_dia: <?= (int)$kcal_comidas_dia ?> | netas: <?= (int)$kcal_netas_dia ?> | restantes vs objetivo: <?= (int)$kcal_restantes ?><br>
-        Nota: consultas usan DATE(columna)=? para compatibilidad con DATE/DATETIME.
-      </div>
-    <?php endif; ?>
-  </section>
-
-  <div class="row" style="margin-top:12px">
-    <!-- Panel objetivo y macros -->
+  <div class="row">
     <section class="card">
-      <h3 style="margin:0 0 8px">🎯 Objetivo y macros</h3>
-      <div class="grid3">
-        <div class="kpi">Proteínas objetivas<b><?= (int)$g_prot ?> g</b></div>
-        <div class="kpi">Carbohidratos objetivos<b><?= (int)$g_carb ?> g</b></div>
-        <div class="kpi">Grasas objetivas<b><?= (int)$g_gras ?> g</b></div>
-      </div>
-      <?php if ($ingesta_dia['prot'] || $ingesta_dia['carb'] || $ingesta_dia['gras']): ?>
-        <div class="grid3" style="margin-top:8px">
-          <div class="kpi">Proteínas ingeridas<b><?= (int)$ingesta_dia['prot'] ?> g</b></div>
-          <div class="kpi">Carbohidratos ingeridos<b><?= (int)$ingesta_dia['carb'] ?> g</b></div>
-          <div class="kpi">Grasas ingeridas<b><?= (int)$ingesta_dia['gras'] ?> g</b></div>
-        </div>
-      <?php endif; ?>
-      <div class="msg" style="margin-top:8px">
-        <?= nl2br(h("Hola {$nombre}. Tu IMC es {$imc} ({$cat}). Rango saludable aprox: {$peso_min}–{$peso_max} kg.")) ?><br>
+      <form method="GET" class="flex">
+        <input type="hidden" name="progreso_id" value="<?= (int)$progreso_id ?>">
+        <label>Objetivo:</label>
+        <select name="objetivo">
+          <option value="bajar peso" <?= $objetivo==='bajar peso'?'selected':'' ?>>Bajar peso</option>
+          <option value="mantener"   <?= $objetivo==='mantener'  ?'selected':'' ?>>Mantener</option>
+          <option value="subir peso" <?= $objetivo==='subir peso'?'selected':'' ?>>Subir peso</option>
+        </select>
+        <button class="btn" type="submit">Actualizar plan</button>
+        <?php if ($es_diabetico): ?><span class="pill">⚠️ Ajustes para diabetes</span><?php endif; ?>
+        <?php if ($ingesta_hoy['origen']): ?><span class="pill">🍽️ Comidas: <?= h($ingesta_hoy['origen']) ?></span><?php endif; ?>
+      </form>
+
+      <div class="msg">
+        <?= nl2br(h($mensaje)) ?><br>
         <span class="muted">* Orientación general; no reemplaza consejo profesional.</span>
+      </div>
+
+      <div class="grid3" style="margin-top:8px">
+        <div class="kpi">Peso actual<b><?= num($peso_ref,1) ?> kg</b></div>
+        <div class="kpi">Altura<b><?= num($altura_m*100,0) ?> cm</b></div>
+        <div class="kpi">IMC<b><?= num($imc,1) ?> (<?= h($cat) ?>)</b></div>
+      </div>
+
+      <div class="grid3" style="margin-top:8px">
+        <div class="kpi">Agua diaria<b><?= num($agua_l,1) ?> L</b></div>
+        <div class="kpi">Proteínas objetivo<b><?= (int)$prot_total ?> g/día</b></div>
+        <div class="kpi">Calorías objetivo<b><?= (int)$kcal_obj ?> kcal</b></div>
+      </div>
+
+      <div class="grid3" style="margin-top:8px">
+        <div class="kpi">Proteínas<b><?= (int)$g_prot ?> g</b></div>
+        <div class="kpi">Carbohidratos<b><?= (int)$g_carb ?> g</b></div>
+        <div class="kpi">Grasas<b><?= (int)$g_gras ?> g</b></div>
       </div>
     </section>
 
-    <!-- Última sesión -->
     <aside class="card">
-      <h3 style="margin:0 0 8px">📝 Última sesión cargada</h3>
+      <h3 style="margin:0 0 8px">📝 Última sesión</h3>
       <?php if ($ult_fmt): ?>
         <p style="margin:0 0 8px"><strong>Fecha:</strong> <?= $ult_fmt['fecha'] ?></p>
         <p style="margin:0 0 8px"><strong>Peso:</strong> <?= $ult_fmt['peso'] ?></p>
         <p style="margin:0 0 8px"><strong>Duración:</strong> <?= (int)$ult_fmt['dur'] ?> min</p>
-        <p style="margin:0"><strong>Calorías perdidas (sesión):</strong> <?= (int)$ult_fmt['kcal'] ?> kcal</p>
+        <p style="margin:0"><strong>Calorías perdidas:</strong> <?= (int)$ult_fmt['kcal'] ?> kcal</p>
         <?php if ($ult_fmt['obj']): ?><p class="muted" style="margin:6px 0 0">Objetivo: <?= $ult_fmt['obj'] ?></p><?php endif; ?>
         <?php if ($ult_fmt['notas']): ?><p class="muted" style="margin:0">Notas: <?= $ult_fmt['notas'] ?></p><?php endif; ?>
       <?php else: ?>
         <p class="muted" style="margin:0">Sin registros aún.</p>
       <?php endif; ?>
-      <p style="margin-top:10px"><a href="form_progreso.php">⟵ Cargar nuevo progreso</a></p>
+
+      <h3 style="margin:12px 0 6px">📆 Últimos 7 días</h3>
+      <p style="margin:0">Sesiones: <strong><?= (int)($stats7['sesiones'] ?? 0) ?></strong></p>
+      <p style="margin:0">Minutos: <strong><?= (int)($stats7['minutos'] ?? 0) ?></strong></p>
+      <p style="margin:0">Kcal perdidas: <strong><?= (int)($stats7['kcal'] ?? 0) ?></strong></p>
     </aside>
   </div>
+
+  <section class="card" style="margin-top:12px">
+    <h3 style="margin:0 0 8px">📊 Balance diario (<?= h($hoy) ?>)</h3>
+    <?php $clase = $kcal_restantes>=50?'ok':($kcal_restantes<=-50?'bad':'warn');
+          $txt = $kcal_restantes>=0?'restantes vs objetivo':'excedente vs objetivo'; ?>
+    <div class="grid3" style="margin-top:8px">
+      <div class="kpi">Calorías comida hoy<b><?= (int)$kcal_comidas_hoy ?> kcal</b></div>
+      <div class="kpi">Calorías perdidas hoy<b><?= (int)$kcal_burn_hoy ?> kcal</b><span class="muted"><br><?= (int)$min_hoy ?> min</span></div>
+      <div class="kpi">Saldo neto<b><?= (int)$kcal_netas_hoy ?> kcal</b></div>
+    </div>
+    <div class="kpi" style="margin-top:8px; text-align:center">
+      Objetivo diario: <b><?= (int)$kcal_obj ?> kcal</b> ·
+      <span class="<?= $clase ?>"><b><?= (int)abs($kcal_restantes) ?> kcal</b> <?= $txt ?></span>
+    </div>
+
+    <?php if ($ingesta_hoy['prot'] || $ingesta_hoy['carb'] || $ingesta_hoy['gras']): ?>
+      <div class="grid3" style="margin-top:8px">
+        <div class="kpi">Proteínas ingeridas hoy<b><?= (int)$ingesta_hoy['prot'] ?> g</b></div>
+        <div class="kpi">Carbohidratos ingeridos hoy<b><?= (int)$ingesta_hoy['carb'] ?> g</b></div>
+        <div class="kpi">Grasas ingeridas hoy<b><?= (int)$ingesta_hoy['gras'] ?> g</b></div>
+      </div>
+    <?php endif; ?>
+  </section>
+
+  <section class="card" style="margin-top:12px">
+    <h3 style="margin:0 0 8px">🍽️ Plan semanal (<?= h($objetivo) ?><?= $es_diabetico ? ', con ajustes para diabetes' : '' ?>)</h3>
+    <table>
+      <thead><tr><th>Día</th><th>Desayuno</th><th>Almuerzo</th><th>Merienda</th><th>Cena</th></tr></thead>
+      <tbody>
+        <?php foreach($plan as $dia=>$comidas): ?>
+          <tr>
+            <td><?= h($dia) ?></td>
+            <td><?= h($comidas['Desayuno']) ?></td>
+            <td><?= h($comidas['Almuerzo']) ?></td>
+            <td><?= h($comidas['Merienda']) ?></td>
+            <td><?= h($comidas['Cena']) ?></td>
+          </tr>
+        <?php endforeach; ?>
+      </tbody>
+    </table>
+    <p class="muted" style="margin-top:8px">Sugerencia general: priorizá alimentos frescos y adaptá por preferencias e indicaciones médicas.</p>
+  </section>
 </div>
 </body>
 </html>
