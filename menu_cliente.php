@@ -45,7 +45,6 @@
     <a href="ver_competencias_cliente.php">Competencias</a>
     <a href="registrar_competencia_cliente.php">Inscribirme a competencia</a>
     <a href="grafico_progreso_cliente.php">Evolución</a>
-    <a href="subastas.php">Subastas</a>
-    <a href="sorteos.php">Sorteos</a>
+    <a href="cliente_qr_maquinas.php">QR de Máquinas</a>
     <a href="logout_cliente.php">Salir</a>
 </div>
