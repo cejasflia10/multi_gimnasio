@@ -1,5 +1,5 @@
 <?php
-// cliente_scan_qr.php — Panel del Cliente (QR): cámara en vivo + fallback “modo foto” con jsQR
+// cliente_scan_qr.php — Escanear QR (nativo + fallback WebView + foto con jsQR)
 if (session_status() === PHP_SESSION_NONE) session_start();
 require_once __DIR__ . '/conexion.php';
 @include __DIR__ . '/menu_cliente.php';
@@ -8,14 +8,13 @@ if (!isset($conexion) || !($conexion instanceof mysqli)) { http_response_code(50
 if (function_exists('mysqli_report')) { mysqli_report(MYSQLI_REPORT_OFF); }
 @$conexion->set_charset('utf8mb4');
 
-// Opcional: permitir cámara explícitamente (no romperá si no lo soporta el host)
+/* Si tu host lo permite, ayuda a no bloquear cámara: */
 @header('Permissions-Policy: camera=(self)');
 
 $cliente_id  = (int)($_SESSION['cliente_id'] ?? 0);
 $gimnasio_id = (int)($_SESSION['gimnasio_id'] ?? 0);
 if ($cliente_id <= 0 || $gimnasio_id <= 0) { header('Location: cliente_acceso.php'); exit; }
 
-/* Helpers */
 function h($s){ return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); }
 function base_url(): string {
   $proto = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
@@ -31,7 +30,6 @@ $public_base = base_url().'maquinas_qr.php?t=';
   <meta charset="utf-8">
   <title>Escanear QR de máquinas — Panel Cliente</title>
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-
   <style>
     :root{
       --bg:#0b1220; --card:#0f172a; --muted:#94a3b8; --line:#1f2937; --acc:#22d3ee; --bad:#ef4444; --ok:#22c55e; --ink:#e5e7eb;
@@ -76,28 +74,27 @@ $public_base = base_url().'maquinas_qr.php?t=';
     .file{ background:transparent; border:1px dashed var(--line); padding:12px; border-radius:12px; }
 
     .notice{ display:none; position:fixed; inset:0; background:rgba(0,0,0,.55); color:#fff; align-items:center; justify-content:center; padding:20px; z-index:50 }
-    .notice .box{ background:#111827; border:1px solid #374151; border-radius:16px; padding:18px; width:min(520px, 92vw); }
+    .notice .box{ background:#111827; border:1px solid #374151; border-radius:16px; padding:18px; width:min(560px, 92vw); }
     .notice.show{ display:flex; }
+    .badge{ display:inline-block; padding:4px 8px; border-radius:999px; background:#1f2937; color:#e5e7eb; font-size:.8rem; }
   </style>
 
-  <!-- Fallback universal escáner por WebView -->
+  <!-- Fallback WebView -->
   <script src="https://unpkg.com/html5-qrcode/minified/html5-qrcode.min.js"></script>
-  <!-- Decoder por imagen (modo foto) -->
+  <!-- Decodificar desde foto (sin cámara) -->
   <script src="https://unpkg.com/jsqr/dist/jsQR.js"></script>
 </head>
 <body>
   <div class="wrap">
     <h1>Escanear QR de máquinas</h1>
-    <p class="muted">Apuntá la cámara al QR pegado en la máquina. Si tu dispositivo no permite cámara en vivo, usá el botón <strong>“Escanear con cámara (modo foto)”</strong>.</p>
+    <p class="muted">Apuntá la cámara al QR pegado en la máquina. Si tu app no permite usar la cámara, podés <strong>tomar una foto</strong> del QR y la decodificamos igual.</p>
 
     <div class="grid">
       <!-- Cámara y estado -->
       <div class="card" aria-labelledby="camTitle">
-        <h2 id="camTitle" style="margin:0 0 8px; font-size:1.05em">Cámara</h2>
+        <h2 id="camTitle" style="margin:0 0 8px; font-size:1.05em">Cámara <span id="envTag" class="badge" style="display:none"></span></h2>
         <div class="video-box" role="group" aria-label="Vista previa de cámara">
-          <div class="video-frame">
-            <video id="video" playsinline muted></video>
-          </div>
+          <div class="video-frame"><video id="video" playsinline muted></video></div>
           <div class="scanline" aria-hidden="true"></div>
         </div>
         <div class="status" id="status" aria-live="polite">Preparando cámara…</div>
@@ -106,23 +103,22 @@ $public_base = base_url().'maquinas_qr.php?t=';
           <button id="btnStop" class="ghost">Detener</button>
           <button id="btnSwitch" class="ghost">Cambiar cámara</button>
           <button id="btnTorch" class="ghost">Linterna</button>
-          <!-- Modo foto destacado -->
-          <button id="btnPhoto" class="ghost">Escanear con cámara (modo foto)</button>
+          <button id="btnExternal" class="danger" title="Abrir en el navegador del sistema">Abrir en navegador</button>
         </div>
         <div class="help hint">Tip: acercá el código hasta ocupar buena parte de la pantalla y mantené el pulso.</div>
       </div>
 
       <!-- Fallbacks: subir foto / pegar enlace -->
       <div class="card" aria-labelledby="fbTitle">
-        <h2 id="fbTitle" style="margin:0 0 8px; font-size:1.05em">Si la cámara no funciona</h2>
+        <h2 id="fbTitle" style="margin:0 0 8px; font-size:1.05em">Si la cámara no funciona (o está bloqueada)</h2>
 
-        <!-- Contenedor para el fallback html5-qrcode (solo visible al usarlo) -->
+        <!-- Contenedor fallback (se usa solo si aplica) -->
         <div id="reader" style="display:none; width:100%; max-width:460px; margin:6px auto 16px;"></div>
 
         <div class="file" style="margin-bottom:12px">
-          <label for="file">Escanear desde foto (abre cámara del sistema)</label>
+          <label for="file">Escanear desde foto (tocar para abrir cámara en modo foto)</label>
           <input id="file" type="file" accept="image/*" capture="environment">
-          <div class="hint">Tomá una foto clara del QR; intentaremos leerlo automáticamente.</div>
+          <div class="hint">Tomá una foto clara del QR. La decodificamos localmente aunque la cámara en vivo esté bloqueada.</div>
         </div>
 
         <div>
@@ -137,40 +133,30 @@ $public_base = base_url().'maquinas_qr.php?t=';
     </div>
   </div>
 
-  <!-- Avisos -->
+  <!-- Avisos superpuestos -->
   <div id="notice" class="notice" role="dialog" aria-modal="true" aria-labelledby="nTitle" aria-describedby="nMsg">
     <div class="box">
       <h3 id="nTitle" style="margin:0 0 8px; font-size:1.1em">Atención</h3>
       <div id="nMsg" class="hint" style="margin-bottom:12px">Mensaje</div>
-      <div class="actions"><button id="nClose" class="ghost">Cerrar</button></div>
+      <div class="actions">
+        <button id="nRetry" class="btn">Reintentar</button>
+        <button id="nClose" class="ghost">Cerrar</button>
+      </div>
     </div>
   </div>
 
   <canvas id="canvas" style="display:none"></canvas>
 
   <script>
-    // Utilidades
     function $(id){ return document.getElementById(id); }
-    const video = $('video');
-    const statusEl = $('status');
-    const btnStart = $('btnStart'), btnStop=$('btnStop'), btnSwitch=$('btnSwitch'), btnTorch=$('btnTorch'), btnPhoto=$('btnPhoto');
-    const inputFile = $('file');
-    const manual = $('manual'), btnOpen = $('btnOpen');
-    const notice = $('notice'), nClose = $('nClose'), nMsg = $('nMsg');
+    const video=$('video'), statusEl=$('status');
+    const btnStart=$('btnStart'), btnStop=$('btnStop'), btnSwitch=$('btnSwitch'), btnTorch=$('btnTorch'), btnExternal=$('btnExternal');
+    const inputFile=$('file'), manual=$('manual'), btnOpen=$('btnOpen');
+    const notice=$('notice'), nMsg=$('nMsg'), nClose=$('nClose'), nRetry=$('nRetry'), envTag=$('envTag');
+
     const PUBLIC_BASE = <?php echo json_encode($public_base, JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES); ?>;
 
-    let stream = null, currentDeviceId = null, devices = [], scanning = false;
-    let detector = null, track = null, torchOn = false;
-    let html5q = null;
-
-    function showNotice(msg){ nMsg.textContent = msg; notice.classList.add('show'); }
-    function hideNotice(){ notice.classList.remove('show'); }
-    nClose.addEventListener('click', hideNotice);
-
-    function status(msg, error=false){
-      statusEl.textContent = msg;
-      statusEl.className = 'status ' + (error ? 'bad' : 'ok');
-    }
+    let stream=null, currentDeviceId=null, devices=[], scanning=false, detector=null, track=null, torchOn=false, html5q=null;
 
     function isInAppWebView(){
       const ua = navigator.userAgent || '';
@@ -178,61 +164,62 @@ $public_base = base_url().'maquinas_qr.php?t=';
       const iOSWV = (/\b(iPhone|iPad|iPod)\b/i.test(ua) && !/Safari\//i.test(ua));
       return androidWV || iOSWV;
     }
+    function status(msg, bad=false){ statusEl.textContent=msg; statusEl.className='status '+(bad?'bad':'ok'); }
+    function showNotice(msg){ nMsg.textContent=msg; notice.classList.add('show'); }
+    function hideNotice(){ notice.classList.remove('show'); }
 
-    // -------- Cámara en vivo: nativo / html5-qrcode --------
-    async function ensureDetector(){
-      if ('BarcodeDetector' in window) {
-        try{
-          const formats = await BarcodeDetector.getSupportedFormats();
-          if (formats && formats.includes('qr_code')){
-            detector = new BarcodeDetector({ formats: ['qr_code'] });
-            return true;
-          }
-        }catch(e){}
-      }
-      return false;
-    }
-
-    async function listCameras(){
-      try{
-        const all = await navigator.mediaDevices.enumerateDevices();
-        devices = all.filter(d => d.kind === 'videoinput');
-      }catch(e){ devices = []; }
-    }
-
+    /* --------- Fallback WebView: html5-qrcode --------- */
     async function startHtml5(){
-      const box = document.getElementById('reader');
-      box.style.display = 'block';
+      const box = document.getElementById('reader'); box.style.display='block';
       try{
         if (!window.Html5Qrcode) throw new Error('html5-qrcode no cargado');
         html5q = new Html5Qrcode('reader');
         await html5q.start(
-          { facingMode: 'environment' },
-          { fps: 12, qrbox: (vw, vh) => Math.min(300, Math.floor(Math.min(vw, vh) * 0.7)) },
-          decodedText => { if (decodedText) onResult(decodedText); },
+          { facingMode:'environment' },
+          { fps:12, qrbox:(vw,vh)=>Math.min(300, Math.floor(Math.min(vw,vh)*0.7)) },
+          decoded => decoded && onResult(decoded),
           _err => {}
         );
         status('Cámara activa (modo compatible). Apuntá al código…');
       }catch(e){
         console.error('html5-qrcode error', e);
-        status('No pudimos iniciar la cámara en este dispositivo. Usá modo foto o pegá el enlace/token.', true);
+        status('No se pudo iniciar la cámara en este entorno.', true);
+        showNotice('No se pudo usar la cámara en esta app. Usá el modo de foto o el botón "Abrir en navegador".');
       }
     }
-    async function stopHtml5(){
-      try{ if (html5q) { await html5q.stop(); await html5q.clear(); html5q = null; } }catch(_){}
-      const box = document.getElementById('reader'); if (box) box.style.display = 'none';
+    async function stopHtml5(){ try{ if (html5q){ await html5q.stop(); await html5q.clear(); html5q=null; } }catch(_){}; $('reader').style.display='none'; }
+
+    /* --------- Nativo: getUserMedia + BarcodeDetector --------- */
+    async function listCameras(){
+      try{
+        const all = await navigator.mediaDevices.enumerateDevices();
+        devices = all.filter(d => d.kind==='videoinput');
+      }catch{ devices=[]; }
+    }
+
+    async function ensureDetector(){
+      if ('BarcodeDetector' in window){
+        try{
+          const formats = await BarcodeDetector.getSupportedFormats();
+          if (formats && formats.includes('qr_code')){ detector=new BarcodeDetector({formats:['qr_code']}); return true; }
+        }catch{}
+      }
+      return false;
     }
 
     async function startCamera(){
-      // En WebView o si HTTPS no está garantizado, usar directamente html5-qrcode
-      if (isInAppWebView()){
+      const inApp = isInAppWebView();
+      envTag.style.display='inline-block';
+      envTag.textContent = inApp ? 'App/WebView' : 'Navegador';
+
+      if (inApp){
         status('Inicializando cámara (modo compatible)…');
         await stopCamera();
         return startHtml5();
       }
 
       if (!location.protocol.startsWith('https') && location.hostname!=='localhost'){
-        status('Necesitás HTTPS para usar cámara en navegador. Probando modo compatible…', true);
+        status('Necesitás HTTPS para cámara en navegador. Usando modo compatible…', true);
         return startHtml5();
       }
 
@@ -241,145 +228,138 @@ $public_base = base_url().'maquinas_qr.php?t=';
         const back = devices.find(d => /back|trasera|rear/i.test(d.label));
         currentDeviceId = (back || devices[devices.length-1]).deviceId;
       }
+
       try{
         stream = await navigator.mediaDevices.getUserMedia({
-          video: currentDeviceId ? { deviceId: { exact: currentDeviceId } } : { facingMode: { ideal: 'environment' } },
-          audio: false
+          video: currentDeviceId ? { deviceId:{ exact: currentDeviceId } } : { facingMode:{ ideal:'environment' } }, audio:false
         });
-        video.srcObject = stream;
-        await video.play();
+        video.srcObject=stream; await video.play();
         track = stream.getVideoTracks()[0] || null;
         status('Cámara activa. Buscando QR…');
-        scanning = true;
-        scanLoop();
+        scanning=true; scanLoop();
       }catch(e){
-        console.error(e);
-        status('No se pudo acceder a la cámara. Probando modo compatible…', true);
+        console.error('getUserMedia error:', e && e.name, e && e.message);
+        let msg='No pudimos acceder a la cámara.';
+        if (e && e.name==='NotAllowedError') msg='Permiso de cámara denegado. Habilitalo en el navegador.';
+        if (e && e.name==='NotFoundError') msg='No se encontró una cámara disponible.';
+        if (e && e.name==='NotReadableError') msg='La cámara está en uso por otra app.';
+        status(msg+' Probando modo compatible…', true);
         return startHtml5();
       }
     }
 
     function stopCamera(){
-      scanning = false;
-      stopHtml5();
-      if (stream){ stream.getTracks().forEach(t=>t.stop()); stream = null; track = null; }
+      scanning=false; stopHtml5();
+      if (stream){ stream.getTracks().forEach(t=>t.stop()); stream=null; track=null; }
       status('Cámara detenida.');
     }
 
     async function switchCamera(){
       if (html5q){ await stopHtml5(); return startHtml5(); }
-      if (!devices.length){ await listCameras(); }
+      if (!devices.length) await listCameras();
       if (!devices.length) return;
-      const idx = devices.findIndex(d => d.deviceId === currentDeviceId);
-      const next = devices[(idx+1) % devices.length];
-      currentDeviceId = next.deviceId;
-      stopCamera();
-      startCamera();
+      const idx = devices.findIndex(d => d.deviceId===currentDeviceId);
+      currentDeviceId = devices[(idx+1)%devices.length].deviceId;
+      stopCamera(); startCamera();
     }
 
     async function toggleTorch(){
-      if (html5q){ return alert('La linterna no está disponible en modo compatible.'); }
-      if (!track) { status('Cámara no disponible.', true); return; }
-      const caps = track.getCapabilities?.();
-      if (!caps || !caps.torch){ status('Tu cámara no soporta linterna.', true); return; }
-      try{
-        torchOn = !torchOn;
-        await track.applyConstraints({ advanced: [{ torch: torchOn }] });
-        status(torchOn ? 'Linterna encendida.' : 'Linterna apagada.');
-      }catch(e){ status('No se pudo cambiar la linterna.', true); }
+      if (html5q) return alert('La linterna no está disponible en el modo compatible.');
+      if (!track) return status('Cámara no disponible.', true);
+      const caps = track.getCapabilities?.(); if (!caps || !caps.torch) return status('Tu cámara no soporta linterna.', true);
+      try{ torchOn=!torchOn; await track.applyConstraints({ advanced:[{ torch: torchOn }] }); status(torchOn?'Linterna encendida.':'Linterna apagada.'); }
+      catch{ status('No se pudo cambiar la linterna.', true); }
     }
 
     async function scanLoop(){
-      const hasDetector = detector || await ensureDetector();
-      if (!hasDetector){ status('Escaneo nativo no disponible. Usando modo compatible…'); return startHtml5(); }
-      const canvas = $('canvas'), ctx = canvas.getContext('2d'); const fps = 12;
-
+      const has = detector || await ensureDetector();
+      if (!has){ status('Escaneo nativo no disponible. Usando modo compatible…'); return startHtml5(); }
+      const canvas=$('canvas'), ctx=canvas.getContext('2d'), fps=12;
       (async function loop(){
         if (!scanning) return;
         try{
-          const w = video.videoWidth, h = video.videoHeight;
+          const w=video.videoWidth, h=video.videoHeight;
           if (w && h){
-            canvas.width = w; canvas.height = h;
-            ctx.drawImage(video, 0, 0, w, h);
+            canvas.width=w; canvas.height=h; ctx.drawImage(video, 0, 0, w, h);
             const barcodes = await detector.detect(canvas);
             if (barcodes && barcodes.length){
-              const raw = (barcodes[0].rawValue || '').trim();
-              if (raw){ onResult(raw); return; }
+              const raw=(barcodes[0].rawValue||'').trim(); if (raw) return onResult(raw);
             }
           }
-        }catch(e){ /* continuar */ }
-        setTimeout(loop, 1000 / fps);
+        }catch(_){}
+        setTimeout(loop, 1000/fps);
       })();
     }
 
-    // -------- Modo foto con jsQR (garantiza lectura incluso cuando getUserMedia falla) --------
-    btnPhoto.addEventListener('click', ()=> inputFile.click());
+    function onResult(raw){
+      scanning=false; stopCamera();
+      let url=raw;
+      try{
+        const u=new URL(raw, location.origin);
+        if (!/maquinas_qr\.php/i.test(u.pathname) && /^[a-f0-9]{8,64}$/i.test(raw)) url = PUBLIC_BASE+encodeURIComponent(raw);
+        else url=u.href;
+      }catch(_){
+        if (/^[a-f0-9]{8,64}$/i.test(raw)) url = PUBLIC_BASE+encodeURIComponent(raw);
+        else { const m=raw.match(/t=([A-Za-z0-9_\-]+)/); url = m ? (PUBLIC_BASE+encodeURIComponent(m[1])) : raw; }
+      }
+      status('QR detectado. Abriendo rutina…'); location.href=url;
+    }
 
-    inputFile.addEventListener('change', async ()=>{
+    /* --------- Foto → Decodificar con jsQR (sin cámara en vivo) --------- */
+    inputFile.addEventListener('change', ()=>{
       const file = inputFile.files && inputFile.files[0];
       if (!file) return;
-      try{
-        const img = new Image();
-        img.onload = ()=>{
-          const canvas = $('canvas'), ctx = canvas.getContext('2d');
-          canvas.width = img.naturalWidth; canvas.height = img.naturalHeight;
-          ctx.drawImage(img, 0, 0);
-          const imageData = ctx.getImageData(0,0,canvas.width,canvas.height);
-          const code = jsQR(imageData.data, imageData.width, imageData.height, { inversionAttempts: 'dontInvert' });
-          if (code && code.data){
-            onResult(code.data.trim());
-          }else{
-            status('No se pudo leer el QR de la foto. Probá de nuevo acercando más.', true);
-            showNotice('No se pudo leer el QR de la foto. Intentá otra foto con mejor luz/enfoque.');
+
+      const img = new Image();
+      img.onload = ()=>{
+        const canvas = $('canvas');
+        const ctx = canvas.getContext('2d');
+        const maxSide = 1280; // limitar tamaño para performance
+        let w = img.width, h = img.height;
+        if (Math.max(w,h) > maxSide){
+          const ratio = maxSide / Math.max(w,h);
+          w = Math.round(w*ratio); h = Math.round(h*ratio);
+        }
+        canvas.width = w; canvas.height = h;
+        ctx.drawImage(img, 0, 0, w, h);
+        const imageData = ctx.getImageData(0, 0, w, h);
+        try{
+          const result = jsQR(imageData.data, w, h, { inversionAttempts: 'dontInvert' });
+          if (result && result.data){
+            status('QR detectado en la foto. Abriendo…');
+            onResult(result.data.trim());
+          } else {
+            status('No se detectó un QR en la foto. Probá más cerca y con buena luz.', true);
+            alert('No se detectó QR en la foto. Asegurate de que ocupe buena parte de la imagen y esté nítido.');
           }
-        };
-        img.onerror = ()=>{ status('No se pudo cargar la imagen.', true); };
-        img.src = URL.createObjectURL(file);
-        status('Procesando foto…');
-      }catch(e){
-        console.error(e);
-        status('No se pudo procesar la imagen. Pegá el enlace/token abajo.', true);
-      }
+        }catch(e){
+          console.error('jsQR error', e);
+          status('No se pudo procesar la imagen. Probá otra foto más nítida.', true);
+        }
+      };
+      img.onerror = ()=>{ status('No se pudo leer la imagen seleccionada.', true); };
+      img.src = URL.createObjectURL(file);
     });
 
-    // -------- Parseo y redirección --------
-    function onResult(raw){
-      stopCamera();
-      let url = raw;
-      try{
-        const u = new URL(raw, location.origin);
-        if (!/maquinas_qr\.php/i.test(u.pathname) && /^[a-f0-9]{8,64}$/i.test(raw)){
-          url = PUBLIC_BASE + encodeURIComponent(raw);
-        }else{
-          url = u.href;
-        }
-      }catch(_){
-        if (/^[a-f0-9]{8,64}$/i.test(raw)){
-          url = PUBLIC_BASE + encodeURIComponent(raw);
-        }else{
-          const m = raw.match(/t=([A-Za-z0-9_\-]+)/);
-          url = m ? (PUBLIC_BASE + encodeURIComponent(m[1])) : raw;
-        }
-      }
-      status('QR detectado. Abriendo rutina…');
-      location.href = url;
-    }
+    // Abrir esta misma página en el navegador del sistema (Chrome) — útil si la app bloquea cámara
+    btnExternal.addEventListener('click', ()=>{
+      const proto = location.protocol.replace(':',''); // https
+      const intent = `intent://${location.host}${location.pathname}${location.search}#Intent;scheme=${proto};package=com.android.chrome;end`;
+      const win = window.open(intent, '_self');
+      if (!win) window.open(location.href, '_blank');
+    });
 
     // Manual
     btnOpen.addEventListener('click', ()=>{
-      let v = (manual.value || '').trim();
-      if (!v){ alert('Pegá un enlace o token.'); return; }
-      if (/^https?:\/\//i.test(v)){ location.href = v; }
-      else { location.href = PUBLIC_BASE + encodeURIComponent(v); }
+      let v=(manual.value||'').trim(); if (!v) return alert('Pegá un enlace o token.');
+      if (/^https?:\/\//i.test(v)) location.href=v; else location.href=PUBLIC_BASE+encodeURIComponent(v);
     });
 
-    // Botones cámara
-    btnStart.addEventListener('click', startCamera);
-    btnStop.addEventListener('click', stopCamera);
-    btnSwitch.addEventListener('click', switchCamera);
-    btnTorch.addEventListener('click', toggleTorch);
+    // Diálogo
+    $('nClose').addEventListener('click', ()=>notice.classList.remove('show'));
+    $('nRetry').addEventListener('click', ()=>{ notice.classList.remove('show'); stopCamera(); startCamera(); });
 
-    // Arranque: intentá cámara en vivo; si es WebView, irá al compatible automáticamente
+    // Arranque
     startCamera();
   </script>
 </body>
