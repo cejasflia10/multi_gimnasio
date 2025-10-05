@@ -8,7 +8,7 @@ if (!isset($conexion) || !($conexion instanceof mysqli)) { http_response_code(50
 if (function_exists('mysqli_report')) { mysqli_report(MYSQLI_REPORT_OFF); }
 @$conexion->set_charset('utf8mb4');
 
-/* Si tu host lo permite, ayuda a no bloquear cámara: */
+/* Ayuda a no bloquear cámara (si el host lo permite): */
 @header('Permissions-Policy: camera=(self)');
 
 $cliente_id  = (int)($_SESSION['cliente_id'] ?? 0);
@@ -17,11 +17,13 @@ if ($cliente_id <= 0 || $gimnasio_id <= 0) { header('Location: cliente_acceso.ph
 
 /* Helpers */
 function h($s){ return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); }
-
-/* ⚠️ FORZAR DOMINIO PÚBLICO (evita localhost en QR) */
-const APP_PUBLIC_ORIGIN = 'https://bq.onrender.com'; // SIN / al final
-$public_base = rtrim(APP_PUBLIC_ORIGIN, '/').'/maquinas_qr.php?t=';
-
+function base_url(): string {
+  $proto = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+  $host  = $_SERVER['HTTP_HOST'] ?? 'localhost';
+  $path  = rtrim(dirname($_SERVER['SCRIPT_NAME'] ?? '/'), '/\\');
+  return $proto.'://'.$host.($path ? $path.'/' : '/');
+}
+$public_base = 'https://multi-gimnasio-51bq.onrender.com/maquinas_qr.php?t=';
 ?>
 <!doctype html>
 <html lang="es">
@@ -89,7 +91,6 @@ $public_base = rtrim(APP_PUBLIC_ORIGIN, '/').'/maquinas_qr.php?t=';
     <p class="muted">Apuntá la cámara al QR pegado en la máquina. Si tu app no permite usar la cámara, podés <strong>tomar una foto</strong> del QR y la decodificamos igual.</p>
 
     <div class="grid">
-      <!-- Cámara y estado -->
       <div class="card" aria-labelledby="camTitle">
         <h2 id="camTitle" style="margin:0 0 8px; font-size:1.05em">Cámara <span id="envTag" class="badge" style="display:none"></span></h2>
         <div class="video-box" role="group" aria-label="Vista previa de cámara">
@@ -107,11 +108,9 @@ $public_base = rtrim(APP_PUBLIC_ORIGIN, '/').'/maquinas_qr.php?t=';
         <div class="help hint">Tip: acercá el código hasta ocupar buena parte de la pantalla y mantené el pulso.</div>
       </div>
 
-      <!-- Fallbacks: subir foto / pegar enlace -->
       <div class="card" aria-labelledby="fbTitle">
         <h2 id="fbTitle" style="margin:0 0 8px; font-size:1.05em">Si la cámara no funciona (o está bloqueada)</h2>
 
-        <!-- Contenedor fallback (se usa solo si aplica) -->
         <div id="reader" style="display:none; width:100%; max-width:460px; margin:6px auto 16px;"></div>
 
         <div class="file" style="margin-bottom:12px">
@@ -132,7 +131,6 @@ $public_base = rtrim(APP_PUBLIC_ORIGIN, '/').'/maquinas_qr.php?t=';
     </div>
   </div>
 
-  <!-- Avisos superpuestos -->
   <div id="notice" class="notice" role="dialog" aria-modal="true" aria-labelledby="nTitle" aria-describedby="nMsg">
     <div class="box">
       <h3 id="nTitle" style="margin:0 0 8px; font-size:1.1em">Atención</h3>
@@ -164,8 +162,6 @@ $public_base = rtrim(APP_PUBLIC_ORIGIN, '/').'/maquinas_qr.php?t=';
       return androidWV || iOSWV;
     }
     function status(msg, bad=false){ statusEl.textContent=msg; statusEl.className='status '+(bad?'bad':'ok'); }
-    function showNotice(msg){ nMsg.textContent=msg; notice.classList.add('show'); }
-    function hideNotice(){ notice.classList.remove('show'); }
 
     /* --------- Fallback WebView: html5-qrcode --------- */
     async function startHtml5(){
@@ -183,7 +179,7 @@ $public_base = rtrim(APP_PUBLIC_ORIGIN, '/').'/maquinas_qr.php?t=';
       }catch(e){
         console.error('html5-qrcode error', e);
         status('No se pudo iniciar la cámara en este entorno.', true);
-        showNotice('No se pudo usar la cámara en esta app. Usá el modo de foto o el botón "Abrir en navegador".');
+        alert('No pudimos usar la cámara en esta app. Usá el modo de foto o el botón "Abrir en navegador".');
       }
     }
     async function stopHtml5(){ try{ if (html5q){ await html5q.stop(); await html5q.clear(); html5q=null; } }catch(_){}; $('reader').style.display='none'; }
@@ -238,11 +234,7 @@ $public_base = rtrim(APP_PUBLIC_ORIGIN, '/').'/maquinas_qr.php?t=';
         scanning=true; scanLoop();
       }catch(e){
         console.error('getUserMedia error:', e && e.name, e && e.message);
-        let msg='No pudimos acceder a la cámara.';
-        if (e && e.name==='NotAllowedError') msg='Permiso de cámara denegado. Habilitalo en el navegador.';
-        if (e && e.name==='NotFoundError') msg='No se encontró una cámara disponible.';
-        if (e && e.name==='NotReadableError') msg='La cámara está en uso por otra app.';
-        status(msg+' Probando modo compatible…', true);
+        status('No pudimos acceder a la cámara. Probando modo compatible…', true);
         return startHtml5();
       }
     }
@@ -266,7 +258,7 @@ $public_base = rtrim(APP_PUBLIC_ORIGIN, '/').'/maquinas_qr.php?t=';
       if (html5q) return alert('La linterna no está disponible en el modo compatible.');
       if (!track) return status('Cámara no disponible.', true);
       const caps = track.getCapabilities?.(); if (!caps || !caps.torch) return status('Tu cámara no soporta linterna.', true);
-      try{ torchOn=!torchOn; await track.applyConstraints({ advanced:[{ torch: torchOn }] }); status(torchOn?'Linterna encendida.':'Linterna apagada.'); }
+      try{ const on = !(track.getConstraints()?.advanced?.[0]?.torch); await track.applyConstraints({ advanced:[{ torch: on }] }); status(on?'Linterna encendida.':'Linterna apagada.'); }
       catch{ status('No se pudo cambiar la linterna.', true); }
     }
 
@@ -313,7 +305,7 @@ $public_base = rtrim(APP_PUBLIC_ORIGIN, '/').'/maquinas_qr.php?t=';
       img.onload = ()=>{
         const canvas = $('canvas');
         const ctx = canvas.getContext('2d');
-        const maxSide = 1280; // limitar tamaño para performance
+        const maxSide = 1280;
         let w = img.width, h = img.height;
         if (Math.max(w,h) > maxSide){
           const ratio = maxSide / Math.max(w,h);
@@ -340,7 +332,7 @@ $public_base = rtrim(APP_PUBLIC_ORIGIN, '/').'/maquinas_qr.php?t=';
       img.src = URL.createObjectURL(file);
     });
 
-    // Abrir esta misma página en el navegador del sistema (Chrome) — útil si la app bloquea cámara
+    // Abrir esta misma página en el navegador del sistema (Android)
     btnExternal.addEventListener('click', ()=>{
       const proto = location.protocol.replace(':',''); // https
       const intent = `intent://${location.host}${location.pathname}${location.search}#Intent;scheme=${proto};package=com.android.chrome;end`;
