@@ -1,6 +1,7 @@
 <?php
 /* =============================================================================
    GYM QR — Máquinas con rutinas escaneables con NIVELES (Principiante/Medio/Avanzado)
+   Responsive para móviles, tablets y PC
    Modo:
      - ADMIN automático si hay $_SESSION['gimnasio_id'] > 0
      - PÚBLICO con ?t={token}
@@ -11,7 +12,10 @@
 
 if (session_status() === PHP_SESSION_NONE) session_start();
 require_once __DIR__ . '/conexion.php';
-require __DIR__ . '/menu_horizontal.php';
+
+// ⚠️ Este include debe imprimir SOLO el <nav> del menú, NO un documento HTML completo.
+// Si tu archivo actual es una página completa, muévelo a un snippet de menú.
+@include __DIR__ . '/menu_horizontal.php';
 
 if (!isset($conexion) || !($conexion instanceof mysqli)) {
   http_response_code(500);
@@ -71,7 +75,6 @@ CREATE TABLE IF NOT EXISTS rutinas_maquina(
   titulo VARCHAR(160) NOT NULL,
   pasos_json JSON NOT NULL,
   notas TEXT NULL,
-  /* NUEVO: pasos por nivel */
   pasos_por_nivel_json JSON NULL,
   creada_en DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   actualizada_en DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -79,11 +82,8 @@ CREATE TABLE IF NOT EXISTS rutinas_maquina(
   CONSTRAINT fk_rm_maquina FOREIGN KEY (maquina_id) REFERENCES maquinas_gym(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 ");
-
-/* Intento agregar columna si faltara (por si la tabla ya existía sin el campo) */
 @$conexion->query("ALTER TABLE rutinas_maquina ADD COLUMN IF NOT EXISTS pasos_por_nivel_json JSON NULL");
 
-/* ================= Modo actual ================= */
 $gimnasio_id = (int)($_SESSION['gimnasio_id'] ?? 0);
 $admin = is_admin() && empty($_GET['t']); // admin por defecto si no hay token
 
@@ -132,30 +132,47 @@ if (isset($_GET['t']) && $_GET['t']!=='') {
   <html lang="es">
   <head>
     <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     <title><?php echo h($mname).' — '.h($title); ?></title>
     <style>
-      :root { --c:#111; --a:#0ea5e9; --b:#06b6d4; }
-      body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; color:#111; margin:0; background:#f8fafc; }
-      .wrap { max-width: 720px; margin: 0 auto; padding: 20px; }
-      .card { background:white; border-radius:16px; box-shadow:0 6px 22px rgba(0,0,0,.08); padding:18px; margin-bottom:16px; }
-      h1 { font-size: 1.6rem; margin: 0 0 6px; }
-      h2 { font-size: 1.1rem; margin: 0 0 12px; color:#0f172a; }
-      .pill { display:inline-block; background:linear-gradient(90deg,var(--a),var(--b)); color:#fff; padding:4px 10px; border-radius:999px; font-size:.8rem; }
-      .row { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
-      select { padding:8px 10px; border-radius:10px; border:1px solid #cbd5e1; background:#fff; }
-      .step { display:flex; align-items:flex-start; gap:10px; padding:10px 0; border-bottom:1px dashed #e5e7eb; }
-      .step:last-child{ border-bottom:0; }
-      .chk { width:22px; height:22px; border:2px solid #0ea5e9; border-radius:6px; display:inline-block; position:relative; cursor:pointer; flex:0 0 22px; margin-top:2px; }
-      .chk.done::after{ content:""; position:absolute; inset:3px; background:#0ea5e9; border-radius:3px; }
-      .subl { color:#475569; font-size:.95rem; }
-      .toolbar { display:flex; gap:8px; flex-wrap:wrap; }
-      button { background:#0ea5e9; color:#fff; border:0; padding:10px 14px; border-radius:10px; cursor:pointer; font-weight:600; }
-      button.secondary { background:#111; }
-      .muted { color:#64748b; font-size:.9rem; }
+      :root{
+        --bg:#f8fafc; --card:#ffffff; --muted:#64748b; --ink:#0f172a; --brand:#0ea5e9; --brand2:#06b6d4;
+        --radius:16px; --shadow:0 6px 22px rgba(0,0,0,.08);
+        --space:clamp(14px, 2.5vw, 22px);
+        --fs-h1:clamp(1.25rem, 2.5vw, 1.8rem);
+        --fs-h2:clamp(1rem, 2vw, 1.2rem);
+        --fs:clamp(0.96rem, 1.6vw, 1rem);
+      }
+      *{box-sizing:border-box}
+      body{ margin:0; background:var(--bg); color:var(--ink); font:400 var(--fs)/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif; }
+      .wrap{ width:min(920px, 100% - 2*var(--space)); margin:0 auto; padding:var(--space) 0 var(--space) }
+      .card{ background:var(--card); border-radius:var(--radius); box-shadow:var(--shadow); padding:clamp(14px,2vw,18px); margin-bottom:clamp(12px,2vw,16px); }
+      h1{ font-size:var(--fs-h1); margin:0 0 6px }
+      h2{ font-size:var(--fs-h2); margin:0 0 12px; color:#0f172a }
+      .pill{ display:inline-block; background:linear-gradient(90deg,var(--brand),var(--brand2)); color:#fff; padding:4px 10px; border-radius:999px; font-size:.8rem; }
+      .row{ display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+      select,button{ font:inherit }
+      select{ padding:10px 12px; border-radius:12px; border:1px solid #cbd5e1; background:#fff; min-width:170px }
+      .step{ display:flex; align-items:flex-start; gap:12px; padding:12px 0; border-bottom:1px dashed #e5e7eb; }
+      .step:last-child{ border-bottom:0 }
+      .chk{ width:26px; height:26px; border:2px solid var(--brand); border-radius:8px; display:inline-block; position:relative; cursor:pointer; flex:0 0 26px; margin-top:2px }
+      .chk.done::after{ content:""; position:absolute; inset:4px; background:var(--brand); border-radius:4px }
+      .subl{ color:#475569 }
+      .toolbar{ display:flex; gap:10px; flex-wrap:wrap }
+      button{ background:var(--brand); color:#fff; border:0; padding:12px 16px; border-radius:12px; cursor:pointer; font-weight:700 }
+      button.secondary{ background:#111 }
+      .muted{ color:var(--muted) }
+      @media (max-width: 520px){
+        .toolbar button{ width:100% }
+      }
+      @media (min-width: 1100px){
+        .wrap{ width:min(980px, 100% - 2*var(--space)); }
+      }
     </style>
   </head>
   <body>
+    <!-- MENU (si tu menu_horizontal.php imprime un <nav>, se verá arriba) -->
+
     <div class="wrap">
       <div class="card">
         <div class="pill">Máquina</div>
@@ -272,7 +289,7 @@ if (isset($_GET['t']) && $_GET['t']!=='') {
   exit;
 }
 
-/* ================= Solo ADMIN desde acá ================= */
+/* ================= Solo ADMIN ================= */
 if (!$admin) {
   http_response_code(403);
   echo "<div style='max-width:720px;margin:20px auto;font-family:system-ui,sans-serif'>
@@ -440,50 +457,76 @@ unset($_SESSION['flash']);
 <html lang="es">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>QR de máquinas — Admin</title>
   <style>
-    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; background:#0b1220; color:#e5e7eb; margin:0; }
-    .wrap { max-width: 1080px; margin: 0 auto; padding: 24px; }
-    .grid { display:grid; grid-template-columns: 1.2fr 1fr; gap:20px; }
-    .card { background:#0f172a; border:1px solid #1f2937; border-radius:16px; padding:16px; }
-    input, textarea { width:100%; padding:10px; border-radius:10px; border:1px solid #334155; background:#0b1220; color:#e5e7eb; }
-    label { font-size:.9rem; color:#cbd5e1; }
-    .row { display:grid; grid-template-columns: 1fr 1fr; gap:10px; }
-    button { background:#22d3ee; border:0; color:#111; font-weight:800; padding:10px 14px; border-radius:10px; cursor:pointer; }
-    table{ width:100%; border-collapse: collapse; }
-    th, td{ text-align:left; padding:10px; border-bottom:1px solid #1f2937; }
+    :root{
+      --bg:#0b1220; --card:#0f172a; --muted:#94a3b8; --line:#1f2937; --ink:#e5e7eb; --acc:#22d3ee;
+      --radius:16px; --space:clamp(14px, 2vw, 24px);
+      --fs:clamp(.95rem, 1.4vw, 1rem); --fs-h:clamp(1.1rem, 2.2vw, 1.5rem);
+    }
+    *{box-sizing:border-box}
+    body{ margin:0; font:400 var(--fs)/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif; background:var(--bg); color:var(--ink); }
+    /* MENU (si tu menú imprime un <nav>, se verá arriba) */
+
+    .wrap{ width:min(1200px, 100% - 2*var(--space)); margin:0 auto; padding:var(--space) 0 var(--space); }
+    h1{ font-size:var(--fs-h); margin:0 0 8px }
+    .grid{ display:grid; grid-template-columns: 1fr; gap:16px; }
+    @media (min-width: 1024px){ .grid{ grid-template-columns: 1.2fr 1fr; gap:20px; } }
+    .card{ background:var(--card); border:1px solid var(--line); border-radius:var(--radius); padding:clamp(14px, 2vw, 18px); }
+    input, textarea{ width:100%; padding:12px; border-radius:12px; border:1px solid #334155; background:#0b1220; color:var(--ink); }
+    label{ font-size:.92rem; color:#cbd5e1; display:block; margin-bottom:6px }
+    .row{ display:grid; grid-template-columns:1fr; gap:10px }
+    @media (min-width: 720px){ .row{ grid-template-columns:1fr 1fr; } }
+    button{ background:var(--acc); border:0; color:#111; font-weight:800; padding:12px 16px; border-radius:12px; cursor:pointer; }
+    .danger{ background:#ef4444; color:#fff; } .warn{ background:#f59e0b; color:#111; }
+    .muted{ color:var(--muted); font-size:.95rem; }
+    .qr{ background:#fff; padding:6px; border-radius:8px; }
+    .badge{ display:inline-block; background:#1f2937; padding:4px 8px; border-radius:999px; font-size:.85rem; }
+    .actions{ display:flex; gap:8px; flex-wrap:wrap; }
+
+    /* Tabla → tarjetas en mobile */
+    .table-wrap{ width:100%; overflow:hidden; }
+    table{ width:100%; border-collapse:collapse; }
+    th, td{ text-align:left; padding:10px; border-bottom:1px solid var(--line); vertical-align:top }
     th{ color:#94a3b8; font-weight:600; }
-    .muted{ color:#94a3b8; font-size:.9rem; }
-    .qr { background:#fff; padding:6px; border-radius:8px; }
-    .danger{ background:#ef4444; color:#fff; }
-    .warn{ background:#f59e0b; color:#111; }
-    .badge{ display:inline-block; background:#1f2937; padding:4px 8px; border-radius:999px; font-size:.8rem; }
-    .actions{ display:flex; gap:6px; flex-wrap:wrap; }
-    .center{ text-align:center; }
-    .small{ font-size:.85rem; }
-    .link{ color:#60a5fa; text-decoration:none; }
-    .link:hover{text-decoration:underline;}
-    .lvlgrid{ display:grid; grid-template-columns: 1fr; gap:10px; }
-    @media (min-width: 900px){ .lvlgrid{ grid-template-columns: 1fr 1fr 1fr; } }
+    .small{ font-size:.88rem }
+
+    @media (max-width: 700px){
+      table, thead, tbody, th, td, tr{ display:block; }
+      thead{ display:none; }
+      tbody tr{ border:1px solid var(--line); border-radius:12px; padding:10px; margin-bottom:12px; background:#0e1830; }
+      tbody td{ border:0; padding:6px 0; }
+      tbody td[data-label]::before{
+        content: attr(data-label) ": "; color:#94a3b8; font-weight:600; display:inline-block; min-width:110px;
+      }
+      .qr{ width:100px; height:100px; }
+      .actions{ justify-content:flex-start }
+    }
+
+    .lvlgrid{ display:grid; grid-template-columns:1fr; gap:10px }
+    @media (min-width: 1000px){ .lvlgrid{ grid-template-columns:1fr 1fr 1fr; } }
     .subtle{ color:#94a3b8; font-size:.85rem; margin-bottom:6px }
   </style>
 </head>
 <body>
+  <!-- MENU -->
+
   <div class="wrap">
     <h1>QR de máquinas — Admin</h1>
     <p class="muted">Creá máquinas, definí sus rutinas por nivel y descargá los QR para imprimir.</p>
     <?php if ($flash): ?>
-      <div class="card" style="border:1px solid #22d3ee; margin-bottom:12px"><?php echo h($flash); ?></div>
+      <div class="card" style="border:1px solid var(--acc); margin-bottom:12px"><?php echo h($flash); ?></div>
     <?php endif; ?>
 
     <div class="grid">
       <div class="card">
-        <h2><?php echo $edit ? 'Editar máquina' : 'Nueva máquina'; ?></h2>
+        <h2 style="margin-top:0"><?php echo $edit ? 'Editar máquina' : 'Nueva máquina'; ?></h2>
         <form method="post">
           <?php if ($edit): ?>
             <input type="hidden" name="maquina_id" value="<?php echo (int)$edit['id']; ?>">
           <?php endif; ?>
+
           <div class="row">
             <div>
               <label>Nombre de máquina</label>
@@ -494,6 +537,7 @@ unset($_SESSION['flash']);
               <input name="ubicacion" value="<?php echo h($edit['ubicacion'] ?? ''); ?>">
             </div>
           </div>
+
           <div style="margin-top:10px">
             <label>Título de la rutina</label>
             <input name="titulo" required value="<?php echo h($edit_r['titulo'] ?? 'Rutina sugerida'); ?>">
@@ -536,77 +580,78 @@ unset($_SESSION['flash']);
             <textarea name="notas" rows="3" placeholder="Aclaraciones, técnica, respiración, etc."><?php echo h($edit_r['notas'] ?? ''); ?></textarea>
           </div>
 
-          <div style="margin-top:12px">
+          <div style="margin-top:12px; display:flex; gap:10px; flex-wrap:wrap">
             <button name="save_machine" value="1"><?php echo $edit ? 'Guardar cambios' : 'Crear máquina + rutina'; ?></button>
+            <?php if ($edit): ?>
+              <form method="post" onsubmit="return confirm('Esto invalida el QR anterior. ¿Continuar?')" style="display:inline">
+                <input type="hidden" name="maquina_id" value="<?php echo (int)$edit['id']; ?>">
+                <button class="warn" name="regen_token" value="1">Regenerar token (nuevo QR)</button>
+              </form>
+            <?php endif; ?>
           </div>
         </form>
-
-        <?php if ($edit): ?>
-        <form method="post" onsubmit="return confirm('Esto invalida el QR anterior. ¿Continuar?')">
-          <input type="hidden" name="maquina_id" value="<?php echo (int)$edit['id']; ?>">
-          <button class="warn" name="regen_token" value="1" style="margin-top:8px">Regenerar token (nuevo QR)</button>
-        </form>
-        <?php endif; ?>
       </div>
 
       <div class="card">
-        <h2>Máquinas</h2>
+        <h2 style="margin-top:0">Máquinas</h2>
         <?php if (empty($rows)): ?>
           <p class="muted">Todavía no cargaste máquinas.</p>
         <?php else: ?>
-          <table>
-            <thead>
-              <tr>
-                <th>#</th>
-                <th>Máquina</th>
-                <th>QR / Enlace</th>
-                <th>Scans</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              <?php foreach ($rows as $r):
-                $url = $public_base . urlencode($r['token']);
-                $qr  = 'https://api.qrserver.com/v1/create-qr-code/?size=500x500&data='.rawurlencode($url);
-              ?>
+          <div class="table-wrap">
+            <table aria-label="Listado de máquinas">
+              <thead>
                 <tr>
-                  <td><?php echo (int)$r['id']; ?></td>
-                  <td>
-                    <strong><?php echo h($r['nombre']); ?></strong>
-                    <?php if ($r['ubicacion']): ?><div class="small muted"><?php echo h($r['ubicacion']); ?></div><?php endif; ?>
-                    <div class="small muted">Creada: <?php echo h($r['creada_en']); ?></div>
-                  </td>
-                  <td>
-                    <div class="actions">
-                      <a class="link" href="<?php echo h($url); ?>" target="_blank">Ver pública</a>
-                      <a class="link" href="<?php echo h($qr); ?>" target="_blank" download="QR_<?php echo (int)$r['id']; ?>.png">Descargar QR</a>
-                    </div>
-                    <div class="center" style="margin-top:6px">
-                      <img class="qr" src="<?php echo h($qr); ?>" alt="QR" width="120" height="120" loading="lazy">
-                    </div>
-                    <div class="small muted"><?php echo h($url); ?></div>
-                  </td>
-                  <td><span class="badge"><?php echo (int)$r['scans']; ?></span></td>
-                  <td>
-                    <div class="actions">
-                      <a class="link" href="?edit=<?php echo (int)$r['id']; ?>">Editar</a>
-                      <form method="post" onsubmit="return confirm('¿Eliminar máquina y su rutina?')">
-                        <input type="hidden" name="maquina_id" value="<?php echo (int)$r['id']; ?>">
-                        <button class="danger" name="delete_machine" value="1">Eliminar</button>
-                      </form>
-                    </div>
-                  </td>
+                  <th>#</th>
+                  <th>Máquina</th>
+                  <th>QR / Enlace</th>
+                  <th>Scans</th>
+                  <th></th>
                 </tr>
-              <?php endforeach; ?>
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                <?php foreach ($rows as $r):
+                  $url = $public_base . urlencode($r['token']);
+                  $qr  = 'https://api.qrserver.com/v1/create-qr-code/?size=500x500&data='.rawurlencode($url);
+                ?>
+                  <tr>
+                    <td data-label="#"><?php echo (int)$r['id']; ?></td>
+                    <td data-label="Máquina">
+                      <strong><?php echo h($r['nombre']); ?></strong>
+                      <?php if ($r['ubicacion']): ?><div class="small muted"><?php echo h($r['ubicacion']); ?></div><?php endif; ?>
+                      <div class="small muted">Creada: <?php echo h($r['creada_en']); ?></div>
+                    </td>
+                    <td data-label="QR / Enlace">
+                      <div class="actions">
+                        <a class="link" href="<?php echo h($url); ?>" target="_blank" rel="noopener">Ver pública</a>
+                        <a class="link" href="<?php echo h($qr); ?>" target="_blank" download="QR_<?php echo (int)$r['id']; ?>.png" rel="noopener">Descargar QR</a>
+                      </div>
+                      <div class="center" style="margin-top:6px">
+                        <img class="qr" src="<?php echo h($qr); ?>" alt="QR" width="120" height="120" loading="lazy">
+                      </div>
+                      <div class="small muted" style="word-break:break-all"><?php echo h($url); ?></div>
+                    </td>
+                    <td data-label="Scans"><span class="badge"><?php echo (int)$r['scans']; ?></span></td>
+                    <td data-label="Acciones">
+                      <div class="actions">
+                        <a class="link" href="?edit=<?php echo (int)$r['id']; ?>">Editar</a>
+                        <form method="post" onsubmit="return confirm('¿Eliminar máquina y su rutina?')">
+                          <input type="hidden" name="maquina_id" value="<?php echo (int)$r['id']; ?>">
+                          <button class="danger" name="delete_machine" value="1">Eliminar</button>
+                        </form>
+                      </div>
+                    </td>
+                  </tr>
+                <?php endforeach; ?>
+              </tbody>
+            </table>
+          </div>
         <?php endif; ?>
       </div>
     </div>
 
     <div class="card" style="margin-top:16px">
-      <h3>Consejos de impresión</h3>
-      <ul>
+      <h3 style="margin:0 0 8px">Consejos de impresión</h3>
+      <ul style="margin:0 0 4px 18px">
         <li>Imprimí el PNG del QR en alta (500×500) y plastificalo en la máquina.</li>
         <li>Si cambiás la rutina seguido, mantené el mismo QR y solo actualizá los pasos.</li>
         <li>Si un QR se filtra, regenerá el token para invalidarlo.</li>

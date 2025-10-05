@@ -1,5 +1,5 @@
 <?php
-// cliente_scan_qr.php — Panel del Cliente: escanear QR con la cámara y abrir la rutina
+// cliente_scan_qr.php — Panel del Cliente: escanear QR con la cámara y abrir la rutina (responsive)
 if (session_status() === PHP_SESSION_NONE) session_start();
 require_once __DIR__ . '/conexion.php';
 @include __DIR__ . '/menu_cliente.php';
@@ -22,7 +22,6 @@ function base_url(): string {
   $path  = rtrim(dirname($_SERVER['SCRIPT_NAME'] ?? '/'), '/\\');
   return $proto.'://'.$host.($path ? $path.'/' : '/');
 }
-
 $public_base = base_url().'maquinas_qr.php?t='; // por si el usuario pega solo el token
 ?>
 <!doctype html>
@@ -30,67 +29,90 @@ $public_base = base_url().'maquinas_qr.php?t='; // por si el usuario pega solo e
 <head>
   <meta charset="utf-8">
   <title>Escanear QR de máquinas — Panel Cliente</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <style>
     :root{
-      --bg:#0b1220; --card:#0f172a; --muted:#94a3b8; --line:#1f2937; --acc:#22d3ee; --bad:#ef4444; --ok:#22c55e;
+      --bg:#0b1220; --card:#0f172a; --muted:#94a3b8; --line:#1f2937; --acc:#22d3ee; --bad:#ef4444; --ok:#22c55e; --ink:#e5e7eb;
+      --space:clamp(14px, 2.4vw, 24px);
+      --radius:16px;
+      --fs:clamp(.96rem, 1.6vw, 1rem);
+      --fsh:clamp(1.2rem, 2.2vw, 1.6rem);
+    }
+    @media (prefers-color-scheme: light){
+      :root{ --bg:#f7fafc; --card:#ffffff; --muted:#556070; --line:#e5e7eb; --ink:#0f172a; }
     }
     *{box-sizing:border-box}
-    body{ margin:0; font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif; background:var(--bg); color:#e5e7eb; }
-    .wrap{ max-width:960px; margin:0 auto; padding:18px; }
-    h1{ margin:6px 0 10px; font-size:1.6rem; }
+    body{ margin:0; font:400 var(--fs)/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif; background:var(--bg); color:var(--ink); }
+    .wrap{ width:min(1100px, 100% - 2*var(--space)); margin:0 auto; padding:var(--space) 0 var(--space); }
+    h1{ margin:6px 0 12px; font-size:var(--fsh); }
     .muted{ color:var(--muted); }
-    .card{ background:var(--card); border:1px solid var(--line); border-radius:16px; padding:16px; }
-    .grid{ display:grid; grid-template-columns: 1.1fr 1fr; gap:16px; }
-    @media (max-width: 900px){ .grid{ grid-template-columns:1fr; } }
+    .grid{ display:grid; grid-template-columns: 1fr; gap:16px; }
+    @media (min-width: 992px){ .grid{ grid-template-columns: 1.15fr 1fr; gap:18px; } }
+    .card{ background:var(--card); border:1px solid var(--line); border-radius:var(--radius); padding:clamp(14px,2vw,18px); }
+
+    /* Video responsivo */
     .video-box{ position:relative; border-radius:14px; overflow:hidden; background:#000; }
-    video{ width:100%; height:auto; display:block; transform:scaleX(-1); } /* espejo: mejor experiencia */
-    .scanline{ position:absolute; left:0; right:0; top:0; height:2px; background:linear-gradient(90deg,transparent,#22d3ee,transparent); animation:scan 2.2s linear infinite; opacity:.8 }
+    .video-frame{ aspect-ratio: 16 / 9; width:100%; display:block; }
+    video{ width:100%; height:100%; object-fit:cover; display:block; }
+    .scanline{ position:absolute; left:0; right:0; top:10%; height:2px; background:linear-gradient(90deg,transparent,var(--acc),transparent); animation:scan 2.2s linear infinite; opacity:.85 }
     @keyframes scan{ 0%{top:10%} 50%{top:90%} 100%{top:10%} }
+
     .status{ margin-top:8px; font-size:.95rem; }
-    .ok{ color:var(--ok); } .bad{ color:#fecaca; }
-    .row{ display:grid; grid-template-columns: 1fr 1fr; gap:10px; }
-    @media (max-width: 600px){ .row{ grid-template-columns:1fr; } }
-    input[type="text"]{ width:100%; padding:10px; border-radius:10px; border:1px solid #334155; background:#0b1220; color:#e5e7eb; }
-    button, .btn{ background:var(--acc); border:0; color:#111; font-weight:800; padding:10px 14px; border-radius:10px; cursor:pointer; text-decoration:none; display:inline-block; }
+    .ok{ color:var(--ok); } .bad{ color:#ef9a9a; }
+
+    .actions{ display:flex; gap:10px; flex-wrap:wrap; margin-top:10px }
+    button, .btn{ background:var(--acc); border:0; color:#111; font-weight:800; padding:12px 16px; border-radius:12px; cursor:pointer; text-decoration:none; display:inline-block; }
     .ghost{ background:#111; color:#fff; }
     .danger{ background:var(--bad); color:#fff; }
-    .actions{ display:flex; gap:8px; flex-wrap:wrap; }
-    .help{ font-size:.9rem; margin-top:8px }
-    .center{ text-align:center; }
-    .hint{ font-size:.85rem; color:#cbd5e1; }
-    .file{ background:#1f2937; border:1px dashed #334155; padding:10px; border-radius:10px; }
+    @media (max-width:520px){ .actions button, .actions .btn{ flex:1 1 46%; } }
+
+    .row{ display:grid; grid-template-columns: 1fr 1fr; gap:10px; }
+    @media (max-width: 640px){ .row{ grid-template-columns:1fr; } }
+    input[type="text"]{ width:100%; padding:12px; border-radius:12px; border:1px solid var(--line); background:transparent; color:inherit; }
+
+    .help{ font-size:.92rem; margin-top:8px }
+    .hint{ font-size:.86rem; color:var(--muted); }
+    .file{ background:transparent; border:1px dashed var(--line); padding:12px; border-radius:12px; }
+
+    /* Overlay guía/errores opcional */
+    .notice{ display:none; position:fixed; inset:0; background:rgba(0,0,0,.55); color:#fff; align-items:center; justify-content:center; padding:20px; z-index:50 }
+    .notice .box{ background:#111827; border:1px solid #374151; border-radius:16px; padding:18px; width:min(520px, 92vw); }
+    .notice.show{ display:flex; }
   </style>
 </head>
 <body>
   <div class="wrap">
     <h1>Escanear QR de máquinas</h1>
-    <p class="muted">Apuntá la cámara al QR pegado en la máquina para abrir la rutina con tu <strong>nivel</strong> (Principiante / Medio / Avanzado) en la siguiente pantalla.</p>
+    <p class="muted">Apuntá la cámara al QR pegado en la máquina. Al detectar, te llevamos a la rutina donde podés elegir tu <strong>nivel</strong> (Principiante / Medio / Avanzado).</p>
 
     <div class="grid">
       <!-- Cámara y estado -->
-      <div class="card">
-        <div class="video-box">
-          <video id="video" playsinline></video>
-          <div class="scanline"></div>
+      <div class="card" aria-labelledby="camTitle">
+        <h2 id="camTitle" style="margin:0 0 8px; font-size:1.05em">Cámara</h2>
+        <div class="video-box" role="group" aria-label="Vista previa de cámara">
+          <div class="video-frame">
+            <video id="video" playsinline muted></video>
+          </div>
+          <div class="scanline" aria-hidden="true"></div>
         </div>
-        <div class="status" id="status">Preparando cámara…</div>
-        <div class="actions" style="margin-top:10px">
+        <div class="status" id="status" aria-live="polite">Preparando cámara…</div>
+        <div class="actions">
           <button id="btnStart">Iniciar cámara</button>
           <button id="btnStop" class="ghost">Detener</button>
           <button id="btnSwitch" class="ghost">Cambiar cámara</button>
           <button id="btnTorch" class="ghost">Linterna</button>
         </div>
-        <div class="help hint">Consejo: acercá el código hasta que ocupe buena parte de la pantalla.</div>
+        <div class="help hint">Tip: acercá el código hasta ocupar buena parte de la pantalla y mantené el pulso.</div>
       </div>
 
       <!-- Fallbacks: subir foto / pegar enlace -->
-      <div class="card">
-        <h3 style="margin-top:0">Si la cámara no funciona</h3>
-        <div class="file" style="margin-bottom:10px">
-          <label for="file">Escanear desde foto (abre cámara si tu equipo lo permite)</label>
+      <div class="card" aria-labelledby="fbTitle">
+        <h2 id="fbTitle" style="margin:0 0 8px; font-size:1.05em">Si la cámara no funciona</h2>
+
+        <div class="file" style="margin-bottom:12px">
+          <label for="file">Escanear desde foto (puede abrir cámara si tu equipo lo permite)</label>
           <input id="file" type="file" accept="image/*" capture="environment">
-          <div class="hint">Tomá una foto clara del QR. Si la foto contiene la URL, vamos a abrirla.</div>
+          <div class="hint">Tomá una foto clara del QR. Si la imagen tiene URL detectable, podrás abrirla.</div>
         </div>
 
         <div>
@@ -99,8 +121,19 @@ $public_base = base_url().'maquinas_qr.php?t='; // por si el usuario pega solo e
             <input id="manual" type="text" placeholder="Ej: <?php echo h($public_base); ?>TOKEN  — o solo TOKEN">
             <button id="btnOpen" class="btn">Abrir rutina</button>
           </div>
-          <div class="hint">Si pegás solo el TOKEN, te llevamos a <?php echo h($public_base); ?>TOKEN</div>
+          <div class="hint">Si pegás solo el TOKEN, vamos a: <?php echo h($public_base); ?>TOKEN</div>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Avisos superpuestos -->
+  <div id="notice" class="notice" role="dialog" aria-modal="true" aria-labelledby="nTitle" aria-describedby="nMsg">
+    <div class="box">
+      <h3 id="nTitle" style="margin:0 0 8px; font-size:1.1em">Atención</h3>
+      <div id="nMsg" class="hint" style="margin-bottom:12px">Mensaje</div>
+      <div class="actions">
+        <button id="nClose" class="ghost">Cerrar</button>
       </div>
     </div>
   </div>
@@ -115,6 +148,7 @@ $public_base = base_url().'maquinas_qr.php?t='; // por si el usuario pega solo e
     const btnStart = $('btnStart'), btnStop=$('btnStop'), btnSwitch=$('btnSwitch'), btnTorch=$('btnTorch');
     const inputFile = $('file');
     const manual = $('manual'), btnOpen = $('btnOpen');
+    const notice = $('notice'), nClose = $('nClose'), nMsg = $('nMsg');
 
     const PUBLIC_BASE = <?php echo json_encode($public_base, JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES); ?>;
 
@@ -126,12 +160,16 @@ $public_base = base_url().'maquinas_qr.php?t='; // por si el usuario pega solo e
     let track = null;
     let torchOn = false;
 
+    function showNotice(msg){ nMsg.textContent = msg; notice.classList.add('show'); }
+    function hideNotice(){ notice.classList.remove('show'); }
+    nClose.addEventListener('click', hideNotice);
+
     // Comprueba soporte de BarcodeDetector
     async function ensureDetector(){
       if ('BarcodeDetector' in window) {
         try{
           const formats = await BarcodeDetector.getSupportedFormats();
-          if (formats.includes('qr_code')){
+          if (formats && formats.includes('qr_code')){
             detector = new BarcodeDetector({ formats: ['qr_code'] });
             return true;
           }
@@ -150,10 +188,12 @@ $public_base = base_url().'maquinas_qr.php?t='; // por si el usuario pega solo e
     async function startCamera(){
       if (!location.protocol.startsWith('https')){
         status('Necesitás HTTPS para usar la cámara (o app instalada).', true);
+        showNotice('Este sitio debe abrirse con HTTPS para acceder a la cámara.');
         return;
       }
       await listCameras();
-      // intenta trasera por label o la última
+
+      // intenta trasera por label; si no, usa la última
       if (devices.length){
         const back = devices.find(d => /back|trasera|rear/i.test(d.label));
         currentDeviceId = (back || devices[devices.length-1]).deviceId;
@@ -172,6 +212,7 @@ $public_base = base_url().'maquinas_qr.php?t='; // por si el usuario pega solo e
       }catch(e){
         console.error(e);
         status('No pudimos acceder a la cámara. Usá la foto o pegá el enlace/token.', true);
+        showNotice('No pudimos acceder a la cámara. Verificá permisos del navegador o usá las opciones alternativas.');
       }
     }
 
@@ -196,7 +237,7 @@ $public_base = base_url().'maquinas_qr.php?t='; // por si el usuario pega solo e
     }
 
     async function toggleTorch(){
-      if (!track) return;
+      if (!track) { status('Cámara no disponible.', true); return; }
       const caps = track.getCapabilities?.();
       if (!caps || !caps.torch){ status('Tu cámara no soporta linterna.', true); return; }
       torchOn = !torchOn;
@@ -213,11 +254,14 @@ $public_base = base_url().'maquinas_qr.php?t='; // por si el usuario pega solo e
 
     async function scanLoop(){
       const hasDetector = detector || await ensureDetector();
-      if (!hasDetector){ status('Escaneo nativo no disponible. Probá por foto o pegá el enlace/token.', true); return; }
-
+      if (!hasDetector){
+        status('Escaneo nativo no disponible. Probá por foto o pegá el enlace/token.', true);
+        return;
+      }
       const canvas = $('canvas');
       const ctx = canvas.getContext('2d');
       const fps = 12;
+
       (async function loop(){
         if (!scanning) return;
         try{
@@ -231,7 +275,7 @@ $public_base = base_url().'maquinas_qr.php?t='; // por si el usuario pega solo e
               if (raw){ onResult(raw); return; }
             }
           }
-        }catch(e){ /* ignore frame errors */ }
+        }catch(e){ /* frame error, continuar */ }
         setTimeout(loop, 1000 / fps);
       })();
     }
@@ -243,18 +287,16 @@ $public_base = base_url().'maquinas_qr.php?t='; // por si el usuario pega solo e
       let url = raw;
       try{
         const u = new URL(raw, location.origin);
-        // Si es un token suelto, URL() lo va a tratar como ruta; detectamos token alfanumérico corto
+        // Si es un token suelto, URL() lo trata como ruta; detectamos token alfanumérico
         if (!/maquinas_qr\.php/i.test(u.pathname) && /^[a-f0-9]{8,64}$/i.test(raw)){
           url = PUBLIC_BASE + encodeURIComponent(raw);
         }else{
           url = u.href;
         }
       }catch(_){
-        // No parsea como URL; asumimos que es token
         if (/^[a-f0-9]{8,64}$/i.test(raw)){
           url = PUBLIC_BASE + encodeURIComponent(raw);
         }else{
-          // último intento: si es texto con ?t=, usamos eso
           const m = raw.match(/t=([A-Za-z0-9_\-]+)/);
           url = m ? (PUBLIC_BASE + encodeURIComponent(m[1])) : raw;
         }
@@ -263,16 +305,13 @@ $public_base = base_url().'maquinas_qr.php?t='; // por si el usuario pega solo e
       location.href = url;
     }
 
-    // Fallback: abrir por foto (no decodificamos manualmente el QR; muchos celulares reconocen URL en la foto)
+    // Fallback: abrir por foto (sin decodificar localmente)
     inputFile.addEventListener('change', async ()=>{
       const file = inputFile.files && inputFile.files[0];
       if (!file) return;
       try{
-        // Intentamos leer metadatos de la imagen rápido por si el SO ya detecta URL (no estándar).
-        // Como fallback simple, mostramos cómo abrir manualmente si el visor del sistema la detecta.
-        status('Foto cargada. Si el sistema reconoce un enlace, vas a poder abrirlo desde la vista previa del sistema.', false);
-        // Alternativa: simplemente ofrecer subir y luego pedir que pegue manual (simple, sin librerías externas)
-        alert('Si tu dispositivo no detecta el enlace automáticamente, copiá el texto del QR y pegalo abajo.');
+        status('Foto cargada. Si el sistema reconoce un enlace, podrás abrirlo.', false);
+        alert('Si tu dispositivo no detecta el enlace automáticamente en la foto, copiá el texto del QR y pegalo abajo.');
       }catch(e){
         status('No se pudo procesar la imagen. Pegá el enlace/token abajo.', true);
       }
@@ -285,7 +324,6 @@ $public_base = base_url().'maquinas_qr.php?t='; // por si el usuario pega solo e
       if (/^https?:\/\//i.test(v)){
         location.href = v;
       }else{
-        // si parece token, armamos URL
         v = PUBLIC_BASE + encodeURIComponent(v);
         location.href = v;
       }
@@ -297,8 +335,14 @@ $public_base = base_url().'maquinas_qr.php?t='; // por si el usuario pega solo e
     btnSwitch.addEventListener('click', switchCamera);
     btnTorch.addEventListener('click', toggleTorch);
 
-    // Auto-inicio (si el navegador deja)
-    document.addEventListener('visibilitychange', ()=>{ if (document.visibilityState==='visible' && !stream && !scanning) {/* opcional reintentar */} });
+    // Autointento
+    document.addEventListener('visibilitychange', ()=>{
+      if (document.visibilityState==='visible' && !stream && !scanning) {
+        // opcional: reintentar al volver a la pestaña
+      }
+    });
+
+    // Intento inicial
     startCamera();
   </script>
 </body>
