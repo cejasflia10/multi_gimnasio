@@ -15,14 +15,13 @@ $cliente_id  = (int)($_SESSION['cliente_id'] ?? 0);
 $gimnasio_id = (int)($_SESSION['gimnasio_id'] ?? 0);
 if ($cliente_id <= 0 || $gimnasio_id <= 0) { header('Location: cliente_acceso.php'); exit; }
 
+/* Helpers */
 function h($s){ return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); }
-function base_url(): string {
-  $proto = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
-  $host  = $_SERVER['HTTP_HOST'] ?? 'localhost';
-  $path  = rtrim(dirname($_SERVER['SCRIPT_NAME'] ?? '/'), '/\\');
-  return $proto.'://'.$host.($path ? $path.'/' : '/');
-}
-$public_base = base_url().'maquinas_qr.php?t=';
+
+/* ⚠️ FORZAR DOMINIO PÚBLICO (evita localhost en QR) */
+const APP_PUBLIC_ORIGIN = 'https://bq.onrender.com'; // SIN / al final
+$public_base = rtrim(APP_PUBLIC_ORIGIN, '/').'/maquinas_qr.php?t=';
+
 ?>
 <!doctype html>
 <html lang="es">
