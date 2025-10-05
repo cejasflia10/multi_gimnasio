@@ -1,5 +1,12 @@
 <?php
-// cliente_scan_qr.php — Panel del Cliente: escanear QR con la cámara y abrir la rutina (responsive)
+// cliente_scan_qr.php — Panel del Cliente: escanear QR con la cámara y abrir la rutina (responsive + fallback WebView)
+/*
+  ✔ Responsive móvil/tablet/PC
+  ✔ Flujo nativo (getUserMedia + BarcodeDetector) cuando está disponible
+  ✔ Fallback universal con html5-qrcode para apps tipo WebView / wrappers
+  ✔ Botones: iniciar/detener, cambiar cámara, linterna
+  ✔ Opciones alternativas: subir foto / pegar enlace o token
+*/
 if (session_status() === PHP_SESSION_NONE) session_start();
 require_once __DIR__ . '/conexion.php';
 @include __DIR__ . '/menu_cliente.php';
@@ -7,6 +14,9 @@ require_once __DIR__ . '/conexion.php';
 if (!isset($conexion) || !($conexion instanceof mysqli)) { http_response_code(500); exit('❌ Sin conexión a BD.'); }
 if (function_exists('mysqli_report')) { mysqli_report(MYSQLI_REPORT_OFF); }
 @$conexion->set_charset('utf8mb4');
+
+// Opcional: habilitar explícitamente acceso a cámara desde navegadores modernos
+@header('Permissions-Policy: camera=(self)');
 
 $cliente_id  = (int)($_SESSION['cliente_id'] ?? 0);
 $gimnasio_id = (int)($_SESSION['gimnasio_id'] ?? 0);
@@ -30,6 +40,7 @@ $public_base = base_url().'maquinas_qr.php?t='; // por si el usuario pega solo e
   <meta charset="utf-8">
   <title>Escanear QR de máquinas — Panel Cliente</title>
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+
   <style>
     :root{
       --bg:#0b1220; --card:#0f172a; --muted:#94a3b8; --line:#1f2937; --acc:#22d3ee; --bad:#ef4444; --ok:#22c55e; --ink:#e5e7eb;
@@ -79,6 +90,9 @@ $public_base = base_url().'maquinas_qr.php?t='; // por si el usuario pega solo e
     .notice .box{ background:#111827; border:1px solid #374151; border-radius:16px; padding:18px; width:min(520px, 92vw); }
     .notice.show{ display:flex; }
   </style>
+
+  <!-- Fallback universal de escaneo para WebView/wrappers -->
+  <script src="https://unpkg.com/html5-qrcode/minified/html5-qrcode.min.js"></script>
 </head>
 <body>
   <div class="wrap">
@@ -108,6 +122,9 @@ $public_base = base_url().'maquinas_qr.php?t='; // por si el usuario pega solo e
       <!-- Fallbacks: subir foto / pegar enlace -->
       <div class="card" aria-labelledby="fbTitle">
         <h2 id="fbTitle" style="margin:0 0 8px; font-size:1.05em">Si la cámara no funciona</h2>
+
+        <!-- Contenedor para el fallback html5-qrcode (se muestra solo cuando se usa) -->
+        <div id="reader" style="display:none; width:100%; max-width:460px; margin:6px auto 16px;"></div>
 
         <div class="file" style="margin-bottom:12px">
           <label for="file">Escanear desde foto (puede abrir cámara si tu equipo lo permite)</label>
@@ -160,9 +177,44 @@ $public_base = base_url().'maquinas_qr.php?t='; // por si el usuario pega solo e
     let track = null;
     let torchOn = false;
 
+    // Fallback: html5-qrcode
+    let html5q = null;
+    async function startHtml5(){
+      const box = document.getElementById('reader');
+      box.style.display = 'block';
+      try{
+        if (!window.Html5Qrcode) throw new Error('html5-qrcode no cargado');
+        html5q = new Html5Qrcode('reader');
+        await html5q.start(
+          { facingMode: 'environment' },
+          { fps: 12, qrbox: (vw, vh) => Math.min(300, Math.floor(Math.min(vw, vh) * 0.7)) },
+          decodedText => { if (decodedText) onResult(decodedText); },
+          _err => {} // ignoramos errores por frame
+        );
+        status('Cámara activa (modo compatible). Apuntá al código…');
+      }catch(e){
+        console.error('html5-qrcode error', e);
+        status('No pudimos iniciar la cámara en este dispositivo. Usá foto o pegá el enlace/token.', true);
+      }
+    }
+    async function stopHtml5(){
+      try{
+        if (html5q) { await html5q.stop(); await html5q.clear(); html5q = null; }
+      }catch(_){}
+      const box = document.getElementById('reader');
+      if (box) box.style.display = 'none';
+    }
+
     function showNotice(msg){ nMsg.textContent = msg; notice.classList.add('show'); }
     function hideNotice(){ notice.classList.remove('show'); }
     nClose.addEventListener('click', hideNotice);
+
+    function isInAppWebView(){
+      const ua = navigator.userAgent || '';
+      const androidWV = /\b; wv\b/i.test(ua) || /\bVersion\/\d+\.\d+ Chrome\/\d+/i.test(ua);
+      const iOSWV = (/\b(iPhone|iPad|iPod)\b/i.test(ua) && !/Safari\//i.test(ua));
+      return androidWV || iOSWV;
+    }
 
     // Comprueba soporte de BarcodeDetector
     async function ensureDetector(){
@@ -186,11 +238,20 @@ $public_base = base_url().'maquinas_qr.php?t='; // por si el usuario pega solo e
     }
 
     async function startCamera(){
-      if (!location.protocol.startsWith('https')){
-        status('Necesitás HTTPS para usar la cámara (o app instalada).', true);
-        showNotice('Este sitio debe abrirse con HTTPS para acceder a la cámara.');
-        return;
+      // Si estamos dentro de un wrapper/app (WebView), usamos directamente el fallback
+      if (isInAppWebView()){
+        status('Inicializando cámara (modo compatible)…');
+        await stopCamera(); // limpia cualquier stream previo
+        return startHtml5();
       }
+
+      // En navegador normal, getUserMedia requiere HTTPS (excepto localhost)
+      if (!location.protocol.startsWith('https') && location.hostname!=='localhost'){
+        status('Necesitás HTTPS para usar la cámara en el navegador.', true);
+        showNotice('Abrí esta página con HTTPS para acceder a la cámara. Intentaremos un modo compatible…');
+        return startHtml5();
+      }
+
       await listCameras();
 
       // intenta trasera por label; si no, usa la última
@@ -211,13 +272,15 @@ $public_base = base_url().'maquinas_qr.php?t='; // por si el usuario pega solo e
         scanLoop();
       }catch(e){
         console.error(e);
-        status('No pudimos acceder a la cámara. Usá la foto o pegá el enlace/token.', true);
-        showNotice('No pudimos acceder a la cámara. Verificá permisos del navegador o usá las opciones alternativas.');
+        status('No pudimos acceder a la cámara. Probando modo compatible…', true);
+        showNotice('No pudimos acceder a la cámara del navegador. Probamos modo compatible.');
+        return startHtml5();
       }
     }
 
     function stopCamera(){
       scanning = false;
+      stopHtml5();
       if (stream){
         stream.getTracks().forEach(t=>t.stop());
         stream = null;
@@ -227,6 +290,11 @@ $public_base = base_url().'maquinas_qr.php?t='; // por si el usuario pega solo e
     }
 
     async function switchCamera(){
+      // Si está activo el fallback, reiniciamos html5-qrcode (no soporta cambiar fácilmente)
+      if (html5q){
+        await stopHtml5();
+        return startHtml5();
+      }
       if (!devices.length){ await listCameras(); }
       if (!devices.length) return;
       const idx = devices.findIndex(d => d.deviceId === currentDeviceId);
@@ -237,11 +305,12 @@ $public_base = base_url().'maquinas_qr.php?t='; // por si el usuario pega solo e
     }
 
     async function toggleTorch(){
+      if (html5q){ return alert('La linterna no está disponible en el modo compatible.'); }
       if (!track) { status('Cámara no disponible.', true); return; }
       const caps = track.getCapabilities?.();
       if (!caps || !caps.torch){ status('Tu cámara no soporta linterna.', true); return; }
-      torchOn = !torchOn;
       try{
+        torchOn = !torchOn;
         await track.applyConstraints({ advanced: [{ torch: torchOn }] });
         status(torchOn ? 'Linterna encendida.' : 'Linterna apagada.');
       }catch(e){ status('No se pudo cambiar la linterna.', true); }
@@ -255,8 +324,9 @@ $public_base = base_url().'maquinas_qr.php?t='; // por si el usuario pega solo e
     async function scanLoop(){
       const hasDetector = detector || await ensureDetector();
       if (!hasDetector){
-        status('Escaneo nativo no disponible. Probá por foto o pegá el enlace/token.', true);
-        return;
+        // Si el detector nativo no está, hacemos fallback automático
+        status('Escaneo nativo no disponible. Usando modo compatible…');
+        return startHtml5();
       }
       const canvas = $('canvas');
       const ctx = canvas.getContext('2d');
@@ -287,7 +357,6 @@ $public_base = base_url().'maquinas_qr.php?t='; // por si el usuario pega solo e
       let url = raw;
       try{
         const u = new URL(raw, location.origin);
-        // Si es un token suelto, URL() lo trata como ruta; detectamos token alfanumérico
         if (!/maquinas_qr\.php/i.test(u.pathname) && /^[a-f0-9]{8,64}$/i.test(raw)){
           url = PUBLIC_BASE + encodeURIComponent(raw);
         }else{
@@ -335,14 +404,7 @@ $public_base = base_url().'maquinas_qr.php?t='; // por si el usuario pega solo e
     btnSwitch.addEventListener('click', switchCamera);
     btnTorch.addEventListener('click', toggleTorch);
 
-    // Autointento
-    document.addEventListener('visibilitychange', ()=>{
-      if (document.visibilityState==='visible' && !stream && !scanning) {
-        // opcional: reintentar al volver a la pestaña
-      }
-    });
-
-    // Intento inicial
+    // Arranque automático
     startCamera();
   </script>
 </body>
