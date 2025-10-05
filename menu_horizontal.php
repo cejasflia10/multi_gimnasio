@@ -173,6 +173,8 @@ if (!function_exists('has_perm')) {
       <a href="ver_clientes.php">Ver Clientes</a>
       <a href="agregar_cliente.php">Agregar Cliente</a>
       <a href="maquinas_qr.php">🏷️ QR de Máquinas</a>
+      <a href="profesor_seguimiento.php">📈 Seguimiento de alumnos</a>
+
 
     </div>
   </div>
