@@ -1,7 +1,9 @@
 <?php
 /* =============================================================================
-   maquinas_qr.php — Máquinas con QR y rutinas por nivel (Admin + Público)
-   Build: v2-public-no-menu + safe-prepare + LONGTEXT (multi-gimnasio)
+   maquinas_qr.php — Máquinas con QR y rutinas por nivel (Admin + Público + Historial)
+   - Público por token (?t=TOKEN) sin menú ni login.
+   - Admin con $_SESSION['gimnasio_id'] > 0 (con menú).
+   - Si el CLIENTE está logueado, podrá guardar su HISTORIAL del día.
    ========================================================================== */
 
 if (session_status() === PHP_SESSION_NONE) session_start();
@@ -14,7 +16,7 @@ if (!isset($conexion) || !($conexion instanceof mysqli)) {
 if (function_exists('mysqli_report')) { mysqli_report(MYSQLI_REPORT_OFF); }
 @$conexion->set_charset('utf8mb4');
 
-/* ==== Dominio público para armar enlaces de QR (evita localhost) ==== */
+/* ==== Dominio público para armar enlaces de QR ==== */
 const APP_PUBLIC_ORIGIN = 'https://multi-gimnasio-51bq.onrender.com';
 function public_base(): string { return rtrim(APP_PUBLIC_ORIGIN, '/') . '/maquinas_qr.php?t='; }
 
@@ -37,8 +39,6 @@ function normalize_levels(?array $byLevel, ?array $fallback): array {
   }
   return $out;
 }
-
-/* ==== Prepare seguro: si falla te muestra el error SQL y aborta ==== */
 function db_prepare(mysqli $cx, string $sql): mysqli_stmt {
   $stmt = $cx->prepare($sql);
   if (!$stmt) {
@@ -49,7 +49,7 @@ function db_prepare(mysqli $cx, string $sql): mysqli_stmt {
   return $stmt;
 }
 
-/* ================= Tablas (compatibles) ================= */
+/* ================= Tablas base ================= */
 $conexion->query("
 CREATE TABLE IF NOT EXISTS maquinas_gym(
   id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
@@ -68,9 +68,9 @@ CREATE TABLE IF NOT EXISTS rutinas_maquina(
   id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   maquina_id INT UNSIGNED NOT NULL,
   titulo VARCHAR(160) NOT NULL,
-  pasos_json LONGTEXT NOT NULL,              -- LONGTEXT para máxima compatibilidad
+  pasos_json LONGTEXT NOT NULL,
   notas TEXT NULL,
-  pasos_por_nivel_json LONGTEXT NULL,        -- LONGTEXT (no JSON)
+  pasos_por_nivel_json LONGTEXT NULL,
   creada_en DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   actualizada_en DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   UNIQUE KEY uniq_maquina (maquina_id),
@@ -89,19 +89,77 @@ CREATE TABLE IF NOT EXISTS qr_scans(
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 ");
 
-/* Intento agregar la columna si ya existía sin ella */
-@$conexion->query("ALTER TABLE rutinas_maquina ADD COLUMN pasos_por_nivel_json LONGTEXT NULL");
+/* ====== NUEVO: historial del cliente ====== */
+$conexion->query("
+CREATE TABLE IF NOT EXISTS rutina_logs(
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  gimnasio_id INT UNSIGNED NOT NULL,
+  cliente_id INT UNSIGNED NOT NULL,
+  maquina_id INT UNSIGNED NOT NULL,
+  nivel ENUM('principiante','medio','avanzado') NOT NULL,
+  pasos_hechos_json LONGTEXT NOT NULL,      -- array de índices de pasos chequeados
+  rpe TINYINT UNSIGNED NULL,                -- esfuerzo percibido 1–10
+  tiempo_min SMALLINT UNSIGNED NULL,        -- minutos totales
+  notas_cliente TEXT NULL,                  -- observaciones del cliente
+  creada_en DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  INDEX (gimnasio_id, cliente_id, creada_en),
+  INDEX (maquina_id, creada_en),
+  CONSTRAINT fk_rl_maquina FOREIGN KEY (maquina_id) REFERENCES maquinas_gym(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+");
+
+$conexion->query("
+CREATE TABLE IF NOT EXISTS rutina_log_comentarios(
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  log_id BIGINT UNSIGNED NOT NULL,
+  profesor_id INT UNSIGNED NULL,
+  comentario TEXT NOT NULL,
+  creada_en DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  INDEX (log_id, creada_en)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+");
 
 /* ================= Modo actual ================= */
 $gimnasio_id = (int)($_SESSION['gimnasio_id'] ?? 0);
-$__is_public = isset($_GET['t']) && $_GET['t']!=='';    // público por token
+$cliente_id  = (int)($_SESSION['cliente_id']  ?? 0);
+$__is_public = isset($_GET['t']) && $_GET['t']!=='';
 $__is_admin  = is_admin() && !$__is_public;
 
 /* ================= Vista pública (t=token) — SIN MENÚ ================= */
 if ($__is_public) {
   $t = (string)$_GET['t'];
+
+  // Si el cliente envía historial (POST)
+  if ($_SERVER['REQUEST_METHOD']==='POST' && isset($_POST['save_log']) && $cliente_id>0) {
+    $nivel = $_POST['nivel'] ?? 'principiante';
+    if (!in_array($nivel, ['principiante','medio','avanzado'], true)) $nivel='principiante';
+    $pasos = json_encode((array)json_decode($_POST['pasos_idx'] ?? '[]', true), JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES);
+    $rpe   = (int)($_POST['rpe'] ?? 0); if ($rpe<1 || $rpe>10) $rpe = null;
+    $tmin  = (int)($_POST['tiempo_min'] ?? 0); if ($tmin<=0) $tmin=null;
+    $notas = trim($_POST['notas_cliente'] ?? '');
+
+    // recuperar maquina + gimnasio por token
+    $stmt = db_prepare($conexion, "SELECT id, gimnasio_id FROM maquinas_gym WHERE token=? LIMIT 1");
+    $stmt->bind_param('s', $t); $stmt->execute(); $row=$stmt->get_result()->fetch_assoc(); $stmt->close();
+
+    if ($row) {
+      $mid = (int)$row['id']; $gim = (int)$row['gimnasio_id'];
+      $stmt = db_prepare($conexion, "
+        INSERT INTO rutina_logs (gimnasio_id, cliente_id, maquina_id, nivel, pasos_hechos_json, rpe, tiempo_min, notas_cliente)
+        VALUES (?,?,?,?,?,?,?,?)
+      ");
+      $stmt->bind_param('iiissiis', $gim, $cliente_id, $mid, $nivel, $pasos, $rpe, $tmin, $notas);
+      $stmt->execute(); $stmt->close();
+      $_SESSION['flash_pub'] = '✅ Historial guardado.';
+    } else {
+      $_SESSION['flash_pub'] = '❌ No se pudo asociar la máquina.';
+    }
+    header('Location: '.$_SERVER['REQUEST_URI']); exit;
+  }
+
+  // Cargar datos de la máquina + rutina
   $sql = "
-    SELECT m.id, m.nombre, m.ubicacion, r.titulo, r.pasos_json, r.pasos_por_nivel_json, r.notas
+    SELECT m.id, m.gimnasio_id, m.nombre, m.ubicacion, r.titulo, r.pasos_json, r.pasos_por_nivel_json, r.notas
     FROM maquinas_gym m
     LEFT JOIN rutinas_maquina r ON r.maquina_id=m.id
     WHERE m.token=? LIMIT 1
@@ -136,6 +194,7 @@ if ($__is_public) {
   $title = $data['titulo'] ?: 'Rutina';
   $mname = $data['nombre'];
   $ubic  = $data['ubicacion'];
+  $flash_pub = $_SESSION['flash_pub'] ?? null; unset($_SESSION['flash_pub']);
 
   ?>
   <!doctype html>
@@ -153,7 +212,7 @@ if ($__is_public) {
       h2 { font-size: 1.1rem; margin: 0 0 12px; color:#0f172a; }
       .pill { display:inline-block; background:linear-gradient(90deg,var(--a),var(--b)); color:#fff; padding:4px 10px; border-radius:999px; font-size:.8rem; }
       .row { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
-      select { padding:8px 10px; border-radius:10px; border:1px solid #cbd5e1; background:#fff; }
+      select, input, textarea { padding:8px 10px; border-radius:10px; border:1px solid #cbd5e1; background:#fff; }
       .step { display:flex; align-items:flex-start; gap:10px; padding:10px 0; border-bottom:1px dashed #e5e7eb; }
       .step:last-child{ border-bottom:0; }
       .chk { width:22px; height:22px; border:2px solid #0ea5e9; border-radius:6px; display:inline-block; position:relative; cursor:pointer; flex:0 0 22px; margin-top:2px; }
@@ -163,6 +222,7 @@ if ($__is_public) {
       button { background:#0ea5e9; color:#fff; border:0; padding:10px 14px; border-radius:10px; cursor:pointer; font-weight:600; }
       button.secondary { background:#111; }
       .muted { color:#64748b; font-size:.9rem; }
+      .ok { color:#16a34a }
     </style>
   </head>
   <body>
@@ -201,11 +261,48 @@ if ($__is_public) {
         <div class="muted" style="margin-top:8px">Elegí tu nivel y marcá cada paso a medida que avanzás.</div>
       </div>
 
+      <?php if ($cliente_id > 0): ?>
+      <div class="card">
+        <h2 style="margin:0 0 8px">Guardar historial del día</h2>
+        <?php if ($flash_pub): ?><div class="ok" style="margin:6px 0 8px"><?php echo h($flash_pub); ?></div><?php endif; ?>
+        <form method="post" id="logForm">
+          <input type="hidden" name="save_log" value="1">
+          <input type="hidden" name="pasos_idx" id="pasos_idx">
+          <div class="row">
+            <div>
+              <label class="subl">Nivel utilizado:</label><br>
+              <select name="nivel" id="nivelForm">
+                <option value="principiante">Principiante</option>
+                <option value="medio">Medio</option>
+                <option value="avanzado">Avanzado</option>
+              </select>
+            </div>
+            <div>
+              <label class="subl">RPE (1–10):</label><br>
+              <input type="number" name="rpe" min="1" max="10" placeholder="7">
+            </div>
+            <div>
+              <label class="subl">Tiempo (min):</label><br>
+              <input type="number" name="tiempo_min" min="1" max="300" placeholder="25">
+            </div>
+          </div>
+          <div style="margin-top:10px">
+            <label class="subl">Notas (opcional):</label><br>
+            <textarea name="notas_cliente" rows="3" placeholder="Cómo te sentiste, cargas usadas, molestias, etc."></textarea>
+          </div>
+          <div style="margin-top:12px">
+            <button type="submit">Guardar historial</button>
+          </div>
+        </form>
+        <div class="muted" style="margin-top:6px">Este registro queda visible para tu profesor.</div>
+      </div>
+      <?php endif; ?>
+
       <div class="muted" style="text-align:center">© <?php echo date('Y'); ?> Tu Gimnasio</div>
     </div>
 
     <script>
-      const niveles = <?php echo json_encode($niveles, JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES); ?>;
+      const niveles = <?php echo json_encode(normalize_levels(json_decode($data['pasos_por_nivel_json'] ?? 'null', true), json_decode($data['pasos_json'] ?? '[]', true)), JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES); ?>;
       const keyBase = 'qrsteps:'+location.pathname+location.search;
 
       const stepsBox = document.getElementById('steps');
@@ -218,7 +315,7 @@ if ($__is_public) {
         stepsBox.innerHTML = ''; let n=1;
         pasos.forEach((p, i)=>{
           const row=document.createElement('div'); row.className='step';
-          const box=document.createElement('span'); box.className='chk'; box.setAttribute('role','checkbox'); box.tabIndex=0;
+          const box=document.createElement('span'); box.className='chk'; box.setAttribute('role','checkbox'); box.tabIndex=0; box.dataset.idx=i;
 
           const keyNivel=keyBase+':'+nivel; const saved=JSON.parse(localStorage.getItem(keyNivel)||'[]');
           if (saved.includes(i)) box.classList.add('done');
@@ -229,11 +326,21 @@ if ($__is_public) {
 
           row.appendChild(box); row.appendChild(t); stepsBox.appendChild(row);
         });
+        syncFormNivel();
       }
       function saveNivel(nivel){
         const keyNivel=keyBase+':'+nivel, idx=[];
         document.querySelectorAll('.step .chk').forEach((el,i)=>{ if (el.classList.contains('done')) idx.push(i); });
         localStorage.setItem(keyNivel, JSON.stringify(idx));
+        syncFormNivel();
+      }
+      function syncFormNivel(){
+        const form = document.getElementById('logForm'); if (!form) return;
+        const nivel = selNivel.value;
+        const idx=[];
+        document.querySelectorAll('.step .chk').forEach((el,i)=>{ if (el.classList.contains('done')) idx.push(i); });
+        document.getElementById('pasos_idx').value = JSON.stringify(idx);
+        document.getElementById('nivelForm').value = nivel;
       }
       selNivel.addEventListener('change', ()=>{ localStorage.setItem(keyBase+':nivel', selNivel.value); render(); });
       document.getElementById('btnReset').onclick = ()=>{ document.querySelectorAll('.step .chk').forEach(el=>el.classList.remove('done')); saveNivel(selNivel.value); };
@@ -353,22 +460,27 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
 
 /* ================= Vista ADMIN ================= */
 
+// Obtener máquina a editar (opcional, validada por gimnasio)
 $edit_id = (int)($_GET['edit'] ?? 0);
 $edit = null; $edit_r = null;
 
 if ($edit_id>0) {
   $stmt = db_prepare($conexion, "SELECT * FROM maquinas_gym WHERE id=? AND gimnasio_id=?");
   $stmt->bind_param('ii', $edit_id, $gimnasio_id);
-  $stmt->execute(); $edit = $stmt->get_result()->fetch_assoc(); $stmt->close();
+  $stmt->execute();
+  $edit = $stmt->get_result()->fetch_assoc();
+  $stmt->close();
 
   if ($edit) {
     $stmt = db_prepare($conexion, "SELECT * FROM rutinas_maquina WHERE maquina_id=?");
     $stmt->bind_param('i', $edit_id);
-    $stmt->execute(); $edit_r = $stmt->get_result()->fetch_assoc(); $stmt->close();
+    $stmt->execute();
+    $edit_r = $stmt->get_result()->fetch_assoc();
+    $stmt->close();
   }
 }
 
-// Form valores
+// Prepara valores para el form de niveles
 $pasos_general_form = '';
 $niveles_form = ['principiante'=>[],'medio'=>[],'avanzado'=>[]];
 if ($edit_r) {
@@ -376,15 +488,18 @@ if ($edit_r) {
   $por_nivel = json_decode($edit_r['pasos_por_nivel_json'] ?? 'null', true);
   $niveles_form = normalize_levels(is_array($por_nivel)?$por_nivel:null, json_decode($edit_r['pasos_json'] ?? '[]', true) ?: []);
 }
-
 $public_base = public_base();
 
-// Listado
-$res = $conexion->query("SELECT m.*, (SELECT COUNT(*) FROM qr_scans s WHERE s.maquina_id=m.id) scans FROM maquinas_gym m WHERE gimnasio_id=".$gimnasio_id." ORDER BY m.id DESC");
-$rows = []; while($r=$res->fetch_assoc()) $rows[]=$r;
+// Listado (solo del gimnasio en sesión)
+$where = "WHERE gimnasio_id=".$gimnasio_id;
+$res = $conexion->query("SELECT m.*, (SELECT COUNT(*) FROM qr_scans s WHERE s.maquina_id=m.id) scans FROM maquinas_gym m $where ORDER BY m.id DESC");
+$rows = [];
+while($r = $res->fetch_assoc()) $rows[] = $r;
 
 // Flash
-$flash = $_SESSION['flash'] ?? null; unset($_SESSION['flash']);
+$flash = $_SESSION['flash'] ?? null;
+unset($_SESSION['flash']);
+
 ?>
 <!doctype html>
 <html lang="es">
@@ -396,7 +511,6 @@ $flash = $_SESSION['flash'] ?? null; unset($_SESSION['flash']);
     body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; background:#0b1220; color:#e5e7eb; margin:0; }
     .wrap { max-width: 1080px; margin: 0 auto; padding: 24px; }
     .grid { display:grid; grid-template-columns: 1.2fr 1fr; gap:20px; }
-    @media (max-width: 900px){ .grid{ grid-template-columns:1fr; } }
     .card { background:#0f172a; border:1px solid #1f2937; border-radius:16px; padding:16px; }
     input, textarea { width:100%; padding:10px; border-radius:10px; border:1px solid #334155; background:#0b1220; color:#e5e7eb; }
     label { font-size:.9rem; color:#cbd5e1; }
@@ -432,7 +546,9 @@ $flash = $_SESSION['flash'] ?? null; unset($_SESSION['flash']);
       <div class="card">
         <h2><?php echo $edit ? 'Editar máquina' : 'Nueva máquina'; ?></h2>
         <form method="post">
-          <?php if ($edit): ?><input type="hidden" name="maquina_id" value="<?php echo (int)$edit['id']; ?>"><?php endif; ?>
+          <?php if ($edit): ?>
+            <input type="hidden" name="maquina_id" value="<?php echo (int)$edit['id']; ?>">
+          <?php endif; ?>
           <div class="row">
             <div>
               <label>Nombre de máquina</label>

@@ -36,6 +36,7 @@
     <a href="registrar_asistencia.php">Registro del Profesor</a>
     <a href="scanner_qr_profesor.php">Escanear Alumnos (QR)</a>
     <a href="ver_progreso_alumnos.php">Ver Progreso de Alumnos</a>
+    <a href="profesor_seguimiento.php">📈 Seguimiento de alumnos</a>
     <a href="subir_rutina.php">Subir Archivo</a>
     <a href="registrar_graduacion.php">Graduación</a>
     <a href="ver_graduaciones.php">Ver Graduaciones</a>
