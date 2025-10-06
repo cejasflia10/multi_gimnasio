@@ -33,13 +33,36 @@
   .mp-item{ display:flex; align-items:center; gap:10px; padding:12px; border-radius:12px;
             text-decoration:none; color:var(--ink); border:1px solid var(--chip-b); background:var(--chip); }
   .mp-item:hover{ border-color:var(--brand); }
+  /* Garantizar color de texto en drawer */
+  .mp-item *, .mp-item:visited{ color:inherit; }
 
   /* Bottom tabs (móvil) */
   .mp-tabs{ position:sticky; bottom:0; z-index:45; background:var(--bg); border-top:1px solid var(--chip-b); }
   .mp-tabs ul{ display:flex; margin:0; padding:6px; list-style:none; gap:6px }
-  .mp-tabs a{ flex:1; text-align:center; text-decoration:none; color:var(--ink); padding:8px 6px; border-radius:10px }
-  .mp-tabs a.active{ background:#111827; border:1px solid var(--brand); color:#fff }
-  .mp-tabs .t-ico{ display:block; font-size:1.2rem; line-height:1; margin-bottom:4px }
+  .mp-tabs a{
+    flex:1; text-align:center; text-decoration:none;
+    padding:8px 6px; border-radius:10px;
+    /* Color base y visited: SIEMPRE el mismo */
+    color:var(--ink);
+  }
+  .mp-tabs a:visited{ color:var(--ink); }
+  .mp-tabs a.active{
+    background:#111827; border:1px solid var(--brand);
+    color:#fff;
+  }
+  .mp-tabs a.active:visited{ color:#fff; }
+
+  /* Icono y etiqueta: heredan color y nunca quedan transparentes */
+  .mp-tabs .t-ico{
+    display:block; font-size:1.2rem; line-height:1; margin-bottom:4px;
+    color:inherit; opacity:1 !important;
+  }
+  .mp-tabs a span{
+    display:block; white-space:nowrap;
+    color:inherit; opacity:1 !important;
+  }
+  .mp-tabs a.active .t-ico,
+  .mp-tabs a.active span{ color:#fff; opacity:1 !important; }
 
   /* Ocultar tabs en escritorio */
   @media (min-width: 861px){ .mp-tabs{ display:none; } }

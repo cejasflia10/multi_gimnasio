@@ -3,7 +3,7 @@
 
 if (session_status() === PHP_SESSION_NONE) session_start();
 require_once __DIR__ . '/conexion.php';
-@include __DIR__ . '/menu_horizontal.php'; // o tu menú del profesor
+require __DIR__ . '/menu_profesor.php';
 
 if (!isset($conexion) || !($conexion instanceof mysqli)) { http_response_code(500); exit('❌ Sin conexión a BD.'); }
 if (function_exists('mysqli_report')) { mysqli_report(MYSQLI_REPORT_OFF); }

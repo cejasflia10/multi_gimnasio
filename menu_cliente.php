@@ -25,21 +25,48 @@
 
   /* Drawer lateral */
   .mc-drawer{ position:fixed; inset:0; display:none; z-index:60; }
-  .mc-drawer.show{ display:block; }            /* ← FALTABA ESTA LÍNEA */
+  .mc-drawer.show{ display:block; }
   .mc-dim{ position:absolute; inset:0; background:rgba(0,0,0,.45); }
   .mc-panel{ position:absolute; top:0; left:0; height:100%; width:min(86vw,360px);
              background:var(--bg); border-right:1px solid var(--chip-b); padding:14px; overflow:auto; }
   .mc-list{ display:grid; gap:6px; margin-top:8px }
-  .mc-item{ display:flex; align-items:center; gap:10px; padding:12px; border-radius:12px;
-            text-decoration:none; color:var(--ink); border:1px solid var(--chip-b); background:var(--chip); }
+  .mc-item{
+    display:flex; align-items:center; gap:10px; padding:12px; border-radius:12px;
+    text-decoration:none; color:var(--ink); border:1px solid var(--chip-b); background:var(--chip);
+  }
   .mc-item:hover{ border-color:var(--brand); }
+  /* Asegurar color en cualquier estado, por si hay reglas globales */
+  .mc-item:visited, .mc-item *{ color:inherit !important; }
 
-  /* Bottom tabs (móvil) */
+  /* Tabs inferiores (móvil) */
   .mc-tabs{ position:sticky; bottom:0; z-index:45; background:var(--bg); border-top:1px solid var(--chip-b); }
   .mc-tabs ul{ display:flex; margin:0; padding:6px; list-style:none; gap:6px }
-  .mc-tabs a{ flex:1; text-align:center; text-decoration:none; color:var(--ink); padding:8px 6px; border-radius:10px }
-  .mc-tabs a.active{ background:#111827; border:1px solid var(--brand); color:#fff }
-  .mc-tabs .t-ico{ display:block; font-size:1.2rem; line-height:1; margin-bottom:4px }
+
+  .mc-tabs a{
+    flex:1; text-align:center; text-decoration:none; padding:8px 6px; border-radius:10px;
+    color:var(--ink);
+  }
+  /* Evitar que :visited cambie el color */
+  .mc-tabs a:visited{ color:var(--ink); }
+
+  .mc-tabs a.active{
+    background:#111827; border:1px solid var(--brand); color:#fff;
+  }
+  .mc-tabs a.active:visited{ color:#fff; }
+
+  /* Icono y etiqueta: heredan color SIEMPRE (evita spans transparentes) */
+  .mc-tabs .t-ico{
+    display:block; font-size:1.2rem; line-height:1; margin-bottom:4px;
+    color:inherit !important; opacity:1 !important;
+  }
+  .mc-tabs a span{
+    display:block; white-space:nowrap;
+    color:inherit !important; opacity:1 !important;
+  }
+  .mc-tabs a.active .t-ico,
+  .mc-tabs a.active span{ color:#fff !important; opacity:1 !important; }
+
+  /* Ocultar tabs en escritorio */
   @media (min-width: 861px){ .mc-tabs{ display:none; } }
 </style>
 
@@ -81,7 +108,7 @@
   <ul>
     <li><a href="panel_cliente.php"><span class="t-ico">🏠</span><span>Inicio</span></a></li>
     <li><a href="ver_turnos_cliente.php"><span class="t-ico">🗓️</span><span>Turnos</span></a></li>
-    <li><a href="pago_online.php"><span class="t-ico">⚡</span><span> Pago Online</span></a></li>
+    <li><a href="pago_online.php"><span class="t-ico">⚡</span><span>Pago Online</span></a></li>
     <li><a href="ver_progreso.php"><span class="t-ico">📈</span><span>Progreso</span></a></li>
   </ul>
 </nav>
