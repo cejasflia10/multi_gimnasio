@@ -65,7 +65,6 @@
       <a class="mc-item" href="ver_turnos_cliente.php">🗓️ Ver Turnos</a>
       <a class="mc-item" href="ver_mis_pagos.php">💳 Mis Pagos</a>
       <a class="mc-item" href="pago_online.php">⚡ Pago Online</a>
-      <a class="mc-item" href="scanner_qr.php">📷 Escanear QR</a>
       <a class="mc-item" href="ver_progreso.php">📈 Ver Progreso</a>
       <a class="mc-item" href="grafico_progreso_cliente.php">📊 Evolución</a>
       <a class="mc-item" href="tienda_indumentaria.php">🛍️ Indumentaria</a>
@@ -82,7 +81,6 @@
   <ul>
     <li><a href="panel_cliente.php"><span class="t-ico">🏠</span><span>Inicio</span></a></li>
     <li><a href="ver_turnos_cliente.php"><span class="t-ico">🗓️</span><span>Turnos</span></a></li>
-    <li><a href="scanner_qr.php"><span class="t-ico">📷</span><span>Escanear</span></a></li>
     <li><a href="pago_online.php"><span class="t-ico">⚡</span><span> Pago Online</span></a></li>
     <li><a href="ver_progreso.php"><span class="t-ico">📈</span><span>Progreso</span></a></li>
   </ul>
