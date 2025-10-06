@@ -1,10 +1,17 @@
 <?php
+/* =========================
+   ver_peleas_evento.php
+   + Importador XLSX/CSV/PDF (listado de peleas)
+   ========================= */
 if (session_status() === PHP_SESSION_NONE) session_start();
 require_once __DIR__ . '/conexion.php';
 
 if (!isset($conexion) || !($conexion instanceof mysqli)) { http_response_code(500); exit('❌ Sin conexión a BD.'); }
 if (function_exists('mysqli_report')) { mysqli_report(MYSQLI_REPORT_OFF); }
 @$conexion->set_charset('utf8mb4');
+header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+header('Pragma: no-cache');
+
 
 /* ========= helpers ========= */
 function h($s){ return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); }
@@ -34,7 +41,7 @@ if ($evento_id <= 0) {
   echo '<div style="max-width:900px;margin:16px auto;padding:12px;border:1px solid #f5c6cb;background:#fdecea;color:#b71c1c;border-radius:8px;">Falta <b>evento_id</b>. Abrí esta página desde el evento.</div>';
   exit;
 }
-$_SESSION['evento_id_actual'] = $evento_id;
+$_SESSION['evento_id_actual'] = ($evento_id > 0 ? $evento_id : ($_SESSION['evento_id_actual'] ?? 0));
 
 /* ========= columnas peleas_evento ========= */
 $cols = [];
@@ -213,11 +220,22 @@ function insertar_competidor_min(mysqli $cx, $mapCols, $data): int {
   return $id;
 }
 
+/* ========= utilidades importación ========= */
+function normalizar_header($h){
+  $h = preg_replace('/\s+/','_', trim(mb_strtolower((string)$h,'UTF-8')));
+  $h = str_replace(['á','é','í','ó','ú','ñ'],['a','e','i','o','u','n'],$h);
+  return $h;
+}
+function pick_key(array $map, array $aliases){
+  foreach($aliases as $a){ if(isset($map[$a])) return $a; }
+  return null;
+}
+
 /* ========= acciones POST ========= */
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   // reasegurar evento_id desde POST por si llegan sin querystring
   $evento_id = (int)($_POST['evento_id'] ?? $evento_id);
-  $_SESSION['evento_id_actual'] = $evento_id;
+  $_SESSION['evento_id_actual'] = ($evento_id > 0 ? $evento_id : ($_SESSION['evento_id_actual'] ?? 0));
 
   $accion   = $_POST['accion'] ?? '';
   $pelea_id = isset($_POST['pelea_id']) && is_numeric($_POST['pelea_id']) ? (int)$_POST['pelea_id'] : 0;
@@ -228,6 +246,245 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($st) { $st->bind_param('ii',$evento_id,$pelea_id); $st->execute(); $ok=$st->get_result()->num_rows===1; $st->close(); if(!$ok){ $pelea_id=0; } }
     else { $pelea_id=0; }
   }
+
+  /* ===== importar peleas desde archivo ===== */
+  if ($accion === 'importar_peleas' && isset($_FILES['archivo_peleas'])) {
+    $file = $_FILES['archivo_peleas'];
+    if ($file['error'] !== UPLOAD_ERR_OK) {
+      $_SESSION['flash_error'] = 'Error subiendo archivo.';
+      header('Location: ver_peleas_evento.php?evento_id='.$evento_id); exit;
+    }
+    $ext = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
+    $permitidas = ['xlsx','csv','pdf'];
+    if (!in_array($ext, $permitidas)) {
+      $_SESSION['flash_error'] = 'Formato no permitido. Use .xlsx, .csv o .pdf';
+      header('Location: ver_peleas_evento.php?evento_id='.$evento_id); exit;
+    }
+
+    $uploads = __DIR__ . '/uploads';
+    if (!is_dir($uploads)) @mkdir($uploads, 0777, true);
+    $nombre = 'peleas_evento_'.$evento_id.'_'.date('Ymd_His').'.'.$ext;
+    $dest = $uploads . '/' . $nombre;
+    if (!@move_uploaded_file($file['tmp_name'], $dest)) {
+      $_SESSION['flash_error'] = 'No se pudo guardar el archivo subido.';
+      header('Location: ver_peleas_evento.php?evento_id='.$evento_id); exit;
+    }
+
+    // Si PDF: solo almacenar referencia
+    if ($ext === 'pdf') {
+      $_SESSION['flash_ok'] = '📄 PDF guardado como referencia (no se importaron filas).';
+      header('Location: ver_peleas_evento.php?evento_id='.$evento_id); exit;
+    }
+
+    $filas = [];
+    try {
+      if ($ext === 'xlsx') {
+        if (!class_exists('ZipArchive')) {
+          $_SESSION['flash_error'] = 'Para leer .xlsx necesitás la extensión PHP <b>ZipArchive</b> (paquete <code>php-zip</code>). ' .
+            'Alternativas: 1) instalar php-zip y recargar, 2) subir el mismo archivo como .csv. ' .
+            'En Ubuntu/Debian: <code>sudo apt-get install php-zip && sudo systemctl restart apache2</code>'; 
+          header('Location: ver_peleas_evento.php?evento_id='.(int)$evento_id); exit;
+        }
+
+        // Requiere: composer require phpoffice/phpspreadsheet
+        require_once __DIR__ . '/vendor/autoload.php';
+        $spreadsheet = \PhpOffice\PhpSpreadsheet\IOFactory::load($dest);
+        $sheet = $spreadsheet->getActiveSheet();
+        $rows = $sheet->toArray(null, true, true, true); // por letras
+        if (!$rows || count($rows)<2) throw new RuntimeException('El Excel está vacío.');
+        // Primera fila: encabezados
+        $headers = [];
+        foreach($rows[1] as $col => $val){ $headers[$col] = normalizar_header($val); }
+        for($i=2; $i<=count($rows); $i++){
+          $r = [];
+          foreach($rows[$i] as $col => $val){
+            $key = $headers[$col] ?? ('col_'.$col);
+            $r[$key] = is_string($val) ? trim($val) : $val;
+          }
+          $filas[] = $r;
+        }
+      } elseif ($ext === 'csv') {
+        $fh = fopen($dest, 'r');
+        if (!$fh) throw new RuntimeException('No se pudo abrir CSV.');
+        $enc = fgetcsv($fh, 0, ';'); // intento ; primero
+        if ($enc && count($enc)===1){ // tal vez coma
+          rewind($fh);
+          $enc = fgetcsv($fh, 0, ',');
+          $delim = ',';
+        } else {
+          $delim = ';';
+        }
+        if (!$enc) throw new RuntimeException('CSV sin encabezado.');
+        $headers = array_map('normalizar_header', $enc);
+        while(($row = fgetcsv($fh, 0, $delim)) !== false){
+          if (count($row)==1 && trim((string)$row[0])==='') continue;
+          $r = [];
+          foreach($headers as $i=>$hx){ $r[$hx] = isset($row[$i]) ? trim((string)$row[$i]) : ''; }
+          $filas[] = $r;
+        }
+        fclose($fh);
+      }
+    } catch (Throwable $e) {
+      $_SESSION['flash_error'] = 'Error leyendo archivo: '.$e->getMessage();
+      header('Location: ver_peleas_evento.php?evento_id='.$evento_id); exit;
+    }
+
+    // Mapear alias de columnas
+    $ejemplo = $filas[0] ?? [];
+    $keys = array_fill_keys(array_keys($ejemplo), true);
+
+    // Construir un mapa header->key real
+    $map = [];
+    $hdr = array_keys($keys);
+    $rev = array_flip($hdr);
+
+    $k_r_ap   = pick_key($keys, ['rojo_apellido','r_apellido','apellido_rojo','apellido_r','apellido']);
+    $k_r_nom  = pick_key($keys, ['rojo_nombre','r_nombre','nombre_rojo','nombre_r','nombre']);
+    $k_r_esc  = pick_key($keys, ['rojo_escuela','r_escuela','escuela_rojo','escuela_r','escuela']);
+    $k_r_dni  = pick_key($keys, ['rojo_dni','r_dni','dni_rojo','dni_r','dni']);
+    $k_r_peso = pick_key($keys, ['rojo_peso','r_peso','peso_rojo','peso_r','peso']);
+    $k_a_ap   = pick_key($keys, ['azul_apellido','a_apellido','apellido_azul','apellido_a']);
+    $k_a_nom  = pick_key($keys, ['azul_nombre','a_nombre','nombre_azul','nombre_a']);
+    $k_a_esc  = pick_key($keys, ['azul_escuela','a_escuela','escuela_azul','escuela_a']);
+    $k_a_dni  = pick_key($keys, ['azul_dni','a_dni','dni_azul','dni_a']);
+    $k_a_peso = pick_key($keys, ['azul_peso','a_peso','peso_azul','peso_a']);
+    $k_rondas = pick_key($keys, ['rondas','rounds']);
+    $k_obs    = pick_key($keys, ['observaciones','obs','comentarios','nota']);
+    $k_form   = pick_key($keys, ['formato','tipo','fixture']);
+    $k_sexo   = pick_key($keys, ['sexo','genero']);
+    $k_div    = pick_key($keys, ['division_id','id_division','division']);
+    $k_mod    = pick_key($keys, ['modalidad_id','id_modalidad','modalidad']);
+    $k_disc   = pick_key($keys, ['disciplina_id','id_disciplina','disciplina']);
+    $k_ctec   = pick_key($keys, ['categoria_tecnica_id','id_categoria_tecnica','cat_tec','nivel']);
+    $k_solo   = pick_key($keys, ['solo_rojo','en_espera','solo','espera']);
+
+    $creadas=0; $saltadas=0; $avisos=[];
+    $conexion->begin_transaction();
+    try{
+      foreach($filas as $idx=>$row){
+        // mínimos requeridos (Rojo Apellido+Nombre)
+        $r_ap = trim((string)($k_r_ap ? ($row[$k_r_ap] ?? '') : ''));
+        $r_no = trim((string)($k_r_nom? ($row[$k_r_nom]?? '') : ''));
+        $a_ap = trim((string)($k_a_ap ? ($row[$k_a_ap] ?? '') : ''));
+        $a_no = trim((string)($k_a_nom? ($row[$k_a_nom]?? '') : ''));
+        if ($r_ap==='' || $r_no===''){ $saltadas++; continue; }
+
+        $r_esc = trim((string)($k_r_esc? ($row[$k_r_esc]??'') : ''));
+        $r_dni = trim((string)($k_r_dni? ($row[$k_r_dni]??'') : ''));
+        $r_pes = ($k_r_peso && $row[$k_r_peso]!=='' ? (float)str_replace(',','.',$row[$k_r_peso]) : null);
+
+        $a_esc = trim((string)($k_a_esc? ($row[$k_a_esc]??'') : ''));
+        $a_dni = trim((string)($k_a_dni? ($row[$k_a_dni]??'') : ''));
+        $a_pes = ($k_a_peso && $row[$k_a_peso]!=='' ? (float)str_replace(',','.',$row[$k_a_peso]) : null);
+
+        $rondas = $k_rondas && is_numeric($row[$k_rondas] ?? null) ? (int)$row[$k_rondas] : 3;
+        $obs_extra = trim((string)($k_obs? ($row[$k_obs]??'') : ''));
+        $formato = trim((string)($k_form? ($row[$k_form]??'') : ''));
+
+        $sexo = strtoupper(trim((string)($k_sexo? ($row[$k_sexo]??'') : '')));
+        $division_id = ($k_div && is_numeric($row[$k_div] ?? null)) ? (int)$row[$k_div] : null;
+        $modalidad_val = ($k_mod && is_numeric($row[$k_mod] ?? null)) ? (int)$row[$k_mod] : null;
+        $disciplina_val = ($k_disc && is_numeric($row[$k_disc] ?? null)) ? (int)$row[$k_disc] : null;
+        $cat_tec_id = ($k_ctec && is_numeric($row[$k_ctec] ?? null)) ? (int)$row[$k_ctec] : null;
+        $es_espera = false;
+        if ($k_solo) {
+          $v = trim((string)($row[$k_solo]??''));
+          $es_espera = in_array(mb_strtolower($v,'UTF-8'), ['1','si','sí','true','x','s','solo','espera'], true);
+        }
+        // Si no viene azul y hay REQ_AZUL=0, permitimos espera implícita
+        if ($a_ap==='' || $a_no===''){ if (!$REQ_AZUL) $es_espera = true; }
+
+        // Crear competidor rojo
+        $r_id = insertar_competidor_min(
+          $conexion,
+          [$CE_ID,$CE_APE,$CE_NOM,$CE_ESC,$CE_EDAD,$CE_PESO,$CE_EVENTO,$CE_OBS,$CE_DNI,$CE_DISC,$CE_MODAL,$CE_DIV,$CE_FOTO,$CE_CAT_TEC,$CE_SEXO],
+          ['evento_id'=>$evento_id,'apellido'=>$r_apellido=$r_ap,'nombre'=>$r_nombre=$r_no,'escuela'=>$r_esc,'edad'=>null,'dni'=>$r_dni,'sexo'=>$sexo,
+           'disciplina_val'=>$disciplina_val,'modalidad_val'=>$modalidad_val,'division_id'=>$division_id,'cat_tec_id'=>$cat_tec_id,'peso'=>$r_pes,'obs'=>'']
+        );
+
+        // Azul (BYE si hace falta y la tabla peleas_evento exige azul)
+        if ($es_espera){
+          $azul_id = $REQ_AZUL ? obtener_o_crear_bye($conexion, [$CE_ID,$CE_APE,$CE_NOM,$CE_ESC,$CE_EDAD,$CE_PESO,$CE_EVENTO,$CE_OBS,$CE_DNI,$CE_DISC,$CE_MODAL,$CE_DIV,$CE_FOTO,$CE_CAT_TEC,$CE_SEXO], $evento_id, $sexo) : null;
+        } else {
+          $azul_id = insertar_competidor_min(
+            $conexion,
+            [$CE_ID,$CE_APE,$CE_NOM,$CE_ESC,$CE_EDAD,$CE_PESO,$CE_EVENTO,$CE_OBS,$CE_DNI,$CE_DISC,$CE_MODAL,$CE_DIV,$CE_FOTO,$CE_CAT_TEC,$CE_SEXO],
+            ['evento_id'=>$evento_id,'apellido'=>$a_ap,'nombre'=>$a_no,'escuela'=>$a_esc,'edad'=>null,'dni'=>$a_dni,'sexo'=>$sexo,
+             'disciplina_val'=>$disciplina_val,'modalidad_val'=>$modalidad_val,'division_id'=>$division_id,'cat_tec_id'=>$cat_tec_id,'peso'=>$a_pes,'obs'=>'']
+          );
+        }
+
+        // Observaciones
+        $obsComp = [];
+        if ($formato!=='') $obsComp[] = strtoupper($formato);
+        $obsComp[] = 'Rojo: '.$r_ap.' '.$r_no.($r_esc!==''?' - '.$r_esc:'');
+        $obsComp[] = 'Azul: '.($es_espera ? '(en espera)' : trim($a_ap.' '.$a_no.($a_esc!==''?' - '.$a_esc:'')));
+        $obsTxt = trim(($obs_extra!==''?$obs_extra.' | ':'').implode(' | ', $obsComp));
+
+        // Insert pelea
+        $colsP = [bt($C_EVENTO), bt($C_ROJO)];
+        $valsP = [$evento_id, $r_id];
+        $types = 'ii';
+        $colsP[] = bt($C_AZUL); $valsP[] = $azul_id!==null ? (int)$azul_id : null; $types .= 'i';
+        if ($C_RONDAS) { $colsP[] = bt($C_RONDAS); $valsP[] = (int)$rondas; $types .= 'i'; }
+        if ($C_OBS)    { $colsP[] = bt($C_OBS);    $valsP[] = $obsTxt;   $types .= 's'; }
+        $sqlP = 'INSERT INTO peleas_evento ('.implode(',', $colsP).') VALUES ('.implode(',', array_fill(0,count($colsP),'?')).')';
+        $st = $conexion->prepare($sqlP);
+        if (!$st) throw new RuntimeException('Prep pelea fila '.($idx+1).': '.$conexion->error);
+        // bind dinámico (nulls => s/i? usamos string para obs y enteros para ints, null funciona)
+        // Para null en enteros en mysqli, hay que usar 'i' y pasar null — mysqli lo convertirá a 0. Mejor: usamos 's' y pasamos null -> será NULL? No.
+        // Hacemos un truco: si $azul_id === null, armamos SQL con NULL in situ:
+        if ($azul_id === null){
+          // reconstruimos SQL con NULL para azul
+          $colsPtmp = [bt($C_EVENTO), bt($C_ROJO)];
+          $valsPtmp = [$evento_id, $r_id];
+          $typesTmp = 'ii';
+          $sqlP = 'INSERT INTO peleas_evento ('.bt($C_EVENTO).','.bt($C_ROJO).','.bt($C_AZUL)
+                .($C_RONDAS?','.bt($C_RONDAS):'')
+                .($C_OBS?','.bt($C_OBS):'')
+                .') VALUES (?, ?, NULL'
+                .($C_RONDAS?', ?':'')
+                .($C_OBS?', ?':'')
+                .')';
+          $st = $conexion->prepare($sqlP);
+          if(!$st) throw new RuntimeException('Prep pelea (NULL azul) fila '.($idx+1).': '.$conexion->error);
+          if ($C_RONDAS && $C_OBS) { $st->bind_param('iiss', $evento_id, $r_id, $rondas, $obsTxt); }
+          elseif ($C_RONDAS && !$C_OBS) { $st->bind_param('iii', $evento_id, $r_id, $rondas); }
+          elseif (!$C_RONDAS && $C_OBS) { $st->bind_param('iis', $evento_id, $r_id, $obsTxt); }
+          else { $st->bind_param('ii', $evento_id, $r_id); }
+        } else {
+          // caso normal
+          if ($C_RONDAS && $C_OBS) { $st->bind_param('iiis', $evento_id, $r_id, $azul_id, $obsTxt); if($C_RONDAS){ /* ya agregado arriba */ } }
+          // Ajustamos correctamente el orden (evento, rojo, azul, rondas?, obs?)
+          $params = [];
+          $bindTypes = '';
+          $params[] = $evento_id; $bindTypes.='i';
+          $params[] = $r_id;      $bindTypes.='i';
+          $params[] = $azul_id;   $bindTypes.='i';
+          if ($C_RONDAS){ $params[] = (int)$rondas; $bindTypes.='i'; }
+          if ($C_OBS){ $params[] = (string)$obsTxt; $bindTypes.='s'; }
+          // Re-preparar por las dudas de la línea anterior
+          $st = $conexion->prepare($sqlP);
+          if(!$st) throw new RuntimeException('Prep pelea bind fila '.($idx+1).': '.$conexion->error);
+          $st->bind_param($bindTypes, ...$params);
+        }
+        $okExec=$st->execute(); $st->close();
+        if(!$okExec) throw new RuntimeException('Insert pelea falló (fila '.($idx+1).')');
+
+        $creadas++;
+      }
+
+      $conexion->commit();
+      $_SESSION['flash_ok'] = "✅ Importación completa: $creadas pelea(s) creadas".($saltadas>0? " · $saltadas fila(s) saltadas por datos mínimos":'').".";
+      if ($avisos){ $_SESSION['flash_warn'] = implode('<br>', array_map('h',$avisos)); }
+    } catch (Throwable $e){
+      $conexion->rollback();
+      $_SESSION['flash_error'] = 'Error importando: '.$e->getMessage();
+    }
+
+    header('Location: ver_peleas_evento.php?evento_id='.$evento_id); exit;
+  }
+  /* ===== fin importar ===== */
 
   if ($accion === 'guardar_orden') {
     if (!$C_ORDEN) {
@@ -450,14 +707,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       $obsTxt = trim(($obs_extra!==''?$obs_extra.' | ':'').implode(' | ', $obsComp));
       if ($C_OBS) { $colsP[] = bt($C_OBS); $valsP[] = $obsTxt; $types .= 's'; }
 
-      $sqlP = 'INSERT INTO peleas_evento ('.implode(',', $colsP).') VALUES ('.implode(',', array_fill(0,count($colsP),'?')).')';
-      $st = $conexion->prepare($sqlP);
-      if (!$st) throw new RuntimeException('Prep pelea: '.$conexion->error);
-      $st->bind_param($types, ...$valsP); $okExec=$st->execute(); $errExec=$st->error; $aff=$st->affected_rows; $st->close();
+      // Insert con NULL azul si corresponde
+      if ($valsP[2] === null){
+        $sqlP = 'INSERT INTO peleas_evento ('.bt($C_EVENTO).','.bt($C_ROJO).','.bt($C_AZUL).($C_RONDAS?','.bt($C_RONDAS):'').($C_OBS?','.bt($C_OBS):'').') VALUES (?, ?, NULL'.($C_RONDAS?', ?':'').($C_OBS?', ?':'').')';
+        $st = $conexion->prepare($sqlP);
+        if(!$st) throw new RuntimeException('Prep pelea: '.$conexion->error);
+        if ($C_RONDAS && $C_OBS) { $st->bind_param('iiss', $evento_id, $r_id, $rondas, $obsTxt); }
+        elseif ($C_RONDAS && !$C_OBS) { $st->bind_param('iii', $evento_id, $r_id, $rondas); }
+        elseif (!$C_RONDAS && $C_OBS) { $st->bind_param('iis', $evento_id, $r_id, $obsTxt); }
+        else { $st->bind_param('ii', $evento_id, $r_id); }
+      } else {
+        $placeholders = '?, ?, ?, '.($C_RONDAS?'?, ':'').($C_OBS?'?':'');
+        $placeholders = rtrim($placeholders, ', ');
+        $sqlP = 'INSERT INTO peleas_evento ('.implode(',', $colsP).') VALUES ('.implode(',', array_fill(0, count($colsP), '?')).')';
+        $st = $conexion->prepare($sqlP);
+        if(!$st) throw new RuntimeException('Prep pelea: '.$conexion->error);
+        $bindTypes = 'iii'; $params = [$evento_id, $r_id, (int)$valsP[2]];
+        if ($C_RONDAS){ $bindTypes.='i'; $params[]=(int)$rondas; }
+        if ($C_OBS){ $bindTypes.='s'; $params[]=$obsTxt; }
+        $st->bind_param($bindTypes, ...$params);
+      }
+
+      $okExec=$st->execute(); $errExec=$st->error; $aff=$st->affected_rows; $st->close();
       if (!$okExec || $aff <= 0) { throw new RuntimeException('Insert pelea falló: '.($errExec ?: 'sin detalle')); }
 
       $conexion->commit();
-      $_SESSION['flash_ok'] = '✅ Pelea creada. Rojo #'.$r_id.($azul_id?(' / Azul #'.$azul_id):' (en espera)').'.';
+      $_SESSION['flash_ok'] = '✅ Pelea creada. Rojo #'.$r_id.($valsP[2]!==null?(' / Azul #'.$valsP[2]):' (en espera)').'.';
       if (!empty($warnings)) { $_SESSION['flash_warn'] = implode('<br>', $warnings); }
     } catch (Throwable $e) {
       $conexion->rollback();
@@ -647,7 +922,7 @@ $ph = 'assets/placeholder-user.png';
     tbody tr:nth-child(even){background:var(--zebra)}
     .avatar{width:44px;height:44px;object-fit:cover;border-radius:8px;display:inline-block;vertical-align:middle}
     .pill{display:inline-block;padding:2px 8px;border-radius:999px;background:var(--pill-bg);color:var(--pill-text);font-size:12px;white-space:normal}
-    .muted{color:var(--muted);font-size:12px}
+    .muted{color:#000;font-size:12px}
     .acciones{text-align:center;white-space:nowrap}
     .vs{font-weight:700;text-align:center;color:#111}
     .row-actions{display:flex;gap:6px;align-items:center;justify-content:center;flex-wrap:wrap}
@@ -669,14 +944,11 @@ $ph = 'assets/placeholder-user.png';
     @media (max-width:980px){ .grid-4{grid-template-columns:1fr 1fr} table{min-width:980px} }
     @media (max-width:640px){ .grid-4,.grid-3,.grid-2{grid-template-columns:1fr} .toolbar{gap:10px} table{min-width:900px} .pesaje input{width:84px} }
     @media print{ .toolbar,.form-actions,.row-actions,.btn{display:none !important} body{background:#fff} table{min-width:100%} }
+    .flash.ok{border:1px solid #c8e6c9;background:#e8f5e9;color:#1b5e20;padding:8px 10px;border-radius:8px;margin:8px 0}
+    .flash.warn{border:1px solid #ffeeba;background:#fff3cd;color:#856404;padding:8px 10px;border-radius:8px;margin:8px 0}
+    .flash.err{border:1px solid #ffcdd2;background:#ffebee;color:#b71c1c;padding:8px 10px;border-radius:8px;margin:8px 0}
   </style>
-  <colgroup>
-    <col class="num"><col class="bloque">
-    <col class="foto"><col class="nombre"><col class="info"><col class="escuela"><col class="tecnica">
-    <col class="vs">
-    <col class="foto"><col class="nombre"><col class="info"><col class="escuela"><col class="tecnica">
-    <col class="rondas"><col class="obs"><col class="acc">
-  </colgroup>
+  
 </head>
 <body>
 <div class="contenedor">
@@ -687,16 +959,37 @@ $ph = 'assets/placeholder-user.png';
         <button class="btn btn-secondary" type="button" id="btnEditarOrden">✏️ Editar numeración</button>
       <?php } else { ?>
         <span class="helper">ℹ️ Para numeración manual, agregá una columna <code>orden</code> (INT) en <b>peleas_evento</b>.</span>
-      <?php } ?><a class="btn btn-mini btn-secondary" href="organizar_pelea.php?evento_id=<?= (int)$evento_id ?>">➕ Nueva pelea</a>
-<a class="btn btn-mini btn-secondary" href="pesajes.php?evento_id=<?= (int)$evento_id ?>">⚖️ Pesajes</a>
-<button class="btn btn-mini btn-secondary" type="button" onclick="window.print()">🖨️ Imprimir / PDF</button>
-
+      <?php } ?>
+      <a class="btn btn-mini btn-secondary" href="organizar_pelea.php?evento_id=<?= (int)$evento_id ?>">➕ Nueva pelea</a>
+      <a class="btn btn-mini btn-secondary" href="pesajes.php?evento_id=<?= (int)$evento_id ?>">⚖️ Pesajes</a>
+      <button class="btn btn-mini btn-secondary" type="button" onclick="window.print()">🖨️ Imprimir / PDF</button>
     </div>
   </div>
 
   <?php if (!empty($_SESSION['flash_ok'])) { ?><div class="flash ok"><?= h($_SESSION['flash_ok']); ?></div><?php unset($_SESSION['flash_ok']); } ?>
   <?php if (!empty($_SESSION['flash_warn'])) { ?><div class="flash warn"><?= $_SESSION['flash_warn']; ?></div><?php unset($_SESSION['flash_warn']); } ?>
   <?php if (!empty($_SESSION['flash_error'])) { ?><div class="flash err"><?= h($_SESSION['flash_error']); ?></div><?php unset($_SESSION['flash_error']); } ?>
+
+  <!-- ============== NUEVO: Cargar listado desde archivo ============== -->
+  <div class="card">
+    <h3 style="margin:0 0 10px 0">📥 Subir listado de peleas (Excel/CSV o PDF)</h3>
+    <form method="POST" enctype="multipart/form-data" autocomplete="off">
+      <input type="hidden" name="accion" value="importar_peleas">
+      <input type="hidden" name="evento_id" value="<?= (int)$evento_id ?>">
+      <div class="grid grid-3">
+        <div class="field">
+          <label>Archivo</label>
+          <input type="file" name="archivo_peleas" accept=".xlsx,.csv,.pdf" required>
+          <div class="helper">.xlsx / .csv (se importan filas) · .pdf (se guarda como referencia)</div>
+        </div>
+        <div class="field" style="align-self:end;">
+          <button class="btn btn-primary" type="submit">⬆️ Subir e importar</button>
+        </div>
+      </div>
+      <div class="helper">Encabezados sugeridos: <code>r_apellido</code>, <code>r_nombre</code>, <code>r_escuela</code>, <code>r_dni</code>, <code>r_peso</code>, <code>a_apellido</code>, <code>a_nombre</code>, <code>a_escuela</code>, <code>a_dni</code>, <code>a_peso</code>, <code>rondas</code>, <code>observaciones</code>, <code>sexo</code>, <code>division_id</code>, <code>modalidad_id</code>, <code>disciplina_id</code>, <code>categoria_tecnica_id</code>, <code>solo_rojo</code>.</div>
+    </form>
+  </div>
+  <!-- ============== FIN NUEVO ============== -->
 
   <div class="card">
     <h3 style="margin:0 0 10px 0">⚡ Alta manual rápida de competidores + pelea</h3>
@@ -832,6 +1125,13 @@ $ph = 'assets/placeholder-user.png';
       <input type="hidden" id="accionInput" name="accion" value="guardar_orden">
       <input type="hidden" name="evento_id" value="<?= (int)$evento_id ?>"><!-- persistir -->
       <table>
+<colgroup>
+    <col class="num"><col class="bloque">
+    <col class="foto"><col class="nombre"><col class="info"><col class="escuela"><col class="tecnica">
+    <col class="vs">
+    <col class="foto"><col class="nombre"><col class="info"><col class="escuela"><col class="tecnica">
+    <col class="rondas"><col class="obs"><col class="acc">
+  </colgroup>
         <thead>
           <tr>
             <th style="width:70px">N°</th>
