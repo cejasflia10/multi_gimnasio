@@ -69,13 +69,8 @@
       <a class="mp-item" href="ver_progreso_alumnos.php">📈 Ver Progreso de Alumnos</a>
       <a class="mp-item" href="profesor_seguimiento.php">🗂️ Seguimiento de alumnos</a>
       <a class="mp-item" href="subir_rutina.php">📤 Subir Archivo</a>
-      <a class="mp-item" href="registrar_graduacion.php">🎓 Graduación</a>
-      <a class="mp-item" href="ver_graduaciones.php">📜 Ver Graduaciones</a>
-      <a class="mp-item" href="registrar_competencia.php">🥋 Competencia</a>
-      <a class="mp-item" href="ver_competencias.php">🏆 Ver Competencias</a>
       <a class="mp-item" href="registrar_datos_fisicos.php">📏 Datos Físicos</a>
       <a class="mp-item" href="ver_datos_fisicos_profesor.php">📄 Ver Datos</a>
-      <a class="mp-item" href="ver_competidores.php">👥 Ver Competidores</a>
       <a class="mp-item" href="logout_profesor.php">🚪 Cerrar Sesión</a>
     </div>
   </div>
