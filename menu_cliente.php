@@ -65,14 +65,11 @@
       <a class="mc-item" href="ver_turnos_cliente.php">🗓️ Ver Turnos</a>
       <a class="mc-item" href="ver_mis_pagos.php">💳 Mis Pagos</a>
       <a class="mc-item" href="pago_online.php">⚡ Pago Online</a>
-      <a class="mc-item" href="cliente_scan_qr.php">📷 Escanear QR</a>
-      <a class="mc-item" href="cliente_historial.php">📒 Mi Historial</a>
+      <a class="mc-item" href="scanner_qr.php">📷 Escanear QR</a>
       <a class="mc-item" href="ver_progreso.php">📈 Ver Progreso</a>
       <a class="mc-item" href="grafico_progreso_cliente.php">📊 Evolución</a>
       <a class="mc-item" href="tienda_indumentaria.php">🛍️ Indumentaria</a>
       <a class="mc-item" href="asistente_ia_api.php">🤖 Asistente IA</a>
-      <a class="mc-item" href="ver_competencias_cliente.php">🏆 Competencias</a>
-      <a class="mc-item" href="registrar_competencia_cliente.php">📝 Inscribirme</a>
       <a class="mc-item" href="cena_fin_anio.php">🍽️ Cena Fin de Año</a>
       <a class="mc-item" href="cliente_qr_maquinas.php">🧰 QR de Máquinas</a>
       <a class="mc-item" href="logout_cliente.php">🚪 Salir</a>
@@ -85,8 +82,8 @@
   <ul>
     <li><a href="panel_cliente.php"><span class="t-ico">🏠</span><span>Inicio</span></a></li>
     <li><a href="ver_turnos_cliente.php"><span class="t-ico">🗓️</span><span>Turnos</span></a></li>
-    <li><a href="cliente_scan_qr.php"><span class="t-ico">📷</span><span>Escanear</span></a></li>
-    <li><a href="cliente_historial.php"><span class="t-ico">📒</span><span>Historial</span></a></li>
+    <li><a href="scanner_qr.php"><span class="t-ico">📷</span><span>Escanear</span></a></li>
+    <li><a href="pago_online.php"><span class="t-ico">⚡</span><span> Pago Online</span></a></li>
     <li><a href="ver_progreso.php"><span class="t-ico">📈</span><span>Progreso</span></a></li>
   </ul>
 </nav>
