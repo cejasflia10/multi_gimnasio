@@ -20,9 +20,6 @@
   .mp-link{ color:var(--ink); text-decoration:none; font-weight:600; padding:6px 10px; border-radius:8px; }
   .mp-link:hover{ background:var(--chip); }
 
-  /* (Opción A) ocultar chips horizontales */
-  .mp-scroll{ display:none !important; }
-
   /* Drawer lateral */
   .mp-drawer{ position:fixed; inset:0; display:none; z-index:60; }
   .mp-drawer.show{ display:block; }
@@ -30,42 +27,48 @@
   .mp-panel{ position:absolute; top:0; left:0; height:100%; width:min(86vw,360px);
              background:var(--bg); border-right:1px solid var(--chip-b); padding:14px; overflow:auto; }
   .mp-list{ display:grid; gap:6px; margin-top:8px }
-  .mp-item{ display:flex; align-items:center; gap:10px; padding:12px; border-radius:12px;
-            text-decoration:none; color:var(--ink); border:1px solid var(--chip-b); background:var(--chip); }
+  .mp-item{
+    display:flex; align-items:center; gap:10px; padding:12px; border-radius:12px;
+    text-decoration:none; color:var(--ink); border:1px solid var(--chip-b); background:var(--chip);
+  }
   .mp-item:hover{ border-color:var(--brand); }
-  /* Garantizar color de texto en drawer */
-  .mp-item *, .mp-item:visited{ color:inherit; }
+  .mp-item:visited, .mp-item *{ color:inherit !important; }
 
-  /* Bottom tabs (móvil) */
+  /* Tabs inferiores (móvil) */
   .mp-tabs{ position:sticky; bottom:0; z-index:45; background:var(--bg); border-top:1px solid var(--chip-b); }
   .mp-tabs ul{ display:flex; margin:0; padding:6px; list-style:none; gap:6px }
   .mp-tabs a{
-    flex:1; text-align:center; text-decoration:none;
-    padding:8px 6px; border-radius:10px;
-    /* Color base y visited: SIEMPRE el mismo */
+    flex:1; text-align:center; text-decoration:none; padding:8px 6px; border-radius:10px;
     color:var(--ink);
   }
   .mp-tabs a:visited{ color:var(--ink); }
-  .mp-tabs a.active{
-    background:#111827; border:1px solid var(--brand);
-    color:#fff;
-  }
+  .mp-tabs a.active{ background:#111827; border:1px solid var(--brand); color:#fff; }
   .mp-tabs a.active:visited{ color:#fff; }
 
-  /* Icono y etiqueta: heredan color y nunca quedan transparentes */
   .mp-tabs .t-ico{
     display:block; font-size:1.2rem; line-height:1; margin-bottom:4px;
-    color:inherit; opacity:1 !important;
+    color:inherit !important; opacity:1 !important;
   }
   .mp-tabs a span{
     display:block; white-space:nowrap;
-    color:inherit; opacity:1 !important;
+    color:inherit !important; opacity:1 !important;
   }
   .mp-tabs a.active .t-ico,
-  .mp-tabs a.active span{ color:#fff; opacity:1 !important; }
+  .mp-tabs a.active span{ color:#fff !important; opacity:1 !important; }
 
   /* Ocultar tabs en escritorio */
   @media (min-width: 861px){ .mp-tabs{ display:none; } }
+
+  /* 🔧 Fix global: anula background-clip:text y text-fill transparent heredados */
+  .mp-tabs a,
+  .mp-tabs a span,
+  .mp-item,
+  .mp-item * {
+    -webkit-text-fill-color: currentColor !important;
+    background: none !important;
+    -webkit-background-clip: initial !important;
+    background-clip: initial !important;
+  }
 </style>
 
 <div class="mp-top" data-mp>
@@ -122,7 +125,7 @@
   d.getElementById('mpClose')?.addEventListener('click', closeDrawer);
   d.getElementById('mpClose2')?.addEventListener('click', closeDrawer);
 
-  // Marcar activo según URL (drawer + tabs)
+  // Activo según URL
   (function markActive(){
     const cur = location.pathname.split('/').pop().toLowerCase();
     d.querySelectorAll('.mp-item, .mp-tabs a').forEach(a=>{

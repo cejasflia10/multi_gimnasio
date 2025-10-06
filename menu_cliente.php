@@ -20,9 +20,6 @@
   .mc-link{ color:var(--ink); text-decoration:none; font-weight:600; padding:6px 10px; border-radius:8px; }
   .mc-link:hover{ background:var(--chip); }
 
-  /* (Opción A) ocultar chips horizontales */
-  .mc-scroll{ display:none !important; }
-
   /* Drawer lateral */
   .mc-drawer{ position:fixed; inset:0; display:none; z-index:60; }
   .mc-drawer.show{ display:block; }
@@ -35,26 +32,19 @@
     text-decoration:none; color:var(--ink); border:1px solid var(--chip-b); background:var(--chip);
   }
   .mc-item:hover{ border-color:var(--brand); }
-  /* Asegurar color en cualquier estado, por si hay reglas globales */
   .mc-item:visited, .mc-item *{ color:inherit !important; }
 
   /* Tabs inferiores (móvil) */
   .mc-tabs{ position:sticky; bottom:0; z-index:45; background:var(--bg); border-top:1px solid var(--chip-b); }
   .mc-tabs ul{ display:flex; margin:0; padding:6px; list-style:none; gap:6px }
-
   .mc-tabs a{
     flex:1; text-align:center; text-decoration:none; padding:8px 6px; border-radius:10px;
     color:var(--ink);
   }
-  /* Evitar que :visited cambie el color */
   .mc-tabs a:visited{ color:var(--ink); }
-
-  .mc-tabs a.active{
-    background:#111827; border:1px solid var(--brand); color:#fff;
-  }
+  .mc-tabs a.active{ background:#111827; border:1px solid var(--brand); color:#fff; }
   .mc-tabs a.active:visited{ color:#fff; }
 
-  /* Icono y etiqueta: heredan color SIEMPRE (evita spans transparentes) */
   .mc-tabs .t-ico{
     display:block; font-size:1.2rem; line-height:1; margin-bottom:4px;
     color:inherit !important; opacity:1 !important;
@@ -66,8 +56,18 @@
   .mc-tabs a.active .t-ico,
   .mc-tabs a.active span{ color:#fff !important; opacity:1 !important; }
 
-  /* Ocultar tabs en escritorio */
   @media (min-width: 861px){ .mc-tabs{ display:none; } }
+
+  /* 🔧 Fix global: anula background-clip:text y text-fill transparent heredados */
+  .mc-tabs a,
+  .mc-tabs a span,
+  .mc-item,
+  .mc-item * {
+    -webkit-text-fill-color: currentColor !important;
+    background: none !important;
+    -webkit-background-clip: initial !important;
+    background-clip: initial !important;
+  }
 </style>
 
 <div class="mc-top" data-mc>
@@ -125,7 +125,7 @@
   d.getElementById('mcClose')?.addEventListener('click', closeDrawer);
   d.getElementById('mcClose2')?.addEventListener('click', closeDrawer);
 
-  // Marcar activo en drawer y tabs según URL
+  // Marcar activo
   (function markActive(){
     const cur = location.pathname.split('/').pop().toLowerCase();
     d.querySelectorAll('.mc-item, .mc-tabs a').forEach(a=>{
