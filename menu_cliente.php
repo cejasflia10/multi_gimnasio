@@ -34,6 +34,12 @@
   .mc-item:hover{ border-color:var(--brand); }
   .mc-item:visited, .mc-item *{ color:inherit !important; }
 
+  /* 🔹 Activo en drawer (faltaba esta regla) */
+  .mc-item.active{
+    background:#0e1526; border-color:var(--brand); color:#fff;
+  }
+  .mc-item.active *{ color:inherit !important; }
+
   /* Tabs inferiores (móvil) */
   .mc-tabs{ position:sticky; bottom:0; z-index:45; background:var(--bg); border-top:1px solid var(--chip-b); }
   .mc-tabs ul{ display:flex; margin:0; padding:6px; list-style:none; gap:6px }
@@ -92,12 +98,13 @@
       <a class="mc-item" href="ver_turnos_cliente.php">🗓️ Ver Turnos</a>
       <a class="mc-item" href="ver_mis_pagos.php">💳 Mis Pagos</a>
       <a class="mc-item" href="pago_online.php">⚡ Pago Online</a>
-      <a class="mc-item" href="ver_progreso.php">📈 Ver Progreso</a>
+      <a class="mc-item" href="form_progreso.php">📈 Ver Progreso</a>
       <a class="mc-item" href="grafico_progreso_cliente.php">📊 Evolución</a>
       <a class="mc-item" href="tienda_indumentaria.php">🛍️ Indumentaria</a>
       <a class="mc-item" href="asistente_ia_api.php">🤖 Asistente IA</a>
       <a class="mc-item" href="cena_fin_anio.php">🍽️ Cena Fin de Año</a>
       <a class="mc-item" href="cliente_qr_maquinas.php">🧰 QR de Máquinas</a>
+
       <a class="mc-item" href="logout_cliente.php">🚪 Salir</a>
     </div>
   </div>
@@ -125,7 +132,7 @@
   d.getElementById('mcClose')?.addEventListener('click', closeDrawer);
   d.getElementById('mcClose2')?.addEventListener('click', closeDrawer);
 
-  // Marcar activo
+  // Marcar activo (drawer + tabs)
   (function markActive(){
     const cur = location.pathname.split('/').pop().toLowerCase();
     d.querySelectorAll('.mc-item, .mc-tabs a').forEach(a=>{

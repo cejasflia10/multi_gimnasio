@@ -3,14 +3,13 @@
 
 if (session_status() === PHP_SESSION_NONE) session_start();
 require_once __DIR__ . '/conexion.php';
-require __DIR__ . '/menu_profesor.php';
 
 if (!isset($conexion) || !($conexion instanceof mysqli)) { http_response_code(500); exit('❌ Sin conexión a BD.'); }
 if (function_exists('mysqli_report')) { mysqli_report(MYSQLI_REPORT_OFF); }
 @$conexion->set_charset('utf8mb4');
 
-$gimnasio_id   = (int)($_SESSION['gimnasio_id'] ?? 0);
-$profesor_id   = (int)($_SESSION['profesor_id'] ?? 0) ?: null; // opcional
+$gimnasio_id = (int)($_SESSION['gimnasio_id'] ?? 0);
+$profesor_id = (int)($_SESSION['profesor_id'] ?? 0) ?: null; // opcional
 if ($gimnasio_id <= 0) { http_response_code(403); exit('Acceso restringido.'); }
 
 /* Helpers */
@@ -33,7 +32,6 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && isset($_POST['add_comment'], $_POST['
   $log_id = (int)$_POST['log_id'];
   $coment = trim($_POST['comentario'] ?? '');
   if ($coment !== '') {
-    // validación de pertenencia al gimnasio
     $chk = db_prepare($conexion, "SELECT l.id FROM rutina_logs l WHERE l.id=? LIMIT 1");
     $chk->bind_param('i', $log_id); $chk->execute();
     $own = $chk->get_result()->fetch_assoc(); $chk->close();
@@ -128,30 +126,47 @@ $flash = $_SESSION['flash_prof'] ?? null; unset($_SESSION['flash_prof']);
   <meta charset="utf-8">
   <title>Seguimiento de alumnos — Profesor</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <!-- ✅ Estilo unificado (mismo que usan el resto de páginas) -->
+  <link rel="stylesheet" href="/multi_gimnasio/estilo_unificado.css?v=20251006">
+
   <style>
-    :root{ --bg:#0b1220; --card:#0f172a; --mut:#94a3b8; --line:#1f2937; --acc:#22d3ee; --ok:#22c55e; }
-    *{ box-sizing:border-box }
-    body{ margin:0; background:var(--bg); color:#e5e7eb; font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif; }
+    /* Complementos visuales específicos de esta página (manteniendo base unificada) */
+    :root{ --line:#444; --acc:#ffd600; --ok:#22c55e; }
     .wrap{ max-width:1100px; margin:0 auto; padding:20px; }
-    h1{ margin:6px 0 14px; font-size:1.6rem; }
-    .card{ background:var(--card); border:1px solid var(--line); border-radius:16px; padding:16px; margin-bottom:16px; }
+    h1{ margin:6px 0 14px; font-size:1.6rem; text-align:left; }
+    .card{ background:#2c2c2c; border:1px solid var(--line); border-radius:12px; padding:16px; margin-bottom:16px; }
     .row{ display:grid; grid-template-columns: 1fr auto; gap:10px }
     @media (max-width:700px){ .row{ grid-template-columns:1fr; } }
-    input[type="text"]{ width:100%; padding:10px; border-radius:10px; border:1px solid #334155; background:#0b1220; color:#e5e7eb; }
-    button, .btn{ background:var(--acc); border:0; color:#111; font-weight:800; padding:10px 14px; border-radius:10px; cursor:pointer; text-decoration:none; display:inline-block; }
-    .mut{ color:var(--mut) }
-    .badge{ display:inline-block; padding:3px 8px; border-radius:999px; background:#1f2937; font-size:.8rem; }
-    .tag{ display:inline-block; padding:3px 8px; border-radius:6px; background:#111827; border:1px solid #334155; font-size:.78rem; margin-right:6px }
+    input[type="text"]{ width:100%; }
+    button, .btn{ background:var(--acc); border:0; color:#111; font-weight:bold; padding:10px 14px; border-radius:8px; cursor:pointer; text-decoration:none; display:inline-block; }
+    .mut{ color:#c9c9c9 }
+    .badge{ display:inline-block; padding:3px 8px; border-radius:999px; background:#333; font-size:.8rem; }
+    .tag{ display:inline-block; padding:3px 8px; border-radius:6px; background:#222; border:1px solid #444; font-size:.78rem; margin-right:6px }
     .steps{ margin-top:6px; padding-left:14px; }
     .steps li{ margin:2px 0; }
-    textarea{ width:100%; padding:10px; border-radius:10px; border:1px solid #334155; background:#0b1220; color:#e5e7eb; }
+    textarea{ width:100%; }
     .small{ font-size:.9rem }
     .ok{ color:var(--ok) }
     .grid2{ display:grid; grid-template-columns: 1fr 1fr; gap:12px; }
     @media (max-width:900px){ .grid2{ grid-template-columns: 1fr; } }
+
+    /* 🔒 Utilidad de truncado en 2 líneas (igual en todas las páginas) */
+    .clamp-2{
+      display:-webkit-box;
+      -webkit-line-clamp:2;
+      -webkit-box-orient:vertical;
+      overflow:hidden;
+    }
   </style>
 </head>
 <body>
+
+<?php
+// ✅ Menú compartido, cargado DESPUÉS del CSS unificado
+require __DIR__ . '/menu_profesor.php';
+?>
+
   <div class="wrap">
     <h1>📈 Seguimiento de alumnos</h1>
 
@@ -169,7 +184,7 @@ $flash = $_SESSION['flash_prof'] ?? null; unset($_SESSION['flash_prof']);
         <?php if ($clientes): ?>
           <ul style="list-style:none;padding:0;margin-top:10px">
             <?php foreach ($clientes as $c): ?>
-              <li style="padding:8px 0;border-bottom:1px solid #1f2937">
+              <li style="padding:8px 0;border-bottom:1px solid #444">
                 <a class="btn" href="?q=<?php echo urlencode($q); ?>&c=<?php echo (int)$c['id']; ?>">Ver historial</a>
                 <span style="margin-left:8px"><strong><?php echo h($c['nombre']); ?></strong></span>
                 <?php if (!empty($c['dni'])): ?><span class="mut"> — DNI: <?php echo h($c['dni']); ?></span><?php endif; ?>
@@ -206,6 +221,7 @@ $flash = $_SESSION['flash_prof'] ?? null; unset($_SESSION['flash_prof']);
             }
 
             $my_comments = $comentarios[(int)$L['id']] ?? [];
+            $notas = (string)($L['notas_cliente'] ?? '');
           ?>
             <div class="card" style="margin:0">
               <div class="small mut"><?php echo h($L['creada_en']); ?></div>
@@ -215,15 +231,19 @@ $flash = $_SESSION['flash_prof'] ?? null; unset($_SESSION['flash_prof']);
                 <?php if ($L['rpe']): ?><span class="tag">RPE: <?php echo (int)$L['rpe']; ?></span><?php endif; ?>
                 <?php if ($L['tiempo_min']): ?><span class="tag">Tiempo: <?php echo (int)$L['tiempo_min']; ?> min</span><?php endif; ?>
               </div>
-              <?php if (!empty($L['notas_cliente'])): ?>
-                <div class="small" style="margin:6px 0"><strong>Notas del cliente:</strong> <?php echo nl2br(h($L['notas_cliente'])); ?></div>
+
+              <?php if ($notas !== ''): ?>
+                <div class="small" style="margin:6px 0">
+                  <strong>Notas del cliente:</strong>
+                  <div class="clamp-2" title="<?php echo h($notas); ?>"><?php echo nl2br(h($notas)); ?></div>
+                </div>
               <?php endif; ?>
 
               <?php if ($done_texts): ?>
                 <div class="small" style="margin-top:8px"><strong>Pasos realizados:</strong></div>
                 <ul class="steps">
                   <?php foreach ($done_texts as $txt): ?>
-                    <li>✔️ <?php echo h($txt); ?></li>
+                    <li class="clamp-2" title="<?php echo h($txt); ?>">✔️ <?php echo h($txt); ?></li>
                   <?php endforeach; ?>
                 </ul>
               <?php else: ?>
@@ -233,8 +253,12 @@ $flash = $_SESSION['flash_prof'] ?? null; unset($_SESSION['flash_prof']);
               <?php if ($my_comments): ?>
                 <div class="small" style="margin-top:8px"><strong>Comentarios del profesor</strong></div>
                 <ul class="steps">
-                  <?php foreach ($my_comments as $cm): ?>
-                    <li>🗒️ <?php echo nl2br(h($cm['comentario'])); ?> <span class="mut">— <?php echo h($cm['creada_en']); ?></span></li>
+                  <?php foreach ($my_comments as $cm):
+                    $cbody = (string)$cm['comentario'];
+                  ?>
+                    <li class="clamp-2" title="<?php echo h($cbody); ?>">
+                      🗒️ <?php echo nl2br(h($cbody)); ?> <span class="mut">— <?php echo h($cm['creada_en']); ?></span>
+                    </li>
                   <?php endforeach; ?>
                 </ul>
               <?php endif; ?>

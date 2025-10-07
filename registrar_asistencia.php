@@ -2,6 +2,8 @@
 if (session_status() === PHP_SESSION_NONE) session_start();
 header('Cache-Control: no-store, no-cache, must-revalidate');
 require_once __DIR__ . '/conexion.php';
+require_once __DIR__ . '/mc_menu.php'; 
+
 
 date_default_timezone_set('America/Argentina/San_Luis');
 $hoy         = date('Y-m-d');

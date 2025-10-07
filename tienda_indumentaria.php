@@ -1,8 +1,6 @@
 <?php
 if (session_status() === PHP_SESSION_NONE) session_start();
 require_once __DIR__.'/conexion.php';
-require_once __DIR__.'/menu_cliente.php';
-
 
 if (!isset($conexion) || !($conexion instanceof mysqli)) { http_response_code(500); exit('❌ Sin conexión a BD'); }
 if (function_exists('mysqli_report')) { mysqli_report(MYSQLI_REPORT_OFF); }
@@ -17,7 +15,9 @@ $csrf=$_SESSION['csrf_token'];
 if (!isset($_SESSION['cart'])) $_SESSION['cart']=[];
 
 function h($s){ return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); }
-function must_prepare(mysqli $db, string $sql){ $st=$db->prepare($sql); if(!$st) die('❌ SQL prepare error: '.$db->error.'<br><code>'.$sql.'</code>'); return $st; }
+function must_prepare(mysqli $db, string $sql){
+  $st=$db->prepare($sql); if(!$st) die('❌ SQL prepare error: '.$db->error.'<br><code>'.$sql.'</code>'); return $st;
+}
 
 /* ===== CARRITO ===== */
 if ($_SERVER['REQUEST_METHOD']==='POST' && hash_equals($csrf, $_POST['csrf'] ?? '')) {
@@ -73,19 +73,23 @@ $st->execute();
 $prods = $st->get_result()->fetch_all(MYSQLI_ASSOC);
 $st->close();
 
-/* Talles por producto (BD) */
+/* Talles por producto (sin bind_param variable) */
 $talles_por_prod = [];
 if (!empty($prods)) {
-  $ids = array_column($prods, 'id');
-  $in    = implode(',', array_fill(0, count($ids), '?'));
-  $types = str_repeat('i', count($ids));
-  $sql   = "SELECT producto_id, talle, stock FROM ind_talles WHERE producto_id IN ($in) ORDER BY talle";
-  $stmt  = must_prepare($conexion, $sql);
-  $stmt->bind_param($types, ...$ids);
-  $stmt->execute();
-  $rs = $stmt->get_result();
-  while ($r = $rs->fetch_assoc()) $talles_por_prod[$r['producto_id']][] = $r;
-  $stmt->close();
+  $ids_raw = array_column($prods, 'id');
+  $ids = array_map('intval', $ids_raw);
+  $ids = array_values(array_filter($ids, fn($v)=>$v>0));
+  if (!empty($ids)) {
+    $inList = implode(',', $ids); // seguro: todos int
+    $sql = "SELECT producto_id, talle, stock FROM ind_talles WHERE producto_id IN ($inList) ORDER BY talle";
+    if ($rs = $conexion->query($sql)) {
+      while ($r = $rs->fetch_assoc()) {
+        $pid = (int)$r['producto_id'];
+        $talles_por_prod[$pid][] = $r;
+      }
+      $rs->free();
+    }
+  }
 }
 
 /* ===== Fallback de talles por defecto ===== */
@@ -96,16 +100,14 @@ $DEF_SHORTS        = ['XS','S','M','L','XL','2XL'];
 
 function render_talle_select($pid, $categoria, $desde_bd){
   global $DEF_REMERA_UNISEX,$DEF_REMERA_MUJER,$DEF_REMERA_NINOS,$DEF_SHORTS;
-  // Prioriza talles de BD si existen:
   if (!empty($desde_bd)) {
     foreach($desde_bd as $t){
-      $stk = isset($t['stock']) ? " (stk: {$t['stock']})" : '';
+      $stk = isset($t['stock']) ? " (stk: ".h($t['stock']).")" : '';
       echo '<option value="'.h($t['talle']).'">'.h($t['talle']).$stk.'</option>';
     }
     return;
   }
-  // Si no hay en BD, usar catálogo por defecto según categoría
-  $cat = strtolower($categoria);
+  $cat = strtolower((string)$categoria);
   if ($cat==='remera' || $cat==='otro'){
     echo '<optgroup label="Unisex">';
     foreach($DEF_REMERA_UNISEX as $t) echo '<option value="'.h($t).'">'.$t.'</option>';
@@ -116,7 +118,7 @@ function render_talle_select($pid, $categoria, $desde_bd){
     echo '<optgroup label="Niños/as">';
     foreach($DEF_REMERA_NINOS as $t) echo '<option value="'.h($t).'">'.$t.'</option>';
     echo '</optgroup>';
-  } else { // short / pantalón
+  } else {
     foreach($DEF_SHORTS as $t) echo '<option value="'.h($t).'">'.$t.'</option>';
   }
 }
@@ -126,29 +128,52 @@ function render_talle_select($pid, $categoria, $desde_bd){
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Tienda — Indumentaria</title>
+
+<!-- Estilo unificado -->
+<link rel="stylesheet" href="/multi_gimnasio/estilo_unificado.css?v=20251006">
+
 <style>
- body{font-family:system-ui,Segoe UI,Roboto,Arial;background:#0f1320;color:#fff;margin:0}
- .wrap{max-width:1080px;margin:24px auto;padding:16px}
- .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px}
- .card{background:#141a2a;border:1px solid #24314d;border-radius:14px;padding:16px}
- img{width:100%;height:220px;object-fit:cover;border-radius:10px;border:1px solid #24314d}
- label{display:block;margin:.5rem 0 .25rem}
- input,select,textarea{width:100%;padding:12px;border-radius:12px;border:1px solid #2a3550;background:#0d1322;color:#fff}
- .row{display:flex;gap:10px;align-items:end;flex-wrap:wrap}
- .btn{padding:12px 16px;border-radius:12px;border:0;background:#3b82f6;color:#fff;cursor:pointer;font-weight:700}
- table{width:100%;border-collapse:collapse} th,td{padding:8px;border-bottom:1px solid #24314d}
- .mini{font-size:12px;color:#9fb0d3}
- .pill{display:inline-block;padding:6px 10px;border:1px solid #3b82f6;border-radius:999px;font-size:12px;cursor:pointer}
- .guide{background:#0b1220;border:1px solid #1c2a4d;border-radius:14px;padding:16px;margin-top:18px}
- .tabs{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px}
- .tab{padding:8px 12px;border:1px solid #334155;border-radius:10px;cursor:pointer}
- .tab.active{border-color:#3b82f6;background:#0f1a33}
- .hide{display:none}
- .sticky-top{position:sticky;top:0;background:#0f1320;padding:8px 0;z-index:5}
- @media (max-width:760px){ .grid{grid-template-columns:1fr} }
+/* ===== Overrides mínimos para que el menú se vea perfecto ===== */
+.mc-top, .mc-top *, .mc-drawer *, .mc-tabs *, .mc-item, .mc-item *{
+  -webkit-text-fill-color: currentColor !important;
+  background: none !important;
+  -webkit-background-clip: initial !important;
+  background-clip: initial !important;
+}
+.mc-top{ background:#111 !important; border-bottom:1px solid #444 !important; }
+.mc-bar .mc-title{ color: gold !important; font-weight:800 !important; }
+.mc-bar .mc-link{ color: gold !important; }
+.mc-bar .mc-btn{ background:#ffd600 !important; color:#000 !important; }
+.mc-item{ background:#222 !important; border:1px solid #444 !important; color:gold !important; }
+.mc-item:hover{ background:#333 !important; }
+
+/* ===== Página (usa tokens del unificado) ===== */
+.wrap{max-width:1080px;margin:24px auto;padding:16px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px}
+.card{background:#141a2a;border:1px solid #24314d;border-radius:14px;padding:16px}
+.card h3{margin:10px 0 0}
+img.prod{width:100%;height:220px;object-fit:cover;border-radius:10px;border:1px solid #24314d}
+label{display:block;margin:.5rem 0 .25rem}
+input,select,textarea{width:100%;padding:12px;border-radius:12px;border:1px solid #2a3550;background:#0d1322;color:#fff}
+.row{display:flex;gap:10px;align-items:end;flex-wrap:wrap}
+.btn{padding:12px 16px;border-radius:12px;border:0;background:#3b82f6;color:#fff;cursor:pointer;font-weight:700}
+table{width:100%;border-collapse:collapse}
+th,td{padding:8px;border-bottom:1px solid #24314d}
+.mini{font-size:12px;color:#9fb0d3}
+.pill{display:inline-block;padding:6px 10px;border:1px solid #3b82f6;border-radius:999px;font-size:12px;cursor:pointer}
+.guide{background:#0b1220;border:1px solid #1c2a4d;border-radius:14px;padding:16px;margin-top:18px}
+.tabs{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px}
+.tab{padding:8px 12px;border:1px solid #334155;border-radius:10px;cursor:pointer}
+.tab.active{border-color:#3b82f6;background:#0f1a33}
+.hide{display:none}
+.sticky-top{position:sticky;top:0;background:#0f1320;padding:8px 0;z-index:5}
+@media (max-width:760px){ .grid{grid-template-columns:1fr} }
 </style>
 </head>
 <body>
+
+<?php include __DIR__.'/menu_cliente.php'; ?>
+
 <div class="wrap">
   <div class="sticky-top">
     <button class="btn" onclick="document.getElementById('guia_talles').scrollIntoView({behavior:'smooth'})">📏 Guía de talles</button>
@@ -160,12 +185,12 @@ function render_talle_select($pid, $categoria, $desde_bd){
     <?php if(empty($prods)): ?>
       <div class="card"><div class="mini">No hay productos activos cargados.</div></div>
     <?php else: foreach($prods as $p): ?>
-      <?php $pid=(int)$p['id']; $cat=strtolower($p['categoria']); ?>
+      <?php $pid=(int)$p['id']; $cat=strtolower((string)$p['categoria']); ?>
       <div class="card">
-        <?php if(!empty($p['foto_url'])): ?><img src="<?=h($p['foto_url'])?>" alt="Foto"><?php endif; ?>
-        <h3 style="margin:10px 0 0"><?=h($p['titulo'])?></h3>
+        <?php if(!empty($p['foto_url'])): ?><img class="prod" src="<?=h($p['foto_url'])?>" alt="Foto"><?php endif; ?>
+        <h3><?=h($p['titulo'])?></h3>
         <div class="mini"><?=h($p['categoria'])?></div>
-        <div style="font-weight:700;margin:.25rem 0">$<?=number_format($p['precio'],2,',','.')?></div>
+        <div style="font-weight:700;margin:.25rem 0">$<?=number_format((float)$p['precio'],2,',','.')?></div>
 
         <details style="margin:.5rem 0">
           <summary class="pill">📏 Medir y sugerir talle</summary>
@@ -401,7 +426,6 @@ function calcRemeraGeneric(pid){
   const talle = suggestFrom(tbl, A,B);
   document.getElementById('sugg_'+pid).textContent = 'Sugerencia: '+talle+' (A≈'+A+' / B≈'+B+')';
   const sel=document.getElementById('talle_sel_'+pid);
-  // selecciona automáticamente si existe el talle entre las opciones (ya sea BD o fallback)
   [...sel.options].forEach(o=>{ if(o.value==talle) sel.value=o.value; });
   document.getElementById('guia_tipo_'+pid).value=g;
   document.getElementById('medidas_json_'+pid).value=JSON.stringify({ancho:A,largo:B});

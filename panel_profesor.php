@@ -1,5 +1,5 @@
 <?php
-// panel_profesor.php — versión elegante/pro
+// panel_profesor.php — versión con menú compartido y estilo_unificado
 if (session_status() === PHP_SESSION_NONE) session_start();
 
 if (empty($_SESSION['profesor_id']) || empty($_SESSION['gimnasio_id'])) {
@@ -8,7 +8,8 @@ if (empty($_SESSION['profesor_id']) || empty($_SESSION['gimnasio_id'])) {
 }
 
 require __DIR__ . '/conexion.php';
-require __DIR__ . '/menu_profesor.php';
+if (function_exists('mysqli_report')) { mysqli_report(MYSQLI_REPORT_OFF); }
+@$conexion->set_charset('utf8mb4');
 
 $profesor_id = (int)($_SESSION['profesor_id']);
 $gimnasio_id = (int)($_SESSION['gimnasio_id']);
@@ -119,8 +120,12 @@ if ($turnos_mes) {
 <meta charset="UTF-8">
 <title>Panel del Profesor</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<link rel="stylesheet" href="estilo_unificado.css">
+
+<!-- ✅ Carga el estilo unificado ANTES de imprimir el menú -->
+<link rel="stylesheet" href="/multi_gimnasio/estilo_unificado.css?v=20251006">
+
 <style>
+/* Estilos específicos de este panel (compatibles con estilo_unificado) */
 :root{
   --bg:#0b0d12; --surface:#11141b; --card:#151926; --muted:#95a3b8;
   --text:#e8eef6; --accent:#f5b301; --ring:#26324a; --ok:#22c55e; --warn:#f59e0b;
@@ -128,9 +133,9 @@ if ($turnos_mes) {
 *{box-sizing:border-box}
 html,body{height:100%}
 body{
-  margin:0; font-family: Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Arial;
-  background: radial-gradient(1200px 800px at 80% -10%, #1c2235 0%, #0b0d12 45%) no-repeat, var(--bg);
-  color:var(--text);
+  /* Mantiene la base oscura del estilo_unificado, pero añade un fondo sutil */
+  background: radial-gradient(1200px 800px at 80% -10%, #1c2235 0%, #0b0d12 45%) no-repeat, #1c1c1c;
+  color: var(--text);
 }
 .container{max-width:1200px; margin-inline:auto; padding:20px}
 .header{
@@ -202,6 +207,12 @@ body{
 </style>
 </head>
 <body>
+
+<?php
+/* ✅ Menú compartido: se incluye DESPUÉS de que el CSS global se cargó */
+require_once __DIR__ . '/menu_profesor.php';
+?>
+
 <div class="container">
 
   <!-- Encabezado -->

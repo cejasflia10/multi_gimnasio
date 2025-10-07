@@ -10,99 +10,100 @@
   }
 
   /* Base */
-  .mp-top,*[data-mp]{ box-sizing:border-box; font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif; }
+  .mp-top, *[data-mp]{ box-sizing:border-box; font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif; }
   .mp-top{ position:sticky; top:0; z-index:50; background:var(--bg); border-bottom:1px solid var(--chip-b); }
   .mp-bar{ display:flex; align-items:center; gap:10px; padding:10px 12px; }
-  .mp-btn{ appearance:none; border:0; background:linear-gradient(90deg,var(--brand),var(--brand2));
-           color:#111; font-weight:800; padding:8px 12px; border-radius:999px; cursor:pointer; }
   .mp-title{ font-weight:800; color:var(--ink); letter-spacing:.2px; }
   .mp-spacer{ flex:1 }
   .mp-link{ color:var(--ink); text-decoration:none; font-weight:600; padding:6px 10px; border-radius:8px; }
   .mp-link:hover{ background:var(--chip); }
 
-  /* Drawer lateral */
-  .mp-drawer{ position:fixed; inset:0; display:none; z-index:60; }
-  .mp-drawer.show{ display:block; }
-  .mp-dim{ position:absolute; inset:0; background:rgba(0,0,0,.45); }
-  .mp-panel{ position:absolute; top:0; left:0; height:100%; width:min(86vw,360px);
-             background:var(--bg); border-right:1px solid var(--chip-b); padding:14px; overflow:auto; }
-  .mp-list{ display:grid; gap:6px; margin-top:8px }
-  .mp-item{
-    display:flex; align-items:center; gap:10px; padding:12px; border-radius:12px;
-    text-decoration:none; color:var(--ink); border:1px solid var(--chip-b); background:var(--chip);
+  /* ======= NUEVO: Tira de links siempre visible (móvil + PC) ======= */
+  .mp-nav{
+    display:flex;
+    gap:8px;
+    padding:8px 12px;
+    border-top:1px solid var(--chip-b);
+    background:var(--bg);
+    overflow-x:auto;           /* móvil: permite desplazamiento horizontal */
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
   }
-  .mp-item:hover{ border-color:var(--brand); }
-  .mp-item:visited, .mp-item *{ color:inherit !important; }
+  .mp-nav a{
+    white-space:nowrap;
+    color:var(--ink);
+    text-decoration:none;
+    font-weight:600;
+    padding:8px 10px;
+    border-radius:10px;
+    border:1px solid transparent;
+    flex:0 0 auto;            /* chips horizontales */
+  }
+  .mp-nav a:hover{ background:var(--chip); border-color:var(--chip-b); }
 
-  /* Tabs inferiores (móvil) */
+  /* Badge de sección en nav (opcional) */
+  .mp-chip{
+    background:linear-gradient(90deg,var(--brand),var(--brand2));
+    color:#111; font-weight:800; padding:8px 12px; border-radius:999px;
+    flex:0 0 auto;
+  }
+
+  /* Tabs inferiores (móvil) — mantenemos, pero opcional */
   .mp-tabs{ position:sticky; bottom:0; z-index:45; background:var(--bg); border-top:1px solid var(--chip-b); }
   .mp-tabs ul{ display:flex; margin:0; padding:6px; list-style:none; gap:6px }
   .mp-tabs a{
     flex:1; text-align:center; text-decoration:none; padding:8px 6px; border-radius:10px;
     color:var(--ink);
   }
-  .mp-tabs a:visited{ color:var(--ink); }
   .mp-tabs a.active{ background:#111827; border:1px solid var(--brand); color:#fff; }
-  .mp-tabs a.active:visited{ color:#fff; }
 
-  .mp-tabs .t-ico{
-    display:block; font-size:1.2rem; line-height:1; margin-bottom:4px;
-    color:inherit !important; opacity:1 !important;
-  }
-  .mp-tabs a span{
-    display:block; white-space:nowrap;
-    color:inherit !important; opacity:1 !important;
-  }
-  .mp-tabs a.active .t-ico,
-  .mp-tabs a.active span{ color:#fff !important; opacity:1 !important; }
+  .mp-tabs .t-ico{ display:block; font-size:1.2rem; line-height:1; margin-bottom:4px; color:inherit !important; opacity:1 !important; }
+  .mp-tabs a span{ display:block; white-space:nowrap; color:inherit !important; opacity:1 !important; font-size:.9rem; }
+  .mp-tabs a.active .t-ico, .mp-tabs a.active span{ color:#fff !important; opacity:1 !important; }
 
   /* Ocultar tabs en escritorio */
   @media (min-width: 861px){ .mp-tabs{ display:none; } }
 
-  /* 🔧 Fix global: anula background-clip:text y text-fill transparent heredados */
-  .mp-tabs a,
-  .mp-tabs a span,
-  .mp-item,
-  .mp-item * {
+  /* ========= RESET ANTI-GRADIENTE (visibilidad estable) ========= */
+  .mp-tabs a, .mp-tabs a *{
     -webkit-text-fill-color: currentColor !important;
     background: none !important;
     -webkit-background-clip: initial !important;
     background-clip: initial !important;
+    text-shadow: none !important; filter: none !important; opacity: 1 !important;
+  }
+  .mp-tabs a:link, .mp-tabs a:visited, .mp-tabs a:hover, .mp-tabs a:active{
+    color: var(--ink) !important; -webkit-text-fill-color: currentColor !important;
+  }
+  .mp-tabs a.active:link, .mp-tabs a.active:visited, .mp-tabs a.active:hover, .mp-tabs a.active:active{
+    color: #fff !important; -webkit-text-fill-color: #fff !important;
   }
 </style>
 
+<!-- Barra superior -->
 <div class="mp-top" data-mp>
   <div class="mp-bar">
-    <button class="mp-btn" id="mpOpen">☰ Menú</button>
     <div class="mp-title">Panel Profesor</div>
     <div class="mp-spacer"></div>
     <a class="mp-link" href="logout_profesor.php">Salir</a>
   </div>
+
+  <!-- ✅ Menú SIEMPRE VISIBLE (móvil y PC) -->
+  <nav class="mp-nav" aria-label="Menú principal">
+    <span class="mp-chip">☰ Menú</span>
+    <a class="mp-link" href="panel_profesor.php">🏠 Inicio</a>
+    <a class="mp-link" href="registrar_asistencia.php">🧾 Registro del Profesor</a>
+    <a class="mp-link" href="scanner_qr_profesor.php">📷 Escanear Alumnos (QR)</a>
+    <a class="mp-link" href="ver_progreso_alumnos.php">📈 Ver Progreso de Alumnos</a>
+    <a class="mp-link" href="profesor_seguimiento.php">🗂️ Seguimiento de alumnos</a>
+    <a class="mp-link" href="subir_rutina.php">📤 Subir Archivo</a>
+    <a class="mp-link" href="registrar_datos_fisicos.php">📏 Datos Físicos</a>
+    <a class="mp-link" href="ver_datos_fisicos_profesor.php">📄 Ver Datos</a>
+    <a class="mp-link" href="logout_profesor.php">🚪 Cerrar Sesión</a>
+  </nav>
 </div>
 
-<!-- Drawer lateral -->
-<aside class="mp-drawer" id="mpDrawer" aria-hidden="true" data-mp>
-  <div class="mp-dim" id="mpClose" aria-label="Cerrar"></div>
-  <div class="mp-panel">
-    <div style="display:flex; align-items:center; gap:10px">
-      <button class="mp-btn" id="mpClose2">✕</button>
-      <strong style="color:var(--ink)">Menú</strong>
-    </div>
-    <div class="mp-list" role="menu" aria-label="Menú completo">
-      <a class="mp-item" href="panel_profesor.php">🏠 Inicio</a>
-      <a class="mp-item" href="registrar_asistencia.php">🧾 Registro del Profesor</a>
-      <a class="mp-item" href="scanner_qr_profesor.php">📷 Escanear Alumnos (QR)</a>
-      <a class="mp-item" href="ver_progreso_alumnos.php">📈 Ver Progreso de Alumnos</a>
-      <a class="mp-item" href="profesor_seguimiento.php">🗂️ Seguimiento de alumnos</a>
-      <a class="mp-item" href="subir_rutina.php">📤 Subir Archivo</a>
-      <a class="mp-item" href="registrar_datos_fisicos.php">📏 Datos Físicos</a>
-      <a class="mp-item" href="ver_datos_fisicos_profesor.php">📄 Ver Datos</a>
-      <a class="mp-item" href="logout_profesor.php">🚪 Cerrar Sesión</a>
-    </div>
-  </div>
-</aside>
-
-<!-- Tabs inferiores (móvil) -->
+<!-- Tabs inferiores (móvil) — opcional, podés borrar este bloque si no los querés -->
 <nav class="mp-tabs" data-mp aria-label="Accesos rápidos">
   <ul>
     <li><a href="panel_profesor.php"><span class="t-ico">🏠</span><span>Inicio</span></a></li>
@@ -112,25 +113,3 @@
     <li><a href="ver_progreso_alumnos.php"><span class="t-ico">📈</span><span>Progreso</span></a></li>
   </ul>
 </nav>
-
-<script>
-  // Abrir/cerrar drawer
-  const d=document, drawer=d.getElementById('mpDrawer');
-  d.getElementById('mpOpen')?.addEventListener('click', ()=>{
-    drawer.classList.add('show'); drawer.setAttribute('aria-hidden','false');
-  });
-  function closeDrawer(){
-    drawer.classList.remove('show'); drawer.setAttribute('aria-hidden','true');
-  }
-  d.getElementById('mpClose')?.addEventListener('click', closeDrawer);
-  d.getElementById('mpClose2')?.addEventListener('click', closeDrawer);
-
-  // Activo según URL
-  (function markActive(){
-    const cur = location.pathname.split('/').pop().toLowerCase();
-    d.querySelectorAll('.mp-item, .mp-tabs a').forEach(a=>{
-      const href = (a.getAttribute('href')||'').split('/').pop().toLowerCase();
-      if (href && href===cur) a.classList.add('active');
-    });
-  })();
-</script>

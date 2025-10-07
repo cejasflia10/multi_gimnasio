@@ -95,7 +95,7 @@ function gem_call_with_cache(string $apiKey, string $payload_b64, string $mime, 
     CURLOPT_HTTPHEADER     => ['Content-Type: application/json','X-goog-api-key: '.$apiKey],
     CURLOPT_POSTFIELDS     => $json_payload,
     CURLOPT_TIMEOUT        => 30,
-    CURLOPT_HEADER         => true, // para leer headers y Retry-After
+    CURLOPT_HEADER         => true,
   ]);
   $resp = curl_exec($ch);
   $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
@@ -105,12 +105,10 @@ function gem_call_with_cache(string $apiKey, string $payload_b64, string $mime, 
   curl_close($ch);
 
   if ($code === 200) {
-    // cachear éxito
     @file_put_contents($file, $body);
     return ['ok'=>true, 'data'=>json_decode($body,true), 'cached'=>false, 'retry_after'=>0];
   }
 
-  // Lee Retry-After si viene (segundos)
   $retryAfter = 0;
   foreach (explode("\r\n", $rawH) as $h) {
     if (stripos($h, 'Retry-After:') === 0) { $retryAfter = (float)trim(substr($h, 12)); break; }
@@ -129,8 +127,8 @@ if (!$cliente_id || !$gimnasio_id) {
   exit;
 }
 
-/* ---------- Cliente (SELECT dinámico según columnas existentes) ---------- */
-$cols = ['apellido','nombre'];                 // básicas
+/* ---------- Cliente (SELECT dinámico) ---------- */
+$cols = ['apellido','nombre'];
 $has_altura_cm = hcol($conexion,'clientes','altura_cm');
 $has_altura    = hcol($conexion,'clientes','altura');
 $has_peso      = hcol($conexion,'clientes','peso');
@@ -143,7 +141,6 @@ $sqlCliente = "SELECT ".implode(', ', $cols)." FROM clientes WHERE id=? AND gimn
 $st = prepare_or_fail($conexion, $sqlCliente, 'cliente_select');
 $st->bind_param("ii", $cliente_id, $gimnasio_id);
 
-/* variables para bind_result dinámico */
 $apellido = $nombre = '';
 $altura_cm = $altura = $peso_cli = null;
 
@@ -166,26 +163,20 @@ if (!$found) {
 }
 $nombre_cliente = trim(($apellido ?? '') . ' ' . ($nombre ?? ''));
 
-/* Altura -> metros (acepta altura_cm o altura si existen) */
+/* Altura -> metros */
 $altura_raw = $altura_cm ?? $altura;
 $altura_m = ($altura_raw !== null && (float)$altura_raw > 0)
   ? ((float)$altura_raw > 3 ? ((float)$altura_raw / 100.0) : (float)$altura_raw)
   : 1.70;
 
-/* ================= PROGRESO (form_progreso) ==================
-   Traigo los últimos 2 registros de progreso_cliente para calcular:
-   - peso de HOY (si hay)
-   - peso ANTERIOR (previo a hoy)
-   - tendencia: sube/baja/mantiene
-   - calorías/duración de hoy si están cargadas
-===============================================================*/
-$prog_tbl = 'progreso_cliente';
+/* ================= PROGRESO ================== */
+$prog_tbl  = 'progreso_cliente';
 $prog_date = first_col($conexion, $prog_tbl, ['fecha','created_at','fecha_registro','dia','id'], false) ?: 'id';
 $prog_cli  = first_col($conexion, $prog_tbl, ['cliente_id','id_cliente'], false);
 $prog_gym  = first_col($conexion, $prog_tbl, ['gimnasio_id','id_gimnasio'], false);
-$prog_pesos = existing_cols($conexion, $prog_tbl, ['peso_despues','peso_fin','peso_post','peso'], false);
-$prog_kcal  = first_col($conexion, $prog_tbl, ['calorias_estimadas','calorias_quemadas','kcal','calorias','calorias_ejercicio'], false);
-$prog_dur   = first_col($conexion, $prog_tbl, ['duracion','tiempo','minutos','dur_min'], false);
+$prog_pesos= existing_cols($conexion, $prog_tbl, ['peso_despues','peso_fin','peso_post','peso'], false);
+$prog_kcal = first_col($conexion, $prog_tbl, ['calorias_estimadas','calorias_quemadas','kcal','calorias','calorias_ejercicio'], false);
+$prog_dur  = first_col($conexion, $prog_tbl, ['duracion','tiempo','minutos','dur_min'], false);
 
 try { $tz = new DateTimeZone('America/Argentina/San_Luis'); }
 catch(Throwable $e){ $tz = new DateTimeZone('America/Argentina/Buenos_Aires'); }
@@ -195,7 +186,7 @@ $peso_hoy = null; $peso_prev = null; $fecha_peso_hoy=null; $fecha_peso_prev=null
 $dur_hoy = null; $kcal_hoy = null;
 
 if ($prog_cli && $prog_gym && !empty($prog_pesos)) {
-  // 1) último registro de HOY (si existe)
+  // 1) HOY
   $selPeso = 'COALESCE('.implode(', ', array_map(fn($c)=>"`$c`", $prog_pesos)).') AS p';
   $sqlPH = "SELECT $selPeso, `$prog_date`".
           ($prog_kcal? ", COALESCE(`$prog_kcal`,0) AS kcal": "").
@@ -216,7 +207,7 @@ if ($prog_cli && $prog_gym && !empty($prog_pesos)) {
   }
   $st->close();
 
-  // 2) registro anterior (el último ANTES de hoy)
+  // 2) anterior a hoy
   $sqlPP = "SELECT $selPeso, `$prog_date` FROM `$prog_tbl`
             WHERE `$prog_cli`=? AND `$prog_gym`=? AND DATE(`$prog_date`)<? 
             ORDER BY `$prog_date` DESC LIMIT 1";
@@ -231,12 +222,11 @@ if ($prog_cli && $prog_gym && !empty($prog_pesos)) {
   $st->close();
 }
 
-/* ---------- Peso de referencia ---------- */
+/* Peso de referencia */
 $peso_ref = null;
 if ($peso_hoy && $peso_hoy > 0) {
   $peso_ref = $peso_hoy;
 } else {
-  // último registro global
   if ($prog_cli && $prog_gym && !empty($prog_pesos)) {
     $selPeso = 'COALESCE('.implode(', ', array_map(fn($c)=>"`$c`", $prog_pesos)).') AS p';
     $sqlLast = "SELECT $selPeso FROM `$prog_tbl` WHERE `$prog_cli`=? AND `$prog_gym`=? ORDER BY `$prog_date` DESC LIMIT 1";
@@ -252,7 +242,7 @@ if ($peso_hoy && $peso_hoy > 0) {
   }
 }
 
-/* ---------- Objetivos ---------- */
+/* Objetivos */
 $imc = ($altura_m > 0) ? round($peso_ref / ($altura_m*$altura_m), 1) : 0.0;
 $objetivo = strtolower(trim($_GET['objetivo'] ?? ''));
 if (!in_array($objetivo, ['bajar peso','mantener','subir peso'], true)) {
@@ -266,7 +256,7 @@ $proteinas_obj = (int)round($peso_ref * $prot_gkg);
 $kcal_base = (int)round($peso_ref * 30);
 $kcal_obj  = $kcal_base + (($objetivo === 'subir peso') ? +300 : (($objetivo === 'bajar peso') ? -400 : 0));
 
-/* ============= TENDENCIA DE PESO: sube / baja / mantiene ============= */
+/* Tendencia */
 $tend_text = '—'; $tend_cls=''; $delta_str=''; $peso_mostrar = $peso_hoy ?: $peso_ref;
 if ($peso_hoy !== null && $peso_prev !== null) {
   $delta = round($peso_hoy - $peso_prev, 2);
@@ -278,8 +268,8 @@ if ($peso_hoy !== null && $peso_prev !== null) {
   $tend_text='—'; $tend_cls='muted'; $delta_str='(primer registro reciente)';
 }
 
-/* ---------- Gemini (API Key — SE MANTIENE, NO LA TOCO) ---------- */
-$apiKey = 'AIzaSyDVMv4gliTqbrHqdgNcql7P8eP8jQL7Iwo'; // <-- TU CLAVE AQUÍ
+/* ---------- Gemini (API Key) ---------- */
+$apiKey = 'AIzaSyDVMv4gliTqbrHqdgNcql7P8eP8jQL7Iwo'; // <-- tu clave
 
 $resultado_modelo = '';
 $error_modelo = '';
@@ -289,12 +279,11 @@ $sug_porcion_cant = null;
 $sug_porcion_uni  = null;
 $kcal_por_100g    = null;
 $gem_json_bruto   = '';
-$retry_after_ui   = 0; // para countdown en UI
+$retry_after_ui   = 0;
 
-/* ---------- Procesar imagen con Gemini (CACHE + 429 + rate-limit sesión) ---------- */
+/* Procesar imagen */
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['imagen_base64'])) {
-  // Rate limit de sesión (evita ráfagas)
-  $minGap = 3.0; // segundos
+  $minGap = 3.0;
   $now = microtime(true);
   if (!isset($_SESSION['last_gem_call'])) $_SESSION['last_gem_call'] = 0;
   if (($now - $_SESSION['last_gem_call']) < $minGap) {
@@ -309,7 +298,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['imagen_base64'])) {
     if (!$apiKey) {
       $error_modelo = "⚠️ Falta configurar GEMINI_API_KEY en el servidor.";
     } elseif (!function_exists('curl_init')) {
-      $error_modelo = "⚠️ cURL no está habilitado en el servidor. Activá la extensión php-curl.";
+      $error_modelo = "⚠️ cURL no está habilitado en el servidor. Activá php-curl.";
     } else {
       $prompt = "Analiza la imagen de comida y devuelve SOLO un JSON minificado (sin texto extra) con este esquema:
 {
@@ -323,7 +312,7 @@ Responde únicamente el JSON, sin backticks, sin explicación.";
 
       if (!$res['ok']) {
         if (($res['code'] ?? 0) == 429) {
-          $retry_after_ui = (int)ceil($res['retry_after'] ?: 20); // fallback 20s si no viene
+          $retry_after_ui = (int)ceil($res['retry_after'] ?: 20);
           $error_modelo = "Límite temporal alcanzado. Esperá " . $retry_after_ui . " s y probá de nuevo.";
         } else {
           $error_modelo = "No se pudo procesar la imagen (HTTP ".($res['code'] ?? '?')."). ".$res['message'];
@@ -346,7 +335,6 @@ Responde únicamente el JSON, sin backticks, sin explicación.";
             if (isset($parsed['porcion_sugerida']['unidad']))   $sug_porcion_uni  = strtolower((string)$parsed['porcion_sugerida']['unidad']);
             $resultado_modelo = "Detectado: {$nombre_detectado}. kcal/porción aprox: {$kcal_detectadas}".($sug_porcion_cant? " | Porción sugerida: {$sug_porcion_cant} ".h($sug_porcion_uni):"");
           } else {
-            // Fallback a texto libre
             $resultado_modelo = $texto;
             if (preg_match('/(\d{2,5})\s?k?cal/i', $texto, $m)) $kcal_detectadas = (int)$m[1];
             if (preg_match('/^(.{3,80}?)(?:\s+(?:contiene|tiene|aprox|aprox\.|≈))/iu', $texto, $n)) {
@@ -363,9 +351,7 @@ Responde únicamente el JSON, sin backticks, sin explicación.";
   }
 }
 
-/* =============================================================================
-   REGISTRO_COMIDAS (mapa dinámico + creación si no existe)
-   ========================================================================== */
+/* ===================== REGISTRO_COMIDAS ====================== */
 $tbl = 'registro_comidas';
 $rc = [
   'id'     => first_col($conexion,$tbl,['id']),
@@ -378,7 +364,6 @@ $rc = [
   'total'  => first_col($conexion,$tbl,['total_calorias','kcal_total','total_kcal','total'])
 ];
 
-/* Si la tabla NO existe en absoluto, la creamos con el estándar */
 $resTabla = $conexion->query("SHOW TABLES LIKE '{$tbl}'");
 if (!$resTabla || !$resTabla->num_rows) {
   $conexion->query("CREATE TABLE IF NOT EXISTS registro_comidas (
@@ -392,7 +377,6 @@ if (!$resTabla || !$resTabla->num_rows) {
     total_calorias DECIMAL(10,2) NOT NULL,
     INDEX idx_cli_gym_fecha (cliente_id, gimnasio_id, fecha)
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;");
-  // Remapea después de crear:
   $rc = [
     'id'     => '`id`',
     'cli'    => '`cliente_id`',
@@ -404,14 +388,12 @@ if (!$resTabla || !$resTabla->num_rows) {
     'total'  => '`total_calorias`'
   ];
 }
-
-/* Verificación mínima para poder operar */
 if (!$rc['cli'] || !$rc['gym'] || !$rc['fecha']) {
-  echo "<div style='color:#ff6b6b; padding:12px'>⚠️ La tabla '{$tbl}' no tiene columnas de relación (cliente/gimnasio/fecha). No se puede continuar.</div>";
+  echo "<div style='color:#ff6b6b; padding:12px'>⚠️ La tabla '{$tbl}' no tiene columnas de relación (cliente/gimnasio/fecha).</div>";
   exit;
 }
 
-/* ---------- Guardar comida ---------- */
+/* Guardar comida */
 $mensaje_guardado = '';
 if (isset($_POST['guardar']) && isset($_POST['nombre'], $_POST['porciones'], $_POST['calorias'])) {
   $nombre = trim((string)$_POST['nombre']);
@@ -443,7 +425,7 @@ if (isset($_POST['guardar']) && isset($_POST['nombre'], $_POST['porciones'], $_P
   }
 }
 
-/* ---------- Totales y listado del día ---------- */
+/* Totales y listado del día */
 $consumidas_hoy = 0.0;
 if ($rc['total']) {
   $sqlSum = "SELECT COALESCE(SUM({$rc['total']}),0) AS t FROM `{$tbl}` WHERE {$rc['cli']}=? AND {$rc['gym']}=? AND DATE({$rc['fecha']})=?";
@@ -495,22 +477,34 @@ while ($st->fetch()) {
 }
 $st->close();
 
-/* Quemadas hoy (dinámico por columnas en progreso_cliente) */
+/* ========= CALORÍAS QUEMADAS HOY (FIX backticks duplicados) ========= */
 $quemadas_hoy = 0.0;
 if ($prog_cli && $prog_gym) {
-  $calCols = existing_cols($conexion, $prog_tbl, ['calorias_estimadas','calorias_quemadas','kcal','calorias','calorias_ejercicio']);
+  // columnas sin backticks
+  $calCols = existing_cols(
+    $conexion,
+    $prog_tbl,
+    ['calorias_estimadas','calorias_quemadas','kcal','calorias','calorias_ejercicio'],
+    false
+  );
   if (!empty($calCols)) {
-    $sumExpr = 'COALESCE('.implode(', ', array_map(fn($c)=>"`$c`", $calCols)).',0)';
-    $conds   = ["`$prog_cli` = ?", "`$prog_gym` = ?", "DATE(`$prog_date`) = ?"];
-    $types='iis'; $vars=[$cliente_id, $gimnasio_id, $hoy];
+    // tomamos por fila la primera no nula; si querés sumar todas, ver comentario más abajo
+    $wrapped    = array_map(fn($c)=>"`$c`", $calCols);
+    $perRowExpr = 'COALESCE(' . implode(', ', $wrapped) . ', 0)';
 
-    $sql = "SELECT COALESCE(SUM($sumExpr),0) AS t FROM `$prog_tbl` WHERE ".implode(' AND ', $conds);
+    $sql = "SELECT COALESCE(SUM($perRowExpr),0) AS t
+            FROM `$prog_tbl`
+            WHERE `$prog_cli` = ? AND `$prog_gym` = ? AND DATE(`$prog_date`) = ?";
+
     $st = prepare_or_fail($conexion, $sql, 'sum_quemadas');
-    bind_params($st, $types, $vars);
+    $st->bind_param("iis", $cliente_id, $gimnasio_id, $hoy);
     $st->execute();
     $st->bind_result($t_quem);
     if ($st->fetch()) $quemadas_hoy = (float)$t_quem;
     $st->close();
+
+    // Si preferís SUMAR todas las columnas cuando estén, reemplazá $perRowExpr por:
+    // $perRowExpr = implode(' + ', array_map(fn($c)=>"COALESCE(`$c`,0)", $calCols));
   }
 }
 
@@ -603,13 +597,12 @@ $estado_neto  = ($balance_neto > 250) ? 'Superávit' : (($balance_neto < -250) ?
       <?php $pct = max(0, min(100, $kcal_obj>0 ? round($consumidas_hoy*100/$kcal_obj) : 0)); ?>
       <div class="progress"><span style="width:<?= $pct ?>%"></span></div>
 
-      <!-- Mostrar ejercicios de hoy si existen -->
       <?php
         $ejercicios_hoy = [];
         if ($prog_cli && $prog_gym) {
-          $ejCol = first_col($conexion, $prog_tbl, ['ejercicios','ejercicio','detalle','actividad','ejercicio_detalle','actividad_realizada','nombre_ejercicio'], false);
-          $calEjCol = $prog_kcal ?: first_col($conexion, $prog_tbl, ['calorias_ejercicio','kcal_ejercicio'], false);
-          $durCol = $prog_dur;
+          $ejCol   = first_col($conexion, $prog_tbl, ['ejercicios','ejercicio','detalle','actividad','ejercicio_detalle','actividad_realizada','nombre_ejercicio'], false);
+          $calEjCol= $prog_kcal ?: first_col($conexion, $prog_tbl, ['calorias_ejercicio','kcal_ejercicio'], false);
+          $durCol  = $prog_dur;
           if ($ejCol || $calEjCol || $durCol) {
             $sel = [];
             $sel[] = ($ejCol ? "`$ejCol`" : "''") . " AS `ejercicio`";
@@ -697,7 +690,7 @@ $estado_neto  = ($balance_neto > 250) ? 'Superávit' : (($balance_neto < -250) ?
         <p class="muted">Tomá una foto o subí una imagen para analizar la comida.</p>
       <?php endif; ?>
 
-      <!-- Bloque: Lo que consumiste -->
+      <!-- Lo que consumiste -->
       <div class="form-mini" style="margin-top:8px">
         <div class="full">
           <label>Cantidad consumida <span class="hint">(opcional — usa la sugerencia o ajustá)</span></label>
@@ -852,7 +845,7 @@ $estado_neto  = ($balance_neto > 250) ? 'Superávit' : (($balance_neto < -250) ?
     if (stream) stream.getTracks().forEach(function(t){ t.stop(); });
   });
 
-  // ======== Lógica "escaneo" aplicado al formulario ========
+  // ======== Aplicar sugerencia al form ========
   var btnAplicar = document.getElementById('btnAplicarSugerencia');
   var cant = document.getElementById('cantConsumida');
   var unidad = document.getElementById('unidadConsumida');
@@ -875,7 +868,6 @@ $estado_neto  = ($balance_neto > 250) ? 'Superávit' : (($balance_neto < -250) ?
     var cantidad = parseFloat(cant.value || sugPorcionCant || 0);
     var u = unidad.value || 'g';
 
-    // A) kcal/porción + porción sugerida -> escalar porciones
     if (kcalPorPorcion && sugPorcionCant && u === (sugPorcionUni || u)) {
       var porciones = cantidad > 0 ? (cantidad / sugPorcionCant) : 1;
       if (!isFinite(porciones) || porciones <= 0) porciones = 1;
@@ -883,14 +875,12 @@ $estado_neto  = ($balance_neto > 250) ? 'Superávit' : (($balance_neto < -250) ?
       campoKcal.value = parseInt(kcalPorPorcion, 10);
       return;
     }
-    // B) kcal/100g y unidad g/ml -> calcular cal/porción para esa cantidad
     if (kcal100g && (u === 'g' || u === 'ml') && cantidad > 0) {
       var kcalTotal = (kcal100g * (cantidad / 100.0));
       campoPorciones.value = "1.00";
       campoKcal.value = Math.max(1, Math.round(kcalTotal));
       return;
     }
-    // C) fallback
     if (kcalPorPorcion) {
       campoPorciones.value = "1.00";
       campoKcal.value = parseInt(kcalPorPorcion, 10);
@@ -899,7 +889,7 @@ $estado_neto  = ($balance_neto > 250) ? 'Superávit' : (($balance_neto < -250) ?
   }
   if (btnAplicar) btnAplicar.addEventListener('click', aplicarSugerencia);
 
-  // ======== Countdown si hubo 429 (Retry-After) ========
+  // ======== Countdown si hubo 429 ========
   (function(){
     var box = document.getElementById('retryBox');
     if(!box) return;

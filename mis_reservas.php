@@ -1,6 +1,8 @@
 <?php
+
 include 'conexion.php';
 session_start();
+require __DIR__ . '/menu_cliente.php';
 
 $cliente_id = $_SESSION['cliente_id'] ?? 0;
 if (!$cliente_id) {

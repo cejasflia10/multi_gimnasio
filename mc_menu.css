@@ -1,0 +1,56 @@
+/* mc_menu.css — Menú unificado con namespace */
+/* Reset mínimo dentro del scope */
+.mc-scope, .mc-scope * { box-sizing: border-box; font-family: system-ui,-apple-system,Segoe UI,Roboto,sans-serif; }
+
+/* Paleta */
+.mc-scope.mc-dark { --bg:#0b1220; --ink:#e5e7eb; --mut:#94a3b8; --chip:#111827; --chip-b:#334155; --brand:#22d3ee; --brand2:#06b6d4; }
+.mc-scope.mc-light{ --bg:#ffffff; --ink:#0f172a; --mut:#475569; --chip:#f1f5f9; --chip-b:#cbd5e1; --brand:#14b8a6; --brand2:#06b6d4; }
+
+/* Contenedor evita que otros layouts lo tapen */
+.mc-scope .mc-top{
+  position: sticky; top:0; z-index: 1000;
+  background: var(--bg);
+  border-bottom:1px solid var(--chip-b);
+  display:flex; justify-content:space-between; align-items:center;
+  padding:8px 14px;
+}
+
+/* Links del tope */
+.mc-scope .mc-links a{
+  display:inline-block;
+  color:var(--ink);
+  text-decoration:none;
+  font-weight:600;
+  padding:8px 12px;
+  border-radius:8px;
+  transition:background .2s,color .2s;
+}
+.mc-scope .mc-links a:hover{ background:var(--brand); color:#000; }
+
+/* Botón hamburguesa */
+.mc-scope .mc-menu-btn{
+  background: linear-gradient(90deg, var(--brand2), var(--brand));
+  color:#000; font-weight:800; border:0; border-radius:999px;
+  padding:10px 18px; cursor:pointer; display:flex; align-items:center; gap:6px;
+}
+
+/* Menú inferior de íconos */
+.mc-scope .mc-icons{
+  display:flex; justify-content:center; gap:28px;
+  padding:10px 0; background:var(--bg); border-bottom:1px solid var(--chip-b);
+}
+.mc-scope .mc-it{ text-decoration:none; color:var(--ink); display:flex; flex-direction:column; align-items:center; gap:4px; transition:color .2s, transform .2s; }
+.mc-scope .mc-it:hover{ color:var(--brand); transform: translateY(-1px); }
+.mc-scope .mc-emoji{ font-size:22px; line-height:1; }
+.mc-scope .mc-lb{ font-size:13px; }
+
+/* Móvil */
+@media (max-width: 768px){
+  .mc-scope .mc-top{ flex-direction:column; gap:8px; }
+  .mc-scope .mc-links{ display:none; width:100%; text-align:center; }
+  .mc-scope .mc-links.is-open{ display:block; }
+  .mc-scope .mc-icons{ gap:18px; }
+}
+
+/* Dureza de color (evita que otros CSS lo cambien) */
+.mc-scope .mc-top, .mc-scope .mc-icons, .mc-scope .mc-links a, .mc-scope .mc-it { color: var(--ink) !important; }

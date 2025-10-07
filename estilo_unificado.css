@@ -265,3 +265,174 @@ a:hover {
     margin: auto;
   }
 }
+/* ====== COMPAT MENÚ PROFESOR (.mp-*) con estilo_unificado.css ====== */
+/* No toques nada arriba: esto va al FINAL del archivo para tener prioridad */
+
+.mp-wrap, .mp-wrap * {
+  box-sizing: border-box;
+  font-family: system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Arial !important;
+}
+
+/* Paleta propia del menú */
+:root {
+  --mp-bg:#0b1220; --mp-ink:#e5e7eb; --mp-chip:#111827; --mp-b:#334155;
+  --mp-brand:#22d3ee; --mp-brand2:#06b6d4;
+}
+
+/* Contenedor fijo/pegajoso arriba y por encima */
+.mp-wrap{
+  position: sticky; top: 0; z-index: 2147483647;
+  background: var(--mp-bg);
+  border-bottom: 1px solid var(--mp-b);
+  color: var(--mp-ink);
+}
+
+/* Fila superior */
+.mp-row{
+  max-width: 1200px; margin: 0 auto; padding: 10px 12px;
+  display:flex; align-items:center; gap:10px;
+}
+.mp-title{ font-weight: 800; letter-spacing: .2px; }
+.mp-spacer{ flex: 1; }
+
+/* Enlaces de cabecera (Salir) – neutralizan el dorado global de a{} */
+.mp-toplink{
+  color: var(--mp-ink) !important;
+  text-decoration: none !important;
+  font-weight: 700 !important;
+  padding: 6px 10px !important; border-radius: 8px !important;
+  background: transparent !important; border: 0 !important;
+}
+.mp-toplink:hover{ background: var(--mp-chip) !important; }
+
+/* Tira de navegación horizontal */
+.mp-nav{
+  display:flex; align-items:center; gap:8px;
+  padding:8px 12px; border-top:1px solid var(--mp-b);
+  background: var(--mp-bg);
+  overflow-x:auto; -webkit-overflow-scrolling:touch; scrollbar-width:thin;
+}
+
+/* Chip "☰ Menú" */
+.mp-chip{
+  background: linear-gradient(90deg,var(--mp-brand),var(--mp-brand2)) !important;
+  color:#111 !important; font-weight:800 !important;
+  padding:8px 12px !important; border-radius:999px !important;
+  text-decoration:none !important; white-space:nowrap !important;
+  flex: 0 0 auto !important;
+}
+
+/* Botones: DOS LÍNEAS exactas, todos iguales */
+.mp-btn{
+  color: var(--mp-ink) !important;
+  background: var(--mp-chip) !important;
+  border: 1px solid var(--mp-b) !important;
+  border-radius: 10px !important;
+  text-decoration: none !important;
+
+  display: -webkit-box !important;        /* line clamp */
+  -webkit-box-orient: vertical !important;
+  -webkit-line-clamp: 2 !important;       /* <= dos líneas */
+  overflow: hidden !important;
+  white-space: normal !important;
+  text-align: center !important;
+
+  font-size: 14px !important; font-weight: 700 !important; letter-spacing: .2px !important;
+  width: 210px !important; height: 56px !important; line-height: 1.15 !important;
+  padding: 8px 10px !important;
+  flex: 0 0 auto !important;
+}
+.mp-btn:hover{ border-color: var(--mp-brand) !important; }
+
+/* Activo */
+.mp-btn.active{
+  border-color: var(--mp-brand) !important;
+  outline: 2px solid rgba(34,211,238,.35) !important;
+}
+
+/* 🔒 Neutraliza estilos globales que podrían "pintar" el menú */
+.mp-wrap a, .mp-wrap a *{
+  color: inherit !important;              /* ignora a{ color: #ffd600 } global */
+  -webkit-text-fill-color: currentColor !important;
+  background: none !important;            /* sin gradientes heredados */
+  -webkit-background-clip: initial !important;
+  background-clip: initial !important;
+  text-shadow: none !important;
+  filter: none !important; opacity: 1 !important;
+}
+/* Evita que .contenedor, table, etc. afecten al menú */
+.mp-wrap table, .mp-wrap .contenedor { all: unset; } /* el menú no usa estas estructuras */
+/* ====== /COMPAT MENÚ ====== */
+/* === HOTFIX VISIBILIDAD TEXTO MENÚ (.mp-*) === */
+.mp-wrap a,
+.mp-wrap a *{
+  color: var(--mp-ink) !important;                 /* texto claro por defecto */
+  -webkit-text-fill-color: var(--mp-ink) !important;
+  text-shadow: none !important;
+  filter: none !important;
+  opacity: 1 !important;
+  background: none !important;                     /* evita text-gradient */
+  -webkit-background-clip: initial !important;
+  background-clip: initial !important;
+}
+
+/* Asegura todos los estados del link */
+.mp-wrap a:link,
+.mp-wrap a:visited,
+.mp-wrap a:hover,
+.mp-wrap a:active{
+  color: var(--mp-ink) !important;
+  -webkit-text-fill-color: var(--mp-ink) !important;
+}
+
+/* El chip de título (☰ Menú) usa texto oscuro sobre fondo celeste */
+.mp-chip,
+.mp-chip *{
+  color: #111 !important;
+  -webkit-text-fill-color: #111 !important;
+}
+
+/* Por si alguna regla global baja la opacidad del contenedor */
+.mp-wrap{ opacity: 1 !important; }
+/* === ULTRA-HOTFIX: texto visible SIEMPRE en el menú (.mp-wrap) === */
+.mp-wrap, .mp-wrap *{
+  /* Color y fill sólidos */
+  color: var(--mp-ink) !important;
+  -webkit-text-fill-color: var(--mp-ink) !important;
+
+  /* Quita cualquier truco de texto con gradientes */
+  background: none !important;
+  background-image: none !important;
+  -webkit-background-clip: initial !important;
+  background-clip: initial !important;
+
+  /* Nada de mezclas ni filtros raros */
+  mix-blend-mode: normal !important;
+  filter: none !important;
+  text-shadow: none !important;
+
+  /* Evita “parpadeos” por animaciones/transiciones heredadas */
+  animation: none !important;
+  transition: none !important;
+
+  /* Asegura opacidad plena */
+  opacity: 1 !important;
+}
+
+/* Estados del link forzados (por si hay reglas globales) */
+.mp-wrap a:link,
+.mp-wrap a:visited,
+.mp-wrap a:hover,
+.mp-wrap a:active,
+.mp-wrap a *,
+.mp-wrap a:hover *{
+  color: var(--mp-ink) !important;
+  -webkit-text-fill-color: var(--mp-ink) !important;
+}
+
+/* Botón “☰ Menú” necesita texto oscuro sobre celeste */
+.mp-chip,
+.mp-chip *{
+  color: #111 !important;
+  -webkit-text-fill-color: #111 !important;
+}

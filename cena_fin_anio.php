@@ -1,7 +1,6 @@
 <?php
 if (session_status() === PHP_SESSION_NONE) session_start();
 require_once __DIR__ . '/conexion.php';
-require_once __DIR__.'/menu_cliente.php';
 
 if (!isset($conexion) || !($conexion instanceof mysqli)) { http_response_code(500); exit('❌ Sin conexión a BD'); }
 if (function_exists('mysqli_report')) { mysqli_report(MYSQLI_REPORT_OFF); }
@@ -28,28 +27,15 @@ $stmt->execute();
 $evento = $stmt->get_result()->fetch_assoc();
 $stmt->close();
 
-if (!$evento) {
-  echo '<div style="padding:16px; font-family:system-ui">
-          <h2>🍽️ Cena de Fin de Año</h2>
-          <p>Aún no hay un evento de cena activo configurado para tu gimnasio.</p>
-          <p>Pedile al administrador que lo cargue en <code>cenas_eventos</code>.</p>
-        </div>';
-  exit;
-}
+$cupo_disponible = $evento ? max(0, (int)$evento['cupo_total'] - (int)$evento['cupo_reservado']) : 0;
+$precio_cubierto = $evento ? (float)$evento['precio_cubierto'] : 0.0;
+$sena_minima     = $evento ? (float)$evento['sena_minima']     : 0.0;
 
-$cupo_disponible = max(0, (int)$evento['cupo_total'] - (int)$evento['cupo_reservado']);
-$precio_cubierto = (float)$evento['precio_cubierto'];
-$sena_minima     = (float)$evento['sena_minima'];
-
-/* Generar slots cada 30' de 10:00 a 00:00 */
+/* Slots 30' 10:00–24:00 */
 function build_slots(): array {
-  $slots = [];
-  $start = strtotime('10:00');
-  $end   = strtotime('24:00'); // incluye 00:00
-  for ($t=$start; $t <= $end; $t += 30*60) {
-    $slots[] = date('H:i', $t);
-  }
-  return $slots;
+  $out=[]; $t=strtotime('10:00'); $end=strtotime('24:00');
+  while($t<$end){ $out[]=date('H:i',$t); $t+=30*60; }
+  return $out;
 }
 $slots = build_slots();
 ?>
@@ -59,58 +45,131 @@ $slots = build_slots();
   <meta charset="utf-8">
   <title>Cena de Fin de Año</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <link rel="stylesheet" href="estilo_unificado.css">
+
   <style>
-    body{font-family:system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif;background:#0f1320;color:#fff;margin:0}
-    .wrap{max-width:980px;margin:24px auto;padding:16px}
-    .card{background:#141a2a;border:1px solid #222a40;border-radius:14px;padding:20px;box-shadow:0 6px 26px rgba(0,0,0,.25)}
-    .h1{font-size:26px;margin:0 0 10px}
-    .grid{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+    /* =========================================================
+       OVERRIDES DUROS PARA EL MENÚ (barra + drawer + dropdown)
+       — Fuerzan fondo oscuro/vidriado y texto blanco.
+       — Cubren nombres de clases típicos y genéricos.
+       ========================================================= */
+
+    /* Barra superior */
+    header, .mc-top, .navbar, nav.site-nav, .topbar {
+      background: rgba(15,19,32,.78) !important;
+      -webkit-backdrop-filter: blur(10px) saturate(1.1);
+      backdrop-filter: blur(10px) saturate(1.1);
+      border-bottom: 1px solid rgba(255,255,255,.14) !important;
+    }
+    header *, .mc-top *, .navbar *, nav.site-nav *, .topbar * {
+      color:#fff !important;
+      -webkit-text-fill-color:#fff !important;
+      text-shadow:none !important;
+      background: transparent !important;
+      -webkit-background-clip: initial !important;
+      background-clip: initial !important;
+    }
+
+    /* Contenedores de menú desplegable / lateral / offcanvas */
+    .mc-drawer, .mc-menu, .mc-dropdown, .dropdown-menu, .offcanvas, .offcanvas-body,
+    aside.menu, nav .menu, [role="menu"], .sidebar, .drawer, .drawer-content {
+      background: rgba(10,12,20,.92) !important;
+      -webkit-backdrop-filter: blur(12px) saturate(1.1);
+      backdrop-filter: blur(12px) saturate(1.1);
+      border: 1px solid rgba(255,255,255,.18) !important;
+      box-shadow: 0 10px 30px rgba(0,0,0,.4) !important;
+    }
+
+    /* Items del menú (links, botones, li) */
+    .mc-item, .mc-link, .mc-btn, .dropdown-item, .menu a, .menu li, .drawer a, .sidebar a,
+    .mc-item *, .dropdown-item *, .menu a *, .drawer a *, .sidebar a * {
+      color:#fff !important;
+      -webkit-text-fill-color:#fff !important;
+      background: transparent !important;
+      border-color: rgba(255,255,255,.18) !important;
+    }
+    .mc-item, .dropdown-item, .menu a, .drawer a, .sidebar a {
+      border:1px solid rgba(255,255,255,.18) !important;
+      border-radius:14px !important;
+    }
+    .mc-item:hover, .dropdown-item:hover, .menu a:hover, .drawer a:hover, .sidebar a:hover {
+      background: rgba(255,255,255,.10) !important;
+      border-color: rgba(255,255,255,.28) !important;
+      color:#fff !important;
+    }
+    /* Iconos del menú */
+    .mc-item .icon, .mc-item svg, .dropdown-item svg, .menu svg, .drawer svg, .sidebar svg {
+      color:#fff !important; fill:#fff !important; stroke:#fff !important;
+    }
+
+    /* Botón flotante de abrir/cerrar menú (si existe) */
+    .mc-bar .mc-btn, .menu-toggle, .nav-toggle {
+      background:#ffd600 !important; color:#000 !important; border:none !important;
+    }
+
+    /* ===== Estilos mínimos propios de esta pantalla ===== */
+    .contenedor{max-width:980px;margin:24px auto;padding:16px}
+    .glass.card{background:#141a2a;border:1px solid #222a40;border-radius:14px;padding:20px;box-shadow:0 6px 26px rgba(0,0,0,.25)}
     .muted{color:#c9d1e1}
-    label{display:block;margin:.25rem 0 .35rem;font-weight:600}
-    input,textarea,select{width:100%;padding:10px;border-radius:10px;border:1px solid #2a3550;background:#0d1322;color:#fff}
-    .row{display:flex;gap:12px;flex-wrap:wrap}
-    .btn{display:inline-block;padding:12px 16px;border-radius:12px;border:0;cursor:pointer;font-weight:700}
-    .primary{background:#3b82f6;color:#fff}
-    .outline{background:transparent;border:1px solid #3b82f6;color:#3b82f6}
-    .note{background:#0b1220;border-left:4px solid #3b82f6;padding:10px 12px;border-radius:10px}
-    .danger{color:#ff6b6b}
-    .ok{color:#34d399}
     .mini{font-size:12px}
-    .tot{margin-top:10px;padding:10px;border-radius:10px;background:#0b1220}
+    label{display:block;margin:.25rem 0 .35rem;font-weight:600}
+    .input{width:100%;padding:10px;border-radius:10px;border:1px solid #2a3550;background:#0d1322;color:#fff}
+    .btn{display:inline-block;padding:12px 16px;border-radius:12px;border:0;cursor:pointer;font-weight:700}
+    .btn.primary{background:#3b82f6;color:#fff}
+    .btn.outline{background:transparent;border:1px solid #3b82f6;color:#3b82f6}
     .chips{display:flex;gap:8px;flex-wrap:wrap;margin:.35rem 0}
     .chip{padding:6px 10px;border:1px solid #3b82f6;border-radius:999px;cursor:pointer;font-size:12px}
+    .grid2{display:grid;gap:16px}
+    @media (min-width:860px){ .grid2{grid-template-columns:1fr 1fr} }
+    select[multiple]{min-height:220px}
+    .note{background:#0b1220;border-left:4px solid #3b82f6;padding:10px 12px;border-radius:10px}
+    .tot{margin-top:10px;padding:10px;border-radius:10px;background:#0b1220;border:1px solid rgba(255,255,255,.08)}
   </style>
 </head>
 <body>
-  <div class="wrap">
-    <div class="card">
-      <h1 class="h1">🍽️ <?=htmlspecialchars($evento['titulo'])?></h1>
-      <p class="muted">
-        📅 <?=date('d/m/Y', strtotime($evento['fecha']))?> — ⏰ <?=substr($evento['hora'],0,5)?>
-        <br>📍 <?=htmlspecialchars($evento['lugar'])?>
-      </p>
-      <div class="grid">
-        <div>
-          <div class="note">
-            <strong>Precio por cubierto:</strong> $<?=number_format($precio_cubierto, 2, ',', '.')?><br>
-            <strong>Seña mínima (por cubierto):</strong> $<?=number_format($sena_minima, 2, ',', '.')?><br>
-            <strong>Cupo disponible:</strong> <?=$cupo_disponible?><br>
-            <small class="mini">
-              🎉 Promo: <strong>3–4</strong> cubiertos → <strong>10% OFF</strong>.<br>
-              🎉 Promo: <strong>5 o más</strong> cubiertos → <strong>15% OFF</strong>.
-            </small>
-          </div>
-          <?php if($cupo_disponible<=0): ?>
-            <p class="danger"><strong>Sin cupos disponibles por el momento.</strong></p>
-          <?php else: ?>
+
+<?php include __DIR__.'/menu_cliente.php'; ?>
+
+<div class="contenedor">
+  <h2>🍽️ Cena de Fin de Año</h2>
+
+  <?php if (!$evento): ?>
+    <div class="glass card">
+      <p class="muted">Aún no hay un evento de cena activo configurado para tu gimnasio.</p>
+      <p class="muted">Pedile al administrador que lo cargue en <code>cenas_eventos</code>.</p>
+    </div>
+  <?php else: ?>
+
+    <div class="grid2">
+      <div class="glass card">
+        <h3 style="margin:0 0 6px"><?= htmlspecialchars($evento['titulo']) ?></h3>
+        <p class="muted" style="margin:0 0 10px">
+          📅 <?= date('d/m/Y', strtotime($evento['fecha'])) ?> · ⏰ <?= substr($evento['hora'],0,5) ?><br>
+          📍 <?= htmlspecialchars($evento['lugar']) ?>
+        </p>
+
+        <div class="note" style="margin-bottom:12px">
+          <strong>Precio por cubierto:</strong> $<?= number_format($precio_cubierto,2,',','.') ?><br>
+          <strong>Seña mínima (por cubierto):</strong> $<?= number_format($sena_minima,2,',','.') ?><br>
+          <strong>Cupo disponible:</strong> <?= $cupo_disponible ?><br>
+          <small class="mini">
+            🎉 Promo: <strong>3–4</strong> cubiertos → <strong>10% OFF</strong> ·
+            🎉 <strong>5+</strong> cubiertos → <strong>15% OFF</strong>
+          </small>
+        </div>
+
+        <?php if ($cupo_disponible<=0): ?>
+          <p style="color:#fca5a5"><strong>Sin cupos disponibles por el momento.</strong></p>
+        <?php else: ?>
           <form action="guardar_cena_reserva.php" method="post" enctype="multipart/form-data">
-            <input type="hidden" name="csrf" value="<?=$csrf?>">
-            <input type="hidden" name="evento_id" value="<?=$evento['id']?>">
-            <input type="hidden" id="precio_unit" value="<?=$precio_cubierto?>">
-            <input type="hidden" id="sena_unit" value="<?=$sena_minima?>">
+            <input type="hidden" name="csrf" value="<?= $csrf ?>">
+            <input type="hidden" name="evento_id" value="<?= (int)$evento['id'] ?>">
+            <input type="hidden" id="precio_unit" value="<?= $precio_cubierto ?>">
+            <input type="hidden" id="sena_unit" value="<?= $sena_minima ?>">
 
             <label for="cantidad">Cantidad de cubiertos</label>
-            <input type="number" id="cantidad" name="cantidad" min="1" max="<?=$cupo_disponible?>" value="1" required>
+            <input class="input" type="number" id="cantidad" name="cantidad" min="1" max="<?= $cupo_disponible ?>" value="1" required>
 
             <label>Seleccioná horarios (podés elegir varios)</label>
             <div class="chips">
@@ -120,21 +179,21 @@ $slots = build_slots();
               <span class="chip" data-range="10:00-24:00">Todo el día</span>
               <span class="chip" data-clear="1">Limpiar</span>
             </div>
-            <select id="horarios" name="horarios[]" multiple size="10" required>
-              <?php foreach($slots as $h): ?>
-                <option value="<?=$h?>"><?=$h?></option>
+            <select class="input" id="horarios" name="horarios[]" multiple required>
+              <?php foreach ($slots as $h): ?>
+                <option value="<?= $h ?>"><?= $h ?></option>
               <?php endforeach; ?>
             </select>
             <small class="mini muted">Tip: mantené Ctrl/⌘ para seleccionar varios horarios.</small>
 
             <label for="nombres">Nombres de acompañantes (opcional)</label>
-            <textarea id="nombres" name="nombres" rows="3" placeholder="Ej: Juan Pérez, Ana López"></textarea>
+            <textarea class="input" id="nombres" name="nombres" rows="3" placeholder="Ej: Juan Pérez, Ana López"></textarea>
 
             <label for="comentario">Comentario (opcional)</label>
-            <input id="comentario" name="comentario" maxlength="200" placeholder="Preferencias, alergias, etc.">
+            <input class="input" id="comentario" name="comentario" maxlength="200" placeholder="Preferencias, alergias, etc.">
 
             <label for="pago">Forma de pago</label>
-            <select id="pago" name="pago" required>
+            <select class="input" id="pago" name="pago" required>
               <option value="sena_efectivo">Seña ahora (Efectivo)</option>
               <option value="total_efectivo">Pagar total (Efectivo)</option>
               <option value="sena_transferencia">Seña ahora (Transferencia)</option>
@@ -144,7 +203,7 @@ $slots = build_slots();
 
             <div id="wrap_comprobante" style="display:none">
               <label for="comprobante">Comprobante (imagen o PDF, máx 6MB)</label>
-              <input type="file" id="comprobante" name="comprobante" accept="image/*,application/pdf">
+              <input class="input" type="file" id="comprobante" name="comprobante" accept="image/*,application/pdf">
               <small class="mini muted">Subí el recibo/transferencia. Se guardará en la nube.</small>
             </div>
 
@@ -155,79 +214,82 @@ $slots = build_slots();
               <div>Seña mínima estimada: <strong id="sena_estimada">$0,00</strong></div>
             </div>
 
-            <div class="row" style="margin-top:10px">
+            <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
               <button class="btn primary" type="submit">Reservar</button>
               <a class="btn outline" href="mis_reservas_cena.php">Ver mis reservas</a>
             </div>
           </form>
-          <?php endif; ?>
-        </div>
-        <div>
-          <p class="muted">
-            Tu reserva queda registrada al instante. Si elegís pagar seña o total, el estado figurará como
-            <em>“seña”</em> o <em>“pagado”</em>. Con “reservar y pagar después”, queda <em>“pendiente”</em>.
-            Si pagás por <strong>transferencia</strong>, podés adjuntar el <strong>comprobante</strong> acá mismo.
-          </p>
-          <p class="mini muted">
-            * Descuentos automáticos: 3–4 cubiertos 10% OFF; 5+ cubiertos 15% OFF.<br>
-            * Podés elegir varios horarios entre 10:00 y 00:00.
-          </p>
-        </div>
+        <?php endif; ?>
+      </div>
+
+      <div class="glass card">
+        <p class="muted">
+          Tu reserva queda registrada al instante. Si elegís pagar seña o total, el estado figurará como
+          <em>“seña”</em> o <em>“pagado”</em>. Con “reservar y pagar después”, queda <em>“pendiente”</em>.
+          Si pagás por <strong>transferencia</strong>, podés adjuntar el <strong>comprobante</strong> acá mismo.
+        </p>
+        <p class="mini muted">
+          * Descuentos automáticos: 3–4 cubiertos 10% OFF; 5+ cubiertos 15% OFF.<br>
+          * Podés elegir varios horarios entre 10:00 y 24:00.
+        </p>
       </div>
     </div>
-  </div>
+
+  <?php endif; ?>
+
+</div>
 
 <script>
 (function(){
   const $ = (id)=>document.getElementById(id);
-  const precio = parseFloat($('precio_unit').value||'0');
-  const sena   = parseFloat($('sena_unit').value||'0');
+  const precio = parseFloat(($('precio_unit')?.value)||'0');
+  const sena   = parseFloat(($('sena_unit')?.value)||'0');
   const fmt = (n)=> n.toLocaleString('es-AR', {minimumFractionDigits:2, maximumFractionDigits:2});
 
-  function recalc(){
-    const q = Math.max(1, parseInt(($('cantidad').value||'1'),10));
-    let subtotal = precio * q;
-    let desc = 0;
-    if (q >= 5) { desc = subtotal * 0.15; } // 5+ => 15%
-    else if (q >= 3) { desc = subtotal * 0.10; } // 3-4 => 10%
-    let total = subtotal - desc;
-    $('subtot').textContent = '$'+fmt(subtotal);
-    $('desc_line').style.display = desc>0 ? '' : 'none';
-    $('desc').textContent = '$'+fmt(desc);
-    $('total').textContent = '$'+fmt(total);
-    $('sena_estimada').textContent = '$'+fmt(sena*q);
-  }
-
-  function toggleComprobante(){
-    const v = $('pago').value;
-    $('wrap_comprobante').style.display = (v==='sena_transferencia' || v==='total_transferencia') ? '' : 'none';
-  }
-
-  // Chips de rango rápido
-  function parseTime(s){ const [H,M]=s.split(':').map(x=>parseInt(x,10)); return H*60+M; }
-  function selectRange(r){
-    const [a,b]=r.split('-'); const amin=parseTime(a), bmin=parseTime(b);
-    const sel=$('horarios');
-    for(let i=0;i<sel.options.length;i++){
-      const v=sel.options[i].value; const m=parseTime(v);
-      sel.options[i].selected = (m>=amin && m<=bmin);
+  if ($('cantidad')) {
+    function recalc(){
+      const q = Math.max(1, parseInt(($('cantidad').value||'1'),10));
+      let subtotal = precio * q;
+      let desc = 0;
+      if (q >= 5) { desc = subtotal * 0.15; }
+      else if (q >= 3) { desc = subtotal * 0.10; }
+      const total = subtotal - desc;
+      $('subtot').textContent = '$'+fmt(subtotal);
+      $('desc_line').style.display = desc>0 ? '' : 'none';
+      $('desc').textContent = '$'+fmt(desc);
+      $('total').textContent = '$'+fmt(total);
+      $('sena_estimada').textContent = '$'+fmt(sena*q);
     }
-    sel.dispatchEvent(new Event('change'));
-  }
+    function toggleComprobante(){
+      const v = $('pago').value;
+      $('wrap_comprobante').style.display = (v==='sena_transferencia' || v==='total_transferencia') ? '' : 'none';
+    }
 
-  document.querySelectorAll('.chip').forEach(ch=>{
-    ch.addEventListener('click', ()=>{
-      if (ch.dataset.clear){ 
-        const sel=$('horarios'); for(let i=0;i<sel.options.length;i++) sel.options[i].selected=false;
-        return;
+    /* Chips de rango rápido */
+    function parseTime(s){ const [H,M]=s.split(':').map(x=>parseInt(x,10)); return H*60+M; }
+    function selectRange(r){
+      const [a,b]=r.split('-'); const amin=parseTime(a), bmin=parseTime(b);
+      const sel=$('horarios');
+      for(let i=0;i<sel.options.length;i++){
+        const v=sel.options[i].value; const m=parseTime(v);
+        sel.options[i].selected = (m>=amin && m<=bmin);
       }
-      if (ch.dataset.range){ selectRange(ch.dataset.range); }
+      sel.dispatchEvent(new Event('change'));
+    }
+    document.querySelectorAll('.chip').forEach(ch=>{
+      ch.addEventListener('click', ()=>{
+        if (ch.dataset.clear){
+          const sel=$('horarios'); for(let i=0;i<sel.options.length;i++) sel.options[i].selected=false;
+          return;
+        }
+        if (ch.dataset.range) selectRange(ch.dataset.range);
+      });
     });
-  });
 
-  $('cantidad').addEventListener('input', recalc);
-  $('pago').addEventListener('change', toggleComprobante);
-  recalc(); toggleComprobante();
+    $('cantidad').addEventListener('input', recalc);
+    $('pago').addEventListener('change', toggleComprobante);
+    recalc(); toggleComprobante();
+  }
 })();
 </script>
 </body>
