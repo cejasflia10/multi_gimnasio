@@ -1,15 +1,16 @@
 <?php
+/* registrar_asistencia.php — estable (AJAX robusto, sin menú, sin 404) */
 if (session_status() === PHP_SESSION_NONE) session_start();
 header('Cache-Control: no-store, no-cache, must-revalidate');
+
 require_once __DIR__ . '/conexion.php';
 
 date_default_timezone_set('America/Argentina/San_Luis');
 $hoy         = date('Y-m-d');
 $hora_actual = date('H:i:s');
 
-if (empty($_SESSION['csrf_token'])) {
-  $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
-}
+/* ===== CSRF ===== */
+if (empty($_SESSION['csrf_token'])) $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
 $csrf = $_SESSION['csrf_token'];
 
 $advertencia    = "";
@@ -27,13 +28,13 @@ if ($gimnasio_id > 0) {
   }
 }
 
-/* ===== Utilidades de ruta seguras (evita 404 por subcarpetas) ===== */
-$BASE_PATH = rtrim(dirname($_SERVER['SCRIPT_NAME'] ?? ''), '/');
-if ($BASE_PATH === '') $BASE_PATH = '/';
-$self_file = basename(__FILE__);
-$URL_AJAX_SELF  = $BASE_PATH . '/' . $self_file . '?ajax=1';
-$URL_AJAX_PROF  = $BASE_PATH . '/ajax_ingresos_profesores.php';
-$URL_AJAX_CLIENT= $BASE_PATH . '/ajax_ingresos_clientes.php';
+/* ===== Rutas seguras (evita 404/“//”) ===== */
+$scriptName = $_SERVER['SCRIPT_NAME'] ?? '';
+$basePath   = str_replace('\\','/', dirname($scriptName));
+if ($basePath === '.' || $basePath === '/' || $basePath === '\\') $basePath = '';
+$URL_AJAX_SELF   = $basePath . '/' . basename(__FILE__) . '?ajax=1';
+$URL_AJAX_PROF   = $basePath . '/ajax_ingresos_profesores.php';
+$URL_AJAX_CLIENT = $basePath . '/ajax_ingresos_clientes.php';
 
 /* ===== Lógica principal (profesores / clientes) ===== */
 function procesar_codigo(mysqli $db, int $gymId, string $codigo, string $hoy, string $hora_actual): array {
@@ -130,18 +131,20 @@ function procesar_codigo(mysqli $db, int $gymId, string $codigo, string $hoy, st
 
 /* ===== Respuesta AJAX ===== */
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_GET['ajax'])) {
+  // JSON limpio (sin notices ni espacios)
+  ini_set('display_errors', '0');
+  while (ob_get_level()) ob_end_clean();
   header('Content-Type: application/json; charset=utf-8');
 
-  $codigo = trim((string)($_POST['codigo'] ?? ''));
+  $codigo  = trim((string)($_POST['codigo'] ?? ''));
   $csrf_in = (string)($_POST['csrf'] ?? '');
 
   if (!hash_equals($_SESSION['csrf_token'] ?? '', $csrf_in)) {
-    echo json_encode(['ok'=>false,'mensaje'=>'❌ CSRF inválido. Refrescá la página.','tipo'=>'alerta','sonido'=>true]);
+    echo json_encode(['ok'=>false,'mensaje'=>'❌ CSRF inválido. Refrescá la página.','tipo'=>'alerta','sonido'=>true], JSON_UNESCAPED_UNICODE);
     exit;
   }
-
   if ($gimnasio_id <= 0 || $codigo === '') {
-    echo json_encode(['ok'=>false,'mensaje'=>'❌ Acceso denegado o código vacío.','tipo'=>'alerta','sonido'=>true]);
+    echo json_encode(['ok'=>false,'mensaje'=>'❌ Acceso denegado o código vacío.','tipo'=>'alerta','sonido'=>true], JSON_UNESCAPED_UNICODE);
     exit;
   }
 
@@ -151,13 +154,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_GET['ajax'])) {
     'mensaje' => $advertencia,
     'tipo'    => $tipo_resultado,
     'sonido'  => ($tipo_resultado === 'alerta'),
-  ]);
+  ], JSON_UNESCAPED_UNICODE);
   exit;
 }
 
 /* ===== Flujo no-AJAX (submit directo) ===== */
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['codigo']) && !isset($_GET['ajax'])) {
-  $codigo = trim((string)$_POST['codigo']);
+  $codigo  = trim((string)$_POST['codigo']);
   $csrf_in = (string)($_POST['csrf'] ?? '');
   if (!hash_equals($_SESSION['csrf_token'] ?? '', $csrf_in)) {
     $advertencia = '❌ CSRF inválido. Refrescá la página.'; $tipo_resultado = 'alerta';
@@ -191,16 +194,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['codigo']) && !isset($
       border: 1px solid var(--muted); border-radius: 12px;
       outline: none; background:#000; color: var(--fg); min-height: 52px;
     }
-    .table-wrap{
-      background:#0e0e0e; border:1px solid #1f1f1f; border-radius: 12px;
-      overflow: auto; -webkit-overflow-scrolling: touch;
-    }
+    .table-wrap{ background:#0e0e0e; border:1px solid #1f1f1f; border-radius: 12px; overflow:auto; -webkit-overflow-scrolling:touch; }
     table{ width:100%; border-collapse: collapse; min-width: 520px; }
     thead th{ background:#1a1a1a; position: sticky; top: 0; z-index: 1; }
-    table th, table td{
-      border-bottom: 1px solid #1f1f1f; padding: clamp(8px, 2.2vw, 12px);
-      text-align: center; font-size: clamp(13px, 3.3vw, 15px); white-space: nowrap;
-    }
+    table th, table td{ border-bottom: 1px solid #1f1f1f; padding: clamp(8px, 2.2vw, 12px); text-align:center; font-size: clamp(13px, 3.3vw, 15px); white-space:nowrap; }
     .advertencia{ font-size: clamp(16px, 3.8vw, 18px); margin: 12px 0; }
     .advertencia.ok{ color: var(--ok); }
     .advertencia.err{ color: var(--err); }
@@ -209,7 +206,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['codigo']) && !isset($
     @media (max-width: 599px){ .contenedor{ padding: 12px; } img[alt="logo"]{ height: 56px; } }
   </style>
   <script>
-    // URLs generadas por PHP (evita 404 si está en subcarpeta)
     const URL_AJAX_SELF   = <?= json_encode($URL_AJAX_SELF) ?>;
     const URL_AJAX_PROF   = <?= json_encode($URL_AJAX_PROF) ?>;
     const URL_AJAX_CLIENT = <?= json_encode($URL_AJAX_CLIENT) ?>;
@@ -236,10 +232,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['codigo']) && !isset($
       el.textContent = `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
     }
 
-    function focusInput(){
-      const i = document.getElementById('codigo');
-      if (i) i.focus({preventScroll:true});
-    }
+    function focusInput(){ const i = document.getElementById('codigo'); if (i) i.focus({preventScroll:true}); }
 
     function enviarCodigo(e){
       e.preventDefault();
@@ -251,7 +244,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['codigo']) && !isset($
       fd.append('codigo', val);
       fd.append('csrf', CSRF);
 
-      fetch(URL_AJAX_SELF, { method: 'POST', body: fd, cache:'no-store' })
+      fetch(URL_AJAX_SELF, { method:'POST', body:fd, cache:'no-store' })
         .then(r => r.json())
         .then(j => {
           const adv = document.getElementById('adv');
@@ -260,10 +253,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['codigo']) && !isset($
             const clase = (j.tipo === 'alerta' || j.sonido) ? 'err' : 'ok';
             adv.className = 'advertencia ' + clase;
           }
-          const okAudio     = document.getElementById('snd-ok');
-          const alertaAudio = document.getElementById('snd-alerta');
-          if (j && j.tipo === 'ok' && okAudio){ okAudio.currentTime = 0; okAudio.play().catch(()=>{}); }
-          if (j && (j.tipo === 'alerta' || j.sonido) && alertaAudio){ alertaAudio.currentTime = 0; alertaAudio.play().catch(()=>{}); }
+          const okAudio = document.getElementById('snd-ok');
+          const alAudio = document.getElementById('snd-alerta');
+          if (j && j.tipo === 'ok' && okAudio){ okAudio.currentTime=0; okAudio.play().catch(()=>{}); }
+          if (j && (j.tipo === 'alerta' || j.sonido) && alAudio){ alAudio.currentTime=0; alAudio.play().catch(()=>{}); }
 
           inp.value = '';
           focusInput();
@@ -271,16 +264,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['codigo']) && !isset($
         })
         .catch(()=>{
           const adv = document.getElementById('adv');
-          if (adv) {
-            adv.textContent = '⚠️ Error enviando el código. Revisá la conexión.';
-            adv.className = 'advertencia err';
-          }
+          if (adv) { adv.textContent = '⚠️ Error enviando el código. Revisá la conexión.'; adv.className = 'advertencia err'; }
         });
     }
 
-    document.addEventListener('visibilitychange', () => {
-      if (!document.hidden) { actualizarListados(); focusInput(); }
-    });
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) { actualizarListados(); focusInput(); } });
 
     window.addEventListener('load', () => {
       tickClock(); setInterval(tickClock, 1000);
@@ -290,7 +278,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['codigo']) && !isset($
       const form = document.getElementById('form-scan');
       if (form) form.addEventListener('submit', enviarCodigo);
 
-      // Mantener foco para lector de barras
       document.addEventListener('click', (e) => {
         const t = e.target;
         if (!(t instanceof HTMLInputElement) && !(t instanceof HTMLTextAreaElement)) focusInput();
