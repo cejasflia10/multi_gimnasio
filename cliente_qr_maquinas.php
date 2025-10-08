@@ -1,8 +1,7 @@
 <?php
-// cliente_scan_qr.php — Escanear QR (nativo + fallback WebView + foto con jsQR)
+// cliente_scan_qr.php — Escanear QR (nativo + fallback WebView + foto con jsQR) con MENÚ UNIFICADO (cliente)
 if (session_status() === PHP_SESSION_NONE) session_start();
 require_once __DIR__ . '/conexion.php';
-@include __DIR__ . '/menu_cliente.php';
 
 if (!isset($conexion) || !($conexion instanceof mysqli)) { http_response_code(500); exit('❌ Sin conexión a BD.'); }
 if (function_exists('mysqli_report')) { mysqli_report(MYSQLI_REPORT_OFF); }
@@ -17,39 +16,64 @@ if ($cliente_id <= 0 || $gimnasio_id <= 0) { header('Location: cliente_acceso.ph
 
 /* Helpers */
 function h($s){ return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); }
-function base_url(): string {
-  $proto = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
-  $host  = $_SERVER['HTTP_HOST'] ?? 'localhost';
-  $path  = rtrim(dirname($_SERVER['SCRIPT_NAME'] ?? '/'), '/\\');
-  return $proto.'://'.$host.($path ? $path.'/' : '/');
-}
 $public_base = 'https://multi-gimnasio-51bq.onrender.com/maquinas_qr.php?t=';
 ?>
 <!doctype html>
 <html lang="es">
 <head>
   <meta charset="utf-8">
-  <title>Escanear QR de máquinas — Panel Cliente</title>
+  <title>📷 Escanear QR de Máquinas — Panel Cliente</title>
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+
   <style>
+    /* ================== MENÚ UNIFICADO (idéntico al panel) ================== */
     :root{
-      --bg:#0b1220; --card:#0f172a; --muted:#94a3b8; --line:#1f2937; --acc:#22d3ee; --bad:#ef4444; --ok:#22c55e; --ink:#e5e7eb;
-      --space:clamp(14px, 2.4vw, 24px);
-      --radius:16px;
-      --fs:clamp(.96rem, 1.6vw, 1rem);
-      --fsh:clamp(1.2rem, 2.2vw, 1.6rem);
+      --mnu-bg-bar: rgba(15,19,32,.78);
+      --mnu-bg-drawer: rgba(10,12,20,.94);
+      --mnu-fg: #fff;
+      --mnu-fg-dim: #cbd5e1;
+      --mnu-accent: #ffd600;
+      --mnu-border: rgba(255,255,255,.16);
+      --mnu-shadow: 0 10px 30px rgba(0,0,0,.45);
+
+      /* Base panel */
+      --bg:#0b0b0b; --surface:#0f1115; --card:#12141a; --fg:#f1f5f9; --muted:#a0a7b4; --acc:#f5c542; --border:rgba(255,255,255,.12);
     }
-    @media (prefers-color-scheme: light){
-      :root{ --bg:#f7fafc; --card:#ffffff; --muted:#556070; --line:#e5e7eb; --ink:#0f172a; }
-    }
+    .mnu-bar{ position:sticky; top:0; z-index:1000; display:flex; align-items:center; gap:12px; padding:10px 14px; background:var(--mnu-bg-bar); -webkit-backdrop-filter: blur(10px) saturate(1.05); backdrop-filter: blur(10px) saturate(1.05); border-bottom:1px solid var(--mnu-border); }
+    .mnu-title{ font-weight:800; color:var(--mnu-accent); }
+    .mnu-spacer{ flex:1; }
+    .mnu-btn{ display:inline-flex; align-items:center; gap:8px; padding:10px 14px; border-radius:999px; cursor:pointer; background:var(--mnu-accent); color:#111; border:none; font-weight:700; text-decoration:none }
+    .mnu-btn--ghost{ background:transparent; color:var(--mnu-fg); border:1px solid var(--mnu-border); }
+    .mnu-inline{ display:flex; gap:10px; flex-wrap:wrap; padding:10px 14px; background:transparent; border-bottom:1px solid var(--mnu-border); }
+    .mnu-tab{ padding:10px 14px; border-radius:14px; border:1px solid var(--mnu-border); color:var(--mnu-fg); text-decoration:none; }
+    .mnu-tab:hover{ background:rgba(255,255,255,.06); }
+    @media (max-width:920px){ .mnu-inline{ display:none !important; } }
+    .mnu-backdrop{ position:fixed; inset:0; background:rgba(0,0,0,.55); z-index:10005; display:none; }
+    .mnu-drawer{ position:fixed; top:0; bottom:0; left:0; width:86vw; max-width:360px; background:var(--mnu-bg-drawer); border-right:1px solid var(--mnu-border); box-shadow:var(--mnu-shadow); transform:translateX(-100%); transition:transform .25s ease; z-index:10010; padding:14px; display:flex; flex-direction:column; gap:12px; }
+    .mnu-drawer.open{ transform:translateX(0); }
+    .mnu-backdrop.show{ display:block; }
+    .mnu-head{ display:flex; align-items:center; gap:10px; margin-bottom:6px; }
+    .mnu-close{ width:44px; height:44px; border-radius:50%; display:grid; place-items:center; cursor:pointer; background:var(--mnu-accent); color:#111; font-weight:900; border:none; }
+    .mnu-list{ display:flex; flex-direction:column; gap:12px; margin:0; padding:0; list-style:none; }
+    .mnu-item{ display:flex; align-items:center; gap:12px; padding:14px; border-radius:14px; border:1px solid var(--mnu-border); color:#fff; text-decoration:none; background:transparent; }
+    .mnu-item:hover{ background:rgba(255,255,255,.10); border-color:rgba(255,255,255,.30); }
+    .mnu-item__icon{ width:24px; display:inline-grid; place-items:center; color:#fff; }
+    .mnu-item__text{ font-size:18px; }
+    .mnu-bar *, .mnu-drawer *, .mnu-inline *, .mnu-item, .mnu-item *{ color:#fff !important; -webkit-text-fill-color:#fff !important; text-shadow:none !important; background-clip:initial !important; -webkit-background-clip:initial !IMPORTANT; }
+
+    /* ================== BASE / PÁGINA ================== */
     *{box-sizing:border-box}
-    body{ margin:0; font:400 var(--fs)/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif; background:var(--bg); color:var(--ink); }
-    .wrap{ width:min(1100px, 100% - 2*var(--space)); margin:0 auto; padding:var(--space) 0 var(--space); }
-    h1{ margin:6px 0 12px; font-size:var(--fsh); }
-    .muted{ color:var(--muted); }
+    html,body{height:100%}
+    body{ margin:0; background: radial-gradient(1000px 600px at 20% -10%, #1c1f28 0%, #0b0b0b 60%), var(--bg); color:var(--fg); font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; }
+    .container{ max-width:1100px; margin:0 auto; padding:16px 16px 48px; }
+
+    /* ===== Estilos propios del escáner ===== */
     .grid{ display:grid; grid-template-columns: 1fr; gap:16px; }
     @media (min-width: 992px){ .grid{ grid-template-columns: 1.15fr 1fr; gap:18px; } }
-    .card{ background:var(--card); border:1px solid var(--line); border-radius:var(--radius); padding:clamp(14px,2vw,18px); }
+    .glass{ background: rgba(255,255,255,.05); border:1px solid var(--border); border-radius:20px; backdrop-filter: blur(10px); box-shadow: 0 8px 30px rgba(0,0,0,.35); }
+    .card{ padding:18px }
+    h2{ margin:8px 0 6px; }
+    .muted{ color:var(--muted); }
 
     .video-box{ position:relative; border-radius:14px; overflow:hidden; background:#000; }
     .video-frame{ aspect-ratio: 16 / 9; width:100%; display:block; }
@@ -58,21 +82,20 @@ $public_base = 'https://multi-gimnasio-51bq.onrender.com/maquinas_qr.php?t=';
     @keyframes scan{ 0%{top:10%} 50%{top:90%} 100%{top:10%} }
 
     .status{ margin-top:8px; font-size:.95rem; }
-    .ok{ color:var(--ok); } .bad{ color:#ef9a9a; }
+    .ok{ color:#22c55e } .bad{ color:#ef9a9a; }
 
     .actions{ display:flex; gap:10px; flex-wrap:wrap; margin-top:10px }
     button, .btn{ background:var(--acc); border:0; color:#111; font-weight:800; padding:12px 16px; border-radius:12px; cursor:pointer; text-decoration:none; display:inline-block; }
     .ghost{ background:#111; color:#fff; }
-    .danger{ background:var(--bad); color:#fff; }
+    .danger{ background:#ef4444; color:#fff; }
     @media (max-width:520px){ .actions button, .actions .btn{ flex:1 1 46%; } }
 
     .row{ display:grid; grid-template-columns: 1fr 1fr; gap:10px; }
     @media (max-width: 640px){ .row{ grid-template-columns:1fr; } }
-    input[type="text"]{ width:100%; padding:12px; border-radius:12px; border:1px solid var(--line); background:transparent; color:inherit; }
+    input[type="text"], input[type="file"]{ width:100%; padding:12px; border-radius:12px; border:1px solid rgba(255,255,255,.12); background:#0f1115; color:var(--fg); }
 
-    .help{ font-size:.92rem; margin-top:8px }
+    .file{ background:transparent; border:1px dashed rgba(255,255,255,.18); padding:12px; border-radius:12px; }
     .hint{ font-size:.86rem; color:var(--muted); }
-    .file{ background:transparent; border:1px dashed var(--line); padding:12px; border-radius:12px; }
 
     .notice{ display:none; position:fixed; inset:0; background:rgba(0,0,0,.55); color:#fff; align-items:center; justify-content:center; padding:20px; z-index:50 }
     .notice .box{ background:#111827; border:1px solid #374151; border-radius:16px; padding:18px; width:min(560px, 92vw); }
@@ -86,13 +109,62 @@ $public_base = 'https://multi-gimnasio-51bq.onrender.com/maquinas_qr.php?t=';
   <script src="https://unpkg.com/jsqr/dist/jsQR.js"></script>
 </head>
 <body>
-  <div class="wrap">
-    <h1>Escanear QR de máquinas</h1>
+
+  <!-- ===== Menú Unificado (mismo markup y enlaces) ===== -->
+  <header>
+    <div class="mnu-bar">
+      <button class="mnu-btn mnu-open">☰ Menú</button>
+      <div class="mnu-title">Panel Cliente</div>
+      <div class="mnu-spacer"></div>
+      <a class="mnu-btn mnu-btn--ghost" href="cliente_acceso.php?logout=1">Salir</a>
+    </div>
+
+    <!-- Tabs inline (PC) -->
+    <nav class="mnu-inline">
+      <a class="mnu-tab" href="panel_cliente.php">🏠 Inicio</a>
+      <a class="mnu-tab" href="ver_turnos_cliente.php">📅 Ver Turnos</a>
+      <a class="mnu-tab" href="ver_mis_pagos.php">💳 Mis Pagos</a>
+      <a class="mnu-tab" href="pago_online.php">⚡ Pago Online</a>
+      <a class="mnu-tab" href="form_progreso.php">📈 Ver Progreso</a>
+      <a class="mnu-tab" href="evolucion_cliente.php">📊 Evolución</a>
+      <a class="mnu-tab" href="tienda_indumentaria.php">🛍️ Indumentaria</a>
+      <a class="mnu-tab" href="asistente_ia.php">🤖 Asistente IA</a>
+      <a class="mnu-tab" href="cena_fin_anio.php">🍽️ Cena Fin de Año</a>
+      <a class="mnu-tab" href="cliente_scan_qr.php">📷 Escanear QR</a>
+      <a class="mnu-tab" href="cliente_qr_maquinas.php">🧰 QR de Máquinas</a>
+    </nav>
+
+    <!-- Drawer (móvil) -->
+    <div class="mnu-backdrop" id="mnu-backdrop"></div>
+    <aside class="mnu-drawer" id="mnu-drawer">
+      <div class="mnu-head">
+        <button class="mnu-close" id="mnu-close">✕</button>
+        <div class="mnu-title">Menú</div>
+      </div>
+      <ul class="mnu-list">
+        <li><a class="mnu-item" href="panel_cliente.php"><span class="mnu-item__icon">🏠</span><span class="mnu-item__text">Inicio</span></a></li>
+        <li><a class="mnu-item" href="ver_turnos_cliente.php"><span class="mnu-item__icon">📅</span><span class="mnu-item__text">Ver Turnos</span></a></li>
+        <li><a class="mnu-item" href="ver_mis_pagos.php"><span class="mnu-item__icon">💳</span><span class="mnu-item__text">Mis Pagos</span></a></li>
+        <li><a class="mnu-item" href="pago_online.php"><span class="mnu-item__icon">⚡</span><span class="mnu-item__text">Pago Online</span></a></li>
+        <li><a class="mnu-item" href="form_progreso.php"><span class="mnu-item__icon">📈</span><span class="mnu-item__text">Ver Progreso</span></a></li>
+        <li><a class="mnu-item" href="evolucion_cliente.php"><span class="mnu-item__icon">📊</span><span class="mnu-item__text">Evolución</span></a></li>
+        <li><a class="mnu-item" href="tienda_indumentaria.php"><span class="mnu-item__icon">🛍️</span><span class="mnu-item__text">Indumentaria</span></a></li>
+        <li><a class="mnu-item" href="asistente_ia.php"><span class="mnu-item__icon">🤖</span><span class="mnu-item__text">Asistente IA</span></a></li>
+        <li><a class="mnu-item" href="cena_fin_anio.php"><span class="mnu-item__icon">🍽️</span><span class="mnu-item__text">Cena Fin de Año</span></a></li>
+        <li><a class="mnu-item" href="cliente_scan_qr.php"><span class="mnu-item__icon">📷</span><span class="mnu-item__text">Escanear QR</span></a></li>
+        <li><a class="mnu-item" href="cliente_qr_maquinas.php"><span class="mnu-item__icon">🧰</span><span class="mnu-item__text">QR de Máquinas</span></a></li>
+        <li><a class="mnu-item" href="cliente_acceso.php?logout=1"><span class="mnu-item__icon">🚪</span><span class="mnu-item__text">Salir</span></a></li>
+      </ul>
+    </aside>
+  </header>
+
+  <div class="container">
+    <h2>📷 Escanear QR de máquinas</h2>
     <p class="muted">Apuntá la cámara al QR pegado en la máquina. Si tu app no permite usar la cámara, podés <strong>tomar una foto</strong> del QR y la decodificamos igual.</p>
 
     <div class="grid">
-      <div class="card" aria-labelledby="camTitle">
-        <h2 id="camTitle" style="margin:0 0 8px; font-size:1.05em">Cámara <span id="envTag" class="badge" style="display:none"></span></h2>
+      <section class="glass card" aria-labelledby="camTitle">
+        <h3 id="camTitle" style="margin:0 0 8px;">Cámara <span id="envTag" class="badge" style="display:none"></span></h3>
         <div class="video-box" role="group" aria-label="Vista previa de cámara">
           <div class="video-frame"><video id="video" playsinline muted></video></div>
           <div class="scanline" aria-hidden="true"></div>
@@ -105,11 +177,11 @@ $public_base = 'https://multi-gimnasio-51bq.onrender.com/maquinas_qr.php?t=';
           <button id="btnTorch" class="ghost">Linterna</button>
           <button id="btnExternal" class="danger" title="Abrir en el navegador del sistema">Abrir en navegador</button>
         </div>
-        <div class="help hint">Tip: acercá el código hasta ocupar buena parte de la pantalla y mantené el pulso.</div>
-      </div>
+        <div class="hint" style="margin-top:8px">Tip: acercá el código hasta ocupar buena parte de la pantalla y mantené el pulso.</div>
+      </section>
 
-      <div class="card" aria-labelledby="fbTitle">
-        <h2 id="fbTitle" style="margin:0 0 8px; font-size:1.05em">Si la cámara no funciona (o está bloqueada)</h2>
+      <aside class="glass card" aria-labelledby="fbTitle">
+        <h3 id="fbTitle" style="margin:0 0 8px;">Si la cámara no funciona (o está bloqueada)</h3>
 
         <div id="reader" style="display:none; width:100%; max-width:460px; margin:6px auto 16px;"></div>
 
@@ -127,13 +199,14 @@ $public_base = 'https://multi-gimnasio-51bq.onrender.com/maquinas_qr.php?t=';
           </div>
           <div class="hint">Si pegás solo el TOKEN, vamos a: <?php echo h($public_base); ?>TOKEN</div>
         </div>
-      </div>
+      </aside>
     </div>
   </div>
 
+  <!-- Diálogo -->
   <div id="notice" class="notice" role="dialog" aria-modal="true" aria-labelledby="nTitle" aria-describedby="nMsg">
     <div class="box">
-      <h3 id="nTitle" style="margin:0 0 8px; font-size:1.1em">Atención</h3>
+      <h3 id="nTitle" style="margin:0 0 8px;">Atención</h3>
       <div id="nMsg" class="hint" style="margin-bottom:12px">Mensaje</div>
       <div class="actions">
         <button id="nRetry" class="btn">Reintentar</button>
@@ -145,6 +218,23 @@ $public_base = 'https://multi-gimnasio-51bq.onrender.com/maquinas_qr.php?t=';
   <canvas id="canvas" style="display:none"></canvas>
 
   <script>
+    // ===== Menú (abrir/cerrar + bloquear scroll) =====
+    (function(){
+      const drawer   = document.getElementById('mnu-drawer');
+      const backdrop = document.getElementById('mnu-backdrop');
+      const openBtn  = document.querySelector('.mnu-open');
+      const closeBtn = document.getElementById('mnu-close');
+      const lock = (on)=>{ document.documentElement.style.overflow = document.body.style.overflow = on?'hidden':''; }
+      function open(){ drawer.classList.add('open'); backdrop.classList.add('show'); lock(true); }
+      function close(){ drawer.classList.remove('open'); backdrop.classList.remove('show'); lock(false); }
+      openBtn?.addEventListener('click', open);
+      closeBtn?.addEventListener('click', close);
+      backdrop?.addEventListener('click', close);
+      window.addEventListener('keydown', e=>{ if(e.key==='Escape') close(); });
+    })();
+  </script>
+
+  <script>
     function $(id){ return document.getElementById(id); }
     const video=$('video'), statusEl=$('status');
     const btnStart=$('btnStart'), btnStop=$('btnStop'), btnSwitch=$('btnSwitch'), btnTorch=$('btnTorch'), btnExternal=$('btnExternal');
@@ -153,7 +243,7 @@ $public_base = 'https://multi-gimnasio-51bq.onrender.com/maquinas_qr.php?t=';
 
     const PUBLIC_BASE = <?php echo json_encode($public_base, JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES); ?>;
 
-    let stream=null, currentDeviceId=null, devices=[], scanning=false, detector=null, track=null, torchOn=false, html5q=null;
+    let stream=null, currentDeviceId=null, devices=[], scanning=false, detector=null, track=null, html5q=null;
 
     function isInAppWebView(){
       const ua = navigator.userAgent || '';
@@ -258,8 +348,13 @@ $public_base = 'https://multi-gimnasio-51bq.onrender.com/maquinas_qr.php?t=';
       if (html5q) return alert('La linterna no está disponible en el modo compatible.');
       if (!track) return status('Cámara no disponible.', true);
       const caps = track.getCapabilities?.(); if (!caps || !caps.torch) return status('Tu cámara no soporta linterna.', true);
-      try{ const on = !(track.getConstraints()?.advanced?.[0]?.torch); await track.applyConstraints({ advanced:[{ torch: on }] }); status(on?'Linterna encendida.':'Linterna apagada.'); }
-      catch{ status('No se pudo cambiar la linterna.', true); }
+      try{
+        const on = !(track.getConstraints()?.advanced?.[0]?.torch);
+        await track.applyConstraints({ advanced:[{ torch: on }] });
+        status(on?'Linterna encendida.':'Linterna apagada.');
+      }catch{
+        status('No se pudo cambiar la linterna.', true);
+      }
     }
 
     async function scanLoop(){
@@ -346,9 +441,11 @@ $public_base = 'https://multi-gimnasio-51bq.onrender.com/maquinas_qr.php?t=';
       if (/^https?:\/\//i.test(v)) location.href=v; else location.href=PUBLIC_BASE+encodeURIComponent(v);
     });
 
-    // Diálogo
-    $('nClose').addEventListener('click', ()=>notice.classList.remove('show'));
-    $('nRetry').addEventListener('click', ()=>{ notice.classList.remove('show'); stopCamera(); startCamera(); });
+    // Botones cámara
+    $('btnStart').addEventListener('click', startCamera);
+    $('btnStop').addEventListener('click', stopCamera);
+    $('btnSwitch').addEventListener('click', switchCamera);
+    $('btnTorch').addEventListener('click', toggleTorch);
 
     // Arranque
     startCamera();

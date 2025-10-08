@@ -248,7 +248,7 @@ function turno_habilitado_simple(array $t, bool $cerradoGlobal, array $cerradosP
       <a class="mnu-tab" href="tienda_indumentaria.php">🛍️ Indumentaria</a>
       <a class="mnu-tab" href="asistente_ia.php">🤖 Asistente IA</a>
       <a class="mnu-tab" href="cena_fin_anio.php">🍽️ Cena Fin de Año</a>
-      <a class="mnu-tab" href="qr_maquinas.php">🧰 QR de Máquinas</a>
+      <a class="mnu-tab" href="cliente_qr_maquinas.php">🧰 QR de Máquinas</a>
     </nav>
 
     <!-- Drawer (móvil) -->
@@ -268,7 +268,7 @@ function turno_habilitado_simple(array $t, bool $cerradoGlobal, array $cerradosP
         <li><a class="mnu-item" href="tienda_indumentaria.php"><span class="mnu-item__icon">🛍️</span><span class="mnu-item__text">Indumentaria</span></a></li>
         <li><a class="mnu-item" href="asistente_ia.php"><span class="mnu-item__icon">🤖</span><span class="mnu-item__text">Asistente IA</span></a></li>
         <li><a class="mnu-item" href="cena_fin_anio.php"><span class="mnu-item__icon">🍽️</span><span class="mnu-item__text">Cena Fin de Año</span></a></li>
-        <li><a class="mnu-item" href="qr_maquinas.php"><span class="mnu-item__icon">🧰</span><span class="mnu-item__text">QR de Máquinas</span></a></li>
+        <li><a class="mnu-item" href="cliente_qr_maquinas.php"><span class="mnu-item__icon">🧰</span><span class="mnu-item__text">QR de Máquinas</span></a></li>
         <li><a class="mnu-item" href="cliente_acceso.php?logout=1"><span class="mnu-item__icon">🚪</span><span class="mnu-item__text">Salir</span></a></li>
       </ul>
     </aside>
