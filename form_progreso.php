@@ -1,8 +1,7 @@
 <?php
-// registrar_progreso.php
+// registrar_progreso.php — Registrar progreso con MENÚ UNIFICADO (cliente)
 if (session_status() === PHP_SESSION_NONE) session_start();
 require_once __DIR__ . '/conexion.php';
-include __DIR__ . '/menu_cliente.php';
 
 $cliente_id  = (int)($_SESSION['cliente_id'] ?? 0);
 $gimnasio_id = (int)($_SESSION['gimnasio_id'] ?? 0);
@@ -24,12 +23,12 @@ function db_has_table(mysqli $db, string $t): bool {
 $peso_prefill = '';
 $altura_prefill = '';
 if (db_has_table($conexion, 'datos_fisicos')) {
+  // ajustá nombres de columnas si en tu BD difieren:
   $sqlPF = "SELECT peso AS p, altura_cm AS a
             FROM datos_fisicos
             WHERE cliente_id=? AND gimnasio_id=?
             ORDER BY fecha DESC, id DESC
             LIMIT 1";
-  // si tus columnas son otras (peso_kg / altura), cambia el SELECT de arriba
   if ($stPF = @$conexion->prepare($sqlPF)) {
     $stPF->bind_param("ii", $cliente_id, $gimnasio_id);
     if ($stPF->execute()) {
@@ -42,7 +41,7 @@ if (db_has_table($conexion, 'datos_fisicos')) {
   }
 }
 
-// === Historial (tabla fija: progreso) ===
+// === Historial (tabla progreso) ===
 $historial = [];
 if (db_has_table($conexion, 'progreso')) {
   $sqlH = "SELECT fecha, objetivo, notas, peso_antes, peso_despues, altura_cm, duracion_min, calorias_quemadas
@@ -60,46 +59,78 @@ if (db_has_table($conexion, 'progreso')) {
   }
 }
 ?>
-<!DOCTYPE html>
+<!doctype html>
 <html lang="es">
 <head>
-  <meta charset="UTF-8">
-  <title>Registrar Progreso Físico</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <link rel="stylesheet" href="estilo_unificado.css">
+  <meta charset="utf-8" />
+  <title>📈 Registrar Progreso</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
-    :root{ --bg:#0b0b0b; --card:#12141a; --fg:#f1f5f9; --muted:#a0a7b4; --acc:#f5c542; --border:rgba(255,255,255,.12); }
+    /* ================== MENÚ UNIFICADO (idéntico al panel) ================== */
+    :root{
+      --mnu-bg-bar: rgba(15,19,32,.78);
+      --mnu-bg-drawer: rgba(10,12,20,.94);
+      --mnu-fg: #fff;
+      --mnu-fg-dim: #cbd5e1;
+      --mnu-accent: #ffd600;
+      --mnu-border: rgba(255,255,255,.16);
+      --mnu-shadow: 0 10px 30px rgba(0,0,0,.45);
+
+      /* Base panel */
+      --bg:#0b0b0b; --surface:#0f1115; --card:#12141a; --fg:#f1f5f9; --muted:#a0a7b4; --acc:#f5c542; --border:rgba(255,255,255,.12);
+    }
+    .mnu-bar{ position:sticky; top:0; z-index:1000; display:flex; align-items:center; gap:12px; padding:10px 14px; background:var(--mnu-bg-bar); -webkit-backdrop-filter: blur(10px) saturate(1.05); backdrop-filter: blur(10px) saturate(1.05); border-bottom:1px solid var(--mnu-border); }
+    .mnu-title{ font-weight:800; color:var(--mnu-accent); }
+    .mnu-spacer{ flex:1; }
+    .mnu-btn{ display:inline-flex; align-items:center; gap:8px; padding:10px 14px; border-radius:999px; cursor:pointer; background:var(--mnu-accent); color:#111; border:none; font-weight:700; }
+    .mnu-btn--ghost{ background:transparent; color:var(--mnu-fg); border:1px solid var(--mnu-border); }
+    .mnu-inline{ display:flex; gap:10px; flex-wrap:wrap; padding:10px 14px; background:transparent; border-bottom:1px solid var(--mnu-border); }
+    .mnu-tab{ padding:10px 14px; border-radius:14px; border:1px solid var(--mnu-border); color:var(--mnu-fg); text-decoration:none; }
+    .mnu-tab:hover{ background:rgba(255,255,255,.06); }
+    @media (max-width:920px){ .mnu-inline{ display:none !important; } }
+    .mnu-backdrop{ position:fixed; inset:0; background:rgba(0,0,0,.55); z-index:10005; display:none; }
+    .mnu-drawer{ position:fixed; top:0; bottom:0; left:0; width:86vw; max-width:360px; background:var(--mnu-bg-drawer); border-right:1px solid var(--mnu-border); box-shadow:var(--mnu-shadow); transform:translateX(-100%); transition:transform .25s ease; z-index:10010; padding:14px; display:flex; flex-direction:column; gap:12px; }
+    .mnu-drawer.open{ transform:translateX(0); }
+    .mnu-backdrop.show{ display:block; }
+    .mnu-head{ display:flex; align-items:center; gap:10px; margin-bottom:6px; }
+    .mnu-close{ width:44px; height:44px; border-radius:50%; display:grid; place-items:center; cursor:pointer; background:var(--mnu-accent); color:#111; font-weight:900; border:none; }
+    .mnu-list{ display:flex; flex-direction:column; gap:12px; margin:0; padding:0; list-style:none; }
+    .mnu-item{ display:flex; align-items:center; gap:12px; padding:14px; border-radius:14px; border:1px solid var(--mnu-border); color:#fff; text-decoration:none; background:transparent; }
+    .mnu-item:hover{ background:rgba(255,255,255,.10); border-color:rgba(255,255,255,.30); }
+    .mnu-item__icon{ width:24px; display:inline-grid; place-items:center; color:#fff; }
+    .mnu-item__text{ font-size:18px; }
+    .mnu-bar *, .mnu-drawer *, .mnu-inline *, .mnu-item, .mnu-item *{ color:#fff !important; -webkit-text-fill-color:#fff !important; text-shadow:none !important; background-clip:initial !important; -webkit-background-clip:initial !IMPORTANT; }
+
+    /* ================== BASE / GLASS ================== */
     *{box-sizing:border-box}
-    body{ margin:0; background:var(--bg); color:var(--fg); font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Arial }
-    .contenedor{ max-width:1100px; margin:16px auto 48px; padding:0 16px; }
-    h2{ text-align:center; margin:10px 0 18px; }
-    .alert{ background:#112b1a; border:1px solid #1f6f3d; color:#a7f3d0; padding:10px 12px; border-radius:10px; margin:8px 0 18px; }
+    html,body{height:100%}
+    body{ margin:0; background: radial-gradient(1000px 600px at 20% -10%, #1c1f28 0%, #0b0b0b 60%), var(--bg); color:var(--fg); font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; }
+    .container{ max-width:1100px; margin:0 auto; padding:16px 16px 48px; }
+    .glass{ background: rgba(255,255,255,.05); border:1px solid var(--border); border-radius:20px; backdrop-filter: blur(10px); box-shadow: 0 8px 30px rgba(0,0,0,.35); }
     .grid{ display:grid; gap:16px; grid-template-columns: 1fr; }
     @media (min-width:900px){ .grid{ grid-template-columns: 1fr 1fr; } }
-    .card{ background:#111; border:1px solid var(--border); border-radius:16px; padding:16px; }
+    .card{ padding:18px }
+    h2{ text-align:center; margin:10px 0 18px; }
+    .muted{ color:var(--muted); }
+
+    /* ================== FORM / HISTORIAL ================== */
     .formulario label{ display:block; margin:12px 0 6px; font-weight:700; color:var(--acc); }
     .control{ position:relative }
     .control input, .control select, .control textarea{
       width:100%; padding:12px 42px 12px 12px; border:1px solid #333; border-radius:12px;
-      background:#1a1d24; color:var(--fg); font-size:16px; resize:vertical;
+      background:#0f1115; color:var(--fg); font-size:16px; resize:vertical;
     }
-    .unit{
-      position:absolute; right:10px; top:50%; transform:translateY(-50%);
-      color:#d1d5db; font-size:14px; pointer-events:none;
-    }
-    .btn{
-      width:100%; margin-top:14px; padding:12px; border:none; border-radius:12px;
-      background:var(--acc); color:#111; font-weight:800; cursor:pointer; font-size:16px;
-    }
+    .unit{ position:absolute; right:10px; top:50%; transform:translateY(-50%); color:#d1d5db; font-size:14px; pointer-events:none; }
+    .btn{ width:100%; margin-top:14px; padding:12px; border:none; border-radius:12px; background:var(--acc); color:#111; font-weight:800; cursor:pointer; font-size:16px; }
     .outputs{ display:grid; gap:10px; grid-template-columns: 1fr; margin-top:10px }
     @media (min-width:520px){ .outputs{ grid-template-columns: repeat(2, 1fr); } }
     .out{ background:#1a1d24; border:1px solid var(--border); border-radius:12px; padding:12px; font-weight:700 }
-    .muted{ color:var(--muted); font-weight:400 }
+    .ok{ color:#22c55e } .warn{ color:#f59e0b } .bad{ color:#ef4444 }
     table{ width:100%; border-collapse:collapse; font-size:14px; margin-top:8px }
     th,td{ padding:10px; border-bottom:1px solid rgba(255,255,255,.08); text-align:left }
     th{ color:var(--muted); font-weight:700 }
-    .ok{ color:#22c55e } .warn{ color:#f59e0b } .bad{ color:#ef4444 }
     .nowrap{ white-space:nowrap }
+    .alert{ background:#112b1a; border:1px solid #1f6f3d; color:#a7f3d0; padding:10px 12px; border-radius:10px; margin:8px 0 18px; }
   </style>
   <script>
     function calcAll() {
@@ -145,16 +176,63 @@ if (db_has_table($conexion, 'progreso')) {
   </script>
 </head>
 <body>
-  <div class="contenedor">
+
+  <!-- ===== Menú Unificado ===== -->
+  <header>
+    <div class="mnu-bar">
+      <button class="mnu-btn mnu-open">☰ Menú</button>
+      <div class="mnu-title">Panel Cliente</div>
+      <div class="mnu-spacer"></div>
+      <a class="mnu-btn mnu-btn--ghost" href="cliente_acceso.php?logout=1">Salir</a>
+    </div>
+
+    <!-- Tabs inline (PC) -->
+    <nav class="mnu-inline">
+      <a class="mnu-tab" href="panel_cliente.php">🏠 Inicio</a>
+      <a class="mnu-tab" href="ver_turnos_cliente.php">📅 Ver Turnos</a>
+      <a class="mnu-tab" href="ver_mis_pagos.php">💳 Mis Pagos</a>
+      <a class="mnu-tab" href="pago_online.php">⚡ Pago Online</a>
+      <a class="mnu-tab" href="form_progreso.php">📈 Ver Progreso</a>
+      <a class="mnu-tab" href="evolucion_cliente.php">📊 Evolución</a>
+      <a class="mnu-tab" href="tienda_indumentaria.php">🛍️ Indumentaria</a>
+      <a class="mnu-tab" href="asistente_ia.php">🤖 Asistente IA</a>
+      <a class="mnu-tab" href="cena_fin_anio.php">🍽️ Cena Fin de Año</a>
+      <a class="mnu-tab" href="qr_maquinas.php">🧰 QR de Máquinas</a>
+    </nav>
+
+    <!-- Drawer (móvil) -->
+    <div class="mnu-backdrop" id="mnu-backdrop"></div>
+    <aside class="mnu-drawer" id="mnu-drawer">
+      <div class="mnu-head">
+        <button class="mnu-close" id="mnu-close">✕</button>
+        <div class="mnu-title">Menú</div>
+      </div>
+      <ul class="mnu-list">
+        <li><a class="mnu-item" href="panel_cliente.php"><span class="mnu-item__icon">🏠</span><span class="mnu-item__text">Inicio</span></a></li>
+        <li><a class="mnu-item" href="ver_turnos_cliente.php"><span class="mnu-item__icon">📅</span><span class="mnu-item__text">Ver Turnos</span></a></li>
+        <li><a class="mnu-item" href="ver_mis_pagos.php"><span class="mnu-item__icon">💳</span><span class="mnu-item__text">Mis Pagos</span></a></li>
+        <li><a class="mnu-item" href="pago_online.php"><span class="mnu-item__icon">⚡</span><span class="mnu-item__text">Pago Online</span></a></li>
+        <li><a class="mnu-item" href="form_progreso.php"><span class="mnu-item__icon">📈</span><span class="mnu-item__text">Ver Progreso</span></a></li>
+        <li><a class="mnu-item" href="evolucion_cliente.php"><span class="mnu-item__icon">📊</span><span class="mnu-item__text">Evolución</span></a></li>
+        <li><a class="mnu-item" href="tienda_indumentaria.php"><span class="mnu-item__icon">🛍️</span><span class="mnu-item__text">Indumentaria</span></a></li>
+        <li><a class="mnu-item" href="asistente_ia.php"><span class="mnu-item__icon">🤖</span><span class="mnu-item__text">Asistente IA</span></a></li>
+        <li><a class="mnu-item" href="cena_fin_anio.php"><span class="mnu-item__icon">🍽️</span><span class="mnu-item__text">Cena Fin de Año</span></a></li>
+        <li><a class="mnu-item" href="qr_maquinas.php"><span class="mnu-item__icon">🧰</span><span class="mnu-item__text">QR de Máquinas</span></a></li>
+        <li><a class="mnu-item" href="cliente_acceso.php?logout=1"><span class="mnu-item__icon">🚪</span><span class="mnu-item__text">Salir</span></a></li>
+      </ul>
+    </aside>
+  </header>
+
+  <div class="container">
     <h2>📈 Registrar Progreso Físico</h2>
 
     <?php if (isset($_GET['ok'])): ?>
-      <div class="alert">✅ Progreso guardado correctamente.</div>
+      <div class="alert glass">✅ Progreso guardado correctamente.</div>
     <?php endif; ?>
 
     <div class="grid">
       <!-- Formulario -->
-      <form id="progresoForm" method="POST" action="guardar_progreso.php" oninput="calcAll()" class="card formulario" autocomplete="off" novalidate>
+      <form id="progresoForm" method="POST" action="guardar_progreso.php" oninput="calcAll()" class="glass card formulario" autocomplete="off" novalidate>
         <label for="peso_antes">Peso antes del entrenamiento</label>
         <div class="control">
           <input form="progresoForm" type="number" name="peso_antes" id="peso_antes" step="0.1" min="0.1" inputmode="decimal" placeholder="Ej: 78.5" value="<?= h($peso_prefill) ?>" required>
@@ -197,7 +275,7 @@ if (db_has_table($conexion, 'progreso')) {
           </select>
         </div>
 
-        <label for="enfermedades">Condiciones médicas (ej: diabetes, hipertensión) <span class="muted">(opcional)</span></label>
+        <label for="enfermedades">Condiciones médicas (opcional)</label>
         <div class="control">
           <input form="progresoForm" type="text" name="enfermedades" id="enfermedades" placeholder="Si aplica">
         </div>
@@ -221,9 +299,9 @@ if (db_has_table($conexion, 'progreso')) {
       </form>
 
       <!-- Historial -->
-      <?php if (!empty($historial)): ?>
-        <section class="card">
-          <h3 style="margin:0 0 6px">📚 Historial (últimos 10)</h3>
+      <section class="glass card">
+        <h3 style="margin:0 0 6px">📚 Historial <?= empty($historial) ? '' : '(últimos 10)' ?></h3>
+        <?php if (!empty($historial)): ?>
           <table>
             <thead>
               <tr>
@@ -263,14 +341,28 @@ if (db_has_table($conexion, 'progreso')) {
               <?php endforeach; ?>
             </tbody>
           </table>
-        </section>
-      <?php else: ?>
-        <section class="card">
-          <h3 style="margin:0 0 6px">📚 Historial</h3>
+        <?php else: ?>
           <p class="muted" style="margin:0">Aún no hay registros para mostrar.</p>
-        </section>
-      <?php endif; ?>
+        <?php endif; ?>
+      </section>
     </div>
   </div>
+
+  <script>
+  // ===== Menú (abrir/cerrar + bloquear scroll) =====
+  (function(){
+    const drawer   = document.getElementById('mnu-drawer');
+    const backdrop = document.getElementById('mnu-backdrop');
+    const openBtn  = document.querySelector('.mnu-open');
+    const closeBtn = document.getElementById('mnu-close');
+    const lock = (on)=>{ document.documentElement.style.overflow = document.body.style.overflow = on?'hidden':''; }
+    function open(){ drawer.classList.add('open'); backdrop.classList.add('show'); lock(true); }
+    function close(){ drawer.classList.remove('open'); backdrop.classList.remove('show'); lock(false); }
+    openBtn?.addEventListener('click', open);
+    closeBtn?.addEventListener('click', close);
+    backdrop?.addEventListener('click', close);
+    window.addEventListener('keydown', e=>{ if(e.key==='Escape') close(); });
+  })();
+  </script>
 </body>
 </html>

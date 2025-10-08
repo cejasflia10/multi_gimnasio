@@ -1,5 +1,5 @@
 <?php
-// panel_cliente.php — Panel completo: Promos + Encabezado + Datos + Accesos + Reservas + Rutinas (móvil OK + marca "Descargado")
+// panel_cliente.php — Panel completo con MENÚ UNIFICADO integrado (responsive móvil/PC)
 if (session_status() === PHP_SESSION_NONE) session_start();
 require_once __DIR__ . '/conexion.php';
 
@@ -180,7 +180,7 @@ if ((int)($cliente['datos_completos'] ?? 0) === 0) {
 
 /* ===== Datos base ===== */
 $cliente_nombre = trim(($cliente['apellido'] ?? '').' '.($cliente['nombre'] ?? ''));
-$tz   = new DateTimeZone('America/Argentina/San_Luis');
+try { $tz = new DateTimeZone('America/Argentina/San_Luis'); } catch(Throwable $e){ $tz=new DateTimeZone('America/Argentina/Buenos_Aires'); }
 $hoyD = new DateTime('today', $tz);
 $hoy  = $hoyD->format('Y-m-d');
 $fecha_filtro = isset($_GET['fecha']) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $_GET['fecha']) ? $_GET['fecha'] : $hoy;
@@ -291,7 +291,6 @@ if ($rsP = $conexion->query($sqlPromos)) {
 }
 
 /* ====== RUTINAS/ARCHIVOS ====== */
-/* Tabla vistas (con descargado_en) */
 $conexion->query("CREATE TABLE IF NOT EXISTS rutinas_vistas (
   id INT AUTO_INCREMENT PRIMARY KEY,
   cliente_id INT NOT NULL,
@@ -305,7 +304,6 @@ $conexion->query("CREATE TABLE IF NOT EXISTS rutinas_vistas (
 if (!col_exists($conexion,'rutinas_vistas','descargado_en')) {
   @$conexion->query("ALTER TABLE rutinas_vistas ADD COLUMN descargado_en DATETIME NULL");
 }
-/* Tabla rutinas_clientes */
 $conexion->query("CREATE TABLE IF NOT EXISTS rutinas_clientes (
   id INT AUTO_INCREMENT PRIMARY KEY,
   cliente_id INT NOT NULL,
@@ -321,7 +319,7 @@ $conexion->query("CREATE TABLE IF NOT EXISTS rutinas_clientes (
   INDEX idx_fecha (creado_en)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;");
 
-/* Marcar como visto (botón) */
+/* Marcar como visto */
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['marcar_visto'], $_POST['rutina_id'])) {
   $rid=(int)$_POST['rutina_id']; $okRut=false;
   if ($st=$conexion->prepare("SELECT 1 FROM rutinas_clientes WHERE id=? AND cliente_id=? AND gimnasio_id=? LIMIT 1")) {
@@ -359,9 +357,6 @@ if ($stmtN=$conexion->prepare("
   $rutinas = $stmtN->get_result()->fetch_all(MYSQLI_ASSOC);
   $stmtN->close();
 }
-
-/* ===== Menú cliente (si lo tenés separado) ===== */
-include __DIR__ . '/menu_cliente.php';
 ?>
 <!doctype html>
 <html lang="es">
@@ -370,6 +365,59 @@ include __DIR__ . '/menu_cliente.php';
   <title>Panel del Cliente</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
+    /* ================== MENÚ UNIFICADO (integrado) ================== */
+    :root{
+      --mnu-bg-bar: rgba(15,19,32,.78);
+      --mnu-bg-drawer: rgba(10,12,20,.94);
+      --mnu-fg: #fff;
+      --mnu-fg-dim: #cbd5e1;
+      --mnu-accent: #ffd600;      /* dorado */
+      --mnu-border: rgba(255,255,255,.16);
+      --mnu-shadow: 0 10px 30px rgba(0,0,0,.45);
+    }
+    .mnu-bar{
+      position:sticky; top:0; z-index:1000;
+      display:flex; align-items:center; gap:12px;
+      padding:10px 14px; background:var(--mnu-bg-bar);
+      -webkit-backdrop-filter: blur(10px) saturate(1.05);
+      backdrop-filter: blur(10px) saturate(1.05);
+      border-bottom:1px solid var(--mnu-border);
+    }
+    .mnu-title{ font-weight:800; color:var(--mnu-accent); }
+    .mnu-spacer{ flex:1; }
+    .mnu-btn{ display:inline-flex; align-items:center; gap:8px; padding:10px 14px; border-radius:999px; cursor:pointer; background:var(--mnu-accent); color:#111; border:none; font-weight:700; }
+    .mnu-btn--ghost{ background:transparent; color:var(--mnu-fg); border:1px solid var(--mnu-border); }
+
+    .mnu-inline{ display:flex; gap:10px; flex-wrap:wrap; padding:10px 14px; background:transparent; border-bottom:1px solid var(--mnu-border); }
+    .mnu-tab{ padding:10px 14px; border-radius:14px; border:1px solid var(--mnu-border); color:var(--mnu-fg); text-decoration:none; }
+    .mnu-tab:hover{ background:rgba(255,255,255,.06); }
+
+    @media (max-width:920px){ .mnu-inline{ display:none !important; } }
+
+    .mnu-backdrop{ position:fixed; inset:0; background:rgba(0,0,0,.55); z-index:10005; display:none; }
+    .mnu-drawer{
+      position:fixed; top:0; bottom:0; left:0; width:86vw; max-width:360px;
+      background:var(--mnu-bg-drawer); border-right:1px solid var(--mnu-border);
+      box-shadow:var(--mnu-shadow); transform:translateX(-100%); transition:transform .25s ease;
+      z-index:10010; padding:14px; display:flex; flex-direction:column; gap:12px;
+    }
+    .mnu-drawer.open{ transform:translateX(0); }
+    .mnu-backdrop.show{ display:block; }
+    .mnu-head{ display:flex; align-items:center; gap:10px; margin-bottom:6px; }
+    .mnu-close{ width:44px; height:44px; border-radius:50%; display:grid; place-items:center; cursor:pointer; background:var(--mnu-accent); color:#111; font-weight:900; border:none; }
+    .mnu-list{ display:flex; flex-direction:column; gap:12px; margin:0; padding:0; list-style:none; }
+    .mnu-item{ display:flex; align-items:center; gap:12px; padding:14px; border-radius:14px; border:1px solid var(--mnu-border); color:#fff; text-decoration:none; background:transparent; }
+    .mnu-item:hover{ background:rgba(255,255,255,.10); border-color:rgba(255,255,255,.30); }
+    .mnu-item__icon{ width:24px; display:inline-grid; place-items:center; color:#fff; }
+    .mnu-item__text{ font-size:18px; }
+
+    /* garantías de legibilidad (evita text-fill transparente) */
+    .mnu-bar *, .mnu-drawer *, .mnu-inline *, .mnu-item, .mnu-item *{
+      color:#fff !important; -webkit-text-fill-color:#fff !important;
+      text-shadow:none !important; background-clip:initial !important; -webkit-background-clip:initial !important;
+    }
+
+    /* ================== ESTILOS DEL PANEL ================== */
     :root{
       --bg:#0b0b0b; --surface:#0f1115; --card:#12141a; --fg:#f1f5f9; --muted:#a0a7b4; --acc:#f5c542; --border:rgba(255,255,255,.12);
     }
@@ -443,6 +491,53 @@ include __DIR__ . '/menu_cliente.php';
   </style>
 </head>
 <body>
+
+  <!-- ===== Menú Unificado (integrado) ===== -->
+  <header>
+    <div class="mnu-bar">
+      <button class="mnu-btn mnu-open">☰ Menú</button>
+      <div class="mnu-title">Panel Cliente</div>
+      <div class="mnu-spacer"></div>
+      <a class="mnu-btn mnu-btn--ghost" href="cliente_acceso.php?logout=1">Salir</a>
+    </div>
+
+    <!-- Tabs inline (PC) -->
+    <nav class="mnu-inline">
+      <a class="mnu-tab" href="panel_cliente.php">🏠 Inicio</a>
+      <a class="mnu-tab" href="ver_turnos_cliente.php">📅 Ver Turnos</a>
+      <a class="mnu-tab" href="ver_mis_pagos.php">💳 Mis Pagos</a>
+      <a class="mnu-tab" href="pago_online.php">⚡ Pago Online</a>
+      <a class="mnu-tab" href="form_progreso.php">📈 Ver Progreso</a>
+      <a class="mnu-tab" href="evolucion_cliente.php">📊 Evolución</a>
+      <a class="mnu-tab" href="tienda_indumentaria.php">🛍️ Indumentaria</a>
+      <a class="mnu-tab" href="asistente_ia.php">🤖 Asistente IA</a>
+      <a class="mnu-tab" href="cena_fin_anio.php">🍽️ Cena Fin de Año</a>
+      <a class="mnu-tab" href="qr_maquinas.php">🧰 QR de Máquinas</a>
+    </nav>
+
+    <!-- Drawer (móvil) -->
+    <div class="mnu-backdrop" id="mnu-backdrop"></div>
+    <aside class="mnu-drawer" id="mnu-drawer">
+      <div class="mnu-head">
+        <button class="mnu-close" id="mnu-close">✕</button>
+        <div class="mnu-title">Menú</div>
+      </div>
+      <ul class="mnu-list">
+        <li><a class="mnu-item" href="panel_cliente.php"><span class="mnu-item__icon">🏠</span><span class="mnu-item__text">Inicio</span></a></li>
+        <li><a class="mnu-item" href="ver_turnos_cliente.php"><span class="mnu-item__icon">📅</span><span class="mnu-item__text">Ver Turnos</span></a></li>
+        <li><a class="mnu-item" href="ver_mis_pagos.php"><span class="mnu-item__icon">💳</span><span class="mnu-item__text">Mis Pagos</span></a></li>
+        <li><a class="mnu-item" href="pago_online.php"><span class="mnu-item__icon">⚡</span><span class="mnu-item__text">Pago Online</span></a></li>
+        <li><a class="mnu-item" href="form_progreso.php"><span class="mnu-item__icon">📈</span><span class="mnu-item__text">Ver Progreso</span></a></li>
+        <li><a class="mnu-item" href="evolucion_cliente.php"><span class="mnu-item__icon">📊</span><span class="mnu-item__text">Evolución</span></a></li>
+        <li><a class="mnu-item" href="tienda_indumentaria.php"><span class="mnu-item__icon">🛍️</span><span class="mnu-item__text">Indumentaria</span></a></li>
+        <li><a class="mnu-item" href="asistente_ia.php"><span class="mnu-item__icon">🤖</span><span class="mnu-item__text">Asistente IA</span></a></li>
+        <li><a class="mnu-item" href="cena_fin_anio.php"><span class="mnu-item__icon">🍽️</span><span class="mnu-item__text">Cena Fin de Año</span></a></li>
+        <li><a class="mnu-item" href="qr_maquinas.php"><span class="mnu-item__icon">🧰</span><span class="mnu-item__text">QR de Máquinas</span></a></li>
+        <li><a class="mnu-item" href="cliente_acceso.php?logout=1"><span class="mnu-item__icon">🚪</span><span class="mnu-item__text">Salir</span></a></li>
+      </ul>
+    </aside>
+  </header>
+
   <div class="container">
 
     <!-- ===== Promociones (Flash) ===== -->
@@ -545,7 +640,6 @@ include __DIR__ . '/menu_cliente.php';
               $visto = (int)$n['visto'] === 1;
               $desc  = (int)$n['descargado'] === 1;
 
-              // Desktop: ver inline si es PDF; Móvil: forzar descarga con fl_attachment
               $viewerUrl     = is_pdf_ext($ext) ? cld_viewer_url($url, $ext) : $url;
               $actionDesktop = $viewerUrl;
               $downloadMobile= is_pdf_ext($ext) ? cld_force_attachment($url, $ext, $n['nombre_archivo'] ?? 'archivo.pdf') : $url;
@@ -564,7 +658,6 @@ include __DIR__ . '/menu_cliente.php';
                   · <span class="muted"><?= h($n['creado_en']) ?></span>
                 </div>
 
-                <!-- Visor inline -->
                 <div id="viewer-<?= $rid ?>" class="viewer">
                   <?php if (is_pdf_ext($ext)): ?>
                     <iframe src="<?= h($viewerUrl) ?>" title="PDF"></iframe>
@@ -613,7 +706,22 @@ include __DIR__ . '/menu_cliente.php';
   </div>
 
   <script>
-  // ======== Slider simple de Promos ========
+  // ===== Menú (abrir/cerrar + bloquear scroll) =====
+  (function(){
+    const drawer = document.getElementById('mnu-drawer');
+    const backdrop = document.getElementById('mnu-backdrop');
+    const openBtn = document.querySelector('.mnu-open');
+    const closeBtn = document.getElementById('mnu-close');
+    const lock = (on)=>{ document.documentElement.style.overflow = document.body.style.overflow = on?'hidden':''; }
+    function open(){ drawer.classList.add('open'); backdrop.classList.add('show'); lock(true); }
+    function close(){ drawer.classList.remove('open'); backdrop.classList.remove('show'); lock(false); }
+    openBtn?.addEventListener('click', open);
+    closeBtn?.addEventListener('click', close);
+    backdrop?.addEventListener('click', close);
+    window.addEventListener('keydown', e=>{ if(e.key==='Escape') close(); });
+  })();
+
+  // ===== Slider simple de Promos =====
   (function(){
     const promos = <?= json_encode($promos, JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES) ?>;
     if (!Array.isArray(promos) || promos.length === 0) return;
@@ -653,7 +761,7 @@ include __DIR__ . '/menu_cliente.php';
     }
   })();
 
-  // ======== Reservas del día (AJAX) ========
+  // ===== Reservas del día (AJAX) =====
   document.addEventListener('DOMContentLoaded', () => {
     const ulReservas = document.getElementById('contenedor-reservas');
     const fecha = '<?= h($fecha_filtro) ?>';
@@ -682,14 +790,14 @@ include __DIR__ . '/menu_cliente.php';
       });
   });
 
-  // ======== Visor inline (PDF/Imagen) ========
+  // ===== Visor inline (PDF/Imagen) =====
   function toggleViewer(id){
     const el = document.getElementById('viewer-'+id);
     if (!el) return;
     el.classList.toggle('open');
   }
 
-  // ======== Modo móvil + marcar DESCARGADO con Beacon ========
+  // ===== Modo móvil + marcar DESCARGADO con Beacon =====
   (function(){
     const isMobile = /Android|webOS|iPhone|iPad|iPod|Opera Mini|IEMobile|Mobile/i.test(navigator.userAgent);
     if (isMobile) document.querySelectorAll('.viewer').forEach(v => v.classList.remove('open'));
@@ -701,7 +809,6 @@ include __DIR__ . '/menu_cliente.php';
         const mob   = a.getAttribute('data-mobile-href') || '';
         const desk  = a.getAttribute('data-desktop-href') || a.getAttribute('href') || '#';
 
-        // 1) Marcar como descargado (no bloquea la navegación)
         if (rid) {
           try {
             const fd = new FormData();
@@ -709,13 +816,11 @@ include __DIR__ . '/menu_cliente.php';
             if (navigator.sendBeacon) {
               navigator.sendBeacon('marcar_descarga.php', fd);
             } else {
-              // fallback rápido
               fetch('marcar_descarga.php', { method:'POST', body: fd, keepalive: true }).catch(()=>{});
             }
           } catch(e){}
         }
 
-        // 2) Móvil + PDF -> forzar descarga con fl_attachment
         if (isMobile && ext === 'pdf' && mob) {
           ev.preventDefault();
           a.textContent = 'Descargado';
@@ -726,7 +831,6 @@ include __DIR__ . '/menu_cliente.php';
           return;
         }
 
-        // 3) Desktop o no-PDF: abrir normal
         a.setAttribute('href', desk);
         if (!isMobile) { a.setAttribute('target','_blank'); a.setAttribute('rel','noopener'); }
         else { a.removeAttribute('target'); }

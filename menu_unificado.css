@@ -1,0 +1,101 @@
+/* ======= MENU UNIFICADO (clientes/profes) ======= */
+:root{
+  --mnu-bg-bar: rgba(15,19,32,.78);
+  --mnu-bg-drawer: rgba(10,12,20,.94);
+  --mnu-fg: #fff;
+  --mnu-fg-dim: #cbd5e1;
+  --mnu-accent: #ffd600;     /* clientes */
+  --mnu-border: rgba(255,255,255,.16);
+  --mnu-shadow: 0 10px 30px rgba(0,0,0,.45);
+}
+
+/* Tema alternativo para profesores (solo cambia acento) */
+.mnu--profe{
+  --mnu-accent: #38bdf8;     /* celeste */
+}
+
+/* ===== Barra superior ===== */
+.mnu-bar{
+  position:sticky; top:0; z-index:1000;
+  display:flex; align-items:center; gap:12px;
+  padding:10px 14px;
+  background:var(--mnu-bg-bar);
+  -webkit-backdrop-filter: blur(10px) saturate(1.05);
+  backdrop-filter: blur(10px) saturate(1.05);
+  border-bottom:1px solid var(--mnu-border);
+}
+.mnu-title{ font-weight:800; color:var(--mnu-accent); }
+.mnu-spacer{ flex:1; }
+
+.mnu-btn{
+  display:inline-flex; align-items:center; gap:8px;
+  padding:10px 14px; border-radius:999px; cursor:pointer;
+  background:var(--mnu-accent); color:#111; border:none; font-weight:700;
+}
+.mnu-btn--ghost{ background:transparent; color:var(--mnu-fg); border:1px solid var(--mnu-border); }
+
+/* ===== Drawer lateral ===== */
+.mnu-backdrop{
+  position:fixed; inset:0; background:rgba(0,0,0,.55);
+  z-index:10005; display:none;
+}
+.mnu-drawer{
+  position:fixed; top:0; bottom:0; left:0;
+  width:86vw; max-width:360px;
+  background:var(--mnu-bg-drawer);
+  border-right:1px solid var(--mnu-border);
+  box-shadow:var(--mnu-shadow);
+  transform:translateX(-100%); transition:transform .25s ease;
+  z-index:10010; padding:14px;
+  display:flex; flex-direction:column; gap:12px;
+}
+.mnu-drawer.open{ transform:translateX(0); }
+.mnu-backdrop.show{ display:block; }
+
+/* Cabecera del drawer */
+.mnu-head{ display:flex; align-items:center; gap:10px; margin-bottom:6px; }
+.mnu-close{
+  width:44px; height:44px; border-radius:50%;
+  display:grid; place-items:center; cursor:pointer;
+  background:var(--mnu-accent); color:#111; font-weight:900; border:none;
+}
+
+/* Lista de items */
+.mnu-list{ display:flex; flex-direction:column; gap:12px; margin:0; padding:0; list-style:none; }
+.mnu-item{
+  display:flex; align-items:center; gap:12px;
+  padding:14px; border-radius:14px;
+  border:1px solid var(--mnu-border);
+  color:var(--mnu-fg); text-decoration:none;
+  background:transparent;
+}
+.mnu-item:hover{ background:rgba(255,255,255,.10); border-color:rgba(255,255,255,.30); }
+.mnu-item__icon{ width:24px; display:inline-grid; place-items:center; color:var(--mnu-fg); }
+.mnu-item__text{ font-size:18px; }
+
+/* Ítems deshabilitados (si tu app los bloquea) */
+.mnu-item[aria-disabled="true"]{ opacity:.35; pointer-events:none; }
+
+/* ===== Menú inline (tabs) — PC ===== */
+.mnu-inline{ display:flex; gap:10px; flex-wrap:wrap; padding:10px 14px; }
+.mnu-tab{
+  padding:10px 14px; border-radius:14px;
+  border:1px solid var(--mnu-border); color:var(--mnu-fg); text-decoration:none;
+}
+.mnu-tab:hover{ background:rgba(255,255,255,.06); }
+
+/* En móvil ocultamos la versión inline para que no tape el contenido */
+@media (max-width:920px){
+  .mnu-inline{ display:none !important; }
+}
+
+/* Garantiza legibilidad aunque el tema original meta text-fill transparent */
+.mnu-bar *, .mnu-drawer *, .mnu-inline *, .mnu-item, .mnu-item *{
+  color:var(--mnu-fg) !important;
+  -webkit-text-fill-color: var(--mnu-fg) !important;
+  text-shadow:none !important;
+  background-clip:initial !important; -webkit-background-clip:initial !important;
+}
+
+/* Contenido debajo del header */
+main, .contenedor, .wrap{ position:relative; z-index:1; }
