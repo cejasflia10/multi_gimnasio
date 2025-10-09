@@ -330,6 +330,64 @@ window.addEventListener('load', cargarDatos);
     flex: 1 1 100% !important; min-width: 0 !important; width: 100% !important;
   }
 }
+
+</style>
+<style>
+/* ====== ANTI-VERTICAL EN MÓVIL (solo afecta contenedores AJAX) ====== */
+@media (max-width: 768px){
+  #contenedor-ingresos, #contenedor-reservas, #contenedor-alumnos{
+    /* por si heredan algo raro del padre */
+    writing-mode: horizontal-tb !important;
+    text-orientation: mixed !important;
+  }
+
+  #contenedor-ingresos *, 
+  #contenedor-reservas *, 
+  #contenedor-alumnos *{
+    /* fuerza texto horizontal y normal */
+    writing-mode: horizontal-tb !important;
+    text-orientation: mixed !important;
+    transform: none !important;            /* anula rotate/transform heredados */
+    white-space: normal !important;
+    word-break: normal !important;
+    overflow-wrap: break-word !important;
+    letter-spacing: normal !important;
+    line-height: 1.35 !important;
+  }
+
+  /* títulos/badges en bloque, sin etiquetas verticales */
+  #contenedor-ingresos h1, #contenedor-ingresos h2, #contenedor-ingresos h3,
+  #contenedor-reservas h1, #contenedor-reservas h2, #contenedor-reservas h3,
+  #contenedor-alumnos h1, #contenedor-alumnos h2, #contenedor-alumnos h3,
+  #contenedor-ingresos .badge, #contenedor-reservas .badge, #contenedor-alumnos .badge{
+    display:block !important;
+    white-space:normal !important;
+    text-align:left !important;
+  }
+
+  /* si vienen con columnas/anchos ridículos desde el parcial */
+  #contenedor-ingresos [class*="col"], 
+  #contenedor-reservas [class*="col"],
+  #contenedor-alumnos [class*="col"]{
+    width: 100% !important;
+    min-width: 0 !important;
+    flex: 1 1 100% !important;
+  }
+
+  /* cualquier ancho inline que genere “tiras” laterales */
+  #contenedor-ingresos [style*="width:"],
+  #contenedor-reservas [style*="width:"],
+  #contenedor-alumnos [style*="width:"]{
+    width:auto !important;
+    max-width:100% !important;
+  }
+
+  /* clases típicas que ponen texto vertical/rotado */
+  .vertical, .titulo-vertical, .rot-90, .rotate-90{
+    writing-mode: horizontal-tb !important;
+    transform: none !important;
+  }
+}
 </style>
 
 <script>
@@ -395,6 +453,80 @@ window.addEventListener('load', () => {
 </script>
 
 </head>
+<script>
+(function(){
+  // sanea un nodo y sus hijos (quita vertical/rotaciones/anchos estrechos)
+  function sanitize(root){
+    if(!root) return;
+    const all = root.querySelectorAll('*');
+    all.forEach(el=>{
+      const cs = getComputedStyle(el);
+
+      // anti writing-mode vertical
+      if (cs.writingMode && cs.writingMode !== 'horizontal-tb'){
+        el.style.writingMode = 'horizontal-tb';
+        el.style.textOrientation = 'mixed';
+      }
+
+      // anti rotaciones (rotate/matrix)
+      const tr = cs.transform || '';
+      if (tr && tr !== 'none'){
+        el.style.transform = 'none';
+      }
+
+      // normaliza espaciado y cortes de palabra
+      el.style.whiteSpace   = 'normal';
+      el.style.wordBreak    = 'normal';
+      el.style.overflowWrap = 'break-word';
+      el.style.letterSpacing= 'normal';
+      el.style.lineHeight   = '1.35';
+
+      // si el ancho calculado es muy chico (apila letras), lo soltamos
+      const w = el.getBoundingClientRect().width;
+      if (w && w < 90){
+        el.style.width = 'auto';
+        el.style.maxWidth = '100%';
+        // si es flex-col, pásalo a fila
+        if (cs.display === 'flex' && cs.flexDirection === 'column'){
+          el.style.flexDirection = 'row';
+          el.style.flexWrap = 'wrap';
+        }
+      }
+    });
+  }
+
+  // aplica a contenedores AJAX cuando cargan
+  function aplicar(){
+    ['contenedor-ingresos','contenedor-reservas','contenedor-alumnos'].forEach(id=>{
+      const el = document.getElementById(id);
+      if (el) sanitize(el);
+    });
+  }
+
+  // observa cambios de DOM y re-sanea lo que llegue por fetch()
+  const obs = new MutationObserver(muts=>{
+    muts.forEach(m=>{
+      if (m.addedNodes && m.addedNodes.length){
+        m.addedNodes.forEach(n=>{
+          if (n.nodeType === 1){ // ELEMENT_NODE
+            const host = n.closest && (n.closest('#contenedor-ingresos, #contenedor-reservas, #contenedor-alumnos'));
+            if (host) sanitize(host);
+          }
+        });
+      }
+    });
+  });
+
+  window.addEventListener('load', ()=>{
+    aplicar();
+    ['contenedor-ingresos','contenedor-reservas','contenedor-alumnos'].forEach(id=>{
+      const el = document.getElementById(id);
+      if (el) obs.observe(el, {childList:true, subtree:true});
+    });
+  });
+})();
+</script>
+
 <body>
 
 <div class="wrap">
