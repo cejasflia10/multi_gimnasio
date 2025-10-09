@@ -52,7 +52,7 @@ $cumples = $conexion->query("
   LIMIT 5
 ");
 
-/* Vencimientos (lista corta) */
+/* Vencimientos */
 $vencimientos = $conexion->query("
   SELECT c.nombre, c.apellido, m.fecha_vencimiento
   FROM membresias m
@@ -153,6 +153,7 @@ body{
 }
 .wrap{ max-width:1200px; margin:24px auto; padding:0 16px 40px; }
 
+/* Header */
 .header{ display:grid; grid-template-columns:1fr auto; gap:16px; align-items:center; margin-bottom:16px; }
 .title{
   margin:0; font-weight:900; letter-spacing:.6px;
@@ -165,10 +166,12 @@ body{
 .btn-mini{ padding:6px 10px; border:1px solid var(--stroke); background:linear-gradient(180deg,#fff,#f7fafc); border-radius:12px; cursor:pointer; }
 @media (max-width:992px){ .header{ grid-template-columns:1fr; } .logo-wrap{ justify-content:flex-start; } #logoGym{ max-height:64px; max-width:180px; padding:6px; } }
 
+/* Grid */
 .grid{ display:grid; grid-template-columns:repeat(12,1fr); gap:var(--gap); }
 @media (max-width:1100px){ .grid{ grid-template-columns:repeat(8,1fr); } }
 @media (max-width:768px){  .grid{ grid-template-columns:repeat(4,1fr); } }
 
+/* Cards / elementos base */
 .card,.notice,.alert,.kpi,.field{ background:var(--card); border:1px solid var(--stroke); border-radius:18px; padding:16px; box-shadow:var(--shadow); }
 .card{ grid-column:span 4; }
 .card-header{ display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; gap:12px; }
@@ -198,9 +201,22 @@ ul{ margin:0; padding-left:16px; } li{ margin:6px 0; }
   -webkit-text-fill-color: currentColor !important; opacity:1 !important;
 }
 
-/* ====== FIX MÓVIL: forzar horizontal y ocultar raíles verticales ====== */
-@media (max-width:768px){
-  /* normaliza escritura en TODO el contenido inyectado */
+/* ======= MODO TARJETAS CENTRADAS EN MÓVIL + ANTI-VERTICAL ======= */
+@media (max-width: 900px){
+  body{ background:#f3f4f6 !important; }
+
+  /* contenedores AJAX como “pilas” centradas */
+  #contenedor-ingresos, #contenedor-reservas, #contenedor-alumnos{
+    display:flex; flex-direction:column; align-items:center; gap:16px; padding:12px;
+  }
+  #contenedor-ingresos > div,
+  #contenedor-reservas > div,
+  #contenedor-alumnos > div{
+    background:#fff !important; border-radius:14px !important; box-shadow:0 4px 12px rgba(0,0,0,.1) !important;
+    width:100% !important; max-width:680px !important; padding:14px 16px !important; box-sizing:border-box !important;
+  }
+
+  /* fuerza texto horizontal normal en todo lo inyectado */
   :where(#contenedor-ingresos, #contenedor-reservas, #contenedor-alumnos) *{
     writing-mode: horizontal-tb !important;
     text-orientation: mixed !important;
@@ -209,196 +225,39 @@ ul{ margin:0; padding-left:16px; } li{ margin:6px 0; }
     word-break: normal !important;
     overflow-wrap: break-word !important;
     letter-spacing: normal !important;
-    line-height: 1.35 !important;
+    line-height: 1.4 !important;
     max-width: 100% !important;
   }
-  /* Oculta tiras/raíles típicas que vienen en vertical */
+
+  /* saca rótulos/raíles verticales típicos */
   :where(#contenedor-ingresos, #contenedor-reservas, #contenedor-alumnos)
-    :is(.vertical, .titulo-vertical, .rot-90, .rotate-90, .rail-vertical, [data-vertical], [data-rail]){
-      display:none !important;
+  :is(.vertical,.titulo-vertical,.rot-90,.rotate-90,.rail-vertical,[data-vertical],[data-rail]){
+    display:none !important;
   }
-  /* Por si esas raíces eran columnas estrechas */
+
+  /* expande columnas estrechas o anchos fijos */
   :where(#contenedor-ingresos, #contenedor-reservas, #contenedor-alumnos) [class*="col"],
   :where(#contenedor-ingresos, #contenedor-reservas, #contenedor-alumnos) [style*="width:"]{
     width:auto !important; min-width:0 !important; flex:1 1 100% !important; max-width:100% !important;
+  }
+
+  /* títulos */
+  #contenedor-ingresos h1,#contenedor-ingresos h2,#contenedor-ingresos h3,
+  #contenedor-reservas h1,#contenedor-reservas h2,#contenedor-reservas h3,
+  #contenedor-alumnos h1,#contenedor-alumnos h2,#contenedor-alumnos h3{
+    font-size:1.2rem !important; font-weight:700 !important; color:#b91c1c !important; margin-bottom:10px !important; text-align:left !important;
   }
 }
 </style>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
-/* ---------- Sanitizador de parciales + ocultar raíles por heurística ---------- */
-function sanitizePartial(root){
-  if (!root) return;
-
-  /* 1) quitar estilos embebidos */
-  root.querySelectorAll('style, link[rel="stylesheet"]').forEach(n=>n.remove());
-
-  /* 2) limpiar inline problemático */
-  root.querySelectorAll('*[style]').forEach(el=>{
-    const s = el.style;
-    if (s.writingMode)     s.writingMode = 'horizontal-tb';
-    if (s.textOrientation) s.textOrientation = 'mixed';
-    if (s.transform)       s.transform = 'none';
-    if (s.whiteSpace)      s.whiteSpace = 'normal';
-    if (s.wordBreak)       s.wordBreak = 'normal';
-    if (s.overflowWrap)    s.overflowWrap = 'break-word';
-  });
-
-  /* 3) HEURÍSTICA: ocultar “raíles” (muy altos y muy angostos con mucho texto) */
-  root.querySelectorAll('*').forEach(el=>{
-    const rect = el.getBoundingClientRect();
-    const text = (el.innerText || '').trim();
-    if (
-      rect.width > 0 &&
-      rect.height > 0 &&
-      rect.width < 72 &&                 // angosto
-      rect.height > rect.width * 2 &&    // alto
-      text.replace(/\s+/g,'').length >= 6 // tiene “texto largo” (no es solo un ícono)
-    ){
-      el.style.display = 'none';
-    }
-  });
-
-  /* 4) observar cambios posteriores del parcial (reaplicar) */
-  const mo = new MutationObserver(()=>sanitizePartial(root));
-  mo.observe(root, {subtree:true, childList:true});
-}
-
-/* ---------- Cargas AJAX (con sanitizado) ---------- */
-function cargarDatos(){
-  const elIng = document.getElementById('contenedor-ingresos');
-  const elRes = document.getElementById('contenedor-reservas');
-  const elAlu = document.getElementById('contenedor-alumnos');
-
-  if(elIng){
-    fetch('ajax_ingresos.php',{cache:'no-store'})
-      .then(r=>r.text())
-      .then(html=>{ elIng.innerHTML = html; sanitizePartial(elIng); })
-      .catch(()=>{});
-  }
-
-  const fecha = document.getElementById('fecha')?.value;
-  if(elRes && fecha){
-    fetch('ajax_reservas.php?fecha='+encodeURIComponent(fecha),{cache:'no-store'})
-      .then(r=>r.text())
-      .then(html=>{ elRes.innerHTML = html; sanitizePartial(elRes); })
-      .catch(()=>{});
-  }
-
-  if(elAlu){
-    fetch('ajax_alumnos_hoy.php',{cache:'no-store'})
-      .then(r=>r.text())
-      .then(html=>{ elAlu.innerHTML = html; sanitizePartial(elAlu); })
-      .catch(()=>{});
-  }
-}
-
-function toggleMontos(){
-  const blocks = document.querySelectorAll('.bloque-monto');
-  const icon  = document.getElementById('icono-ojo');
-  const hidden = blocks.length && blocks[0].classList.contains('hidden');
-  blocks.forEach(b => b.classList.toggle('hidden', !hidden));
-  if(icon) icon.textContent = hidden ? '👁️‍🗨️' : '👁️';
-}
-
-setInterval(cargarDatos, 10000);
-window.addEventListener('load', cargarDatos);
-</script>
-<!-- === ULTRA-FIX MOBILE: matar rieles verticales en parciales AJAX === -->
-<style>
-@media (max-width: 900px){
-  /* 1) Forzar horizontal y legibilidad en todo lo inyectado */
-  :where(#contenedor-ingresos, #contenedor-reservas, #contenedor-alumnos) *{
-    writing-mode: horizontal-tb !important;
-    text-orientation: mixed !important;
-    transform: none !important;
-    white-space: normal !important;
-    word-break: normal !important;
-    overflow-wrap: break-word !important;
-    letter-spacing: normal !important;
-    line-height: 1.35 !important;
-    max-width: 100% !important;
-  }
-  /* 2) Clases típicas de rótulos verticales -> fuera */
-  :where(#contenedor-ingresos, #contenedor-reservas, #contenedor-alumnos)
-  :is(.vertical, .titulo-vertical, .rot-90, .rotate-90, .rail-vertical, [data-vertical], [data-rail]){
-    display: none !important;
-  }
-  /* 3) Columnas o cajas demasiado angostas -> expandir o esconder */
-  :where(#contenedor-ingresos, #contenedor-reservas, #contenedor-alumnos) [class*="col"]{
-    flex: 1 1 100% !important; min-width: 0 !important; width: 100% !important;
-  }
-}
-
-</style>
-<style>
-/* ====== ANTI-VERTICAL EN MÓVIL (solo afecta contenedores AJAX) ====== */
-@media (max-width: 768px){
-  #contenedor-ingresos, #contenedor-reservas, #contenedor-alumnos{
-    /* por si heredan algo raro del padre */
-    writing-mode: horizontal-tb !important;
-    text-orientation: mixed !important;
-  }
-
-  #contenedor-ingresos *, 
-  #contenedor-reservas *, 
-  #contenedor-alumnos *{
-    /* fuerza texto horizontal y normal */
-    writing-mode: horizontal-tb !important;
-    text-orientation: mixed !important;
-    transform: none !important;            /* anula rotate/transform heredados */
-    white-space: normal !important;
-    word-break: normal !important;
-    overflow-wrap: break-word !important;
-    letter-spacing: normal !important;
-    line-height: 1.35 !important;
-  }
-
-  /* títulos/badges en bloque, sin etiquetas verticales */
-  #contenedor-ingresos h1, #contenedor-ingresos h2, #contenedor-ingresos h3,
-  #contenedor-reservas h1, #contenedor-reservas h2, #contenedor-reservas h3,
-  #contenedor-alumnos h1, #contenedor-alumnos h2, #contenedor-alumnos h3,
-  #contenedor-ingresos .badge, #contenedor-reservas .badge, #contenedor-alumnos .badge{
-    display:block !important;
-    white-space:normal !important;
-    text-align:left !important;
-  }
-
-  /* si vienen con columnas/anchos ridículos desde el parcial */
-  #contenedor-ingresos [class*="col"], 
-  #contenedor-reservas [class*="col"],
-  #contenedor-alumnos [class*="col"]{
-    width: 100% !important;
-    min-width: 0 !important;
-    flex: 1 1 100% !important;
-  }
-
-  /* cualquier ancho inline que genere “tiras” laterales */
-  #contenedor-ingresos [style*="width:"],
-  #contenedor-reservas [style*="width:"],
-  #contenedor-alumnos [style*="width:"]{
-    width:auto !important;
-    max-width:100% !important;
-  }
-
-  /* clases típicas que ponen texto vertical/rotado */
-  .vertical, .titulo-vertical, .rot-90, .rotate-90{
-    writing-mode: horizontal-tb !important;
-    transform: none !important;
-  }
-}
-</style>
-
-<script>
-/* Sanitiza un contenedor inyectado por AJAX */
+/* Quita estilos embebidos y “raíles” verticales de cada parcial AJAX */
 function sanitizeAjaxContainer(root){
   if(!root) return;
 
-  // Quitar <style> / <link> embebidos del parcial
   root.querySelectorAll('style, link[rel="stylesheet"]').forEach(n => n.remove());
 
-  // Normalizar inline conflictivo
   root.querySelectorAll('[style]').forEach(el => {
     el.style.writingMode = 'horizontal-tb';
     el.style.textOrientation = 'mixed';
@@ -409,7 +268,7 @@ function sanitizeAjaxContainer(root){
     el.style.maxWidth = '100%';
   });
 
-  // Heurística: ocultar rieles (muy altos y angostos con texto)
+  // Heurística: elementos muy angostos y altos con texto -> esconder (suelen ser rieles verticales)
   root.querySelectorAll('*').forEach(el => {
     const r = el.getBoundingClientRect();
     const txt = (el.innerText || '').replace(/\s+/g,'').trim();
@@ -419,7 +278,7 @@ function sanitizeAjaxContainer(root){
   });
 }
 
-/* Envuelve fetch + sanitización (llamala en lugar del fetch directo) */
+/* Fetch + sanitización */
 function fetchInto(url, targetId){
   const el = document.getElementById(targetId);
   if(!el) return;
@@ -428,104 +287,34 @@ function fetchInto(url, targetId){
     .then(html => {
       el.innerHTML = html;
       sanitizeAjaxContainer(el);
-      // Observa cambios posteriores del parcial
       new MutationObserver(() => sanitizeAjaxContainer(el))
         .observe(el, {subtree:true, childList:true});
     })
     .catch(()=>{});
 }
 
-/* REEMPLAZA tus llamadas actuales por estas: */
-window.addEventListener('load', () => {
-  const fecha = document.getElementById('fecha')?.value;
+/* Cargas periódicas */
+function cargarDatos(){
+  const f = document.getElementById('fecha')?.value;
   fetchInto('ajax_ingresos.php', 'contenedor-ingresos');
-  if(fecha) fetchInto('ajax_reservas.php?fecha='+encodeURIComponent(fecha), 'contenedor-reservas');
+  if (f) fetchInto('ajax_reservas.php?fecha='+encodeURIComponent(f), 'contenedor-reservas');
   fetchInto('ajax_alumnos_hoy.php', 'contenedor-alumnos');
+}
 
-  // refresco cada 10s
-  setInterval(() => {
-    const f = document.getElementById('fecha')?.value;
-    fetchInto('ajax_ingresos.php', 'contenedor-ingresos');
-    if(f) fetchInto('ajax_reservas.php?fecha='+encodeURIComponent(f), 'contenedor-reservas');
-    fetchInto('ajax_alumnos_hoy.php', 'contenedor-alumnos');
-  }, 10000);
+function toggleMontos(){
+  const blocks = document.querySelectorAll('.bloque-monto');
+  const icon  = document.getElementById('icono-ojo');
+  const hidden = blocks.length && blocks[0].classList.contains('hidden');
+  blocks.forEach(b => b.classList.toggle('hidden', !hidden));
+  if(icon) icon.textContent = hidden ? '👁️‍🗨️' : '👁️';
+}
+
+window.addEventListener('load', () => {
+  cargarDatos();
+  setInterval(cargarDatos, 10000);
 });
 </script>
-
 </head>
-<script>
-(function(){
-  // sanea un nodo y sus hijos (quita vertical/rotaciones/anchos estrechos)
-  function sanitize(root){
-    if(!root) return;
-    const all = root.querySelectorAll('*');
-    all.forEach(el=>{
-      const cs = getComputedStyle(el);
-
-      // anti writing-mode vertical
-      if (cs.writingMode && cs.writingMode !== 'horizontal-tb'){
-        el.style.writingMode = 'horizontal-tb';
-        el.style.textOrientation = 'mixed';
-      }
-
-      // anti rotaciones (rotate/matrix)
-      const tr = cs.transform || '';
-      if (tr && tr !== 'none'){
-        el.style.transform = 'none';
-      }
-
-      // normaliza espaciado y cortes de palabra
-      el.style.whiteSpace   = 'normal';
-      el.style.wordBreak    = 'normal';
-      el.style.overflowWrap = 'break-word';
-      el.style.letterSpacing= 'normal';
-      el.style.lineHeight   = '1.35';
-
-      // si el ancho calculado es muy chico (apila letras), lo soltamos
-      const w = el.getBoundingClientRect().width;
-      if (w && w < 90){
-        el.style.width = 'auto';
-        el.style.maxWidth = '100%';
-        // si es flex-col, pásalo a fila
-        if (cs.display === 'flex' && cs.flexDirection === 'column'){
-          el.style.flexDirection = 'row';
-          el.style.flexWrap = 'wrap';
-        }
-      }
-    });
-  }
-
-  // aplica a contenedores AJAX cuando cargan
-  function aplicar(){
-    ['contenedor-ingresos','contenedor-reservas','contenedor-alumnos'].forEach(id=>{
-      const el = document.getElementById(id);
-      if (el) sanitize(el);
-    });
-  }
-
-  // observa cambios de DOM y re-sanea lo que llegue por fetch()
-  const obs = new MutationObserver(muts=>{
-    muts.forEach(m=>{
-      if (m.addedNodes && m.addedNodes.length){
-        m.addedNodes.forEach(n=>{
-          if (n.nodeType === 1){ // ELEMENT_NODE
-            const host = n.closest && (n.closest('#contenedor-ingresos, #contenedor-reservas, #contenedor-alumnos'));
-            if (host) sanitize(host);
-          }
-        });
-      }
-    });
-  });
-
-  window.addEventListener('load', ()=>{
-    aplicar();
-    ['contenedor-ingresos','contenedor-reservas','contenedor-alumnos'].forEach(id=>{
-      const el = document.getElementById(id);
-      if (el) obs.observe(el, {childList:true, subtree:true});
-    });
-  });
-})();
-</script>
 
 <body>
 
