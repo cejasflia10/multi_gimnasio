@@ -1,7 +1,7 @@
 <?php
 if (session_status() === PHP_SESSION_NONE) session_start();
 
-/* ---- sesión/inactividad ---- */
+/* --- Sesión e inactividad --- */
 $timeout_minutos = 30;
 if (!isset($_SESSION['gimnasio_id'])) { session_unset(); session_destroy(); header('Location: login.php'); exit; }
 if (isset($_SESSION['last_activity']) && (time()-$_SESSION['last_activity']) > $timeout_minutos*60){
@@ -11,15 +11,14 @@ $_SESSION['last_activity']=time();
 if (!isset($_SESSION['session_regenerated_time']) || time()-$_SESSION['session_regenerated_time']>900){
   session_regenerate_id(true); $_SESSION['session_regenerated_time']=time();
 }
-/* ---- /sesión ---- */
 
 require_once 'conexion.php';
 require_once 'menu_horizontal.php';
 
 $gimnasio_id = (int)($_SESSION['gimnasio_id'] ?? 0);
 
-/* Gym */
-$gimnasio   = $conexion->query("SELECT nombre, logo, fecha_vencimiento FROM gimnasios WHERE id = {$gimnasio_id}")->fetch_assoc();
+/* Datos gym */
+$gimnasio   = $conexion->query("SELECT nombre, logo, fecha_vencimiento FROM gimnasios WHERE id={$gimnasio_id}")->fetch_assoc();
 $nombre_gym = $gimnasio['nombre'] ?? 'Gimnasio';
 $logo       = $gimnasio['logo']   ?? '';
 $fecha_venc = $gimnasio['fecha_vencimiento'] ?? '---';
@@ -53,7 +52,7 @@ $cumples = $conexion->query("
   LIMIT 5
 ");
 
-/* Vencimientos */
+/* Vencimientos (lista corta) */
 $vencimientos = $conexion->query("
   SELECT c.nombre, c.apellido, m.fecha_vencimiento
   FROM membresias m
@@ -66,7 +65,7 @@ $vencimientos = $conexion->query("
   LIMIT 5
 ");
 
-/* Pagos y CC */
+/* Pendientes y CC */
 $pagos_pendientes = (int)($conexion->query("
   SELECT COUNT(*) t
   FROM pagos_pendientes pp
@@ -82,7 +81,7 @@ $cuentas_corrientes = (int)($conexion->query("
   ) x
 ")->fetch_assoc()['t'] ?? 0);
 
-/* Avisos nuevos */
+/* Nuevos online */
 $nuevos = $conexion->query("SELECT id, nombre, apellido FROM clientes WHERE gimnasio_id={$gimnasio_id} AND nuevo_online=1");
 $avisos_html = '';
 if ($nuevos && $nuevos->num_rows) {
@@ -155,7 +154,8 @@ body{
 .wrap{ max-width:1200px; margin:24px auto; padding:0 16px 40px; }
 
 .header{ display:grid; grid-template-columns:1fr auto; gap:16px; align-items:center; margin-bottom:16px; }
-.title{ margin:0; font-weight:900; letter-spacing:.6px;
+.title{
+  margin:0; font-weight:900; letter-spacing:.6px;
   background:linear-gradient(90deg,var(--brand),var(--brand-2),var(--brand-3));
   -webkit-background-clip:text; background-clip:text; color:transparent;
 }
@@ -190,7 +190,7 @@ ul{ margin:0; padding-left:16px; } li{ margin:6px 0; }
 .chart-wrap{ aspect-ratio:16/9; position:relative; width:100%; max-width:820px; margin:0 auto; }
 #disciplinasChart{ position:absolute; inset:0; }
 
-/* legibilidad general */
+/* Legibilidad general */
 .wrap, .wrap *{
   letter-spacing:normal !important; line-height:1.35 !important; text-transform:none !important;
   white-space:normal !important; word-break:normal !important; overflow-wrap:break-word !important;
@@ -198,8 +198,9 @@ ul{ margin:0; padding-left:16px; } li{ margin:6px 0; }
   -webkit-text-fill-color: currentColor !important; opacity:1 !important;
 }
 
-/* ===== FIX MÓVIL: forzar horizontal en parciales AJAX ===== */
+/* ====== FIX MÓVIL: forzar horizontal y ocultar raíles verticales ====== */
 @media (max-width:768px){
+  /* normaliza escritura en TODO el contenido inyectado */
   :where(#contenedor-ingresos, #contenedor-reservas, #contenedor-alumnos) *{
     writing-mode: horizontal-tb !important;
     text-orientation: mixed !important;
@@ -211,26 +212,29 @@ ul{ margin:0; padding-left:16px; } li{ margin:6px 0; }
     line-height: 1.35 !important;
     max-width: 100% !important;
   }
-  /* Anchos fluidos si los parciales usan columnas estrechas o inline styles */
+  /* Oculta tiras/raíles típicas que vienen en vertical */
+  :where(#contenedor-ingresos, #contenedor-reservas, #contenedor-alumnos)
+    :is(.vertical, .titulo-vertical, .rot-90, .rotate-90, .rail-vertical, [data-vertical], [data-rail]){
+      display:none !important;
+  }
+  /* Por si esas raíces eran columnas estrechas */
   :where(#contenedor-ingresos, #contenedor-reservas, #contenedor-alumnos) [class*="col"],
   :where(#contenedor-ingresos, #contenedor-reservas, #contenedor-alumnos) [style*="width:"]{
     width:auto !important; min-width:0 !important; flex:1 1 100% !important; max-width:100% !important;
   }
-  /* Rotulación vertical típica */
-  .vertical,.titulo-vertical,.rot-90,.rotate-90{ writing-mode:horizontal-tb !important; transform:none !important; }
 }
 </style>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
-/* --- Sanitizador de parciales --- */
+/* ---------- Sanitizador de parciales + ocultar raíles por heurística ---------- */
 function sanitizePartial(root){
   if (!root) return;
 
-  /* 1) Quitar <style> y <link rel="stylesheet"> que vengan adentro */
+  /* 1) quitar estilos embebidos */
   root.querySelectorAll('style, link[rel="stylesheet"]').forEach(n=>n.remove());
 
-  /* 2) Limpiar estilos inline problemáticos */
+  /* 2) limpiar inline problemático */
   root.querySelectorAll('*[style]').forEach(el=>{
     const s = el.style;
     if (s.writingMode)     s.writingMode = 'horizontal-tb';
@@ -239,15 +243,29 @@ function sanitizePartial(root){
     if (s.whiteSpace)      s.whiteSpace = 'normal';
     if (s.wordBreak)       s.wordBreak = 'normal';
     if (s.overflowWrap)    s.overflowWrap = 'break-word';
-    if (s.width && /px|vw|%/.test(s.width) && parseFloat(s.width) < 80){ s.width='auto'; s.maxWidth='100%'; }
   });
 
-  /* 3) Observer por si el parcial vuelve a inyectar estilos */
+  /* 3) HEURÍSTICA: ocultar “raíles” (muy altos y muy angostos con mucho texto) */
+  root.querySelectorAll('*').forEach(el=>{
+    const rect = el.getBoundingClientRect();
+    const text = (el.innerText || '').trim();
+    if (
+      rect.width > 0 &&
+      rect.height > 0 &&
+      rect.width < 72 &&                 // angosto
+      rect.height > rect.width * 2 &&    // alto
+      text.replace(/\s+/g,'').length >= 6 // tiene “texto largo” (no es solo un ícono)
+    ){
+      el.style.display = 'none';
+    }
+  });
+
+  /* 4) observar cambios posteriores del parcial (reaplicar) */
   const mo = new MutationObserver(()=>sanitizePartial(root));
   mo.observe(root, {subtree:true, childList:true});
 }
 
-/* --- Cargas AJAX con sanitización y fix móvil --- */
+/* ---------- Cargas AJAX (con sanitizado) ---------- */
 function cargarDatos(){
   const elIng = document.getElementById('contenedor-ingresos');
   const elRes = document.getElementById('contenedor-reservas');
@@ -256,29 +274,23 @@ function cargarDatos(){
   if(elIng){
     fetch('ajax_ingresos.php',{cache:'no-store'})
       .then(r=>r.text())
-      .then(html=>{
-        elIng.innerHTML = html;
-        sanitizePartial(elIng);
-      }).catch(()=>{});
+      .then(html=>{ elIng.innerHTML = html; sanitizePartial(elIng); })
+      .catch(()=>{});
   }
 
   const fecha = document.getElementById('fecha')?.value;
   if(elRes && fecha){
     fetch('ajax_reservas.php?fecha='+encodeURIComponent(fecha),{cache:'no-store'})
       .then(r=>r.text())
-      .then(html=>{
-        elRes.innerHTML = html;
-        sanitizePartial(elRes);
-      }).catch(()=>{});
+      .then(html=>{ elRes.innerHTML = html; sanitizePartial(elRes); })
+      .catch(()=>{});
   }
 
   if(elAlu){
     fetch('ajax_alumnos_hoy.php',{cache:'no-store'})
       .then(r=>r.text())
-      .then(html=>{
-        elAlu.innerHTML = html;
-        sanitizePartial(elAlu);
-      }).catch(()=>{});
+      .then(html=>{ elAlu.innerHTML = html; sanitizePartial(elAlu); })
+      .catch(()=>{});
   }
 }
 
