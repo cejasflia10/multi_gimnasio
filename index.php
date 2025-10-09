@@ -64,7 +64,7 @@ $estado = $conexion->query("
 $activos   = (int)($estado['activos'] ?? 0);
 $inactivos = (int)($estado['inactivos'] ?? 0);
 
-// ===== Cumpleaños (filtro seguro) =====
+// ===== Cumpleaños =====
 $cumples = $conexion->query("
   SELECT nombre, apellido, fecha_nacimiento
   FROM clientes
@@ -76,7 +76,7 @@ $cumples = $conexion->query("
   LIMIT 5
 ");
 
-// ===== Vencimientos (filtro seguro) =====
+// ===== Vencimientos =====
 $vencimientos = $conexion->query("
   SELECT c.nombre, c.apellido, m.fecha_vencimiento
   FROM membresias m
@@ -136,7 +136,7 @@ if ($nuevos && $nuevos->num_rows > 0) {
     $avisos_html = ob_get_clean();
 }
 
-// ===== Disciplinas TOP (normalizadas) =====
+// ===== Disciplinas TOP =====
 $disciplinas_top_q = $conexion->query("
   SELECT nombre_mostrar, total
   FROM (
@@ -144,8 +144,8 @@ $disciplinas_top_q = $conexion->query("
       MIN(
         TRIM(
           REPLACE(
-            REPLACE(COALESCE(d.nombre, c.disciplina), CONVERT(0xC2A0 USING utf8mb4), ' '), /* NBSP */
-            CHAR(9), ' ' /* TAB */
+            REPLACE(COALESCE(d.nombre, c.disciplina), CONVERT(0xC2A0 USING utf8mb4), ' '),
+            CHAR(9), ' '
           )
         )
       ) AS nombre_mostrar,
@@ -202,7 +202,6 @@ if ($disciplinas_rows) {
 <title>Panel General - <?= htmlspecialchars($nombre_gym) ?></title>
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 
-<!-- ================== TEMA GYM LIGHT (CLARO, MODERNO) ================== -->
 <style>
   :root{
     --bg1:#f5f7fb; --bg2:#eef3f9;
@@ -225,10 +224,8 @@ if ($disciplinas_rows) {
       linear-gradient(180deg, var(--bg1) 0%, var(--bg2) 100%);
   }
 
-  /* Contenedor principal */
   .wrap{ max-width:1200px; margin:24px auto; padding:0 16px 40px; }
 
-  /* Header con logo grande a la derecha en desktop */
   .header{
     display:grid; grid-template-columns: 1fr auto; gap:16px; align-items:center; margin-bottom:16px;
   }
@@ -258,12 +255,10 @@ if ($disciplinas_rows) {
     #logoGym{ max-height:64px; max-width:180px; padding:6px; }
   }
 
-  /* Grid tarjetas */
   .grid{ display:grid; grid-template-columns: repeat(12,1fr); gap:var(--gap); }
   @media (max-width:1100px){ .grid{ grid-template-columns: repeat(8,1fr); } }
   @media (max-width:768px){ .grid{ grid-template-columns: repeat(4,1fr); } }
 
-  /* Tarjetas/KPIs/Alertas/Field */
   .card,.notice,.alert,.kpi,.field{
     background:var(--card); border:1px solid var(--stroke);
     border-radius:var(--radius); padding:16px; box-shadow:var(--shadow);
@@ -275,13 +270,11 @@ if ($disciplinas_rows) {
   .card-title{ margin:0; color:var(--brand); font-size:1.05rem; }
   .card-sub{ margin:0; color:#64748b; font-size:.9rem; }
 
-  /* KPIs */
   .kpis{ display:flex; gap:12px; flex-wrap:wrap; margin:10px 0 16px; }
   .kpi{ min-width:160px; background:linear-gradient(180deg,#fff,#f8fafc); }
   .kpi-label{ color:var(--brand); font-size:.8rem; letter-spacing:.3px; }
   .kpi-value{ color:var(--ink); font-weight:900; font-size:1.8rem; line-height:1.1; }
 
-  /* Avisos */
   .notice-warm{ border-color:#f59e0b55; }
   .notice-title{ font-weight:700; color:var(--brand); margin-bottom:6px; }
   .notice-item{ padding:6px 0; }
@@ -292,11 +285,9 @@ if ($disciplinas_rows) {
     background:linear-gradient(180deg,#fff,#f9fafb);
   }
 
-  /* Listas */
   ul{ margin:0; padding-left:16px; }
   li{ margin:6px 0; }
 
-  /* Toolbar */
   .toolbar{ display:flex; justify-content:flex-end; align-items:center; gap:10px; margin:6px 0 12px; }
   .icon-btn{
     cursor:pointer; user-select:none; font-size:20px; line-height:1;
@@ -305,17 +296,14 @@ if ($disciplinas_rows) {
     box-shadow:0 6px 16px rgba(2,6,23,.08);
   }
 
-  /* Chart */
   .chart-wrap{ aspect-ratio:16/9; position:relative; width:100%; max-width:820px; margin:0 auto; }
   #disciplinasChart{ position:absolute; inset:0; }
 
-  /* Inputs */
   .field{ display:flex; gap:8px; align-items:center; }
   input[type="date"]{
     background:transparent; border:none; outline:none; color:var(--ink); font-size:.95rem;
   }
 
-  /* Skeleton */
   .skeleton{
     position:relative; overflow:hidden;
     background: linear-gradient(180deg,#f3f6fb,#eef3f9);
@@ -328,21 +316,24 @@ if ($disciplinas_rows) {
   }
   @keyframes shimmer{ 100%{ transform: translateX(100%); } }
 
-  /* Helpers */
   .mut{ color:#64748b; }
   .ok{ color:var(--ok); }
   .warn{ color:var(--warn); }
   .hidden{ display:none !important; }
 
-  /* ===== HOTFIX LEGIBILIDAD (evita texto pegado) ===== */
+  /* ========= HOTFIX LEGIBILIDAD (sin romper palabras) ========= */
   .wrap, .wrap *{
     letter-spacing: normal !important;
-    text-transform: none !important;
     line-height: 1.35 !important;
+    text-transform: none !important;
+
+    /* Mantiene las palabras juntas y solo corta cuando hace falta */
     white-space: normal !important;
-    word-break: break-word !important;
-    overflow-wrap: anywhere !important;
-    hyphens: auto;
+    word-break: normal !important;
+    overflow-wrap: break-word !important;  /* NO 'anywhere' */
+    hyphens: auto !important;
+
+    /* Limpieza de efectos que podían afectar contraste/opacidad */
     text-shadow: none !important;
     filter: none !important;
     mix-blend-mode: normal !important;
@@ -350,11 +341,10 @@ if ($disciplinas_rows) {
     opacity: 1 !important;
   }
   .card ul, .card ol { margin: 0 0 8px 20px; padding: 0; }
-  .card li { margin: 6px 0; line-height: 1.4; }
+  .card li { margin: 6px 0; line-height: 1.45; }
   .field { flex-wrap: wrap; }
   .field label { white-space: nowrap; }
 </style>
-<!-- ==================================================================== -->
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
@@ -384,7 +374,6 @@ if ($disciplinas_rows) {
 
 <div class="wrap">
 
-  <!-- Encabezado: Título a la izquierda, Logo grande a la derecha -->
   <div class="header">
     <div class="brand-title">
       <h1 class="title">🏋️ <?= htmlspecialchars($nombre_gym) ?></h1>
@@ -412,7 +401,6 @@ if ($disciplinas_rows) {
     </div>
   </div>
 
-  <!-- KPIs -->
   <div class="kpis">
     <div class="kpi"><div class="kpi-label">Activos</div><div class="kpi-value"><?= (int)$activos ?></div></div>
     <div class="kpi"><div class="kpi-label">Inactivos</div><div class="kpi-value"><?= (int)$inactivos ?></div></div>
@@ -434,15 +422,12 @@ if ($disciplinas_rows) {
     </div>
   <?php endif; ?>
 
-  <!-- Toolbar -->
   <div class="toolbar">
     <span id="icono-ojo" class="icon-btn" title="Mostrar/Ocultar montos" onclick="toggleMontos()">👁️‍🗨️</span>
   </div>
 
-  <!-- GRID -->
   <div class="grid">
 
-    <!-- Ingresos -->
     <section class="card bloque-monto" id="contenedor-ingresos">
       <div class="card-header">
         <h3 class="card-title">💰 Ingresos</h3>
@@ -451,7 +436,6 @@ if ($disciplinas_rows) {
       <div class="skeleton" style="min-height:120px"></div>
     </section>
 
-    <!-- Cumpleaños -->
     <section class="card">
       <div class="card-header">
         <h3 class="card-title">🎂 Próximos Cumpleaños</h3>
@@ -467,7 +451,6 @@ if ($disciplinas_rows) {
       </ul>
     </section>
 
-    <!-- Vencimientos -->
     <section class="card">
       <div class="card-header">
         <h3 class="card-title">🗓 Vencimientos</h3>
@@ -483,7 +466,6 @@ if ($disciplinas_rows) {
       </ul>
     </section>
 
-    <!-- Reservas -->
     <section class="card" style="grid-column: span 8">
       <div class="card-header">
         <h3 class="card-title">📋 Reservas del día</h3>
@@ -499,7 +481,6 @@ if ($disciplinas_rows) {
       </div>
     </section>
 
-    <!-- Alumnos hoy -->
     <section class="card" id="contenedor-alumnos">
       <div class="card-header">
         <h3 class="card-title">🧑‍🎓 Alumnos de hoy</h3>
@@ -508,7 +489,6 @@ if ($disciplinas_rows) {
       <div class="skeleton" style="min-height:110px"></div>
     </section>
 
-    <!-- Gráfico: Disciplinas -->
     <section class="card" style="grid-column: span 8">
       <div class="card-header">
         <h3 class="card-title">📊 Disciplinas más registradas</h3>
@@ -522,12 +502,11 @@ if ($disciplinas_rows) {
       <?php endif; ?>
     </section>
 
-  </div><!-- /grid -->
+  </div>
 
-</div><!-- /wrap -->
+</div>
 
 <script>
-  // Render del gráfico de disciplinas (colores pensados para fondo claro)
   (function(){
     const data = <?= json_encode($disciplinas_rows, JSON_UNESCAPED_UNICODE) ?>;
     if(!Array.isArray(data) || !data.length) return;
@@ -537,8 +516,8 @@ if ($disciplinas_rows) {
 
     const h = el.offsetHeight || el.height || 300;
     const grad = ctx.createLinearGradient(0, 0, 0, h);
-    grad.addColorStop(0, 'rgba(251, 191, 36, .95)');  // #fbbf24
-    grad.addColorStop(1, 'rgba(245, 158, 11, .65)');  // #f59e0b
+    grad.addColorStop(0, 'rgba(251, 191, 36, .95)');
+    grad.addColorStop(1, 'rgba(245, 158, 11, .65)');
 
     new Chart(ctx, {
       type: 'bar',
@@ -548,7 +527,7 @@ if ($disciplinas_rows) {
           label: 'Registros',
           data: data.map(d => Number(d.total)),
           backgroundColor: grad,
-          borderColor: 'rgba(180,83,9,.9)', // #b45309
+          borderColor: 'rgba(180,83,9,.9)',
           borderWidth: 2,
           borderRadius: 10,
           hoverBorderWidth: 2.5
