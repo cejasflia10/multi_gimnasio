@@ -333,6 +333,26 @@ if ($disciplinas_rows) {
   .ok{ color:var(--ok); }
   .warn{ color:var(--warn); }
   .hidden{ display:none !important; }
+
+  /* ===== HOTFIX LEGIBILIDAD (evita texto pegado) ===== */
+  .wrap, .wrap *{
+    letter-spacing: normal !important;
+    text-transform: none !important;
+    line-height: 1.35 !important;
+    white-space: normal !important;
+    word-break: break-word !important;
+    overflow-wrap: anywhere !important;
+    hyphens: auto;
+    text-shadow: none !important;
+    filter: none !important;
+    mix-blend-mode: normal !important;
+    -webkit-text-fill-color: currentColor !important;
+    opacity: 1 !important;
+  }
+  .card ul, .card ol { margin: 0 0 8px 20px; padding: 0; }
+  .card li { margin: 6px 0; line-height: 1.4; }
+  .field { flex-wrap: wrap; }
+  .field label { white-space: nowrap; }
 </style>
 <!-- ==================================================================== -->
 
@@ -515,7 +535,8 @@ if ($disciplinas_rows) {
     if(!el) return;
     const ctx = el.getContext('2d');
 
-    const grad = ctx.createLinearGradient(0, 0, 0, el.height);
+    const h = el.offsetHeight || el.height || 300;
+    const grad = ctx.createLinearGradient(0, 0, 0, h);
     grad.addColorStop(0, 'rgba(251, 191, 36, .95)');  // #fbbf24
     grad.addColorStop(1, 'rgba(245, 158, 11, .65)');  // #f59e0b
 
