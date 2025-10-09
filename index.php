@@ -305,6 +305,95 @@ function toggleMontos(){
 setInterval(cargarDatos, 10000);
 window.addEventListener('load', cargarDatos);
 </script>
+<!-- === ULTRA-FIX MOBILE: matar rieles verticales en parciales AJAX === -->
+<style>
+@media (max-width: 900px){
+  /* 1) Forzar horizontal y legibilidad en todo lo inyectado */
+  :where(#contenedor-ingresos, #contenedor-reservas, #contenedor-alumnos) *{
+    writing-mode: horizontal-tb !important;
+    text-orientation: mixed !important;
+    transform: none !important;
+    white-space: normal !important;
+    word-break: normal !important;
+    overflow-wrap: break-word !important;
+    letter-spacing: normal !important;
+    line-height: 1.35 !important;
+    max-width: 100% !important;
+  }
+  /* 2) Clases típicas de rótulos verticales -> fuera */
+  :where(#contenedor-ingresos, #contenedor-reservas, #contenedor-alumnos)
+  :is(.vertical, .titulo-vertical, .rot-90, .rotate-90, .rail-vertical, [data-vertical], [data-rail]){
+    display: none !important;
+  }
+  /* 3) Columnas o cajas demasiado angostas -> expandir o esconder */
+  :where(#contenedor-ingresos, #contenedor-reservas, #contenedor-alumnos) [class*="col"]{
+    flex: 1 1 100% !important; min-width: 0 !important; width: 100% !important;
+  }
+}
+</style>
+
+<script>
+/* Sanitiza un contenedor inyectado por AJAX */
+function sanitizeAjaxContainer(root){
+  if(!root) return;
+
+  // Quitar <style> / <link> embebidos del parcial
+  root.querySelectorAll('style, link[rel="stylesheet"]').forEach(n => n.remove());
+
+  // Normalizar inline conflictivo
+  root.querySelectorAll('[style]').forEach(el => {
+    el.style.writingMode = 'horizontal-tb';
+    el.style.textOrientation = 'mixed';
+    el.style.transform = 'none';
+    el.style.whiteSpace = 'normal';
+    el.style.wordBreak = 'normal';
+    el.style.overflowWrap = 'break-word';
+    el.style.maxWidth = '100%';
+  });
+
+  // Heurística: ocultar rieles (muy altos y angostos con texto)
+  root.querySelectorAll('*').forEach(el => {
+    const r = el.getBoundingClientRect();
+    const txt = (el.innerText || '').replace(/\s+/g,'').trim();
+    if (r.width > 0 && r.height > 0 && r.width < 72 && r.height > r.width * 2 && txt.length >= 6){
+      el.style.display = 'none';
+    }
+  });
+}
+
+/* Envuelve fetch + sanitización (llamala en lugar del fetch directo) */
+function fetchInto(url, targetId){
+  const el = document.getElementById(targetId);
+  if(!el) return;
+  fetch(url, {cache:'no-store'})
+    .then(r => r.text())
+    .then(html => {
+      el.innerHTML = html;
+      sanitizeAjaxContainer(el);
+      // Observa cambios posteriores del parcial
+      new MutationObserver(() => sanitizeAjaxContainer(el))
+        .observe(el, {subtree:true, childList:true});
+    })
+    .catch(()=>{});
+}
+
+/* REEMPLAZA tus llamadas actuales por estas: */
+window.addEventListener('load', () => {
+  const fecha = document.getElementById('fecha')?.value;
+  fetchInto('ajax_ingresos.php', 'contenedor-ingresos');
+  if(fecha) fetchInto('ajax_reservas.php?fecha='+encodeURIComponent(fecha), 'contenedor-reservas');
+  fetchInto('ajax_alumnos_hoy.php', 'contenedor-alumnos');
+
+  // refresco cada 10s
+  setInterval(() => {
+    const f = document.getElementById('fecha')?.value;
+    fetchInto('ajax_ingresos.php', 'contenedor-ingresos');
+    if(f) fetchInto('ajax_reservas.php?fecha='+encodeURIComponent(f), 'contenedor-reservas');
+    fetchInto('ajax_alumnos_hoy.php', 'contenedor-alumnos');
+  }, 10000);
+});
+</script>
+
 </head>
 <body>
 
