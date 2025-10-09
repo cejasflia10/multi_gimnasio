@@ -344,6 +344,56 @@ if ($disciplinas_rows) {
   .card li { margin: 6px 0; line-height: 1.45; }
   .field { flex-wrap: wrap; }
   .field label { white-space: nowrap; }
+  /* ====== FIX MOBILE: texto apilado en widgets de AJAX ====== */
+@media (max-width: 768px){
+
+  /* Quita rotaciones y escritura vertical que vengan de los parciales */
+  #contenedor-ingresos *, 
+  #contenedor-reservas *, 
+  #contenedor-alumnos *{
+    writing-mode: horizontal-tb !important;
+    text-orientation: mixed !important;
+    transform: none !important;
+    white-space: normal !important;
+    word-break: normal !important;
+    overflow-wrap: break-word !important;
+    letter-spacing: normal !important;
+    line-height: 1.35 !important;
+  }
+
+  /* Evita columnas ultra angostas en los parciales */
+  #contenedor-ingresos [class*="col"], 
+  #contenedor-reservas [class*="col"],
+  #contenedor-alumnos [class*="col"]{
+    width: 100% !important;
+    min-width: 0 !important;
+    flex: 1 1 100% !important;
+  }
+
+  /* Asegura que títulos y badges no queden en tiras verticales */
+  #contenedor-ingresos h1, #contenedor-ingresos h2, #contenedor-ingresos h3,
+  #contenedor-reservas h1, #contenedor-reservas h2, #contenedor-reservas h3,
+  #contenedor-alumnos h1, #contenedor-alumnos h2, #contenedor-alumnos h3{
+    display:block !important;
+    text-align:left !important;
+    white-space:normal !important;
+  }
+
+  /* Quita cualquier ancho fijo que deje una “tira” lateral */
+  #contenedor-ingresos [style*="width:"],
+  #contenedor-reservas [style*="width:"],
+  #contenedor-alumnos [style*="width:"]{
+    width:auto !important;
+    max-width:100% !important;
+  }
+
+  /* Por si los parciales usan etiquetas “verticales” con estas clases comunes */
+  .vertical, .titulo-vertical, .rot-90, .rotate-90{
+    writing-mode: horizontal-tb !important;
+    transform: none !important;
+  }
+}
+
 </style>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
