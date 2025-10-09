@@ -191,7 +191,7 @@ if ($disciplinas_rows) {
     $agg[$k]['total'] += (int)$r['total'];
   }
   $disciplinas_rows = array_values($agg);
-  usort($disciplinas_rows, function($a,$b){ return $b['total'] <=> $a['total']; });
+  usort($disciplinas_rows, fn($a,$b) => $b['total'] <=> $a['total']);
   $disciplinas_rows = array_slice($disciplinas_rows, 0, 10);
 }
 ?>
@@ -202,214 +202,141 @@ if ($disciplinas_rows) {
 <title>Panel General - <?= htmlspecialchars($nombre_gym) ?></title>
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 
+<!-- ================== TEMA GYM LIGHT (CLARO, MODERNO) ================== -->
 <style>
   :root{
-    --bg:#0b0f16;
-    --card:#0f1725cc; /* glass */
-    --stroke:rgba(255,215,0,.16);
-    --ink:#eef2ff;
-    --mut:#93a3b5;
-    --brand:#ffd166;
-    --brand-2:#ffb703;
-    --ok:#22c55e;
-    --warn:#f59e0b;
-    --bad:#ef4444;
-    --chip:#0f1725;
-    --shadow:0 10px 30px rgba(0,0,0,.35);
-    --blur:10px;
-    --radius:16px;
-    --radius-sm:12px;
-    --grid-gap:18px;
+    --bg1:#f5f7fb; --bg2:#eef3f9;
+    --ink:#0f172a; --mut:#475569;
+    --brand:#b45309; --brand-2:#f59e0b; --brand-3:#fbbf24;
+    --ok:#16a34a; --warn:#f59e0b; --danger:#b91c1c;
+    --card:#ffffff; --stroke:rgba(15,23,42,.08);
+    --shadow:0 10px 28px rgba(2,6,23,.08);
+    --radius:18px; --radius-sm:14px;
+    --gap:18px;
   }
-  @media (prefers-color-scheme: light){
-    :root{
-      --bg:#f7fafc;
-      --card:#ffffffcc;
-      --stroke:rgba(17,24,39,.08);
-      --ink:#0f172a;
-      --mut:#475569;
-      --brand:#b45309;
-      --brand-2:#a16207;
-      --chip:#ffffff;
-      --shadow:0 8px 24px rgba(2,6,23,.10);
-      --blur:6px;
-    }
-  }
-
   *{ box-sizing:border-box }
   html,body{ height:100% }
   body{
-    margin:0; padding:0;
+    margin:0; padding:0; color:var(--ink);
     font-family: system-ui, -apple-system, Segoe UI, Roboto, Inter, Arial, sans-serif;
-    color:var(--ink); background: radial-gradient(1200px 500px at 10% -10%, #1b2638 0%, transparent 55%), radial-gradient(800px 600px at 110% -10%, #2b3a59 0%, transparent 40%), var(--bg);
-    backdrop-filter: blur(0px);
+    background:
+      radial-gradient(900px 600px at -10% -10%, rgba(255,105,0,.08) 0%, transparent 45%),
+      radial-gradient(1200px 700px at 110% -10%, rgba(255,170,0,.08) 0%, transparent 55%),
+      linear-gradient(180deg, var(--bg1) 0%, var(--bg2) 100%);
   }
 
   /* Contenedor principal */
-  .wrap{
-    max-width:1200px; margin:24px auto; padding:0 16px 40px;
-  }
+  .wrap{ max-width:1200px; margin:24px auto; padding:0 16px 40px; }
 
-  /* ===== HEADER NUEVO: logo grande a la derecha en desktop ===== */
+  /* Header con logo grande a la derecha en desktop */
   .header{
-    display:grid;
-    grid-template-columns: 1fr auto;
-    gap:16px;
-    align-items:center;
-    margin-bottom:16px;
+    display:grid; grid-template-columns: 1fr auto; gap:16px; align-items:center; margin-bottom:16px;
   }
-  .header-left{ display:flex; align-items:center; gap:14px; min-width:0; }
-  .title{
-    margin:0;
-    font-weight:800; letter-spacing:.3px;
-    background: linear-gradient(90deg, var(--brand), #fff);
+  .brand-title h1.title{
+    margin:0; font-weight:900; letter-spacing:.6px;
+    background: linear-gradient(90deg,var(--brand),var(--brand-2),var(--brand-3));
     -webkit-background-clip:text; background-clip:text; color:transparent;
-    text-shadow: 0 2px 18px rgba(255, 215, 0, .15);
-    line-height:1.1;
   }
-  .sys-exp{ margin:.25rem 0 0; font-size:.95rem; color:var(--mut) }
-
-  /* logo chico para mobile (en fila con título) */
-  .logo-sm{
-    width:auto; max-height:48px; max-width:120px; object-fit:contain;
-    border-radius:10px; background:#fff; padding:4px; box-shadow: var(--shadow);
-  }
-
-  /* logo grande a la derecha (solo desktop) */
-  .header-right{ display:none; justify-content:flex-end; }
-  .logo-big{
-    width:auto; max-height:150px; max-width:360px; object-fit:contain;
-    border-radius:12px; background:#fff; padding:8px; box-shadow: var(--shadow);
+  .brand-title .sys-exp{ margin:.25rem 0 0; color:var(--mut); }
+  .logo-wrap{ display:flex; align-items:center; gap:10px; justify-content:flex-end; }
+  #logoGym{
+    max-height:170px; max-width:420px; width:auto; object-fit:contain;
+    border-radius:16px; background:#fff; padding:8px;
+    border:1px solid var(--stroke); box-shadow: var(--shadow);
   }
   .btn-mini{
-    margin-top:6px; padding:6px 10px; border:1px solid var(--stroke);
-    background:linear-gradient(180deg, #1e293b, #0b1220);
-    color:var(--ink); border-radius:10px; cursor:pointer;
-    transition:.25s transform ease;
+    padding:6px 10px; border:1px solid var(--stroke);
+    background:linear-gradient(180deg,#fff,#f7fafc); color:var(--ink);
+    border-radius:12px; cursor:pointer; box-shadow: 0 6px 16px rgba(2,6,23,.08);
+    transition:.2s transform ease;
   }
-  .btn-mini:hover{ transform: translateY(-1px) scale(1.02) }
+  .btn-mini:hover{ transform: translateY(-1px) }
 
-  @media (min-width: 992px){
-    /* En desktop ocultamos el logo pequeño y mostramos el grande a la derecha */
-    .logo-sm-wrap{ display:none; }
-    .header-right{ display:flex; }
-  }
   @media (max-width: 991.98px){
-    /* En mobile, todo va a la izquierda: logo pequeño + textos */
-    .logo-sm-wrap{ display:block; }
+    .header{ grid-template-columns: 1fr; }
+    .logo-wrap{ justify-content:flex-start; }
+    #logoGym{ max-height:64px; max-width:180px; padding:6px; }
   }
 
-  /* Grid */
-  .grid{
-    display:grid; grid-template-columns: repeat(12, 1fr); gap:var(--grid-gap);
-  }
-  @media (max-width: 1100px){
-    .grid{ grid-template-columns: repeat(8, 1fr); }
-  }
-  @media (max-width: 768px){
-    .grid{ grid-template-columns: repeat(4, 1fr); }
-  }
+  /* Grid tarjetas */
+  .grid{ display:grid; grid-template-columns: repeat(12,1fr); gap:var(--gap); }
+  @media (max-width:1100px){ .grid{ grid-template-columns: repeat(8,1fr); } }
+  @media (max-width:768px){ .grid{ grid-template-columns: repeat(4,1fr); } }
 
-  /* Card */
-  .card{
-    grid-column: span 4;
-    background: var(--card);
-    border:1px solid var(--stroke);
-    border-radius: var(--radius);
-    padding:16px;
-    box-shadow: var(--shadow);
-    backdrop-filter: blur(var(--blur));
-    transition: .25s transform ease, .25s box-shadow ease, .25s border-color ease;
+  /* Tarjetas/KPIs/Alertas/Field */
+  .card,.notice,.alert,.kpi,.field{
+    background:var(--card); border:1px solid var(--stroke);
+    border-radius:var(--radius); padding:16px; box-shadow:var(--shadow);
+    backdrop-filter: blur(6px);
   }
-  .card:hover{ transform: translateY(-2px); box-shadow: 0 14px 36px rgba(0,0,0,.4); border-color: rgba(255,215,0,.28); }
-  .card-header{
-    display:flex; align-items:center; justify-content:space-between; margin-bottom:10px;
-  }
-  .card-title{ margin:0; font-size:1.05rem; letter-spacing:.2px; color:var(--brand) }
-  .card-sub{ margin:0; font-size:.85rem; color:var(--mut) }
+  .card{ grid-column: span 4; transition:.2s transform ease; }
+  .card:hover{ transform: translateY(-2px); }
+  .card-header{ display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; }
+  .card-title{ margin:0; color:var(--brand); font-size:1.05rem; }
+  .card-sub{ margin:0; color:#64748b; font-size:.9rem; }
 
   /* KPIs */
-  .kpis{
-    display:flex; gap:12px; flex-wrap:wrap; margin:10px 0 16px;
-  }
-  .kpi{
-    background: linear-gradient(180deg, #101829, #0b1322);
-    border:1px solid var(--stroke);
-    border-radius: 14px;
-    padding:12px 14px; min-width:160px;
-    box-shadow: var(--shadow);
-  }
-  .kpi-label{ color:#ffdf6b; font-size:.78rem; opacity:.95; letter-spacing:.3px; }
-  .kpi-value{ color:#fff; font-weight:900; font-size:1.8rem; line-height:1.1; }
+  .kpis{ display:flex; gap:12px; flex-wrap:wrap; margin:10px 0 16px; }
+  .kpi{ min-width:160px; background:linear-gradient(180deg,#fff,#f8fafc); }
+  .kpi-label{ color:var(--brand); font-size:.8rem; letter-spacing:.3px; }
+  .kpi-value{ color:var(--ink); font-weight:900; font-size:1.8rem; line-height:1.1; }
 
-  /* Avisos / Alertas */
-  .notice{ border:1px solid var(--stroke); border-radius: var(--radius-sm); padding:12px 14px; background:linear-gradient(180deg, #1f2937e6, #0b1220d9); box-shadow: var(--shadow); }
-  .notice-warm{ border-color: rgba(255,215,0,.28); }
+  /* Avisos */
+  .notice-warm{ border-color:#f59e0b55; }
   .notice-title{ font-weight:700; color:var(--brand); margin-bottom:6px; }
-  .notice-item{ padding:6px 0; color:var(--ink); }
-  .link-inline{ color:#ffe08a; text-decoration: underline; }
+  .notice-item{ padding:6px 0; }
+  .link-inline{ color:var(--brand); text-decoration: underline; }
+
   .alert{
-    border:1px dashed rgba(255,215,0,.35);
-    border-radius: var(--radius-sm);
-    padding:10px 12px;
-    background: linear-gradient(180deg, #1e293bcc, #0b1220cc);
-    animation: pulse 2.4s ease-in-out infinite;
-  }
-  @keyframes pulse{
-    0%, 100%{ box-shadow: 0 0 0 rgba(255, 215, 0, 0); }
-    50%{ box-shadow: 0 0 24px rgba(255, 215, 0, .15); }
+    border:1px dashed #f59e0b66;
+    background:linear-gradient(180deg,#fff,#f9fafb);
   }
 
   /* Listas */
-  ul{ margin:0; padding-left:16px }
-  li{ margin:6px 0; color:var(--ink) }
+  ul{ margin:0; padding-left:16px; }
+  li{ margin:6px 0; }
 
-  /* Toggle montos */
+  /* Toolbar */
   .toolbar{ display:flex; justify-content:flex-end; align-items:center; gap:10px; margin:6px 0 12px; }
   .icon-btn{
     cursor:pointer; user-select:none; font-size:20px; line-height:1;
-    padding:6px 9px; border-radius:10px; border:1px solid var(--stroke);
-    background: linear-gradient(180deg, #142033, #0b1220);
-    transition: .2s transform ease;
+    padding:6px 9px; border-radius:12px; border:1px solid var(--stroke);
+    background:linear-gradient(180deg,#fff,#f8fafc);
+    box-shadow:0 6px 16px rgba(2,6,23,.08);
   }
-  .icon-btn:hover{ transform: translateY(-1px) }
 
   /* Chart */
-  .chart-wrap{ aspect-ratio: 16/9; position:relative; width:100%; max-width:700px; margin:0 auto; }
+  .chart-wrap{ aspect-ratio:16/9; position:relative; width:100%; max-width:820px; margin:0 auto; }
   #disciplinasChart{ position:absolute; inset:0; }
 
   /* Inputs */
-  .field{
-    display:flex; gap:8px; align-items:center;
-    padding:10px; border:1px solid var(--stroke);
-    border-radius:12px; background:linear-gradient(180deg, #0d1524, #0b1220);
-  }
+  .field{ display:flex; gap:8px; align-items:center; }
   input[type="date"]{
     background:transparent; border:none; outline:none; color:var(--ink); font-size:.95rem;
   }
 
-  /* Skeleton / Shimmer */
+  /* Skeleton */
   .skeleton{
     position:relative; overflow:hidden;
-    background: linear-gradient(180deg, #0e1523, #0b1220);
+    background: linear-gradient(180deg,#f3f6fb,#eef3f9);
     border-radius: 14px; min-height: 110px; border:1px solid var(--stroke);
   }
   .skeleton::after{
     content:""; position:absolute; inset:0;
-    background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,.06) 50%, transparent 100%);
+    background: linear-gradient(90deg, transparent 0%, rgba(2,6,23,.06) 50%, transparent 100%);
     transform: translateX(-100%); animation: shimmer 1.8s infinite;
   }
   @keyframes shimmer{ 100%{ transform: translateX(100%); } }
 
   /* Helpers */
-  .mut{ color:var(--mut) }
-  .ok{ color:var(--ok) }
-  .warn{ color:var(--warn) }
-  .center{ display:flex; align-items:center; justify-content:center }
+  .mut{ color:#64748b; }
+  .ok{ color:var(--ok); }
+  .warn{ color:var(--warn); }
+  .hidden{ display:none !important; }
 </style>
+<!-- ==================================================================== -->
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-
 <script>
   function toggleMontos(){
     const blocks = document.querySelectorAll('.bloque-monto');
@@ -423,10 +350,10 @@ if ($disciplinas_rows) {
     const elIng = document.getElementById('contenedor-ingresos');
     const elRes = document.getElementById('contenedor-reservas');
     const elAlu = document.getElementById('contenedor-alumnos');
-    if(elIng) fetch('ajax_ingresos.php').then(r=>r.text()).then(html=> elIng.innerHTML=html).catch(()=>{});
+    if(elIng) fetch('ajax_ingresos.php',{cache:'no-store'}).then(r=>r.text()).then(html=> elIng.innerHTML=html).catch(()=>{});
     const fecha = document.getElementById('fecha')?.value;
-    if(elRes && fecha) fetch('ajax_reservas.php?fecha='+encodeURIComponent(fecha)).then(r=>r.text()).then(html=> elRes.innerHTML=html).catch(()=>{});
-    if(elAlu) fetch('ajax_alumnos_hoy.php').then(r=>r.text()).then(html=> elAlu.innerHTML=html).catch(()=>{});
+    if(elRes && fecha) fetch('ajax_reservas.php?fecha='+encodeURIComponent(fecha),{cache:'no-store'}).then(r=>r.text()).then(html=> elRes.innerHTML=html).catch(()=>{});
+    if(elAlu) fetch('ajax_alumnos_hoy.php',{cache:'no-store'}).then(r=>r.text()).then(html=> elAlu.innerHTML=html).catch(()=>{});
   }
 
   setInterval(cargarDatos, 10000);
@@ -437,44 +364,25 @@ if ($disciplinas_rows) {
 
 <div class="wrap">
 
-  <!-- ===== Encabezado con logo grande a la derecha en desktop ===== -->
+  <!-- Encabezado: Título a la izquierda, Logo grande a la derecha -->
   <div class="header">
-
-    <!-- Izquierda: logo pequeño (solo mobile) + textos -->
-    <div class="header-left">
-      <?php if (!empty($logo)): ?>
-        <div class="logo-sm-wrap">
-          <img src="<?= htmlspecialchars($logo) ?>?v=<?= time() ?>" alt="Logo del gimnasio" class="logo-sm" />
-          <?php if ($gimnasio_id > 0): ?>
-            <div>
-              <button class="btn-mini" onclick="document.getElementById('formLogoSm').style.display='block'">🖋</button>
-              <form method="POST" action="subir_logo.php" enctype="multipart/form-data" id="formLogoSm" style="display:none;margin-top:6px">
-                <input type="file" name="logo" accept="image/*" required onchange="this.form.submit()">
-              </form>
-            </div>
-          <?php endif; ?>
-        </div>
-      <?php endif; ?>
-
-      <div>
-        <h1 class="title">🏋️ <?= htmlspecialchars($nombre_gym) ?></h1>
-        <p class="sys-exp">🗓 Vencimiento del sistema:
-          <strong class="<?= (is_string($fecha_venc) && $fecha_venc !== '0000-00-00' && strtotime($fecha_venc) && strtotime($fecha_venc) >= time()) ? 'ok' : 'warn' ?>">
-            <?= (is_string($fecha_venc) && $fecha_venc !== '0000-00-00' && strtotime($fecha_venc)) ? date('d/m/Y', strtotime($fecha_venc)) : '---' ?>
-          </strong>
-        </p>
-      </div>
+    <div class="brand-title">
+      <h1 class="title">🏋️ <?= htmlspecialchars($nombre_gym) ?></h1>
+      <p class="sys-exp">🗓 Vencimiento del sistema:
+        <strong class="<?= (is_string($fecha_venc) && $fecha_venc !== '0000-00-00' && strtotime($fecha_venc) && strtotime($fecha_venc) >= time()) ? 'ok' : 'warn' ?>">
+          <?= (is_string($fecha_venc) && $fecha_venc !== '0000-00-00' && strtotime($fecha_venc)) ? date('d/m/Y', strtotime($fecha_venc)) : '---' ?>
+        </strong>
+      </p>
     </div>
 
-    <!-- Derecha: logo grande (solo desktop) -->
-    <div class="header-right">
+    <div class="logo-wrap">
       <?php if (!empty($logo)): ?>
         <div>
-          <img src="<?= htmlspecialchars($logo) ?>?v=<?= time() ?>" alt="Logo del gimnasio" class="logo-big" id="logoGym" />
+          <img src="<?= htmlspecialchars($logo) ?>?v=<?= time() ?>" alt="Logo del gimnasio" id="logoGym" />
           <?php if ($gimnasio_id > 0): ?>
-            <div style="text-align:right">
-              <button class="btn-mini" onclick="document.getElementById('formLogo').style.display='block'">Cambiar logo</button>
-              <form method="POST" action="subir_logo.php" enctype="multipart/form-data" id="formLogo" style="display:none;margin-top:6px">
+            <div style="margin-top:6px; text-align:right">
+              <button class="btn-mini" onclick="document.getElementById('formLogo').style.display='block'">🖋 Cambiar logo</button>
+              <form method="POST" action="subir_logo.php" enctype="multipart/form-data" id="formLogo" style="display:none; margin-top:6px">
                 <input type="file" name="logo" accept="image/*" required onchange="this.form.submit()">
               </form>
             </div>
@@ -482,7 +390,6 @@ if ($disciplinas_rows) {
         </div>
       <?php endif; ?>
     </div>
-
   </div>
 
   <!-- KPIs -->
@@ -600,7 +507,7 @@ if ($disciplinas_rows) {
 </div><!-- /wrap -->
 
 <script>
-  // Render del gráfico de disciplinas
+  // Render del gráfico de disciplinas (colores pensados para fondo claro)
   (function(){
     const data = <?= json_encode($disciplinas_rows, JSON_UNESCAPED_UNICODE) ?>;
     if(!Array.isArray(data) || !data.length) return;
@@ -608,10 +515,9 @@ if ($disciplinas_rows) {
     if(!el) return;
     const ctx = el.getContext('2d');
 
-    // Degradado vertical en runtime
     const grad = ctx.createLinearGradient(0, 0, 0, el.height);
-    grad.addColorStop(0, 'rgba(255, 209, 102, 0.95)'); // brand
-    grad.addColorStop(1, 'rgba(255, 183,   3, 0.60)'); // brand-2
+    grad.addColorStop(0, 'rgba(251, 191, 36, .95)');  // #fbbf24
+    grad.addColorStop(1, 'rgba(245, 158, 11, .65)');  // #f59e0b
 
     new Chart(ctx, {
       type: 'bar',
@@ -621,7 +527,7 @@ if ($disciplinas_rows) {
           label: 'Registros',
           data: data.map(d => Number(d.total)),
           backgroundColor: grad,
-          borderColor: 'rgba(255,215,0,.9)',
+          borderColor: 'rgba(180,83,9,.9)', // #b45309
           borderWidth: 2,
           borderRadius: 10,
           hoverBorderWidth: 2.5
@@ -632,26 +538,21 @@ if ($disciplinas_rows) {
         maintainAspectRatio:false,
         animation:{ duration: 800 },
         plugins:{
-          legend:{ labels:{ color:'#ffe9a3' } },
+          legend:{ labels:{ color:'#0f172a' } },
           tooltip:{
-            backgroundColor:'rgba(10,14,22,.96)',
-            titleColor:'#ffe9a3', bodyColor:'#e6edf7',
-            borderColor:'rgba(255,215,0,.35)', borderWidth:1
+            backgroundColor:'rgba(15,23,42,.96)',
+            titleColor:'#fbbf24', bodyColor:'#e2e8f0',
+            borderColor:'rgba(180,83,9,.35)', borderWidth:1
           }
         },
         scales:{
-          x:{ ticks:{ color:'#ffe9a3' }, grid:{ color:'rgba(255,215,0,.10)' } },
-          y:{ beginAtZero:true, ticks:{ color:'#ffe9a3', precision:0 }, grid:{ color:'rgba(255,215,0,.08)' } }
+          x:{ ticks:{ color:'#0f172a' }, grid:{ color:'rgba(2,6,23,.06)' } },
+          y:{ beginAtZero:true, ticks:{ color:'#0f172a', precision:0 }, grid:{ color:'rgba(2,6,23,.06)' } }
         }
       }
     });
   })();
 </script>
-
-<style>
-  /* util para ocultar montos sin reflow brusco */
-  .hidden{ display:none !important; }
-</style>
 
 </body>
 </html>

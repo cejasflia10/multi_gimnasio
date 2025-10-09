@@ -1,306 +1,327 @@
 <?php
 if (session_status() === PHP_SESSION_NONE) { session_start(); }
-
-/* Intenta cargar permisos; si no existe, no rompe */
 @require_once __DIR__ . '/permiso.php';
 
-/* Refresca SIEMPRE los permisos si hay gimnasio en sesión (evita cache viejo) */
 if (function_exists('refresh_permissions') && !empty($_SESSION['gimnasio_id'])) {
   refresh_permissions((int)$_SESSION['gimnasio_id']);
 }
-
-/* Wrapper de permisos para el menú:
-   - Admin ve todo.
-   - Si existe has_feature() (de permiso.php), la usamos.
-   - Si no existe, devolvemos true para no esconder el menú por error.
-*/
 if (!function_exists('has_perm')) {
   function has_perm(string $feature): bool {
     if (!empty($_SESSION['rol']) && $_SESSION['rol'] === 'admin') return true;
     return function_exists('has_feature') ? has_feature($feature) : true;
   }
 }
+
+/** Definición única del menú **/
+$MENU = [
+  'panel_gimnasio' => ['label'=>'🏢 Panel Gimnasio','perm'=>'panel_gimnasio','items'=>[
+    ['Dashboard','panel_gimnasios.php'],
+    ['Agregar Gimnasio','agregar_gimnasio.php'],
+    ['Renovar Plan','renovar_gimnasio.php'],
+  ]],
+  'clientes' => ['label'=>'👤 Clientes','perm'=>'clientes','items'=>[
+    ['Ver Clientes','ver_clientes.php'],
+    ['Agregar Cliente','agregar_cliente.php'],
+    ['🏷️ QR de Máquinas','maquinas_qr.php'],
+    ['📈 Seguimiento de alumnos','profesor_seguimiento.php'],
+  ]],
+  'membresias' => ['label'=>'📅 Membresías','perm'=>'membresias','items'=>[
+    ['Ver Membresías','ver_membresias.php'],
+    ['Agregar Membresía','nueva_membresia.php'],
+    ['Disciplinas','disciplinas.php'],
+    ['Planes','planes.php'],
+    ['Adicionales','adicionales.php'],
+    ['🍽️ Cena (Admin)','admin_cena.php'],
+  ]],
+  'pagos' => ['label'=>'💳 Pagos','perm'=>'pagos','items'=>[
+    ['Pagos Pendientes','ver_pagos_pendientes.php'],
+    ['Alias','config_alias.php'],
+    ['Pagos del Mes','ver_pagos_mes.php'],
+    ['Pagos Cuenta Corriente','ver_cuentas_corrientes.php'],
+    ['Gastos','gastos.php'],
+  ]],
+  'asistencias' => ['label'=>'🧍‍♂️ Asistencias','perm'=>'asistencias','items'=>[
+    ['Ver Asistencias','ver_asistencia.php'],
+    ['Registrar Asistencia','registrar_asistencia.php',[
+      'popup'=>true,'name'=>'asistenciaWin','features'=>'width=1200,height=800,menubar=no,toolbar=no,location=no,status=no,scrollbars=yes,resizable=yes'
+    ]],
+    ['Escaneo QR','scanner_qr.php'],
+    ['Asistencia Profesores','ver_asistencias_profesor.php'],
+  ]],
+  'ventas' => ['label'=>'🛒 Ventas','perm'=>'ventas','items'=>[
+    ['Agregar Productos','agregar_producto.php'],
+    ['Ventas Protecciones','ventas_proteccion.php'],
+    ['Ventas Suplementos','ventas_suplementos.php'],
+    ['Ventas Indumentaria','ventas_indumentaria.php'],
+    ['Ver Productos','ver_productos.php'],
+    ['Ver Facturas','ver_facturas.php'],
+    ['Promociones','promociones_admin.php'],
+    ['🛍️ Indumentaria (Admin)','admin_indum.php'],
+    ['🧾 Pedidos indumentaria','admin_pedidos_indum.php'],
+  ]],
+  'profesores' => ['label'=>'👨‍🏫 Profesores','perm'=>'profesores','items'=>[
+    ['Agregar Profesor','agregar_profesor.php'],
+    ['Panel','login_profesor.php'],
+    ['Ver Profesores','ver_profesores.php'],
+    ['Turnos Profesores','turnos_profesor.php'],
+    ['Precio de Horas','editar_tarifa_profesor.php'],
+    ['Reporte de Horas','reporte_horas_profesor.php'],
+    ['Enrolar huella','biometria/enrolar_profesores.php'],
+  ]],
+  'panel_cliente' => ['label'=>'📲 Panel Cliente','perm'=>'panel_cliente','items'=>[
+    ['Panel','cliente_acceso.php'],
+    ['Panel Configuración','panel_configuracion.php'],
+  ]],
+  'eventos' => ['label'=>'🎪 Eventos','perm'=>'eventos_panel','items'=>[
+    ['Panel de Eventos','panel_eventos.php'],
+    ['Acceso a Panel','login_evento.php'],
+    ['Eventos Públicos','eventos_publicos.php',['extra_perm'=>'eventos']],
+  ]],
+];
+$SALIDA = ['label'=>'❌ Cerrar','items'=>[
+  ['Volver al Inicio','index.php'],
+  ['Cerrar Sesión','logout.php'],
+  ['❌ Cerrar Programa','#',['onclick'=>'cerrarApp()']],
+]];
+
+/** Helpers de render **/
+function render_link($label,$href,$opts=[]){
+  $attrs = [];
+  $cls   = [];
+  if (!empty($opts['onclick'])) $attrs[] = 'onclick="'.htmlspecialchars($opts['onclick']).'"';
+  if (!empty($opts['popup'])) {
+    $cls[]='newwin'; $attrs[]='data-popup="1"';
+    if (!empty($opts['features'])) $attrs[]='data-features="'.htmlspecialchars($opts['features']).'"';
+    if (!empty($opts['name']))     $attrs[]='data-window="'.htmlspecialchars($opts['name']).'"';
+  }
+  if (!empty($opts['class'])) $cls[]=$opts['class'];
+  $clsAttr = $cls ? ' class="'.implode(' ',$cls).'"' : '';
+  return '<a href="'.htmlspecialchars($href).'"'.$clsAttr.' '.implode(' ',$attrs).'>'.htmlspecialchars($label).'</a>';
+}
+function render_menu_desktop($MENU,$SALIDA){
+  ob_start(); ?>
+  <nav class="nav-desktop" role="navigation" aria-label="Menú (PC)">
+    <?php foreach($MENU as $sec){
+      if(!empty($sec['perm']) && !has_perm($sec['perm'])) continue; ?>
+      <div class="dd">
+        <button class="dd-head" type="button" tabindex="0"><?= htmlspecialchars($sec['label']) ?></button>
+        <div class="dd-body">
+          <?php foreach($sec['items'] as $it){
+            [$label,$href,$opts]=[$it[0],$it[1],$it[2]??[]];
+            if(!empty($opts['extra_perm']) && !has_perm($opts['extra_perm'])) continue;
+            echo render_link($label,$href,$opts);
+          } ?>
+        </div>
+      </div>
+    <?php } ?>
+    <div class="dd">
+      <button class="dd-head" type="button" tabindex="0"><?= htmlspecialchars($SALIDA['label']) ?></button>
+      <div class="dd-body">
+        <?php foreach($SALIDA['items'] as $it){ echo render_link($it[0],$it[1],$it[2]??[]); } ?>
+      </div>
+    </div>
+  </nav>
+  <?php return ob_get_clean();
+}
+function render_menu_mobile($MENU,$SALIDA){
+  ob_start(); ?>
+  <div class="mobile-bar" role="navigation" aria-label="Menú (Celular)">
+    <button class="hamb" type="button" aria-controls="drawer" aria-expanded="false" aria-label="Abrir menú">☰</button>
+    <div class="brand-mini">Menú</div>
+    <a class="logout" href="logout.php" title="Salir">⎋</a>
+  </div>
+  <aside id="drawer" class="drawer" aria-hidden="true">
+    <div class="drawer-inner">
+      <div class="drawer-head">
+        <span>Menú</span>
+        <button class="close" type="button" aria-label="Cerrar">✕</button>
+      </div>
+      <div class="accordion">
+        <?php foreach($MENU as $sec){
+          if(!empty($sec['perm']) && !has_perm($sec['perm'])) continue; ?>
+          <details class="acc-item">
+            <summary><span><?= htmlspecialchars($sec['label']) ?></span></summary>
+            <div class="acc-body">
+              <?php foreach($sec['items'] as $it){
+                [$label,$href,$opts]=[$it[0],$it[1],$it[2]??[]];
+                if(!empty($opts['extra_perm']) && !has_perm($opts['extra_perm'])) continue;
+                echo render_link($label,$href,$opts);
+              } ?>
+            </div>
+          </details>
+        <?php } ?>
+        <details class="acc-item">
+          <summary><span><?= htmlspecialchars($SALIDA['label']) ?></span></summary>
+          <div class="acc-body">
+            <?php foreach($SALIDA['items'] as $it){ echo render_link($it[0],$it[1],$it[2]??[]); } ?>
+          </div>
+        </details>
+      </div>
+    </div>
+  </aside>
+  <div id="drawer-backdrop" class="backdrop" hidden></div>
+  <?php return ob_get_clean();
+}
 ?>
 <!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="UTF-8">
-  <title>Menú Horizontal</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <style>
-    :root{
-      --bg:#000; --fg:gold; --brand:#a00; --brand-dark:#700; --drop:#111; --border:#700; --line:#333;
-    }
-    *{box-sizing:border-box}
-    body{margin:0;background:var(--bg);color:var(--fg);font-family:Arial,Helvetica,sans-serif}
+<meta charset="UTF-8">
+<title>Menú</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+  :root{
+    --brand:#b45309; --brand2:#f59e0b; --fg:#0f172a;
+    --bg:#fff; --soft:#f8fafc; --stroke:rgba(2,6,23,.10);
+    --drop:#ffffff; --shadow:0 10px 24px rgba(2,6,23,.10);
+    --radius:12px;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Inter,Arial,sans-serif}
 
-    .menu-toggle{
-      display:none;background:var(--brand);color:var(--fg);
-      font-size:20px;padding:10px;text-align:center;cursor:pointer
-    }
+  /* Ocultar por defecto para evitar que se vean ambos antes de aplicar la media-query */
+  .nav-desktop{ display:none }
+  .mobile-bar, .drawer, #drawer-backdrop{ display:none }
 
-    .menu-horizontal{
-      background:var(--brand);display:flex;flex-wrap:wrap;justify-content:flex-start;
-      padding:6px 10px;position:relative;z-index:1000
+  /* ====== PC (solo PC) ====== */
+  @media (min-width: 992px){
+    .nav-desktop{
+      display:flex; gap:6px; align-items:center;
+      position:sticky; top:0; z-index:1000;
+      padding:8px 10px; background:linear-gradient(180deg,#fff,#f8fafc);
+      border-bottom:1px solid var(--stroke);
     }
-    .menu-horizontal > .dropdown{position:relative}
-    .menu-horizontal > .dropdown > a,
-    .menu-horizontal > a{
-      color:var(--fg);text-decoration:none;font-weight:bold;padding:10px 14px;
-      display:inline-block;border-radius:6px
+    .dd{ position:relative }
+    .dd-head{
+      background:transparent; border:none; cursor:default;
+      color:var(--fg); font-weight:700; padding:8px 12px; border-radius:10px;
     }
+    .dd-head:hover{ background:#f1f5f9 }
+    .dd-body{
+      position:absolute; left:0; top:100%; min-width:240px;
+      background:var(--drop); border:1px solid var(--stroke); border-radius:12px;
+      box-shadow:var(--shadow); padding:6px; display:none;
+    }
+    .dd:hover .dd-body{ display:block }
+    .dd-body a{ display:block; padding:10px 12px; border-radius:8px; color:var(--fg); text-decoration:none }
+    .dd-body a:hover{ background:#f1f5f9 }
+    .dd-body a.newwin::after{ content:"↗"; margin-left:8px; opacity:.85 }
+  }
 
-    .dropdown-content{
-      display:none;position:absolute;background:var(--drop);min-width:220px;z-index:1100;
-      border:1px solid var(--border);border-radius:8px;overflow:hidden
+  /* ====== Celular (solo celular) ====== */
+  @media (max-width: 991.98px){
+    .mobile-bar{ display:flex }
+    .mobile-bar{
+      position:sticky; top:0; z-index:1001; height:48px;
+      align-items:center; justify-content:space-between;
+      padding:0 10px; background:linear-gradient(180deg,#fff,#f8fafc);
+      border-bottom:1px solid var(--stroke);
     }
-    .dropdown-content a{
-      display:block;padding:10px 12px;border-bottom:1px solid var(--line);
-      color:var(--fg);text-decoration:none
-    }
-    .dropdown:hover .dropdown-content{display:block}
+    .mobile-bar .hamb{ font-size:20px; border:none; background:#fff; padding:6px 10px; border-radius:10px }
+    .mobile-bar .brand-mini{ font-weight:800; color:var(--brand); letter-spacing:.3px }
+    .mobile-bar .logout{ color:var(--fg); text-decoration:none; font-size:18px; padding:6px 10px }
 
-    .menu-horizontal a:hover,
-    .dropdown-content a:hover{background:var(--brand-dark)}
+    .drawer{ display:block; position:fixed; inset:0 35% 0 0; transform:translateX(-100%);
+      background:#fff; border-right:1px solid var(--stroke);
+      box-shadow:var(--shadow); transition:.25s transform ease;
+      z-index:1002; overflow:auto }
+    .drawer.open{ transform:translateX(0) }
+    .drawer-inner{ padding:10px }
+    .drawer-head{ display:flex; justify-content:space-between; align-items:center; padding:6px 2px 10px; border-bottom:1px solid var(--stroke) }
+    .drawer-head .close{ border:none; background:#fff; font-size:20px; padding:6px 10px; border-radius:8px }
 
-    /* Indicador visual (opcional) para links que abren ventana */
-    .dropdown-content a.newwin::after{
-      content:"↗"; font-weight:bold; margin-left:8px; opacity:.85;
-    }
+    .accordion{ padding:6px 0 }
+    .acc-item{ border-bottom:1px solid var(--stroke) }
+    .acc-item summary{ list-style:none; cursor:pointer; padding:12px 4px; font-weight:700; color:var(--fg) }
+    .acc-item summary::-webkit-details-marker{ display:none }
+    .acc-body{ padding:4px 0 10px 8px }
+    .acc-body a{ display:block; padding:9px 10px; border-radius:8px; color:var(--fg); text-decoration:none }
+    .acc-body a:hover{ background:#f1f5f9 }
+    .acc-body a.newwin::after{ content:"↗"; margin-left:8px; opacity:.85 }
 
-    @media (max-width: 768px){
-      .menu-toggle{display:block}
-      .menu-horizontal{display:none;flex-direction:column;width:100%}
-      .menu-horizontal.active{display:flex !important}
-      .dropdown{width:100%}
-      .dropdown-content{position:static;background:var(--drop);border:none;border-radius:0}
-      .menu-horizontal a{display:block;padding:12px}
-      .dropdown-content a{padding-left:20px}
+    #drawer-backdrop{ display:block; position:fixed; inset:0; background:rgba(2,6,23,.35); z-index:1001 }
+    #drawer-backdrop[hidden]{ display:none }
+  }
+</style>
+
+<script>
+  // Drawer móvil (solo se ejecuta si existen los nodos)
+  document.addEventListener('DOMContentLoaded', function(){
+    const drawer   = document.getElementById('drawer');
+    const backdrop = document.getElementById('drawer-backdrop');
+    const hamb     = document.querySelector('.mobile-bar .hamb');
+    const closeBtn = document.querySelector('.drawer .close');
+    if(!drawer || !hamb) return;
+
+    function openDrawer(){
+      drawer.classList.add('open');
+      drawer.setAttribute('aria-hidden','false');
+      if(backdrop){ backdrop.hidden = false; }
+      hamb.setAttribute('aria-expanded','true');
     }
-  </style>
-  <script>
-    function toggleMenu(){
-      var menu = document.getElementById("menu-principal");
-      menu.classList.toggle("active");
+    function closeDrawer(){
+      drawer.classList.remove('open');
+      drawer.setAttribute('aria-hidden','true');
+      if(backdrop){ backdrop.hidden = true; }
+      hamb.setAttribute('aria-expanded','false');
     }
-    function cerrarApp(){
-      if (confirm("¿Seguro que deseas cerrar la aplicación?")) {
-        if (window.electronAPI) { window.electronAPI.cerrarVentana(); }
-        else { window.close(); }
+    hamb.addEventListener('click', openDrawer);
+    if(closeBtn) closeBtn.addEventListener('click', closeDrawer);
+    if(backdrop) backdrop.addEventListener('click', closeDrawer);
+    document.addEventListener('keydown', (e)=>{ if(e.key==='Escape') closeDrawer(); });
+  });
+
+  function cerrarApp(){
+    if (confirm("¿Seguro que deseas cerrar la aplicación?")) {
+      if (window.electronAPI) { window.electronAPI.cerrarVentana(); }
+      else { window.close(); }
+    }
+  }
+
+  // Popups controlados para <a.newwin>
+  (function(){
+    const opened = new Map();
+    document.addEventListener('click', function(e){
+      const a = e.target.closest('a.newwin');
+      if (!a) return;
+      e.preventDefault();
+
+      const href     = a.href;
+      const isPopup  = a.dataset.popup === '1';
+      const features = (a.dataset.features || '').trim();
+      const winName  = (a.dataset.window || '_blank').trim();
+
+      if (!isPopup) { window.open(href,'_blank','noopener'); return; }
+
+      const parseFeat = (k, d) => {
+        const m = new RegExp(k+'=([0-9]+)').exec(features);
+        return m ? parseInt(m[1],10) : d;
+      };
+      const w = parseFeat('width',1200), h = parseFeat('height',800);
+      const left = Math.max(0, Math.floor((screen.availWidth  - w)/2));
+      const top  = Math.max(0, Math.floor((screen.availHeight - h)/2));
+      const base = features ? features.replace(/\bleft=\d+\b/g,'').replace(/\btop=\d+\b/g,'')
+                            : `menubar=no,toolbar=no,location=no,status=no,scrollbars=yes,resizable=yes,width=${w},height=${h}`;
+      const finalFeats = `${base},left=${left},top=${top}`;
+
+      let win = opened.get(winName);
+      if (win && !win.closed) { try{ win.focus(); win.location.href = href; }catch{} }
+      else {
+        win = window.open(href, winName, finalFeats);
+        if (win) { try{ win.opener=null; }catch{} opened.set(winName,win); try{ win.focus(); }catch{} }
+        else { window.open(href,'_blank','noopener'); }
       }
-    }
-
-    // --- POPUP CONTROLADO para <a.newwin> ---
-    (function(){
-      const opened = new Map(); // reuso por nombre
-
-      document.addEventListener('click', function(e){
-        const a = e.target.closest('a.newwin');
-        if (!a) return;
-
-        // click de usuario -> no debería bloquearse
-        e.preventDefault();
-
-        const href     = a.href;
-        const isPopup  = a.dataset.popup === '1';
-        const features = (a.dataset.features || '').trim();
-        const winName  = (a.dataset.window || '_blank').trim();
-
-        if (!isPopup) {
-          window.open(href, '_blank', 'noopener');
-          return;
-        }
-
-        // parseo básico de width/height
-        const parseFeat = (key, def) => {
-          const m = new RegExp(key + '=([0-9]+)').exec(features);
-          return m ? parseInt(m[1], 10) : def;
-        };
-        const w = parseFeat('width', 1200);
-        const h = parseFeat('height', 800);
-
-        // centro en pantalla disponible
-        const left = Math.max(0, Math.floor((window.screen.availWidth  - w) / 2));
-        const top  = Math.max(0, Math.floor((window.screen.availHeight - h) / 2));
-
-        // features finales (con left/top)
-        const baseFeats = features
-          ? features.replace(/\bleft=\d+\b/g,'').replace(/\btop=\d+\b/g,'')
-          : 'menubar=no,toolbar=no,location=no,status=no,scrollbars=yes,resizable=yes,width=' + w + ',height=' + h;
-        const finalFeats = baseFeats + `,left=${left},top=${top}`;
-
-        // reutilizo ventana si sigue abierta
-        let win = opened.get(winName);
-        if (win && !win.closed) {
-          try { win.focus(); win.location.href = href; } catch {}
-        } else {
-          win = window.open(href, winName, finalFeats);
-          if (win) {
-            try { win.opener = null; } catch {}
-            opened.set(winName, win);
-            try { win.focus(); } catch {}
-          } else {
-            // fallback si algún bloqueador interviene
-            window.open(href, '_blank', 'noopener');
-          }
-        }
-      });
-    })();
-  </script>
+    });
+  })();
+</script>
 </head>
 <body>
 
-<div class="menu-toggle" onclick="toggleMenu()">☰ Menú</div>
+<!-- PC -->
+<?= render_menu_desktop($MENU,$SALIDA) ?>
 
-<nav class="menu-horizontal" id="menu-principal">
-  <!-- PANEL GIMNASIO -->
-  <?php if (has_perm('panel_gimnasio')): ?>
-  <div class="dropdown">
-    <a href="#">🏢 Panel Gimnasio</a>
-    <div class="dropdown-content">
-      <a href="panel_gimnasios.php">Dashboard</a>
-      <a href="agregar_gimnasio.php">Agregar Gimnasio</a>
-      <a href="renovar_gimnasio.php">Renovar Plan</a>
-    </div>
-  </div>
-  <?php endif; ?>
-
-  <!-- CLIENTES -->
-  <?php if (has_perm('clientes')): ?>
-  <div class="dropdown">
-    <a href="#">👤 Clientes</a>
-    <div class="dropdown-content">
-      <a href="ver_clientes.php">Ver Clientes</a>
-      <a href="agregar_cliente.php">Agregar Cliente</a>
-      <a href="maquinas_qr.php">🏷️ QR de Máquinas</a>
-      <a href="profesor_seguimiento.php">📈 Seguimiento de alumnos</a>
-
-
-    </div>
-  </div>
-  <?php endif; ?>
-
-  <!-- MEMBRESÍAS -->
-  <?php if (has_perm('membresias')): ?>
-  <div class="dropdown">
-    <a href="#">📅 Membresías</a>
-    <div class="dropdown-content">
-      <a href="ver_membresias.php">Ver Membresías</a>
-      <a href="nueva_membresia.php">Agregar Membresía</a>
-      <a href="disciplinas.php">Disciplinas</a>
-      <a href="planes.php">Planes</a>
-      <a href="adicionales.php">Adicionales</a>
-      <a href="admin_cena.php">🍽️ Cena (Admin)</a>
-
-    </div>
-  </div>
-  <?php endif; ?>
-
-  <!-- PAGOS -->
-  <?php if (has_perm('pagos')): ?>
-  <div class="dropdown">
-    <a href="#">💳 Pagos</a>
-    <div class="dropdown-content">
-      <a href="ver_pagos_pendientes.php">Pagos Pendientes</a>
-      <a href="config_alias.php">Alias</a>
-      <a href="ver_pagos_mes.php">Pagos del Mes</a>
-      <a href="ver_cuentas_corrientes.php">Pagos Cuenta Corriente</a>
-      <a href="gastos.php">Gastos</a>
-    </div>
-  </div>
-  <?php endif; ?>
-
-  <!-- ASISTENCIAS -->
-  <?php if (has_perm('asistencias')): ?>
-  <div class="dropdown">
-    <a href="#">🧍‍♂️ Asistencias</a>
-    <div class="dropdown-content">
-      <a href="ver_asistencia.php">Ver Asistencias</a>
-
-      <!-- Popup controlado 1200x800, centrado, reutiliza 'asistenciaWin' -->
-      <a href="registrar_asistencia.php"
-         class="newwin"
-         data-popup="1"
-         data-features="width=1200,height=800,menubar=no,toolbar=no,location=no,status=no,scrollbars=yes,resizable=yes"
-         data-window="asistenciaWin"
-         rel="noopener">Registrar Asistencia</a>
-
-      <a href="scanner_qr.php">Escaneo QR</a>
-      <a href="ver_asistencias_profesor.php">Asistencia Profesores</a>
-    </div>
-  </div>
-  <?php endif; ?>
-
-  <!-- VENTAS -->
-  <?php if (has_perm('ventas')): ?>
-  <div class="dropdown">
-    <a href="#">🛒 Ventas</a>
-    <div class="dropdown-content">
-      <a href="agregar_producto.php">Agregar Productos</a>
-      <a href="ventas_proteccion.php">Ventas Protecciones</a>
-      <a href="ventas_suplementos.php">Ventas Suplementos</a>
-      <a href="ventas_indumentaria.php">Ventas Indumentaria</a>
-      <a href="ver_productos.php">Ver Productos</a>
-      <a href="ver_facturas.php">Ver Facturas</a>
-      <a href="promociones_admin.php">Promociones</a>
-      <a href="admin_indum.php">🛍️ Indumentaria (Admin)</a>
-      <a href="admin_pedidos_indum.php">🧾 Pedidos indumentaria</a>
-
-    </div>
-  </div>
-  <?php endif; ?>
-
-  <!-- PROFESORES -->
-  <?php if (has_perm('profesores')): ?>
-  <div class="dropdown">
-    <a href="#">👨‍🏫 Profesores</a>
-    <div class="dropdown-content">
-      <a href="agregar_profesor.php">Agregar Profesor</a>
-      <a href="login_profesor.php">Panel</a>
-      <a href="ver_profesores.php">Ver Profesores</a>
-      <a href="turnos_profesor.php">Turnos Profesores</a>
-      <a href="editar_tarifa_profesor.php">Precio de Horas</a>
-      <a href="reporte_horas_profesor.php">Reporte de Horas</a>
-      <a href="biometria/enrolar_profesores.php">Enrolar huella</a>
-    </div>
-  </div>
-  <?php endif; ?>
-
-  <!-- PANEL CLIENTE -->
-  <?php if (has_perm('panel_cliente')): ?>
-  <div class="dropdown">
-    <a href="#">📲 Panel Cliente</a>
-    <div class="dropdown-content">
-      <a href="cliente_acceso.php">Panel</a>
-      <a href="panel_configuracion.php">Panel Configuración</a>
-    </div>
-  </div>
-  <?php endif; ?>
-
-  <!-- EVENTOS -->
-  <?php if (has_perm('eventos_panel')): ?>
-  <div class="dropdown">
-    <a href="#">🎪 Eventos</a>
-    <div class="dropdown-content">
-      <a href="panel_eventos.php">Panel de Eventos</a>
-      <a href="login_evento.php">Acceso a Panel</a>
-      <?php if (has_perm('eventos')): ?>
-        <a href="eventos_publicos.php">Eventos Públicos</a>
-      <?php endif; ?>
-    </div>
-  </div>
-  <?php endif; ?>
-
-  <!-- CERRAR (siempre visible) -->
-  <div class="dropdown">
-    <a href="#">❌ Cerrar</a>
-    <div class="dropdown-content">
-      <a href="index.php">Volver al Inicio</a>
-      <a href="logout.php">Cerrar Sesión</a>
-      <a href="#" onclick="cerrarApp()">❌ Cerrar Programa</a>
-    </div>
-  </div>
-</nav>
+<!-- Celular -->
+<?= render_menu_mobile($MENU,$SALIDA) ?>
 
 </body>
 </html>
