@@ -1,430 +1,218 @@
 <?php
-// --- INICIO: validación de sesión e inactividad ---
+// menu_horizontal.php (responsive: desktop horizontal / mobile drawer)
+// Usa $rol si querés ocultar/mostrar items por rol.
 if (session_status() === PHP_SESSION_NONE) session_start();
-
-$timeout_minutos = 30;
-$timeout_seg = $timeout_minutos * 60;
-
-if (!isset($_SESSION['gimnasio_id'])) {
-    if (session_status() !== PHP_SESSION_NONE) {
-        session_unset();
-        session_destroy();
-    }
-    header('Location: login.php');
-    exit;
-}
-
-if (isset($_SESSION['last_activity']) && (time() - $_SESSION['last_activity']) > $timeout_seg) {
-    session_unset();
-    session_destroy();
-    header('Location: login.php?timeout=1');
-    exit;
-}
-
-$_SESSION['last_activity'] = time();
-
-if (!isset($_SESSION['session_regenerated_time'])) {
-    session_regenerate_id(true);
-    $_SESSION['session_regenerated_time'] = time();
-} else {
-    if (time() - $_SESSION['session_regenerated_time'] > 15 * 60) {
-        session_regenerate_id(true);
-        $_SESSION['session_regenerated_time'] = time();
-    }
-}
-// --- FIN: validación de sesión e inactividad ---
-
-include 'conexion.php';
-include 'menu_horizontal.php';
-
-$gimnasio_id = isset($_SESSION['gimnasio_id']) ? (int)$_SESSION['gimnasio_id'] : 0;
 $rol = $_SESSION['rol'] ?? '';
 
-$gimnasio = $conexion->query("SELECT nombre, logo, fecha_vencimiento FROM gimnasios WHERE id = $gimnasio_id")->fetch_assoc();
-$nombre_gym = $gimnasio['nombre'] ?? 'Gimnasio';
-$logo = $gimnasio['logo'] ?? '';
-$fecha_venc = $gimnasio['fecha_vencimiento'] ?? '---';
+// Ruta actual para "activo"
+$uri = parse_url($_SERVER['REQUEST_URI'] ?? '', PHP_URL_PATH);
+$basename = strtolower(trim(basename($uri), '/'));
 
-// ===== KPIs Activos vs Inactivos (última membresía por cliente) =====
-$estado = $conexion->query("
-  SELECT
-    SUM(CASE WHEN u.fv IS NOT NULL AND u.fv >= CURDATE() THEN 1 ELSE 0 END) AS activos,
-    SUM(CASE WHEN u.fv IS NULL OR u.fv < CURDATE() THEN 1 ELSE 0 END) AS inactivos
-  FROM clientes c
-  LEFT JOIN (
-    SELECT cliente_id, MAX(fecha_vencimiento) AS fv
-    FROM membresias
-    WHERE gimnasio_id = $gimnasio_id
-      AND fecha_vencimiento IS NOT NULL
-      AND fecha_vencimiento >= '1000-01-01'
-    GROUP BY cliente_id
-  ) u ON u.cliente_id = c.id
-  WHERE c.gimnasio_id = $gimnasio_id
-")->fetch_assoc();
-
-$activos   = (int)($estado['activos'] ?? 0);
-$inactivos = (int)($estado['inactivos'] ?? 0);
-
-// ===== Cumpleaños (filtro seguro) =====
-$cumples = $conexion->query("
-  SELECT nombre, apellido, fecha_nacimiento
-  FROM clientes
-  WHERE gimnasio_id = $gimnasio_id
-    AND fecha_nacimiento IS NOT NULL
-    AND fecha_nacimiento >= '1000-01-01'
-    AND DATE_FORMAT(fecha_nacimiento, '%m-%d') >= DATE_FORMAT(CURDATE(), '%m-%d')
-  ORDER BY DATE_FORMAT(fecha_nacimiento, '%m-%d')
-  LIMIT 5
-");
-
-// ===== Vencimientos (filtro seguro) =====
-$vencimientos = $conexion->query("
-    SELECT c.nombre, c.apellido, m.fecha_vencimiento
-    FROM membresias m
-    JOIN clientes c ON m.cliente_id = c.id
-    WHERE m.gimnasio_id = $gimnasio_id
-      AND m.fecha_vencimiento IS NOT NULL
-      AND m.fecha_vencimiento >= '1000-01-01'
-      AND m.fecha_vencimiento >= CURDATE()
-    ORDER BY m.fecha_vencimiento ASC LIMIT 5
-");
-
-$fecha_filtro = $_GET['fecha'] ?? date('Y-m-d');
-if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $fecha_filtro)) {
-    $fecha_filtro = date('Y-m-d');
+function item($href, $label, $icon, $active) {
+  $isActive = $active ? ' data-active="1"' : '';
+  return [
+    'href' => $href,
+    'label' => $label,
+    'icon' => $icon,
+    'active' => $active,
+    'li' => "<li><a href=\"{$href}\" class=\"nav-link".($active?' active':'')."\"{$isActive} aria-current=\"".($active?'page':'false')."\">{$icon}<span>{$label}</span></a></li>"
+  ];
 }
 
-// ===== PAGOS PENDIENTES =====
-$pagos_pendientes = 0;
-$consulta = $conexion->query("
-    SELECT COUNT(*) AS total 
-    FROM pagos_pendientes 
-    JOIN clientes ON pagos_pendientes.cliente_id = clientes.id 
-    WHERE pagos_pendientes.estado = 'pendiente' 
-      AND clientes.gimnasio_id = $gimnasio_id
-");
-if ($consulta && $r = $consulta->fetch_assoc()) {
-    $pagos_pendientes = (int)$r['total'];
+// Define tu menú (agregá/quitá lo que necesites)
+$items = [];
+$items[] = item('index.php',        'Panel',        '🏠', in_array($basename, ['', 'index.php', 'panel.php']));
+$items[] = item('clientes.php',     'Clientes',     '🧑‍🤝‍🧑', $basename === 'clientes.php');
+$items[] = item('membresias.php',   'Membresías',   '💳', $basename === 'membresias.php');
+$items[] = item('reservas.php',     'Reservas',     '📅', $basename === 'reservas.php');
+$items[] = item('disciplinas.php',  'Disciplinas',  '🥋', $basename === 'disciplinas.php');
+$items[] = item('reportes.php',     'Reportes',     '📊', $basename === 'reportes.php');
+
+// Ejemplo por rol (admin)
+if ($rol === 'admin') {
+  $items[] = item('config.php',     'Config',       '⚙️', $basename === 'config.php');
 }
 
-// ===== CUENTAS CORRIENTES =====
-$cuentas_corrientes = 0;
-$consulta_cc = $conexion->query("
-    SELECT COUNT(*) AS total FROM (
-        SELECT cliente_id
-        FROM cuentas_corrientes
-        WHERE gimnasio_id = $gimnasio_id
-        GROUP BY cliente_id
-        HAVING SUM(monto) < 0
-    ) AS sub
-");
-if ($consulta_cc && $r = $consulta_cc->fetch_assoc()) {
-    $cuentas_corrientes = (int)$r['total'];
-}
-
-// ===== Avisos de nuevos online =====
-$nuevos = $conexion->query("SELECT id, nombre, apellido FROM clientes WHERE gimnasio_id = $gimnasio_id AND nuevo_online = 1");
-$avisos_html = '';
-if ($nuevos && $nuevos->num_rows > 0) {
-    ob_start();
-    echo "<div style='background:#fff3cd;border:1px solid #ffeeba;padding:12px;border-radius:10px;color:#856404;margin-top:10px;'>";
-    echo "<strong>📢 Nuevos registros online:</strong><br>";
-    while ($n = $nuevos->fetch_assoc()) {
-        echo htmlspecialchars($n['nombre'].' '.$n['apellido']) . " — <a href='marcar_visto.php?id={$n['id']}'>Marcar como visto</a><br>";
-    }
-    echo "</div>";
-    $avisos_html = ob_get_clean();
-}
-// ===== Disciplinas TOP (normalizadas y sin duplicados visibles) =====
-$disciplinas_top_q = $conexion->query("
-  SELECT nombre_mostrar, total
-  FROM (
-    SELECT
-      /* Tomamos un nombre legible ya con espacios/tab/NBSP normalizados */
-      MIN(
-        TRIM(
-          REPLACE(
-            REPLACE(COALESCE(d.nombre, c.disciplina), CONVERT(0xC2A0 USING utf8mb4), ' '), /* NBSP */
-          CHAR(9), ' ')                                                                  /* TAB */
-        )
-      ) AS nombre_mostrar,
-
-      /* clave compacta para agrupar */
-      UPPER(
-        REPLACE(
-          REPLACE(
-            REPLACE(
-              REPLACE(
-                REPLACE(
-                  /* quitamos NBSP y TAB antes de compactar */
-                  TRIM(
-                    REPLACE(
-                      REPLACE(COALESCE(d.nombre, c.disciplina), CONVERT(0xC2A0 USING utf8mb4), ' '),
-                    CHAR(9), ' ')
-                  ),
-                ' ', ''),  /* sin espacios */
-              '-', ''),    /* sin guiones  */
-            '.', ''),      /* sin puntos   */
-          '_', ''),        /* sin underscore */
-        '/' , '' )         /* sin slash */
-      ) AS clave,
-
-      COUNT(*) AS total
-    FROM clientes c
-    LEFT JOIN disciplinas d ON d.id = c.disciplina_id
-    WHERE c.gimnasio_id = $gimnasio_id
-      AND COALESCE(d.nombre, c.disciplina) IS NOT NULL
-      AND TRIM(
-            REPLACE(
-              REPLACE(COALESCE(d.nombre, c.disciplina), CONVERT(0xC2A0 USING utf8mb4), ' '),
-            CHAR(9), ' ')
-          ) <> ''
-    GROUP BY clave
-  ) u
-  ORDER BY total DESC
-  LIMIT 10
-");
-
-$disciplinas_rows = [];
-if ($disciplinas_top_q) {
-  while ($row = $disciplinas_top_q->fetch_assoc()) {
-    // Presentación prolija
-    $nombre = ucwords(strtolower($row['nombre_mostrar']));
-    $disciplinas_rows[] = ['nombre' => $nombre, 'total' => (int)$row['total']];
-  }
-}
-
-/* Consolidación extra en PHP por si dos claves distintas terminan
-   mostrando el mismo texto (ej: 'Kick-Boxing' y 'Kick Boxing' => 'Kickboxing') */
-if ($disciplinas_rows) {
-  $agg = [];
-  foreach ($disciplinas_rows as $r) {
-    $k = strtolower(trim($r['nombre']));
-    if (!isset($agg[$k])) {
-      $agg[$k] = ['nombre' => $r['nombre'], 'total' => 0];
-    }
-    $agg[$k]['total'] += (int)$r['total'];
-  }
-  // Reindexado y orden por total desc para el gráfico
-  $disciplinas_rows = array_values($agg);
-  usort($disciplinas_rows, function($a,$b){ return $b['total'] <=> $a['total']; });
-  // si querés limitar a 10 de nuevo:
-  $disciplinas_rows = array_slice($disciplinas_rows, 0, 10);
-}
+$items[] = item('salir.php',        'Salir',        '🚪', $basename === 'salir.php');
 
 ?>
-<!DOCTYPE html>
-<html lang="es">
-<head>
-  <meta charset="UTF-8">
-  <title>Panel General - <?= htmlspecialchars($nombre_gym) ?></title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+  /* ====== Reset mínimo del componente (scoped por #main-nav) ====== */
+  #main-nav, #main-nav * { box-sizing: border-box; }
+  #main-nav { --bg:#0b0f16; --ink:#eaf1ff; --mut:#8fa2ba; --stroke:rgba(255,255,255,.12);
+              --brand:#ffd166; --hover:rgba(255,255,255,.06); --shadow:0 8px 24px rgba(0,0,0,.25);
+              --h:56px; --z: 9999; font-family: system-ui,-apple-system,Segoe UI,Roboto,Inter,Arial,sans-serif; }
 
-  <style>
-    body { background: #000; color: gold; font-family: Arial, sans-serif; padding: 20px; }
-    .grid { display: flex; flex-wrap: wrap; gap: 20px; }
-    .box, .cuadro { background: #111; padding: 15px; border-radius: 10px; flex: 1 1 300px; }
-    h1, h2, h3 { color: gold; margin-top: 0; }
-    ul { padding-left: 20px; }
-    .monto { font-size: 24px; color: lime; }
-    .encabezado { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
-    .logo-gym { max-height: 60px; max-width: 180px; border-radius: 8px; background: white; padding: 5px; object-fit: contain; }
-    .btn-logo-mini { margin-top: 8px; padding: 5px 10px; background: gold; color: black; font-weight: bold; border: none; border-radius: 5px; cursor: pointer; }
-    .alerta-pagos { box-shadow: none; border: 1px solid rgba(255,255,255,.15); padding:10px; border-radius:10px; }
-    .alerta-pagos a { color: yellow; text-decoration: underline; margin-left: 10px; }
-    .toggle-icon { cursor: pointer; font-size: 22px; }
+  /* ====== Desktop navbar (visible ≥ 992px) ====== */
+  #main-nav .deskbar {
+    position: sticky; top: 0; z-index: var(--z);
+    display: none;
+    background: linear-gradient(180deg, #101827f2, #0b1220f2);
+    backdrop-filter: blur(8px);
+    border-bottom: 1px solid var(--stroke);
+    box-shadow: var(--shadow);
+    height: var(--h);
+  }
+  #main-nav .desk-inner {
+    max-width: 1200px; margin: 0 auto; height: 100%;
+    display: grid; grid-template-columns: 220px 1fr 220px; align-items: center; gap: 12px; padding: 0 12px;
+  }
+  #main-nav .brand {
+    display:flex; align-items:center; gap:10px; color:var(--ink); font-weight: 700;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  #main-nav .brand .dot { width:8px; height:8px; border-radius:999px; background: var(--brand); box-shadow:0 0 10px rgba(255,209,102,.8); }
+  #main-nav .desk-links { display:flex; gap:6px; align-items:center; justify-content:center; overflow:auto hidden; scrollbar-width:none; }
+  #main-nav .desk-links::-webkit-scrollbar{ display:none; }
+  #main-nav .desk-links li{ list-style:none; }
+  #main-nav .nav-link {
+    display:flex; align-items:center; gap:8px; color:var(--ink); text-decoration:none; padding:8px 12px; border-radius:10px;
+    border:1px solid transparent;
+  }
+  #main-nav .nav-link:hover { background: var(--hover); border-color: var(--stroke); }
+  #main-nav .nav-link.active { color:#111; background: linear-gradient(180deg,#ffd166,#ffb703); border-color: transparent; }
+  #main-nav .nav-link span{ font-size:.95rem; }
+  #main-nav .nav-link:focus-visible{ outline:2px solid #ffb703; outline-offset:2px; }
 
-    /* KPIs Activos/Inactivos */
-    .kpis { display:flex; gap:12px; flex-wrap:wrap; margin:10px 0 16px; }
-    .kpi { background:#111; border:1px solid rgba(255,215,0,.15); border-radius:12px; padding:10px 14px; min-width:140px; }
-    .kpi-label { color:#ffdf6b; font-size:12px; opacity:.85; letter-spacing:.3px; }
-    .kpi-value { color:#fff; font-weight:800; font-size:26px; line-height:1.1; }
+  #main-nav .rightbox{ display:flex; justify-content:flex-end; gap:10px; align-items:center; }
+  #main-nav .chip{
+    padding:6px 10px; border:1px solid var(--stroke); border-radius:999px; color:var(--ink);
+    background: linear-gradient(180deg, #16243a, #0b1220);
+    font-size:.85rem;
+  }
 
-    /* Tamaño y sombra del gráfico de disciplinas */
-    .chart-wrap { display:flex; justify-content:center; }
-    #disciplinasChart { width:100%; max-width:560px; height:300px; filter: drop-shadow(0 8px 18px rgba(0,0,0,.45)); }
-  </style>
+  /* ====== Mobile topbar + drawer (visible < 992px) ====== */
+  #main-nav .mobar {
+    position: sticky; top: 0; z-index: var(--z);
+    display: flex; align-items:center; justify-content:space-between;
+    height: var(--h);
+    background: linear-gradient(180deg, #101827f2, #0b1220f2);
+    backdrop-filter: blur(8px);
+    border-bottom: 1px solid var(--stroke);
+    padding: 0 10px;
+  }
+  #main-nav .mo-title { color:var(--ink); font-weight:800; letter-spacing:.3px; display:flex; align-items:center; gap:8px; }
+  #main-nav .mo-btn {
+    display:inline-flex; align-items:center; justify-content:center;
+    width:40px; height:40px; border-radius:10px; border:1px solid var(--stroke);
+    background: linear-gradient(180deg, #142033, #0b1220); color:var(--ink);
+  }
+  #main-nav .mo-btn:active { transform: scale(.98); }
 
-  <!-- Solo cargamos Chart.js para el gráfico de disciplinas -->
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  /* Drawer */
+  #main-nav .drawer {
+    position: fixed; inset: 0 0 0 auto; width: 86vw; max-width: 360px; background:#0d1423; border-left:1px solid var(--stroke);
+    transform: translateX(100%); transition: transform .25s ease; z-index: calc(var(--z) + 1);
+    box-shadow: -24px 0 40px rgba(0,0,0,.35);
+    display:flex; flex-direction:column; height:100dvh;
+  }
+  #main-nav .drawer.open { transform: translateX(0); }
+  #main-nav .scrim {
+    position: fixed; inset: 0; background: rgba(0,0,0,.45); backdrop-filter: blur(2px);
+    opacity: 0; pointer-events: none; transition: opacity .2s ease; z-index: var(--z);
+  }
+  #main-nav .scrim.show { opacity: 1; pointer-events: auto; }
 
-  <script>
-    function toggleMontos() {
-      const montos = document.querySelectorAll('.bloque-monto');
-      const icono = document.getElementById('icono-ojo');
-      let visible = montos.length && montos[0].style.display !== 'none';
-      montos.forEach(div => div.style.display = visible ? 'none' : 'block');
-      if (icono) icono.textContent = visible ? '👁️' : '👁️‍🗨️';
-    }
-    function cargarDatos() {
-      fetch('ajax_ingresos.php').then(r => r.text()).then(html => document.getElementById('contenedor-ingresos').innerHTML = html).catch(()=>{});
-      const fecha = document.getElementById('fecha')?.value;
-      if (fecha) fetch('ajax_reservas.php?fecha=' + fecha).then(r => r.text()).then(html => document.getElementById('contenedor-reservas').innerHTML = html).catch(()=>{});
-      fetch('ajax_alumnos_hoy.php').then(r => r.text()).then(html => document.getElementById('contenedor-alumnos').innerHTML = html).catch(()=>{});
-    }
-    setInterval(cargarDatos, 10000);
-    window.onload = cargarDatos;
-  </script>
-</head>
-<body>
+  #main-nav .drawer-head{
+    display:flex; align-items:center; justify-content:space-between; gap:10px; padding:12px; border-bottom:1px solid var(--stroke);
+    color:var(--ink);
+  }
+  #main-nav .drawer-list{ padding:10px; overflow:auto; }
+  #main-nav .drawer-list ul{ margin:0; padding:0; display:flex; flex-direction:column; gap:6px; }
+  #main-nav .drawer-list li{ list-style:none; }
+  #main-nav .drawer-list .nav-link{
+    display:flex; align-items:center; gap:10px; padding:10px 12px; border-radius:12px; text-decoration:none; color:var(--ink);
+    border:1px solid transparent;
+  }
+  #main-nav .drawer-list .nav-link:hover{ background: var(--hover); border-color: var(--stroke); }
+  #main-nav .drawer-list .nav-link.active{ color:#111; background: linear-gradient(180deg,#ffd166,#ffb703); }
 
-<div class="encabezado">
-  <div style="display:flex; align-items:center; gap:15px;">
-    <?php if ($logo): ?>
-      <div style="position:relative; display:flex; flex-direction:column; align-items:flex-start;">
-        <img src="<?= htmlspecialchars($logo) ?>?v=<?= time() ?>" alt="Logo" class="logo-gym" id="logoGym">
-        <?php if ($gimnasio_id > 0): ?>
-          <button onclick="document.getElementById('formLogo').style.display='block'" class="btn-logo-mini">🖋</button>
-          <form method="POST" action="subir_logo.php" enctype="multipart/form-data" id="formLogo" style="display:none; margin-top:3px;">
-            <input type="file" name="logo" accept="image/*" required onchange="this.form.submit()">
-          </form>
-        <?php endif; ?>
+  /* ====== Visibilidad por breakpoint ====== */
+  @media (min-width: 992px){
+    #main-nav .deskbar{ display:block; }
+    #main-nav .mobar, #main-nav .drawer, #main-nav .scrim { display:none !important; }
+  }
+  @media (max-width: 991.98px){
+    #main-nav .deskbar{ display:none !important; }
+    #main-nav .mobar{ display:flex; }
+  }
+</style>
+
+<nav id="main-nav" aria-label="Principal">
+  <!-- ===== Mobile Topbar ===== -->
+  <div class="mobar">
+    <button class="mo-btn" type="button" aria-label="Abrir menú" id="btn-open">☰</button>
+    <div class="mo-title">🏋️ Panel</div>
+    <a class="mo-btn" href="index.php" aria-label="Ir al inicio">🏠</a>
+  </div>
+
+  <!-- Drawer + Scrim -->
+  <div class="scrim" id="nav-scrim" hidden></div>
+  <aside class="drawer" id="nav-drawer" aria-hidden="true" aria-label="Menú móvil">
+    <div class="drawer-head">
+      <strong>Menú</strong>
+      <button class="mo-btn" type="button" aria-label="Cerrar menú" id="btn-close">✕</button>
+    </div>
+    <div class="drawer-list">
+      <ul>
+        <?php foreach ($items as $it) echo $it['li']; ?>
+      </ul>
+    </div>
+  </aside>
+
+  <!-- ===== Desktop Navbar ===== -->
+  <div class="deskbar">
+    <div class="desk-inner">
+      <div class="brand">
+        <span class="dot" aria-hidden="true"></span>
+        <span>Panel General</span>
       </div>
-    <?php endif; ?>
-
-    <div>
-      <h1>🏋️ <?= htmlspecialchars($nombre_gym) ?></h1>
-      <p>🗓 Vencimiento del sistema: <strong style="color:orange;">
-        <?= (is_string($fecha_venc) && $fecha_venc !== '0000-00-00' && strtotime($fecha_venc)) ? date('d/m/Y', strtotime($fecha_venc)) : '---' ?>
-      </strong></p>
+      <ul class="desk-links" role="menubar" aria-label="Navegación">
+        <?php foreach ($items as $it) echo $it['li']; ?>
+      </ul>
+      <div class="rightbox">
+        <span class="chip"><?= htmlspecialchars($_SESSION['usuario'] ?? 'Usuario') ?></span>
+      </div>
     </div>
   </div>
-</div>
-
-<!-- KPIs: Activos / Inactivos (sin gráfico) -->
-<div class="kpis">
-  <div class="kpi">
-    <div class="kpi-label">Activos</div>
-    <div class="kpi-value"><?= (int)$activos ?></div>
-  </div>
-  <div class="kpi">
-    <div class="kpi-label">Inactivos</div>
-    <div class="kpi-value"><?= (int)$inactivos ?></div>
-  </div>
-</div>
-
-<?= $avisos_html ?>
-
-<?php if ($cuentas_corrientes > 0): ?>
-  <div class="alerta-pagos" style="margin:10px 0;">
-    ⚠️ Hay <strong><?= $cuentas_corrientes ?></strong> cliente(s) con saldo negativo.
-    <a href="ver_cuentas_corrientes.php">Ver cuentas corrientes</a>
-  </div>
-<?php endif; ?>
-
-<?php if ($pagos_pendientes > 0): ?>
-  <div class="alerta-pagos" style="margin:10px 0;">
-    💸 Hay <strong><?= $pagos_pendientes ?></strong> pago(s) pendiente(s) de clientes.
-    <a href="ver_pagos_pendientes.php">Ver pagos</a>
-  </div>
-<?php endif; ?>
-
-<div style="text-align:right; margin-bottom:10px;">
-  <span id="icono-ojo" class="toggle-icon" onclick="toggleMontos()">👁️‍🗨️</span>
-</div>
-
-<div class="grid">
-  <div id="contenedor-ingresos" class="box bloque-monto">Cargando ingresos...</div>
-
-  <div class="box">
-    <h2>🎂 Próximos Cumpleaños</h2>
-    <ul>
-      <?php while($c = $cumples->fetch_assoc()): ?>
-        <li>
-          <?= htmlspecialchars($c['apellido'] . ', ' . $c['nombre']) ?>
-          (
-            <?= ($c['fecha_nacimiento'] && strtotime($c['fecha_nacimiento']))
-                  ? date('d/m', strtotime($c['fecha_nacimiento']))
-                  : '--' ?>
-          )
-        </li>
-      <?php endwhile; ?>
-    </ul>
-  </div>
-
-  <div class="box">
-    <h2>🗓 Vencimientos</h2>
-    <ul>
-      <?php while($v = $vencimientos->fetch_assoc()): ?>
-        <li>
-          <?= htmlspecialchars($v['apellido'] . ', ' . $v['nombre']) ?>
-          (
-            <?= ($v['fecha_vencimiento'] && strtotime($v['fecha_vencimiento']))
-                  ? date('d/m', strtotime($v['fecha_vencimiento']))
-                  : '--' ?>
-          )
-        </li>
-      <?php endwhile; ?>
-    </ul>
-  </div>
-
-  <div class="box">
-    <form method="GET" style="margin-bottom: 10px;">
-      <label for="fecha" style="color: gold;">🗓 Ver reservas del día: </label>
-      <input type="date" id="fecha" name="fecha" value="<?= htmlspecialchars($fecha_filtro) ?>" onchange="this.form.submit()">
-    </form>
-    <h2>📋 Reservas del día</h2>
-    <ul id="contenedor-reservas">Cargando reservas...</ul>
-  </div>
-
-  <!-- ÚNICO GRÁFICO: Disciplinas más registradas -->
-  <div class="box">
-    <h2>📊 Disciplinas más registradas</h2>
-    <div class="chart-wrap">
-      <canvas id="disciplinasChart"></canvas>
-    </div>
-    <?php if (count($disciplinas_rows) === 0): ?>
-      <small>No hay datos para mostrar.</small>
-    <?php endif; ?>
-  </div>
-</div>
+</nav>
 
 <script>
-  // Render del único gráfico (disciplinas)
-  const disciplinas = <?= json_encode($disciplinas_rows, JSON_UNESCAPED_UNICODE) ?>;
-  if (Array.isArray(disciplinas) && disciplinas.length) {
-    const canvas = document.getElementById('disciplinasChart');
-    if (canvas) {
-      const ctxD = canvas.getContext('2d');
-      const grad = ctxD.createLinearGradient(0, 0, 0, canvas.height);
-      grad.addColorStop(0, 'rgba(255, 193, 7, 0.9)');
-      grad.addColorStop(1, 'rgba(230, 81, 0, 0.6)');
+(function(){
+  const drawer = document.getElementById('nav-drawer');
+  const scrim  = document.getElementById('nav-scrim');
+  const openB  = document.getElementById('btn-open');
+  const closeB = document.getElementById('btn-close');
 
-      new Chart(ctxD, {
-        type: 'bar',
-        data: {
-          labels: disciplinas.map(d => d.nombre),
-          datasets: [{
-            label: 'Registros de disciplinas',
-            data: disciplinas.map(d => Number(d.total)),
-            backgroundColor: grad,
-            borderColor: 'rgba(255,160,0,1)',
-            borderWidth: 2,
-            borderRadius: 10
-          }]
-        },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          plugins: {
-            legend: { labels: { color: '#FFD54F' } },
-            tooltip: {
-              backgroundColor: 'rgba(20,20,20,.95)',
-              titleColor: '#FFD54F',
-              bodyColor: '#EEE',
-              borderWidth: 1,
-              borderColor: 'rgba(255,215,0,.35)'
-            }
-          },
-          scales: {
-            x: { ticks: { color: '#FFD54F' }, grid: { color: 'rgba(255,215,0,.10)' } },
-            y: { beginAtZero: true, ticks: { color: '#FFD54F', precision: 0 }, grid: { color: 'rgba(255,215,0,.08)' } }
-          }
-        }
-      });
-    }
+  function open(){
+    drawer.classList.add('open');
+    drawer.setAttribute('aria-hidden','false');
+    scrim.hidden = false;
+    void scrim.offsetWidth; // reflow
+    scrim.classList.add('show');
+    // focus al primer link
+    const first = drawer.querySelector('a.nav-link');
+    if(first) first.focus({preventScroll:true});
+    // bloquear scroll fondo
+    document.documentElement.style.overflow = 'hidden';
   }
-</script>
+  function close(){
+    drawer.classList.remove('open');
+    drawer.setAttribute('aria-hidden','true');
+    scrim.classList.remove('show');
+    setTimeout(()=>{ scrim.hidden = true; }, 200);
+    document.documentElement.style.overflow = '';
+    openB && openB.focus({preventScroll:true});
+  }
 
-</body>
-</html>
+  openB && openB.addEventListener('click', open);
+  closeB && closeB.addEventListener('click', close);
+  scrim  && scrim.addEventListener('click', close);
+  document.addEventListener('keydown', (e)=>{ if(e.key === 'Escape' && drawer.classList.contains('open')) close(); });
+
+  // Mejora accesible: marca dinámica aria-current
+  document.querySelectorAll('#main-nav a.nav-link').forEach(a=>{
+    if (a.classList.contains('active')) a.setAttribute('aria-current','page');
+  });
+})();
+</script>
