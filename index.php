@@ -201,22 +201,30 @@ ul{ margin:0; padding-left:16px; } li{ margin:6px 0; }
   -webkit-text-fill-color: currentColor !important; opacity:1 !important;
 }
 
-/* ======= MODO TARJETAS CENTRADAS EN MÓVIL + ANTI-VERTICAL ======= */
+/* ======= MODO TARJETAS CENTRADAS + ANTI-VERTICAL (móvil) ======= */
 @media (max-width: 900px){
   body{ background:#f3f4f6 !important; }
 
-  /* contenedores AJAX como “pilas” centradas */
-  #contenedor-ingresos, #contenedor-reservas, #contenedor-alumnos{
-    display:flex; flex-direction:column; align-items:center; gap:16px; padding:12px;
+  /* Ingresos: grid bonito y horizontal */
+  #contenedor-ingresos{
+    display:block;
   }
-  #contenedor-ingresos > div,
-  #contenedor-reservas > div,
-  #contenedor-alumnos > div{
-    background:#fff !important; border-radius:14px !important; box-shadow:0 4px 12px rgba(0,0,0,.1) !important;
-    width:100% !important; max-width:680px !important; padding:14px 16px !important; box-sizing:border-box !important;
+  #contenedor-ingresos .ingresos-wrap{
+    display:grid; grid-template-columns:1fr 1fr; gap:12px; width:100%;
+  }
+  #contenedor-ingresos .ing-card{
+    display:flex; align-items:center; justify-content:space-between; gap:12px;
+    background:#fff; border-radius:14px; box-shadow:0 4px 12px rgba(0,0,0,.1);
+    padding:14px 16px; box-sizing:border-box;
+  }
+  #contenedor-ingresos .ing-title{ font-weight:700; color:#b45309; font-size:1rem; }
+  #contenedor-ingresos .ing-amount{ font-weight:900; font-size:1.3rem; text-align:right; }
+  /* en teléfonos angostos, 1 columna */
+  @media (max-width:560px){
+    #contenedor-ingresos .ingresos-wrap{ grid-template-columns:1fr; }
   }
 
-  /* fuerza texto horizontal normal en todo lo inyectado */
+  /* normaliza todo lo inyectado (reservas / alumnos) */
   :where(#contenedor-ingresos, #contenedor-reservas, #contenedor-alumnos) *{
     writing-mode: horizontal-tb !important;
     text-orientation: mixed !important;
@@ -228,36 +236,39 @@ ul{ margin:0; padding-left:16px; } li{ margin:6px 0; }
     line-height: 1.4 !important;
     max-width: 100% !important;
   }
-
-  /* saca rótulos/raíles verticales típicos */
   :where(#contenedor-ingresos, #contenedor-reservas, #contenedor-alumnos)
   :is(.vertical,.titulo-vertical,.rot-90,.rotate-90,.rail-vertical,[data-vertical],[data-rail]){
     display:none !important;
   }
-
-  /* expande columnas estrechas o anchos fijos */
   :where(#contenedor-ingresos, #contenedor-reservas, #contenedor-alumnos) [class*="col"],
   :where(#contenedor-ingresos, #contenedor-reservas, #contenedor-alumnos) [style*="width:"]{
     width:auto !important; min-width:0 !important; flex:1 1 100% !important; max-width:100% !important;
   }
+}
 
-  /* títulos */
-  #contenedor-ingresos h1,#contenedor-ingresos h2,#contenedor-ingresos h3,
-  #contenedor-reservas h1,#contenedor-reservas h2,#contenedor-reservas h3,
-  #contenedor-alumnos h1,#contenedor-alumnos h2,#contenedor-alumnos h3{
-    font-size:1.2rem !important; font-weight:700 !important; color:#b91c1c !important; margin-bottom:10px !important; text-align:left !important;
+/* ===== FIX Vencimientos específico para móvil ===== */
+@media (max-width: 900px){
+  #card-venc, #card-venc *{
+    writing-mode: horizontal-tb !important;
+    text-orientation: mixed !important;
+    transform: none !important;
+    white-space: normal !important;
+    word-break: normal !important;
+    overflow-wrap: break-word !important;
+    letter-spacing: normal !important;
+    line-height: 1.4 !important;
+    max-width: 100% !important;
   }
+  #card-venc ul{ margin:8px 0; padding-left:18px; }
 }
 </style>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
-/* Quita estilos embebidos y “raíles” verticales de cada parcial AJAX */
+/* Quita estilos embebidos y rieles verticales en parciales AJAX */
 function sanitizeAjaxContainer(root){
   if(!root) return;
-
   root.querySelectorAll('style, link[rel="stylesheet"]').forEach(n => n.remove());
-
   root.querySelectorAll('[style]').forEach(el => {
     el.style.writingMode = 'horizontal-tb';
     el.style.textOrientation = 'mixed';
@@ -267,8 +278,6 @@ function sanitizeAjaxContainer(root){
     el.style.overflowWrap = 'break-word';
     el.style.maxWidth = '100%';
   });
-
-  // Heurística: elementos muy angostos y altos con texto -> esconder (suelen ser rieles verticales)
   root.querySelectorAll('*').forEach(el => {
     const r = el.getBoundingClientRect();
     const txt = (el.innerText || '').replace(/\s+/g,'').trim();
@@ -370,14 +379,17 @@ window.addEventListener('load', () => {
 
   <div class="grid">
 
+    <!-- INGRESOS (AJAX) -->
     <section class="card bloque-monto" id="contenedor-ingresos">
       <div class="card-header">
         <h3 class="card-title">💰 Ingresos</h3>
         <p class="card-sub">Actualiza cada 10s</p>
       </div>
+      <!-- aquí entra ajax_ingresos.php -->
       <div class="skeleton" style="min-height:120px"></div>
     </section>
 
+    <!-- CUMPLES -->
     <section class="card">
       <div class="card-header">
         <h3 class="card-title">🎂 Próximos Cumpleaños</h3>
@@ -392,7 +404,8 @@ window.addEventListener('load', () => {
       </ul>
     </section>
 
-    <section class="card">
+    <!-- VENCIMIENTOS (ahora con id para el fix móvil) -->
+    <section class="card" id="card-venc">
       <div class="card-header">
         <h3 class="card-title">🗓 Vencimientos</h3>
         <p class="card-sub">Próximas membresías a vencer</p>
@@ -406,6 +419,7 @@ window.addEventListener('load', () => {
       </ul>
     </section>
 
+    <!-- RESERVAS (AJAX) -->
     <section class="card" style="grid-column:span 8">
       <div class="card-header">
         <h3 class="card-title">📋 Reservas del día</h3>
@@ -419,6 +433,7 @@ window.addEventListener('load', () => {
       <div id="contenedor-reservas"><div class="skeleton" style="min-height:110px"></div></div>
     </section>
 
+    <!-- ALUMNOS (AJAX) -->
     <section class="card" id="contenedor-alumnos">
       <div class="card-header">
         <h3 class="card-title">🧑‍🎓 Alumnos de hoy</h3>
@@ -427,6 +442,7 @@ window.addEventListener('load', () => {
       <div class="skeleton" style="min-height:110px"></div>
     </section>
 
+    <!-- DISCIPLINAS -->
     <section class="card" style="grid-column:span 8">
       <div class="card-header">
         <h3 class="card-title">📊 Disciplinas más registradas</h3>
