@@ -39,12 +39,12 @@ require_once 'menu_horizontal.php';
 $gimnasio_id = (int)($_SESSION['gimnasio_id'] ?? 0);
 $rol         = $_SESSION['rol'] ?? '';
 
-$gimnasio = $conexion->query("SELECT nombre, logo, fecha_vencimiento FROM gimnasios WHERE id = {$gimnasio_id}")->fetch_assoc();
+$gimnasio   = $conexion->query("SELECT nombre, logo, fecha_vencimiento FROM gimnasios WHERE id = {$gimnasio_id}")->fetch_assoc();
 $nombre_gym = $gimnasio['nombre'] ?? 'Gimnasio';
 $logo       = $gimnasio['logo']   ?? '';
 $fecha_venc = $gimnasio['fecha_vencimiento'] ?? '---';
 
-// ===== KPIs Activos vs Inactivos (última membresía por cliente) =====
+// ===== KPIs Activos vs Inactivos =====
 $estado = $conexion->query("
   SELECT
     SUM(CASE WHEN u.fv IS NOT NULL AND u.fv >= CURDATE() THEN 1 ELSE 0 END) AS activos,
@@ -92,7 +92,7 @@ $vencimientos = $conexion->query("
 $fecha_filtro = $_GET['fecha'] ?? date('Y-m-d');
 if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $fecha_filtro)) $fecha_filtro = date('Y-m-d');
 
-// ===== PAGOS PENDIENTES =====
+// ===== Pagos pendientes =====
 $pagos_pendientes = 0;
 $consulta = $conexion->query("
   SELECT COUNT(*) AS total
@@ -103,7 +103,7 @@ $consulta = $conexion->query("
 ");
 if ($consulta && $r = $consulta->fetch_assoc()) $pagos_pendientes = (int)$r['total'];
 
-// ===== CUENTAS CORRIENTES =====
+// ===== Cuentas corrientes negativas =====
 $cuentas_corrientes = 0;
 $consulta_cc = $conexion->query("
   SELECT COUNT(*) AS total FROM (
@@ -116,7 +116,7 @@ $consulta_cc = $conexion->query("
 ");
 if ($consulta_cc && $r = $consulta_cc->fetch_assoc()) $cuentas_corrientes = (int)$r['total'];
 
-// ===== Avisos de nuevos online =====
+// ===== Avisos nuevos online =====
 $nuevos = $conexion->query("SELECT id, nombre, apellido FROM clientes WHERE gimnasio_id = {$gimnasio_id} AND nuevo_online = 1");
 $avisos_html = '';
 if ($nuevos && $nuevos->num_rows > 0) {
@@ -321,19 +321,15 @@ if ($disciplinas_rows) {
   .warn{ color:var(--warn); }
   .hidden{ display:none !important; }
 
-  /* ========= HOTFIX LEGIBILIDAD (sin romper palabras) ========= */
+  /* ---- Legibilidad general ---- */
   .wrap, .wrap *{
     letter-spacing: normal !important;
     line-height: 1.35 !important;
     text-transform: none !important;
-
-    /* Mantiene las palabras juntas y solo corta cuando hace falta */
     white-space: normal !important;
     word-break: normal !important;
-    overflow-wrap: break-word !important;  /* NO 'anywhere' */
+    overflow-wrap: break-word !important;
     hyphens: auto !important;
-
-    /* Limpieza de efectos que podían afectar contraste/opacidad */
     text-shadow: none !important;
     filter: none !important;
     mix-blend-mode: normal !important;
@@ -344,175 +340,84 @@ if ($disciplinas_rows) {
   .card li { margin: 6px 0; line-height: 1.45; }
   .field { flex-wrap: wrap; }
   .field label { white-space: nowrap; }
-  /* ====== FIX MOBILE: texto apilado en widgets de AJAX ====== */
-@media (max-width: 768px){
 
-  /* Quita rotaciones y escritura vertical que vengan de los parciales */
-  #contenedor-ingresos *, 
-  #contenedor-reservas *, 
-  #contenedor-alumnos *{
-    writing-mode: horizontal-tb !important;
-    text-orientation: mixed !important;
-    transform: none !important;
-    white-space: normal !important;
-    word-break: normal !important;
-    overflow-wrap: break-word !important;
-    letter-spacing: normal !important;
-    line-height: 1.35 !important;
+  /* ====== FIX MÓVIL: texto vertical en parciales AJAX ====== */
+  @media (max-width: 768px){
+    #contenedor-ingresos *, 
+    #contenedor-reservas *, 
+    #contenedor-alumnos *{
+      writing-mode: horizontal-tb !important;
+      text-orientation: mixed !important;
+      transform: none !important;
+      white-space: normal !important;
+      word-break: normal !important;
+      overflow-wrap: break-word !important;
+      letter-spacing: normal !important;
+      line-height: 1.35 !important;
+    }
+    /* expandir columnas estrechas */
+    #contenedor-ingresos [class*="col"], 
+    #contenedor-reservas [class*="col"],
+    #contenedor-alumnos [class*="col"]{
+      width: 100% !important;
+      min-width: 0 !important;
+      flex: 1 1 100% !important;
+    }
+    /* títulos siempre horizontales */
+    #contenedor-ingresos h1,#contenedor-ingresos h2,#contenedor-ingresos h3,
+    #contenedor-reservas h1,#contenedor-reservas h2,#contenedor-reservas h3,
+    #contenedor-alumnos h1,#contenedor-alumnos h2,#contenedor-alumnos h3{
+      display:block !important; text-align:left !important; white-space:normal !important;
+    }
+    /* quitar anchos fijos inline */
+    #contenedor-ingresos [style*="width:"],
+    #contenedor-reservas [style*="width:"],
+    #contenedor-alumnos [style*="width:"]{
+      width:auto !important; max-width:100% !important;
+    }
+    /* clases típicas de rótulos verticales */
+    .vertical,.titulo-vertical,.rot-90,.rotate-90{
+      writing-mode: horizontal-tb !important; transform:none !important;
+    }
   }
-
-  /* Evita columnas ultra angostas en los parciales */
-  #contenedor-ingresos [class*="col"], 
-  #contenedor-reservas [class*="col"],
-  #contenedor-alumnos [class*="col"]{
-    width: 100% !important;
-    min-width: 0 !important;
-    flex: 1 1 100% !important;
-  }
-
-  /* Asegura que títulos y badges no queden en tiras verticales */
-  #contenedor-ingresos h1, #contenedor-ingresos h2, #contenedor-ingresos h3,
-  #contenedor-reservas h1, #contenedor-reservas h2, #contenedor-reservas h3,
-  #contenedor-alumnos h1, #contenedor-alumnos h2, #contenedor-alumnos h3{
-    display:block !important;
-    text-align:left !important;
-    white-space:normal !important;
-  }
-
-  /* Quita cualquier ancho fijo que deje una “tira” lateral */
-  #contenedor-ingresos [style*="width:"],
-  #contenedor-reservas [style*="width:"],
-  #contenedor-alumnos [style*="width:"]{
-    width:auto !important;
-    max-width:100% !important;
-  }
-
-  /* Por si los parciales usan etiquetas “verticales” con estas clases comunes */
-  .vertical, .titulo-vertical, .rot-90, .rotate-90{
-    writing-mode: horizontal-tb !important;
-    transform: none !important;
-  }
-}
-/* ===== FIX MOBILE: forzar texto horizontal y anchuras fluidas ===== */
-@media (max-width: 768px){
-
-  /* Todo lo que llega por AJAX */
-  #contenedor-ingresos *, 
-  #contenedor-reservas *, 
-  #contenedor-alumnos *{
-    writing-mode: horizontal-tb !important;
-    text-orientation: mixed !important;
-    transform: none !important;
-    white-space: normal !important;
-    word-break: normal !important;
-    overflow-wrap: break-word !important;
-    letter-spacing: normal !important;
-    line-height: 1.35 !important;
-  }
-
-  /* Si en los parciales hay filas/cols muy angostas, expandilas */
-  #contenedor-ingresos [class*="col"], 
-  #contenedor-reservas [class*="col"],
-  #contenedor-alumnos [class*="col"]{
-    width: 100% !important;
-    min-width: 0 !important;
-    flex: 1 1 100% !important;
-  }
-
-  /* Títulos y badges siempre horizontales, en bloque */
-  #contenedor-ingresos h1, #contenedor-ingresos h2, #contenedor-ingresos h3,
-  #contenedor-reservas h1, #contenedor-reservas h2, #contenedor-reservas h3,
-  #contenedor-alumnos h1, #contenedor-alumnos h2, #contenedor-alumnos h3,
-  #contenedor-ingresos .badge, #contenedor-reservas .badge, #contenedor-alumnos .badge{
-    display:block !important;
-    text-align:left !important;
-    white-space:normal !important;
-  }
-
-  /* Cualquier ancho fijo inline que deje “tiras” laterales */
-  #contenedor-ingresos [style*="width:"],
-  #contenedor-reservas [style*="width:"],
-  #contenedor-alumnos [style*="width:"]{
-    width:auto !important;
-    max-width:100% !important;
-  }
-
-  /* Clases típicas de etiquetas verticales (por si aparecen) */
-  .vertical, .titulo-vertical, .rot-90, .rotate-90{
-    writing-mode: horizontal-tb !important;
-    transform: none !important;
-  }
-}
-
 </style>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
-  // Normaliza elementos que llegan con escritura vertical/rotada o flex en columna
+  // Elimina <style> embebidos en los HTML de parciales (si los traen)
+  function quitarEstilosEmbebidos(root){
+    root.querySelectorAll('style').forEach(s=>s.remove());
+  }
+
+  // Normaliza elementos que llegan verticales/rotados o columnas ultra-angostas
   function desverticalizar(rootId){
     const root = document.getElementById(rootId);
     if(!root) return;
 
-    // Recorre nodos y corrige estilos problemáticos
+    quitarEstilosEmbebidos(root);
+
     root.querySelectorAll('*').forEach(el=>{
       const cs = window.getComputedStyle(el);
 
       const isVertical = (cs.writingMode && cs.writingMode !== 'horizontal-tb');
       const rotated    = (cs.transform && cs.transform !== 'none');
-      const isColFlex  = (cs.display === 'flex' && cs.flexDirection === 'column');
 
-      // Si parece una “tiara” lateral o texto apilado, forzamos horizontal
-      if (isVertical || rotated || isColFlex){
-        el.style.writingMode   = 'horizontal-tb';
+      if (isVertical || rotated){
+        el.style.writingMode     = 'horizontal-tb';
         el.style.textOrientation = 'mixed';
-        el.style.transform     = 'none';
-        el.style.whiteSpace    = 'normal';
-        el.style.wordBreak     = 'normal';
-        el.style.overflowWrap  = 'break-word';
-        if (isColFlex) el.style.flexDirection = 'row';
+        el.style.transform       = 'none';
+        el.style.whiteSpace      = 'normal';
+        el.style.wordBreak       = 'normal';
+        el.style.overflowWrap    = 'break-word';
       }
 
-      // Evita columnas ultra-angostas que apilan letras
       const w = parseFloat(cs.width);
       if (!isNaN(w) && w < 80){
-        el.style.width = 'auto';
+        el.style.width    = 'auto';
         el.style.maxWidth = '100%';
       }
     });
   }
-
-  // Reaplica el fix cada vez que recargas los widgets
-  function cargarDatos(){
-    const elIng = document.getElementById('contenedor-ingresos');
-    const elRes = document.getElementById('contenedor-reservas');
-    const elAlu = document.getElementById('contenedor-alumnos');
-
-    if(elIng){
-      fetch('ajax_ingresos.php',{cache:'no-store'})
-        .then(r=>r.text())
-        .then(html=>{ elIng.innerHTML=html; desverticalizar('contenedor-ingresos'); })
-        .catch(()=>{});
-    }
-
-    const fecha = document.getElementById('fecha')?.value;
-    if(elRes && fecha){
-      fetch('ajax_reservas.php?fecha='+encodeURIComponent(fecha),{cache:'no-store'})
-        .then(r=>r.text())
-        .then(html=>{ elRes.innerHTML=html; desverticalizar('contenedor-reservas'); })
-        .catch(()=>{});
-    }
-
-    if(elAlu){
-      fetch('ajax_alumnos_hoy.php',{cache:'no-store'})
-        .then(r=>r.text())
-        .then(html=>{ elAlu.innerHTML=html; desverticalizar('contenedor-alumnos'); })
-        .catch(()=>{});
-    }
-  }
-
-  // Ya lo tenías, solo aseguramos que llama a desverticalizar post-carga
-  setInterval(cargarDatos, 10000);
-  window.addEventListener('load', cargarDatos);
 
   function toggleMontos(){
     const blocks = document.querySelectorAll('.bloque-monto');
@@ -522,14 +427,39 @@ if ($disciplinas_rows) {
     if(icon) icon.textContent = hidden ? '👁️‍🗨️' : '👁️';
   }
 
+  // Carga de parciales + fix móvil
   function cargarDatos(){
     const elIng = document.getElementById('contenedor-ingresos');
     const elRes = document.getElementById('contenedor-reservas');
     const elAlu = document.getElementById('contenedor-alumnos');
-    if(elIng) fetch('ajax_ingresos.php',{cache:'no-store'}).then(r=>r.text()).then(html=> elIng.innerHTML=html).catch(()=>{});
+
+    if(elIng){
+      fetch('ajax_ingresos.php',{cache:'no-store'})
+        .then(r=>r.text())
+        .then(html=>{
+          elIng.innerHTML = html;
+          if (window.matchMedia('(max-width: 768px)').matches) desverticalizar('contenedor-ingresos');
+        }).catch(()=>{});
+    }
+
     const fecha = document.getElementById('fecha')?.value;
-    if(elRes && fecha) fetch('ajax_reservas.php?fecha='+encodeURIComponent(fecha),{cache:'no-store'}).then(r=>r.text()).then(html=> elRes.innerHTML=html).catch(()=>{});
-    if(elAlu) fetch('ajax_alumnos_hoy.php',{cache:'no-store'}).then(r=>r.text()).then(html=> elAlu.innerHTML=html).catch(()=>{});
+    if(elRes && fecha){
+      fetch('ajax_reservas.php?fecha='+encodeURIComponent(fecha),{cache:'no-store'})
+        .then(r=>r.text())
+        .then(html=>{
+          elRes.innerHTML = html;
+          if (window.matchMedia('(max-width: 768px)').matches) desverticalizar('contenedor-reservas');
+        }).catch(()=>{});
+    }
+
+    if(elAlu){
+      fetch('ajax_alumnos_hoy.php',{cache:'no-store'})
+        .then(r=>r.text())
+        .then(html=>{
+          elAlu.innerHTML = html;
+          if (window.matchMedia('(max-width: 768px)').matches) desverticalizar('contenedor-alumnos');
+        }).catch(()=>{});
+    }
   }
 
   setInterval(cargarDatos, 10000);
