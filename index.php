@@ -393,11 +393,127 @@ if ($disciplinas_rows) {
     transform: none !important;
   }
 }
+/* ===== FIX MOBILE: forzar texto horizontal y anchuras fluidas ===== */
+@media (max-width: 768px){
+
+  /* Todo lo que llega por AJAX */
+  #contenedor-ingresos *, 
+  #contenedor-reservas *, 
+  #contenedor-alumnos *{
+    writing-mode: horizontal-tb !important;
+    text-orientation: mixed !important;
+    transform: none !important;
+    white-space: normal !important;
+    word-break: normal !important;
+    overflow-wrap: break-word !important;
+    letter-spacing: normal !important;
+    line-height: 1.35 !important;
+  }
+
+  /* Si en los parciales hay filas/cols muy angostas, expandilas */
+  #contenedor-ingresos [class*="col"], 
+  #contenedor-reservas [class*="col"],
+  #contenedor-alumnos [class*="col"]{
+    width: 100% !important;
+    min-width: 0 !important;
+    flex: 1 1 100% !important;
+  }
+
+  /* Títulos y badges siempre horizontales, en bloque */
+  #contenedor-ingresos h1, #contenedor-ingresos h2, #contenedor-ingresos h3,
+  #contenedor-reservas h1, #contenedor-reservas h2, #contenedor-reservas h3,
+  #contenedor-alumnos h1, #contenedor-alumnos h2, #contenedor-alumnos h3,
+  #contenedor-ingresos .badge, #contenedor-reservas .badge, #contenedor-alumnos .badge{
+    display:block !important;
+    text-align:left !important;
+    white-space:normal !important;
+  }
+
+  /* Cualquier ancho fijo inline que deje “tiras” laterales */
+  #contenedor-ingresos [style*="width:"],
+  #contenedor-reservas [style*="width:"],
+  #contenedor-alumnos [style*="width:"]{
+    width:auto !important;
+    max-width:100% !important;
+  }
+
+  /* Clases típicas de etiquetas verticales (por si aparecen) */
+  .vertical, .titulo-vertical, .rot-90, .rotate-90{
+    writing-mode: horizontal-tb !important;
+    transform: none !important;
+  }
+}
 
 </style>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
+  // Normaliza elementos que llegan con escritura vertical/rotada o flex en columna
+  function desverticalizar(rootId){
+    const root = document.getElementById(rootId);
+    if(!root) return;
+
+    // Recorre nodos y corrige estilos problemáticos
+    root.querySelectorAll('*').forEach(el=>{
+      const cs = window.getComputedStyle(el);
+
+      const isVertical = (cs.writingMode && cs.writingMode !== 'horizontal-tb');
+      const rotated    = (cs.transform && cs.transform !== 'none');
+      const isColFlex  = (cs.display === 'flex' && cs.flexDirection === 'column');
+
+      // Si parece una “tiara” lateral o texto apilado, forzamos horizontal
+      if (isVertical || rotated || isColFlex){
+        el.style.writingMode   = 'horizontal-tb';
+        el.style.textOrientation = 'mixed';
+        el.style.transform     = 'none';
+        el.style.whiteSpace    = 'normal';
+        el.style.wordBreak     = 'normal';
+        el.style.overflowWrap  = 'break-word';
+        if (isColFlex) el.style.flexDirection = 'row';
+      }
+
+      // Evita columnas ultra-angostas que apilan letras
+      const w = parseFloat(cs.width);
+      if (!isNaN(w) && w < 80){
+        el.style.width = 'auto';
+        el.style.maxWidth = '100%';
+      }
+    });
+  }
+
+  // Reaplica el fix cada vez que recargas los widgets
+  function cargarDatos(){
+    const elIng = document.getElementById('contenedor-ingresos');
+    const elRes = document.getElementById('contenedor-reservas');
+    const elAlu = document.getElementById('contenedor-alumnos');
+
+    if(elIng){
+      fetch('ajax_ingresos.php',{cache:'no-store'})
+        .then(r=>r.text())
+        .then(html=>{ elIng.innerHTML=html; desverticalizar('contenedor-ingresos'); })
+        .catch(()=>{});
+    }
+
+    const fecha = document.getElementById('fecha')?.value;
+    if(elRes && fecha){
+      fetch('ajax_reservas.php?fecha='+encodeURIComponent(fecha),{cache:'no-store'})
+        .then(r=>r.text())
+        .then(html=>{ elRes.innerHTML=html; desverticalizar('contenedor-reservas'); })
+        .catch(()=>{});
+    }
+
+    if(elAlu){
+      fetch('ajax_alumnos_hoy.php',{cache:'no-store'})
+        .then(r=>r.text())
+        .then(html=>{ elAlu.innerHTML=html; desverticalizar('contenedor-alumnos'); })
+        .catch(()=>{});
+    }
+  }
+
+  // Ya lo tenías, solo aseguramos que llama a desverticalizar post-carga
+  setInterval(cargarDatos, 10000);
+  window.addEventListener('load', cargarDatos);
+
   function toggleMontos(){
     const blocks = document.querySelectorAll('.bloque-monto');
     const icon  = document.getElementById('icono-ojo');
