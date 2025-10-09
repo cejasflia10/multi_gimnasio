@@ -1,557 +1,441 @@
 <?php
-// --- INICIO: validación de sesión e inactividad ---
-if (session_status() === PHP_SESSION_NONE) session_start();
+if (session_status() === PHP_SESSION_NONE) { session_start(); }
 
-$timeout_minutos = 30;
-$timeout_seg = $timeout_minutos * 60;
-
-if (!isset($_SESSION['gimnasio_id'])) {
-    if (session_status() !== PHP_SESSION_NONE) {
-        session_unset();
-        session_destroy();
-    }
-    header('Location: login.php');
-    exit;
+/* Permisos opcionales */
+@require_once __DIR__ . '/permiso.php';
+if (function_exists('refresh_permissions') && !empty($_SESSION['gimnasio_id'])) {
+  refresh_permissions((int)$_SESSION['gimnasio_id']);
 }
-
-if (isset($_SESSION['last_activity']) && (time() - $_SESSION['last_activity']) > $timeout_seg) {
-    session_unset();
-    session_destroy();
-    header('Location: login.php?timeout=1');
-    exit;
-}
-$_SESSION['last_activity'] = time();
-
-if (!isset($_SESSION['session_regenerated_time'])) {
-    session_regenerate_id(true);
-    $_SESSION['session_regenerated_time'] = time();
-} else {
-    if (time() - $_SESSION['session_regenerated_time'] > 15 * 60) {
-        session_regenerate_id(true);
-        $_SESSION['session_regenerated_time'] = time();
-    }
-}
-// --- FIN: validación de sesión e inactividad ---
-
-require_once 'conexion.php';
-require_once 'menu_horizontal.php';
-
-$gimnasio_id = (int)($_SESSION['gimnasio_id'] ?? 0);
-$rol         = $_SESSION['rol'] ?? '';
-
-$gimnasio = $conexion->query("SELECT nombre, logo, fecha_vencimiento FROM gimnasios WHERE id = {$gimnasio_id}")->fetch_assoc();
-$nombre_gym = $gimnasio['nombre'] ?? 'Gimnasio';
-$logo       = $gimnasio['logo']   ?? '';
-$fecha_venc = $gimnasio['fecha_vencimiento'] ?? '---';
-
-// ===== KPIs Activos vs Inactivos (última membresía por cliente) =====
-$estado = $conexion->query("
-  SELECT
-    SUM(CASE WHEN u.fv IS NOT NULL AND u.fv >= CURDATE() THEN 1 ELSE 0 END) AS activos,
-    SUM(CASE WHEN u.fv IS NULL OR u.fv < CURDATE() THEN 1 ELSE 0 END) AS inactivos
-  FROM clientes c
-  LEFT JOIN (
-    SELECT cliente_id, MAX(fecha_vencimiento) AS fv
-    FROM membresias
-    WHERE gimnasio_id = {$gimnasio_id}
-      AND fecha_vencimiento IS NOT NULL
-      AND fecha_vencimiento >= '1000-01-01'
-    GROUP BY cliente_id
-  ) u ON u.cliente_id = c.id
-  WHERE c.gimnasio_id = {$gimnasio_id}
-")->fetch_assoc();
-
-$activos   = (int)($estado['activos'] ?? 0);
-$inactivos = (int)($estado['inactivos'] ?? 0);
-
-// ===== Cumpleaños (filtro seguro) =====
-$cumples = $conexion->query("
-  SELECT nombre, apellido, fecha_nacimiento
-  FROM clientes
-  WHERE gimnasio_id = {$gimnasio_id}
-    AND fecha_nacimiento IS NOT NULL
-    AND fecha_nacimiento >= '1000-01-01'
-    AND DATE_FORMAT(fecha_nacimiento, '%m-%d') >= DATE_FORMAT(CURDATE(), '%m-%d')
-  ORDER BY DATE_FORMAT(fecha_nacimiento, '%m-%d')
-  LIMIT 5
-");
-
-// ===== Vencimientos (filtro seguro) =====
-$vencimientos = $conexion->query("
-  SELECT c.nombre, c.apellido, m.fecha_vencimiento
-  FROM membresias m
-  JOIN clientes c ON m.cliente_id = c.id
-  WHERE m.gimnasio_id = {$gimnasio_id}
-    AND m.fecha_vencimiento IS NOT NULL
-    AND m.fecha_vencimiento >= '1000-01-01'
-    AND m.fecha_vencimiento >= CURDATE()
-  ORDER BY m.fecha_vencimiento ASC
-  LIMIT 5
-");
-
-$fecha_filtro = $_GET['fecha'] ?? date('Y-m-d');
-if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $fecha_filtro)) $fecha_filtro = date('Y-m-d');
-
-// ===== PAGOS PENDIENTES =====
-$pagos_pendientes = 0;
-$consulta = $conexion->query("
-  SELECT COUNT(*) AS total
-  FROM pagos_pendientes
-  JOIN clientes ON pagos_pendientes.cliente_id = clientes.id
-  WHERE pagos_pendientes.estado = 'pendiente'
-    AND clientes.gimnasio_id = {$gimnasio_id}
-");
-if ($consulta && $r = $consulta->fetch_assoc()) $pagos_pendientes = (int)$r['total'];
-
-// ===== CUENTAS CORRIENTES =====
-$cuentas_corrientes = 0;
-$consulta_cc = $conexion->query("
-  SELECT COUNT(*) AS total FROM (
-    SELECT cliente_id
-    FROM cuentas_corrientes
-    WHERE gimnasio_id = {$gimnasio_id}
-    GROUP BY cliente_id
-    HAVING SUM(monto) < 0
-  ) AS sub
-");
-if ($consulta_cc && $r = $consulta_cc->fetch_assoc()) $cuentas_corrientes = (int)$r['total'];
-
-// ===== Avisos de nuevos online =====
-$nuevos = $conexion->query("SELECT id, nombre, apellido FROM clientes WHERE gimnasio_id = {$gimnasio_id} AND nuevo_online = 1");
-$avisos_html = '';
-if ($nuevos && $nuevos->num_rows > 0) {
-    ob_start(); ?>
-    <div class="notice notice-warm">
-      <div class="notice-title">📢 Nuevos registros online</div>
-      <div class="notice-body">
-        <?php while ($n = $nuevos->fetch_assoc()): ?>
-          <div class="notice-item">
-            <?= htmlspecialchars($n['nombre'].' '.$n['apellido']) ?>
-            — <a class="link-inline" href="marcar_visto.php?id=<?= (int)$n['id'] ?>">Marcar como visto</a>
-          </div>
-        <?php endwhile; ?>
-      </div>
-    </div>
-    <?php
-    $avisos_html = ob_get_clean();
-}
-
-// ===== Disciplinas TOP (normalizadas) =====
-$disciplinas_top_q = $conexion->query("
-  SELECT nombre_mostrar, total
-  FROM (
-    SELECT
-      MIN(
-        TRIM(
-          REPLACE(
-            REPLACE(COALESCE(d.nombre, c.disciplina), CONVERT(0xC2A0 USING utf8mb4), ' '), /* NBSP */
-            CHAR(9), ' ' /* TAB */
-          )
-        )
-      ) AS nombre_mostrar,
-      UPPER(
-        REPLACE(
-          REPLACE(
-            REPLACE(
-              REPLACE(
-                REPLACE(
-                  TRIM(
-                    REPLACE(
-                      REPLACE(COALESCE(d.nombre, c.disciplina), CONVERT(0xC2A0 USING utf8mb4), ' '),
-                      CHAR(9), ' '
-                    )
-                  ),
-                  ' ', ''), '-', ''), '.', ''), '_', ''), '/'
-          , '')
-      ) AS clave,
-      COUNT(*) AS total
-    FROM clientes c
-    LEFT JOIN disciplinas d ON d.id = c.disciplina_id
-    WHERE c.gimnasio_id = {$gimnasio_id}
-      AND COALESCE(d.nombre, c.disciplina) IS NOT NULL
-      AND TRIM(REPLACE(REPLACE(COALESCE(d.nombre, c.disciplina), CONVERT(0xC2A0 USING utf8mb4), ' '), CHAR(9), ' ')) <> ''
-    GROUP BY clave
-  ) u
-  ORDER BY total DESC
-  LIMIT 10
-");
-
-$disciplinas_rows = [];
-if ($disciplinas_top_q) {
-  while ($row = $disciplinas_top_q->fetch_assoc()) {
-    $nombre = ucwords(strtolower($row['nombre_mostrar']));
-    $disciplinas_rows[] = ['nombre' => $nombre, 'total' => (int)$row['total']];
+if (!function_exists('has_perm')) {
+  function has_perm(string $feature): bool {
+    if (!empty($_SESSION['rol']) && $_SESSION['rol'] === 'admin') return true;
+    return function_exists('has_feature') ? has_feature($feature) : true;
   }
-}
-if ($disciplinas_rows) {
-  $agg = [];
-  foreach ($disciplinas_rows as $r) {
-    $k = strtolower(trim($r['nombre']));
-    if (!isset($agg[$k])) $agg[$k] = ['nombre' => $r['nombre'], 'total' => 0];
-    $agg[$k]['total'] += (int)$r['total'];
-  }
-  $disciplinas_rows = array_values($agg);
-  usort($disciplinas_rows, fn($a,$b) => $b['total'] <=> $a['total']);
-  $disciplinas_rows = array_slice($disciplinas_rows, 0, 10);
 }
 ?>
 <!DOCTYPE html>
 <html lang="es">
 <head>
 <meta charset="UTF-8" />
-<title>Panel General - <?= htmlspecialchars($nombre_gym) ?></title>
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-
-<!-- ================== TEMA GYM LIGHT (CLARO, MODERNO) ================== -->
+<title>Menú</title>
 <style>
+  /* ====== Paleta y resets locales para evitar “ensaimada” ====== */
   :root{
-    --bg1:#f5f7fb; --bg2:#eef3f9;
-    --ink:#0f172a; --mut:#475569;
-    --brand:#b45309; --brand-2:#f59e0b; --brand-3:#fbbf24;
-    --ok:#16a34a; --warn:#f59e0b; --danger:#b91c1c;
-    --card:#ffffff; --stroke:rgba(15,23,42,.08);
-    --shadow:0 10px 28px rgba(2,6,23,.08);
-    --radius:18px; --radius-sm:14px;
-    --gap:18px;
+    --red:#b91c1c;        /* barra */
+    --red-dark:#991b1b;   /* hover */
+    --gold:#ffd166;       /* acentos */
+    --ink:#111827;        /* texto oscuro */
+    --ink-2:#374151;
+    --paper:#ffffff;
+    --shadow:0 12px 28px rgba(0,0,0,.18);
+    --line:#e5e7eb;
+    --radius:14px;
   }
-  *{ box-sizing:border-box }
-  html,body{ height:100% }
-  body{
-    margin:0; padding:0; color:var(--ink);
-    font-family: system-ui, -apple-system, Segoe UI, Roboto, Inter, Arial, sans-serif;
-    background:
-      radial-gradient(900px 600px at -10% -10%, rgba(255,105,0,.08) 0%, transparent 45%),
-      radial-gradient(1200px 700px at 110% -10%, rgba(255,170,0,.08) 0%, transparent 55%),
-      linear-gradient(180deg, var(--bg1) 0%, var(--bg2) 100%);
-  }
-
-  /* Contenedor principal */
-  .wrap{ max-width:1200px; margin:24px auto; padding:0 16px 40px; }
-
-  /* Header con logo grande a la derecha en desktop */
-  .header{
-    display:grid; grid-template-columns: 1fr auto; gap:16px; align-items:center; margin-bottom:16px;
-  }
-  .brand-title h1.title{
-    margin:0; font-weight:900; letter-spacing:.6px;
-    background: linear-gradient(90deg,var(--brand),var(--brand-2),var(--brand-3));
-    -webkit-background-clip:text; background-clip:text; color:transparent;
-  }
-  .brand-title .sys-exp{ margin:.25rem 0 0; color:var(--mut); }
-  .logo-wrap{ display:flex; align-items:center; gap:10px; justify-content:flex-end; }
-  #logoGym{
-    max-height:170px; max-width:420px; width:auto; object-fit:contain;
-    border-radius:16px; background:#fff; padding:8px;
-    border:1px solid var(--stroke); box-shadow: var(--shadow);
-  }
-  .btn-mini{
-    padding:6px 10px; border:1px solid var(--stroke);
-    background:linear-gradient(180deg,#fff,#f7fafc); color:var(--ink);
-    border-radius:12px; cursor:pointer; box-shadow: 0 6px 16px rgba(2,6,23,.08);
-    transition:.2s transform ease;
-  }
-  .btn-mini:hover{ transform: translateY(-1px) }
-
-  @media (max-width: 991.98px){
-    .header{ grid-template-columns: 1fr; }
-    .logo-wrap{ justify-content:flex-start; }
-    #logoGym{ max-height:64px; max-width:180px; padding:6px; }
+  /* Reset tipográfico SOLO para este menú */
+  .nav-scope, .nav-scope *{
+    font-family: system-ui, -apple-system, Segoe UI, Roboto, Inter, Arial, sans-serif !important;
+    letter-spacing: normal !important;
+    line-height: 1.25 !important;
+    text-transform: none !important;
+    word-break: normal !important;
+    overflow-wrap: anywhere !important; /* evita desbordes raros */
+    box-sizing: border-box;
   }
 
-  /* Grid tarjetas */
-  .grid{ display:grid; grid-template-columns: repeat(12,1fr); gap:var(--gap); }
-  @media (max-width:1100px){ .grid{ grid-template-columns: repeat(8,1fr); } }
-  @media (max-width:768px){ .grid{ grid-template-columns: repeat(4,1fr); } }
-
-  /* Tarjetas/KPIs/Alertas/Field */
-  .card,.notice,.alert,.kpi,.field{
-    background:var(--card); border:1px solid var(--stroke);
-    border-radius:var(--radius); padding:16px; box-shadow:var(--shadow);
-    backdrop-filter: blur(6px);
+  /* ====== Topbar común (ambos modos comparten) ====== */
+  .topbar{
+    position:sticky; top:0; left:0; right:0; z-index: 4000;
+    background: var(--red);
+    color:#fff;
+    display:flex; align-items:center; justify-content:space-between;
+    padding:10px 12px;
+    box-shadow: var(--shadow);
   }
-  .card{ grid-column: span 4; transition:.2s transform ease; }
-  .card:hover{ transform: translateY(-2px); }
-  .card-header{ display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; }
-  .card-title{ margin:0; color:var(--brand); font-size:1.05rem; }
-  .card-sub{ margin:0; color:#64748b; font-size:.9rem; }
-
-  /* KPIs */
-  .kpis{ display:flex; gap:12px; flex-wrap:wrap; margin:10px 0 16px; }
-  .kpi{ min-width:160px; background:linear-gradient(180deg,#fff,#f8fafc); }
-  .kpi-label{ color:var(--brand); font-size:.8rem; letter-spacing:.3px; }
-  .kpi-value{ color:var(--ink); font-weight:900; font-size:1.8rem; line-height:1.1; }
-
-  /* Avisos */
-  .notice-warm{ border-color:#f59e0b55; }
-  .notice-title{ font-weight:700; color:var(--brand); margin-bottom:6px; }
-  .notice-item{ padding:6px 0; }
-  .link-inline{ color:var(--brand); text-decoration: underline; }
-
-  .alert{
-    border:1px dashed #f59e0b66;
-    background:linear-gradient(180deg,#fff,#f9fafb);
+  .tb-left,.tb-right{display:flex; gap:8px; align-items:center}
+  .tb-title{font-weight:800; letter-spacing:.2px}
+  .tb-btn{
+    appearance:none; border:0; cursor:pointer;
+    background: rgba(255,255,255,.12); color:#fff;
+    padding:8px 10px; border-radius:10px; font-size:16px;
+    transition: .2s transform ease, .2s background ease;
   }
-
-  /* Listas */
-  ul{ margin:0; padding-left:16px; }
-  li{ margin:6px 0; }
-
-  /* Toolbar */
-  .toolbar{ display:flex; justify-content:flex-end; align-items:center; gap:10px; margin:6px 0 12px; }
-  .icon-btn{
-    cursor:pointer; user-select:none; font-size:20px; line-height:1;
-    padding:6px 9px; border-radius:12px; border:1px solid var(--stroke);
-    background:linear-gradient(180deg,#fff,#f8fafc);
-    box-shadow:0 6px 16px rgba(2,6,23,.08);
+  .tb-btn:hover{ transform: translateY(-1px); background: rgba(255,255,255,.18) }
+  .tb-logo{
+    display:inline-flex; align-items:center; gap:8px;
+    color:#fff; text-decoration:none;
+    padding:6px 10px; border-radius:10px; background:transparent;
   }
+  .tb-logo strong{ color:var(--gold) }
 
-  /* Chart */
-  .chart-wrap{ aspect-ratio:16/9; position:relative; width:100%; max-width:820px; margin:0 auto; }
-  #disciplinasChart{ position:absolute; inset:0; }
-
-  /* Inputs */
-  .field{ display:flex; gap:8px; align-items:center; }
-  input[type="date"]{
-    background:transparent; border:none; outline:none; color:var(--ink); font-size:.95rem;
+  /* ====== DESKTOP NAV (>=992px) ====== */
+  .nav-desktop{ display:none; background:var(--red); color:#fff; padding:0 8px; }
+  .nav-desktop .bar{
+    max-width:1200px; margin:0 auto; display:flex; gap:4px; align-items:center;
   }
-
-  /* Skeleton */
-  .skeleton{
-    position:relative; overflow:hidden;
-    background: linear-gradient(180deg,#f3f6fb,#eef3f9);
-    border-radius: 14px; min-height: 110px; border:1px solid var(--stroke);
+  .nav-desktop .item, .nav-desktop .drop > .item{
+    display:inline-block; padding:12px 14px; color:#fff; text-decoration:none; font-weight:700; border-radius:10px;
   }
-  .skeleton::after{
-    content:""; position:absolute; inset:0;
-    background: linear-gradient(90deg, transparent 0%, rgba(2,6,23,.06) 50%, transparent 100%);
-    transform: translateX(-100%); animation: shimmer 1.8s infinite;
+  .nav-desktop .item:hover{ background: var(--red-dark); }
+  .drop{ position:relative }
+  .drop .menu{
+    position:absolute; top:100%; left:0; min-width:240px;
+    background:var(--paper); color:var(--ink);
+    border:1px solid var(--line); border-radius:12px;
+    box-shadow: var(--shadow);
+    padding:6px 0; display:none; z-index: 4200;
   }
-  @keyframes shimmer{ 100%{ transform: translateX(100%); } }
+  .drop:hover .menu{ display:block; }
+  .menu a{
+    display:block; padding:10px 12px; color:var(--ink); text-decoration:none; font-weight:600;
+  }
+  .menu a:hover{ background:#f9fafb }
+  .menu hr{ border:0; border-top:1px solid var(--line); margin:6px 0 }
 
-  /* Helpers */
-  .mut{ color:#64748b; }
-  .ok{ color:var(--ok); }
-  .warn{ color:var(--warn); }
-  .hidden{ display:none !important; }
+  /* ====== MOBILE (drawer) (<992px) ====== */
+  .nav-mobile{ display:block }
+  .drawer{
+    position: fixed; inset:0 0 0 auto; width:min(86vw,380px);
+    background: var(--paper); color: var(--ink);
+    transform: translateX(102%); transition: .28s transform ease;
+    z-index: 4500; box-shadow: var(--shadow); padding:14px 12px 18px;
+    overflow:auto;
+  }
+  .drawer.open{ transform: translateX(0); }
+  .mask{
+    position: fixed; inset:0; background: rgba(0,0,0,.35);
+    opacity:0; pointer-events:none; transition:.25s opacity ease; z-index:4400;
+  }
+  .mask.show{ opacity:1; pointer-events:auto; }
+
+  .d-section{
+    border:1px solid var(--line); border-radius:12px; margin:8px 0; overflow:hidden; background:#fff;
+  }
+  .d-head{
+    display:flex; align-items:center; justify-content:space-between;
+    padding:12px; font-weight:800; color:var(--ink-2); cursor:pointer; background:#fff;
+  }
+  .d-body{ display:none; border-top:1px dashed var(--line); padding:8px; }
+  .d-body a{
+    display:block; padding:10px; border-radius:10px; color:var(--ink); text-decoration:none; font-weight:600;
+  }
+  .d-body a:hover{ background:#f3f4f6; }
+
+  /* ====== Breakpoint ====== */
+  @media (min-width: 992px){
+    .nav-mobile{ display:none !important; }
+    .nav-desktop{ display:block !important; position:sticky; top:48px; z-index:3500; }
+    /* En desktop ocultamos botón hamburguesa, dejamos logo+titulo */
+    .topbar .tb-left .tb-btn{ display:none; }
+  }
 </style>
-<!-- ==================================================================== -->
-
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-<script>
-  function toggleMontos(){
-    const blocks = document.querySelectorAll('.bloque-monto');
-    const icon  = document.getElementById('icono-ojo');
-    const hidden = blocks.length && blocks[0].classList.contains('hidden');
-    blocks.forEach(b => b.classList.toggle('hidden', !hidden));
-    if(icon) icon.textContent = hidden ? '👁️‍🗨️' : '👁️';
-  }
-
-  function cargarDatos(){
-    const elIng = document.getElementById('contenedor-ingresos');
-    const elRes = document.getElementById('contenedor-reservas');
-    const elAlu = document.getElementById('contenedor-alumnos');
-    if(elIng) fetch('ajax_ingresos.php',{cache:'no-store'}).then(r=>r.text()).then(html=> elIng.innerHTML=html).catch(()=>{});
-    const fecha = document.getElementById('fecha')?.value;
-    if(elRes && fecha) fetch('ajax_reservas.php?fecha='+encodeURIComponent(fecha),{cache:'no-store'}).then(r=>r.text()).then(html=> elRes.innerHTML=html).catch(()=>{});
-    if(elAlu) fetch('ajax_alumnos_hoy.php',{cache:'no-store'}).then(r=>r.text()).then(html=> elAlu.innerHTML=html).catch(()=>{});
-  }
-
-  setInterval(cargarDatos, 10000);
-  window.addEventListener('load', cargarDatos);
-</script>
 </head>
-<body>
+<body class="nav-scope">
 
-<div class="wrap">
-
-  <!-- Encabezado: Título a la izquierda, Logo grande a la derecha -->
-  <div class="header">
-    <div class="brand-title">
-      <h1 class="title">🏋️ <?= htmlspecialchars($nombre_gym) ?></h1>
-      <p class="sys-exp">🗓 Vencimiento del sistema:
-        <strong class="<?= (is_string($fecha_venc) && $fecha_venc !== '0000-00-00' && strtotime($fecha_venc) && strtotime($fecha_venc) >= time()) ? 'ok' : 'warn' ?>">
-          <?= (is_string($fecha_venc) && $fecha_venc !== '0000-00-00' && strtotime($fecha_venc)) ? date('d/m/Y', strtotime($fecha_venc)) : '---' ?>
-        </strong>
-      </p>
-    </div>
-
-    <div class="logo-wrap">
-      <?php if (!empty($logo)): ?>
-        <div>
-          <img src="<?= htmlspecialchars($logo) ?>?v=<?= time() ?>" alt="Logo del gimnasio" id="logoGym" />
-          <?php if ($gimnasio_id > 0): ?>
-            <div style="margin-top:6px; text-align:right">
-              <button class="btn-mini" onclick="document.getElementById('formLogo').style.display='block'">🖋 Cambiar logo</button>
-              <form method="POST" action="subir_logo.php" enctype="multipart/form-data" id="formLogo" style="display:none; margin-top:6px">
-                <input type="file" name="logo" accept="image/*" required onchange="this.form.submit()">
-              </form>
-            </div>
-          <?php endif; ?>
-        </div>
-      <?php endif; ?>
-    </div>
+<!-- ========= TOPBAR (común) ========= -->
+<div class="topbar">
+  <div class="tb-left">
+    <button class="tb-btn" id="btnOpen" aria-label="Abrir menú">☰</button>
+    <a href="index.php" class="tb-logo">
+      <span>🏋️</span> <span class="tb-title"><strong>Menú</strong></span>
+    </a>
   </div>
-
-  <!-- KPIs -->
-  <div class="kpis">
-    <div class="kpi"><div class="kpi-label">Activos</div><div class="kpi-value"><?= (int)$activos ?></div></div>
-    <div class="kpi"><div class="kpi-label">Inactivos</div><div class="kpi-value"><?= (int)$inactivos ?></div></div>
+  <div class="tb-right">
+    <!-- lugar para reloj/usuario si querés -->
+    <button class="tb-btn" onclick="location.reload()" title="Refrescar">↻</button>
   </div>
+</div>
 
-  <?= $avisos_html ?>
+<!-- ========= NAV DESKTOP ========= -->
+<nav class="nav-desktop">
+  <div class="bar">
 
-  <?php if ($cuentas_corrientes > 0): ?>
-    <div class="alert" style="margin:10px 0">
-      ⚠️ Hay <strong><?= $cuentas_corrientes ?></strong> cliente(s) con saldo negativo.
-      <a class="link-inline" href="ver_cuentas_corrientes.php">Ver cuentas corrientes</a>
+    <?php if (has_perm('panel_gimnasio')): ?>
+    <div class="drop">
+      <a class="item" href="#">🏢 Panel Gimnasio</a>
+      <div class="menu">
+        <a href="panel_gimnasios.php">Dashboard</a>
+        <a href="agregar_gimnasio.php">Agregar Gimnasio</a>
+        <a href="renovar_gimnasio.php">Renovar Plan</a>
+      </div>
     </div>
-  <?php endif; ?>
+    <?php endif; ?>
 
-  <?php if ($pagos_pendientes > 0): ?>
-    <div class="alert" style="margin:10px 0">
-      💸 Hay <strong><?= $pagos_pendientes ?></strong> pago(s) pendiente(s) de clientes.
-      <a class="link-inline" href="ver_pagos_pendientes.php">Ver pagos</a>
+    <?php if (has_perm('clientes')): ?>
+    <div class="drop">
+      <a class="item" href="#">👤 Clientes</a>
+      <div class="menu">
+        <a href="ver_clientes.php">Ver Clientes</a>
+        <a href="agregar_cliente.php">Agregar Cliente</a>
+        <a href="maquinas_qr.php">🏷️ QR de Máquinas</a>
+        <a href="profesor_seguimiento.php">📈 Seguimiento de alumnos</a>
+      </div>
     </div>
-  <?php endif; ?>
+    <?php endif; ?>
 
-  <!-- Toolbar -->
-  <div class="toolbar">
-    <span id="icono-ojo" class="icon-btn" title="Mostrar/Ocultar montos" onclick="toggleMontos()">👁️‍🗨️</span>
+    <?php if (has_perm('membresias')): ?>
+    <div class="drop">
+      <a class="item" href="#">📅 Membresías</a>
+      <div class="menu">
+        <a href="ver_membresias.php">Ver Membresías</a>
+        <a href="nueva_membresia.php">Agregar Membresía</a>
+        <a href="disciplinas.php">Disciplinas</a>
+        <a href="planes.php">Planes</a>
+        <a href="adicionales.php">Adicionales</a>
+        <hr>
+        <a href="admin_cena.php">🍽️ Cena (Admin)</a>
+      </div>
+    </div>
+    <?php endif; ?>
+
+    <?php if (has_perm('pagos')): ?>
+    <div class="drop">
+      <a class="item" href="#">💳 Pagos</a>
+      <div class="menu">
+        <a href="ver_pagos_pendientes.php">Pagos Pendientes</a>
+        <a href="config_alias.php">Alias</a>
+        <a href="ver_pagos_mes.php">Pagos del Mes</a>
+        <a href="ver_cuentas_corrientes.php">Pagos Cuenta Corriente</a>
+        <a href="gastos.php">Gastos</a>
+      </div>
+    </div>
+    <?php endif; ?>
+
+    <?php if (has_perm('asistencias')): ?>
+    <div class="drop">
+      <a class="item" href="#">🧍‍♂️ Asistencias</a>
+      <div class="menu">
+        <a href="ver_asistencia.php">Ver Asistencias</a>
+        <a href="registrar_asistencia.php" target="_blank" rel="noopener">Registrar Asistencia</a>
+        <a href="scanner_qr.php">Escaneo QR</a>
+        <a href="ver_asistencias_profesor.php">Asistencia Profesores</a>
+      </div>
+    </div>
+    <?php endif; ?>
+
+    <?php if (has_perm('ventas')): ?>
+    <div class="drop">
+      <a class="item" href="#">🛒 Ventas</a>
+      <div class="menu">
+        <a href="agregar_producto.php">Agregar Productos</a>
+        <a href="ventas_proteccion.php">Ventas Protecciones</a>
+        <a href="ventas_suplementos.php">Ventas Suplementos</a>
+        <a href="ventas_indumentaria.php">Ventas Indumentaria</a>
+        <a href="ver_productos.php">Ver Productos</a>
+        <a href="ver_facturas.php">Ver Facturas</a>
+        <a href="promociones_admin.php">Promociones</a>
+        <a href="admin_indum.php">🛍️ Indumentaria (Admin)</a>
+        <a href="admin_pedidos_indum.php">🧾 Pedidos indumentaria</a>
+      </div>
+    </div>
+    <?php endif; ?>
+
+    <?php if (has_perm('profesores')): ?>
+    <div class="drop">
+      <a class="item" href="#">👨‍🏫 Profesores</a>
+      <div class="menu">
+        <a href="agregar_profesor.php">Agregar Profesor</a>
+        <a href="login_profesor.php">Panel</a>
+        <a href="ver_profesores.php">Ver Profesores</a>
+        <a href="turnos_profesor.php">Turnos Profesores</a>
+        <a href="editar_tarifa_profesor.php">Precio de Horas</a>
+        <a href="reporte_horas_profesor.php">Reporte de Horas</a>
+        <a href="biometria/enrolar_profesores.php">Enrolar huella</a>
+      </div>
+    </div>
+    <?php endif; ?>
+
+    <?php if (has_perm('panel_cliente')): ?>
+    <div class="drop">
+      <a class="item" href="#">📲 Panel Cliente</a>
+      <div class="menu">
+        <a href="cliente_acceso.php">Panel</a>
+        <a href="panel_configuracion.php">Panel Configuración</a>
+      </div>
+    </div>
+    <?php endif; ?>
+
+    <?php if (has_perm('eventos_panel')): ?>
+    <div class="drop">
+      <a class="item" href="#">🎪 Eventos</a>
+      <div class="menu">
+        <a href="panel_eventos.php">Panel de Eventos</a>
+        <a href="login_evento.php">Acceso a Panel</a>
+        <?php if (has_perm('eventos')): ?>
+          <a href="eventos_publicos.php">Eventos Públicos</a>
+        <?php endif; ?>
+      </div>
+    </div>
+    <?php endif; ?>
+
+    <div class="drop">
+      <a class="item" href="#">❌ Cerrar</a>
+      <div class="menu">
+        <a href="index.php">Volver al Inicio</a>
+        <a href="logout.php">Cerrar Sesión</a>
+        <a href="#" onclick="if(confirm('¿Cerrar la aplicación?')){ window.close(); }">❌ Cerrar Programa</a>
+      </div>
+    </div>
+
   </div>
+</nav>
 
-  <!-- GRID -->
-  <div class="grid">
-
-    <!-- Ingresos -->
-    <section class="card bloque-monto" id="contenedor-ingresos">
-      <div class="card-header">
-        <h3 class="card-title">💰 Ingresos</h3>
-        <p class="card-sub mut">Actualiza cada 10s</p>
-      </div>
-      <div class="skeleton" style="min-height:120px"></div>
-    </section>
-
-    <!-- Cumpleaños -->
-    <section class="card">
-      <div class="card-header">
-        <h3 class="card-title">🎂 Próximos Cumpleaños</h3>
-        <p class="card-sub mut">Top 5 próximos</p>
-      </div>
-      <ul>
-        <?php while($c = $cumples->fetch_assoc()): ?>
-          <li>
-            <?= htmlspecialchars($c['apellido'] . ', ' . $c['nombre']) ?>
-            (<?= ($c['fecha_nacimiento'] && strtotime($c['fecha_nacimiento'])) ? date('d/m', strtotime($c['fecha_nacimiento'])) : '--' ?>)
-          </li>
-        <?php endwhile; ?>
-      </ul>
-    </section>
-
-    <!-- Vencimientos -->
-    <section class="card">
-      <div class="card-header">
-        <h3 class="card-title">🗓 Vencimientos</h3>
-        <p class="card-sub mut">Próximas membresías a vencer</p>
-      </div>
-      <ul>
-        <?php while($v = $vencimientos->fetch_assoc()): ?>
-          <li>
-            <?= htmlspecialchars($v['apellido'] . ', ' . $v['nombre']) ?>
-            (<?= ($v['fecha_vencimiento'] && strtotime($v['fecha_vencimiento'])) ? date('d/m', strtotime($v['fecha_vencimiento'])) : '--' ?>)
-          </li>
-        <?php endwhile; ?>
-      </ul>
-    </section>
-
-    <!-- Reservas -->
-    <section class="card" style="grid-column: span 8">
-      <div class="card-header">
-        <h3 class="card-title">📋 Reservas del día</h3>
-        <div class="field">
-          <label for="fecha" class="mut">Ver día</label>
-          <form method="GET" id="form-fecha" oninput="this.submit()" style="display:flex;align-items:center;gap:8px">
-            <input type="date" id="fecha" name="fecha" value="<?= htmlspecialchars($fecha_filtro) ?>">
-          </form>
-        </div>
-      </div>
-      <div id="contenedor-reservas">
-        <div class="skeleton" style="min-height:110px"></div>
+<!-- ========= NAV MOBILE (DRAWER) ========= -->
+<div class="nav-mobile">
+  <div class="mask" id="mask"></div>
+  <aside class="drawer" id="drawer" aria-hidden="true">
+    <!-- Secciones en acordeón -->
+    <?php if (has_perm('panel_gimnasio')): ?>
+    <section class="d-section">
+      <header class="d-head" data-acc>🏢 Panel Gimnasio</header>
+      <div class="d-body">
+        <a href="panel_gimnasios.php">Dashboard</a>
+        <a href="agregar_gimnasio.php">Agregar Gimnasio</a>
+        <a href="renovar_gimnasio.php">Renovar Plan</a>
       </div>
     </section>
+    <?php endif; ?>
 
-    <!-- Alumnos hoy -->
-    <section class="card" id="contenedor-alumnos">
-      <div class="card-header">
-        <h3 class="card-title">🧑‍🎓 Alumnos de hoy</h3>
-        <p class="card-sub mut">Asistencias/ingresos</p>
+    <?php if (has_perm('clientes')): ?>
+    <section class="d-section">
+      <header class="d-head" data-acc>👤 Clientes</header>
+      <div class="d-body">
+        <a href="ver_clientes.php">Ver Clientes</a>
+        <a href="agregar_cliente.php">Agregar Cliente</a>
+        <a href="maquinas_qr.php">🏷️ QR de Máquinas</a>
+        <a href="profesor_seguimiento.php">📈 Seguimiento de alumnos</a>
       </div>
-      <div class="skeleton" style="min-height:110px"></div>
     </section>
+    <?php endif; ?>
 
-    <!-- Gráfico: Disciplinas -->
-    <section class="card" style="grid-column: span 8">
-      <div class="card-header">
-        <h3 class="card-title">📊 Disciplinas más registradas</h3>
-        <p class="card-sub mut">Top 10 normalizadas</p>
+    <?php if (has_perm('membresias')): ?>
+    <section class="d-section">
+      <header class="d-head" data-acc>📅 Membresías</header>
+      <div class="d-body">
+        <a href="ver_membresias.php">Ver Membresías</a>
+        <a href="nueva_membresia.php">Agregar Membresía</a>
+        <a href="disciplinas.php">Disciplinas</a>
+        <a href="planes.php">Planes</a>
+        <a href="adicionales.php">Adicionales</a>
+        <a href="admin_cena.php">🍽️ Cena (Admin)</a>
       </div>
-      <div class="chart-wrap">
-        <canvas id="disciplinasChart" aria-label="Gráfico de barras de disciplinas" role="img"></canvas>
-      </div>
-      <?php if (count($disciplinas_rows) === 0): ?>
-        <small class="mut">No hay datos para mostrar.</small>
-      <?php endif; ?>
     </section>
+    <?php endif; ?>
 
-  </div><!-- /grid -->
+    <?php if (has_perm('pagos')): ?>
+    <section class="d-section">
+      <header class="d-head" data-acc>💳 Pagos</header>
+      <div class="d-body">
+        <a href="ver_pagos_pendientes.php">Pagos Pendientes</a>
+        <a href="config_alias.php">Alias</a>
+        <a href="ver_pagos_mes.php">Pagos del Mes</a>
+        <a href="ver_cuentas_corrientes.php">Pagos Cuenta Corriente</a>
+        <a href="gastos.php">Gastos</a>
+      </div>
+    </section>
+    <?php endif; ?>
 
-</div><!-- /wrap -->
+    <?php if (has_perm('asistencias')): ?>
+    <section class="d-section">
+      <header class="d-head" data-acc>🧍‍♂️ Asistencias</header>
+      <div class="d-body">
+        <a href="ver_asistencia.php">Ver Asistencias</a>
+        <a href="registrar_asistencia.php" target="_blank" rel="noopener">Registrar Asistencia</a>
+        <a href="scanner_qr.php">Escaneo QR</a>
+        <a href="ver_asistencias_profesor.php">Asistencia Profesores</a>
+      </div>
+    </section>
+    <?php endif; ?>
+
+    <?php if (has_perm('ventas')): ?>
+    <section class="d-section">
+      <header class="d-head" data-acc>🛒 Ventas</header>
+      <div class="d-body">
+        <a href="agregar_producto.php">Agregar Productos</a>
+        <a href="ventas_proteccion.php">Ventas Protecciones</a>
+        <a href="ventas_suplementos.php">Ventas Suplementos</a>
+        <a href="ventas_indumentaria.php">Ventas Indumentaria</a>
+        <a href="ver_productos.php">Ver Productos</a>
+        <a href="ver_facturas.php">Ver Facturas</a>
+        <a href="promociones_admin.php">Promociones</a>
+        <a href="admin_indum.php">🛍️ Indumentaria (Admin)</a>
+        <a href="admin_pedidos_indum.php">🧾 Pedidos indumentaria</a>
+      </div>
+    </section>
+    <?php endif; ?>
+
+    <?php if (has_perm('profesores')): ?>
+    <section class="d-section">
+      <header class="d-head" data-acc>👨‍🏫 Profesores</header>
+      <div class="d-body">
+        <a href="agregar_profesor.php">Agregar Profesor</a>
+        <a href="login_profesor.php">Panel</a>
+        <a href="ver_profesores.php">Ver Profesores</a>
+        <a href="turnos_profesor.php">Turnos Profesores</a>
+        <a href="editar_tarifa_profesor.php">Precio de Horas</a>
+        <a href="reporte_horas_profesor.php">Reporte de Horas</a>
+        <a href="biometria/enrolar_profesores.php">Enrolar huella</a>
+      </div>
+    </section>
+    <?php endif; ?>
+
+    <?php if (has_perm('panel_cliente')): ?>
+    <section class="d-section">
+      <header class="d-head" data-acc>📲 Panel Cliente</header>
+      <div class="d-body">
+        <a href="cliente_acceso.php">Panel</a>
+        <a href="panel_configuracion.php">Panel Configuración</a>
+      </div>
+    </section>
+    <?php endif; ?>
+
+    <?php if (has_perm('eventos_panel')): ?>
+    <section class="d-section">
+      <header class="d-head" data-acc>🎪 Eventos</header>
+      <div class="d-body">
+        <a href="panel_eventos.php">Panel de Eventos</a>
+        <a href="login_evento.php">Acceso a Panel</a>
+        <?php if (has_perm('eventos')): ?>
+          <a href="eventos_publicos.php">Eventos Públicos</a>
+        <?php endif; ?>
+      </div>
+    </section>
+    <?php endif; ?>
+
+    <section class="d-section">
+      <header class="d-head" data-acc>❌ Cerrar</header>
+      <div class="d-body">
+        <a href="index.php">Volver al Inicio</a>
+        <a href="logout.php">Cerrar Sesión</a>
+        <a href="#" onclick="if(confirm('¿Cerrar la aplicación?')){ window.close(); }">❌ Cerrar Programa</a>
+      </div>
+    </section>
+  </aside>
+</div>
 
 <script>
-  // Render del gráfico de disciplinas (colores pensados para fondo claro)
-  (function(){
-    const data = <?= json_encode($disciplinas_rows, JSON_UNESCAPED_UNICODE) ?>;
-    if(!Array.isArray(data) || !data.length) return;
-    const el = document.getElementById('disciplinasChart');
-    if(!el) return;
-    const ctx = el.getContext('2d');
+  // Drawer
+  const drawer = document.getElementById('drawer');
+  const mask   = document.getElementById('mask');
+  const btnOpen= document.getElementById('btnOpen');
 
-    const grad = ctx.createLinearGradient(0, 0, 0, el.height);
-    grad.addColorStop(0, 'rgba(251, 191, 36, .95)');  // #fbbf24
-    grad.addColorStop(1, 'rgba(245, 158, 11, .65)');  // #f59e0b
+  function openDrawer(){ drawer.classList.add('open'); mask.classList.add('show'); drawer.setAttribute('aria-hidden','false'); }
+  function closeDrawer(){ drawer.classList.remove('open'); mask.classList.remove('show'); drawer.setAttribute('aria-hidden','true'); }
 
-    new Chart(ctx, {
-      type: 'bar',
-      data: {
-        labels: data.map(d => d.nombre),
-        datasets: [{
-          label: 'Registros',
-          data: data.map(d => Number(d.total)),
-          backgroundColor: grad,
-          borderColor: 'rgba(180,83,9,.9)', // #b45309
-          borderWidth: 2,
-          borderRadius: 10,
-          hoverBorderWidth: 2.5
-        }]
-      },
-      options: {
-        responsive:true,
-        maintainAspectRatio:false,
-        animation:{ duration: 800 },
-        plugins:{
-          legend:{ labels:{ color:'#0f172a' } },
-          tooltip:{
-            backgroundColor:'rgba(15,23,42,.96)',
-            titleColor:'#fbbf24', bodyColor:'#e2e8f0',
-            borderColor:'rgba(180,83,9,.35)', borderWidth:1
-          }
-        },
-        scales:{
-          x:{ ticks:{ color:'#0f172a' }, grid:{ color:'rgba(2,6,23,.06)' } },
-          y:{ beginAtZero:true, ticks:{ color:'#0f172a', precision:0 }, grid:{ color:'rgba(2,6,23,.06)' } }
-        }
-      }
+  btnOpen?.addEventListener('click', openDrawer);
+  mask?.addEventListener('click', closeDrawer);
+  document.addEventListener('keydown', e => { if(e.key==='Escape') closeDrawer(); });
+
+  // Acordeones móviles
+  document.querySelectorAll('[data-acc]').forEach(h=>{
+    h.addEventListener('click', ()=>{
+      const body = h.nextElementSibling;
+      const open = body && body.style.display === 'block';
+      // cerrar otros
+      document.querySelectorAll('.d-body').forEach(b=> b.style.display='none');
+      if (body) body.style.display = open ? 'none' : 'block';
     });
-  })();
+  });
 </script>
 
 </body>
