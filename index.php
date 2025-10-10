@@ -32,7 +32,7 @@ $estado = $conexion->query("
   LEFT JOIN (
     SELECT cliente_id, MAX(fecha_vencimiento) AS fv
     FROM membresias
-    WHERE gimnasio_id={$gimnasio_id}
+    WHERE gimnasio_id={$gimnasio_id} AND fecha_vencimiento IS NOT NULL AND fecha_vencimiento>='1000-01-01'
     GROUP BY cliente_id
   ) u ON u.cliente_id=c.id
   WHERE c.gimnasio_id={$gimnasio_id}
@@ -40,7 +40,7 @@ $estado = $conexion->query("
 $activos   = (int)($estado['activos'] ?? 0);
 $inactivos = (int)($estado['inactivos'] ?? 0);
 
-/* Cumples */
+/* Cumples (top 5, sin filtro por fecha para mantener tu lógica original) */
 $cumples = $conexion->query("
   SELECT nombre, apellido, fecha_nacimiento
   FROM clientes
@@ -56,6 +56,7 @@ $vencimientos = $conexion->query("
   FROM membresias m
   JOIN clientes c ON c.id=m.cliente_id
   WHERE m.gimnasio_id={$gimnasio_id}
+    AND m.fecha_vencimiento IS NOT NULL
     AND m.fecha_vencimiento >= CURDATE()
   ORDER BY m.fecha_vencimiento ASC
   LIMIT 5
@@ -86,103 +87,236 @@ if (!preg_match('/^\d{4}-\d{2}-\d{2}$/',$fecha_filtro)) $fecha_filtro=date('Y-m-
 <meta charset="UTF-8">
 <title>Panel General - <?= htmlspecialchars($nombre_gym) ?></title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
+
 <style>
 :root{
-  --bg1:#f5f7fb;--bg2:#eef3f9;--ink:#0f172a;--mut:#475569;
-  --brand:#b45309;--brand2:#f59e0b;--ok:#16a34a;--warn:#f59e0b;
-  --card:#fff;--stroke:rgba(15,23,42,.08);
-  --shadow:0 6px 16px rgba(2,6,23,.08);--radius:18px;
+  --bg1:#f5f7fb; --bg2:#eef3f9; --ink:#0f172a; --mut:#475569;
+  --brand:#b45309; --brand-2:#f59e0b; --card:#fff; --stroke:rgba(15,23,42,.08);
+  --shadow:0 10px 28px rgba(2,6,23,.08); --gap:18px;
 }
-body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Inter,sans-serif;background:linear-gradient(180deg,var(--bg1),var(--bg2));color:var(--ink);}
+*{box-sizing:border-box}
+body{margin:0;color:var(--ink);font-family:system-ui,-apple-system,Segoe UI,Roboto,Inter,Arial,sans-serif;background:linear-gradient(180deg,var(--bg1),var(--bg2))}
 .wrap{max-width:1200px;margin:24px auto;padding:0 16px 40px}
+
+/* Header */
 .header{display:grid;grid-template-columns:1fr auto;gap:16px;align-items:center;margin-bottom:16px}
-.title{margin:0;font-weight:900;color:var(--brand);}
-.sys-exp{margin:4px 0;color:var(--mut);}
+.title{margin:0;font-weight:900;color:var(--brand)}
+.sys-exp{margin:.25rem 0 0;color:var(--mut)}
 .logo-wrap{text-align:right}
-#logoGym{max-height:80px;object-fit:contain;background:#fff;padding:6px;border:1px solid var(--stroke);border-radius:12px}
-.grid{display:grid;grid-template-columns:repeat(12,1fr);gap:18px;}
-@media(max-width:900px){.grid{grid-template-columns:repeat(4,1fr);}}
-.card{background:var(--card);border:1px solid var(--stroke);border-radius:18px;box-shadow:var(--shadow);padding:16px;grid-column:span 4;}
-.card-header{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;}
-.card-title{margin:0;color:var(--brand);font-weight:700;}
-.card-sub{margin:0;color:#64748b;font-size:.9rem;flex:1 1 100%;text-align:right;}
-@media(max-width:520px){.card-header{flex-direction:column;align-items:flex-start}.card-sub{text-align:left;width:100%}}
-ul{margin:0;padding-left:18px;}
-/* asistencias ordenadas */
-#alumnos-body li{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:6px 0;border-bottom:1px dashed rgba(15,23,42,.1);}
-#alumnos-body li:last-child{border:none;}
-#alumnos-body .n{flex:1 1 auto;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
-#alumnos-body .h{flex:0 0 auto;font-variant-numeric:tabular-nums;}
-/* reservas compactas */
-#reservas-body>div{border:1px solid rgba(15,23,42,.06);border-radius:14px;padding:8px 10px;margin:6px 0;box-shadow:0 3px 8px rgba(0,0,0,.04);}
-#reservas-body strong{color:var(--brand);}
-@media(max-width:520px){#reservas-body>div{padding:6px 8px;font-size:.95rem}}
+#logoGym{max-height:64px;max-width:180px;object-fit:contain;background:#fff;padding:6px;border:1px solid var(--stroke);border-radius:12px}
+
+/* Grid */
+.grid{display:grid;grid-template-columns:repeat(12,1fr);gap:var(--gap)}
+@media (max-width:900px){.grid{grid-template-columns:repeat(4,1fr)}}
+
+/* Cards */
+.card{background:var(--card);border:1px solid var(--stroke);border-radius:18px;box-shadow:var(--shadow);padding:16px;grid-column:span 4}
+.card-header{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;position:relative;z-index:2}
+.card-title{margin:0;color:var(--brand);font-size:1.05rem}
+.card-sub{margin:0;color:#64748b;font-size:.9rem}
+
+/* ===========================
+   VISUAL PARA CELULARES
+   =========================== */
+
+/* Reglas generales (<= 900px) */
+@media (max-width: 900px){
+  .card, .alert, .notice{ text-align: center !important; }
+  .card-header{
+    flex-direction: column !important;
+    align-items: center !important;
+    gap: 6px !important;
+    z-index: 3 !important; /* evita que nada lo tape */
+  }
+  .kpis{ justify-content: center !important; }
+  .toolbar{ justify-content: center !important; }
+  .alert a, .notice a{ display: inline-block !important; }
+}
+
+/* --- INGRESOS ($) --- */
+@media (max-width: 560px){
+  #ingresos-body .ingresos-wrap{
+    display: grid !important;
+    grid-template-columns: 1fr !important;
+    gap: 12px !important;
+  }
+  #ingresos-body .ing-card{
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    text-align: center !important;
+    gap: 8px !important;
+    padding: 14px 12px !important;
+    border-radius: 14px !important;
+    box-shadow: 0 4px 12px rgba(0,0,0,.08) !important;
+  }
+  #ingresos-body .ing-title{
+    font-size: 1rem !important;
+    line-height: 1.3 !important;
+    white-space: normal !important;
+    word-break: keep-all !important;
+    overflow-wrap: anywhere !important;
+  }
+  #ingresos-body .ing-amount{
+    font-size: 1.6rem !important;
+    line-height: 1.2 !important;
+    font-weight: 900 !important;
+  }
+}
+@media (min-width:561px) and (max-width:900px){
+  #ingresos-body .ingresos-wrap{
+    display:grid!important;
+    grid-template-columns:1fr 1fr!important;
+    gap:12px!important;
+  }
+}
+
+/* --- RESERVAS DEL DÍA (compactas) --- */
+@media (max-width: 900px){
+  #reservas-body .reserva{
+    margin: 8px 0 !important;
+    padding: 10px 12px !important;
+    border-radius: 14px !important;
+    border: 1px solid rgba(15,23,42,.08) !important;
+    box-shadow: 0 3px 8px rgba(0,0,0,.04) !important;
+    line-height: 1.25 !important;
+  }
+  #reservas-body .reserva strong{ color:#b45309 !important; }
+}
+@media (max-width: 520px){
+  #reservas-body .reserva{ padding: 6px 8px !important; font-size: .95rem !important; }
+}
+
+/* --- ALUMNOS (Asistencias de hoy) --- */
+@media (max-width: 768px){
+  #alumnos-body .asistencias-hoy{
+    margin:0!important; padding:0!important; list-style:none!important;
+  }
+  #alumnos-body .asistencias-hoy li,
+  #alumnos-body .asis-item{
+    display:flex!important; justify-content:space-between!important; align-items:center!important;
+    gap:10px!important; padding:8px 10px!important; border-bottom:1px dashed rgba(15,23,42,.12)!important;
+  }
+  #alumnos-body .asistencias-hoy li:last-child,
+  #alumnos-body .asis-item:last-child{ border-bottom:none!important; }
+  #alumnos-body .n{
+    flex:1 1 auto!important; white-space:nowrap!important; overflow:hidden!important; text-overflow:ellipsis!important; word-break:keep-all!important;
+  }
+  #alumnos-body .h{ flex:0 0 auto!important; font-variant-numeric:tabular-nums!important; }
+}
+
+/* --- Vencimientos centrados (móvil) --- */
+@media (max-width: 900px){
+  #card-venc, #card-venc *{ text-align: center !important; }
+}
 </style>
+
 <script>
-function sanitizeAjaxContainer(r){if(!r)return;r.querySelectorAll('style').forEach(n=>n.remove());}
-function countItems(r){let n=r.querySelectorAll('li').length;if(!n)n=r.querySelectorAll('.asis-item').length;return n;}
-function fetchIntoBody(u,id,after){
- const el=document.getElementById(id);if(!el)return;
- fetch(u,{cache:'no-store'}).then(r=>r.text()).then(h=>{
-   el.innerHTML=h;sanitizeAjaxContainer(el);
-   if(typeof after==='function')after(el);
- }).catch(()=>{el.innerHTML='<div style="color:#b91c1c">Error</div>';});
+/* Limpia estilos embebidos que puedan venir dentro de cada resultado AJAX */
+function sanitizeAjaxContainer(root){
+  if(!root) return;
+  root.querySelectorAll('style, link[rel="stylesheet"]').forEach(n => n.remove());
 }
+
+/* Carga AJAX SOLO dentro del cuerpo de cada card (no toca encabezados) */
+function fetchIntoBody(url, bodyId){
+  const bodyEl = document.getElementById(bodyId);
+  if(!bodyEl) return;
+  fetch(url, {cache:'no-store'})
+    .then(r => r.text())
+    .then(html => { bodyEl.innerHTML = html; sanitizeAjaxContainer(bodyEl); })
+    .catch(()=>{ bodyEl.innerHTML = '<div style="color:#b91c1c">Error al cargar.</div>'; });
+}
+
 function cargarDatos(){
- const f=document.getElementById('fecha')?.value;
- fetchIntoBody('ajax_ingresos.php','ingresos-body');
- fetchIntoBody('ajax_reservas.php?fecha='+(f?encodeURIComponent(f):''),'reservas-body');
- fetchIntoBody('ajax_alumnos_hoy.php','alumnos-body',(root)=>{
-   const sub=document.getElementById('asis-sub');
-   const t=countItems(root);
-   const hoy=new Date().toLocaleDateString('es-AR',{timeZone:'America/Argentina/San_Luis'});
-   const txt=t>0?`${t} ingresos — ${hoy}`:`Sin ingresos — ${hoy}`;
-   if(sub){sub.textContent=txt;}
- });
+  const f = document.getElementById('fecha')?.value || '';
+  fetchIntoBody('ajax_ingresos.php', 'ingresos-body');                                         // ingresos $ día/mes
+  fetchIntoBody('ajax_reservas.php' + (f ? ('?fecha='+encodeURIComponent(f)) : ''), 'reservas-body'); // reservas
+  fetchIntoBody('ajax_alumnos_hoy.php', 'alumnos-body');                                       // asistencias hoy
 }
-window.addEventListener('load',()=>{cargarDatos();setInterval(cargarDatos,10000);});
+
+window.addEventListener('load', () => {
+  cargarDatos();
+  setInterval(cargarDatos, 10000);
+});
 </script>
 </head>
+
 <body>
 <div class="wrap">
   <div class="header">
     <div>
       <h1 class="title">🏋️ <?= htmlspecialchars($nombre_gym) ?></h1>
-      <p class="sys-exp">Vencimiento sistema: <strong><?= htmlspecialchars($fecha_venc) ?></strong></p>
+      <p class="sys-exp">🗓 Vencimiento del sistema:
+        <strong><?= htmlspecialchars($fecha_venc) ?></strong>
+      </p>
     </div>
-    <div class="logo-wrap"><?php if($logo):?><img id="logoGym" src="<?= htmlspecialchars($logo) ?>"><?php endif;?></div>
+    <div class="logo-wrap">
+      <?php if ($logo): ?><img id="logoGym" src="<?= htmlspecialchars($logo) ?>" alt="Logo del gimnasio"><?php endif; ?>
+    </div>
   </div>
 
   <div class="grid">
-    <section class="card bloque-monto">
-      <div class="card-header"><h3 class="card-title">💰 Ingresos</h3><p class="card-sub">Actualiza cada 10s</p></div>
-      <div id="ingresos-body"><div class="skeleton" style="min-height:100px"></div></div>
+
+    <!-- INGRESOS ($) -->
+    <section class="card">
+      <div class="card-header">
+        <h3 class="card-title">💰 Ingresos</h3>
+        <p class="card-sub">Actualiza cada 10s</p>
+      </div>
+      <div id="ingresos-body"><div class="skeleton" style="min-height:110px"></div></div>
     </section>
 
-    <section class="card"><div class="card-header"><h3 class="card-title">🎂 Cumpleaños</h3><p class="card-sub">Top 5</p></div><ul>
-      <?php while($c=$cumples->fetch_assoc()):?>
-      <li><?=htmlspecialchars($c['apellido'].', '.$c['nombre'])?></li>
-      <?php endwhile;?>
-    </ul></section>
+    <!-- CUMPLES -->
+    <section class="card">
+      <div class="card-header">
+        <h3 class="card-title">🎂 Próximos Cumpleaños</h3>
+        <p class="card-sub">Top 5 próximos</p>
+      </div>
+      <ul>
+        <?php while($c=$cumples->fetch_assoc()): ?>
+          <li><?= htmlspecialchars($c['apellido'].', '.$c['nombre']) ?></li>
+        <?php endwhile; ?>
+      </ul>
+    </section>
 
-    <section class="card" id="card-venc"><div class="card-header"><h3 class="card-title">🗓 Vencimientos</h3><p class="card-sub">Próximos</p></div><ul>
-      <?php while($v=$vencimientos->fetch_assoc()):?>
-      <li><?=htmlspecialchars($v['apellido'].', '.$v['nombre'])?> (<?=date('d/m',strtotime($v['fecha_vencimiento']))?>)</li>
-      <?php endwhile;?>
-    </ul></section>
+    <!-- VENCIMIENTOS -->
+    <section class="card" id="card-venc">
+      <div class="card-header">
+        <h3 class="card-title">🗓 Vencimientos</h3>
+        <p class="card-sub">Próximos</p>
+      </div>
+      <ul>
+        <?php while($v=$vencimientos->fetch_assoc()): ?>
+          <li><?= htmlspecialchars($v['apellido'].', '.$v['nombre']) ?>
+            (<?= ($v['fecha_vencimiento'] && strtotime($v['fecha_vencimiento'])) ? date('d/m', strtotime($v['fecha_vencimiento'])) : '--' ?>)
+          </li>
+        <?php endwhile; ?>
+      </ul>
+    </section>
 
+    <!-- RESERVAS -->
     <section class="card" style="grid-column:span 8">
       <div class="card-header">
         <h3 class="card-title">📋 Reservas del día</h3>
-        <div><form method="GET"><input type="date" id="fecha" name="fecha" value="<?=htmlspecialchars($fecha_filtro)?>"></form></div>
+        <div>
+          <form method="GET" oninput="this.submit()">
+            <input type="date" id="fecha" name="fecha" value="<?= htmlspecialchars($fecha_filtro) ?>">
+          </form>
+        </div>
       </div>
-      <div id="reservas-body"><div class="skeleton" style="min-height:100px"></div></div>
+      <div id="reservas-body"><div class="skeleton" style="min-height:110px"></div></div>
     </section>
 
-    <section class="card" id="contenedor-alumnos">
-      <div class="card-header"><h3 class="card-title">🧑‍🎓 Alumnos de hoy</h3><p class="card-sub" id="asis-sub">Cargando…</p></div>
-      <div id="alumnos-body"><div class="skeleton" style="min-height:100px"></div></div>
+    <!-- ALUMNOS (ASISTENCIAS HOY) -->
+    <section class="card">
+      <div class="card-header">
+        <h3 class="card-title">🧑‍🎓 Alumnos de hoy</h3>
+        <p class="card-sub">Asistencias / ingresos</p>
+      </div>
+      <div id="alumnos-body"><div class="skeleton" style="min-height:110px"></div></div>
     </section>
+
   </div>
 </div>
 </body>
