@@ -186,7 +186,7 @@ body{
 .chart-wrap{ aspect-ratio:16/9; position:relative; width:100%; max-width:820px; margin:0 auto; }
 #disciplinasChart{ position:absolute; inset:0; }
 
-/* ====== Móvil: centrado simple y sin cosas raras ====== */
+/* ====== Móvil ====== */
 @media (max-width:900px){
   .card,.alert,.notice{ text-align:center; }
   .card-header{ flex-direction:column; align-items:center; gap:6px; }
@@ -195,7 +195,7 @@ body{
   .card{ grid-column:1 / -1; }
 }
 
-/* ====== ALUMNOS HOY: lista limpia nombre/hora ====== */
+/* ====== ALUMNOS HOY ====== */
 #contenedor-alumnos ul.asistencias-hoy{ list-style:none; margin:0; padding:0; }
 #contenedor-alumnos ul.asistencias-hoy li{
   display:flex; justify-content:space-between; align-items:baseline;
@@ -205,7 +205,7 @@ body{
 #contenedor-alumnos .n{ flex:1 1 auto; min-width:0; white-space:normal; word-break:keep-all; overflow-wrap:anywhere; line-height:1.25; }
 #contenedor-alumnos .h{ flex:0 0 auto; font-variant-numeric:tabular-nums; white-space:nowrap; }
 
-/* ====== RESERVAS: compacto ====== */
+/* ====== RESERVAS compacto ====== */
 @media (max-width:900px){
   #contenedor-reservas .res-card{
     border:1px solid rgba(15,23,42,.08);
@@ -223,6 +223,45 @@ body{
   }
   #contenedor-reservas .res-body > div{ display:flex; gap:6px; line-height:1.25; }
   @media (max-width:520px){ #contenedor-reservas .res-body{ grid-template-columns:1fr; } }
+}
+
+/* ====== FIX SOLO INGRESOS ====== */
+#contenedor-ingresos *{
+  white-space: normal !important;
+  word-break: keep-all !important;
+  overflow-wrap: anywhere !important;
+  letter-spacing: normal !important;
+  line-height: 1.25 !important;
+}
+#contenedor-ingresos [style*="position:absolute"],
+#contenedor-ingresos .abs, 
+#contenedor-ingresos .absolute {
+  position: static !important;
+  left:auto !important; top:auto !important; right:auto !important; bottom:auto !important;
+  transform:none !important;
+}
+#contenedor-ingresos .ing-row,
+#contenedor-ingresos .ing-card,
+#contenedor-ingresos .row,
+#contenedor-ingresos > div > div {
+  display:flex !important; align-items:center !important; justify-content:space-between !important;
+  gap:12px !important; padding:12px 14px !important; border-radius:14px !important; background:#fff !important;
+}
+#contenedor-ingresos .ing-titulo,
+#contenedor-ingresos .titulo,
+#contenedor-ingresos .left,
+#contenedor-ingresos .label,
+#contenedor-ingresos .txt,
+#contenedor-ingresos .desc {
+  flex:1 1 auto !important; min-width:0 !important; color:#b45309 !important; font-weight:800 !important;
+}
+#contenedor-ingresos .ing-monto,
+#contenedor-ingresos .monto,
+#contenedor-ingresos .amount,
+#contenedor-ingresos .right,
+#contenedor-ingresos [class*="monto"],
+#contenedor-ingresos [class*="amount"] {
+  flex:0 0 auto !important; font-weight:900 !important; font-size:1.5rem !important; white-space:nowrap !important; text-align:right !important;
 }
 </style>
 
@@ -358,7 +397,7 @@ body{
 </div>
 
 <script>
-/* ---- Carga simple sin “sanitizar” agresivo ---- */
+/* Inyecta HTML en el body indicado */
 function fetchIntoBody(url, bodyId, afterLoad){
   const el = document.getElementById(bodyId);
   if(!el) return;
@@ -371,13 +410,11 @@ function fetchIntoBody(url, bodyId, afterLoad){
     .catch(()=>{});
 }
 
-/* ===== Normaliza lista de asistencias: Nombre ..... Hora ===== */
+/* ===== ALUMNOS: Nombre ..... Hora (y contador) ===== */
 function normalizeAlumnos(root){
-  // intenta detectar un contador "X ingresos"
   const m = (root.textContent||'').match(/(\d+)\s+ingresos?/i);
   if (m) document.getElementById('alumnos-count').textContent = m[1]+' ingresos';
 
-  // usa la primera UL que encuentre; si no hay, crea una con los LI existentes
   let ul = root.querySelector('ul');
   if (!ul){
     const items = root.querySelectorAll('li');
@@ -400,16 +437,14 @@ function normalizeAlumnos(root){
   });
 }
 
-/* ===== Compacta reservas: etiqueta nodos recibidos ===== */
+/* ===== RESERVAS: compactar visual ===== */
 function normalizeReservas(root){
-  // cada hijo directo lo trato como tarjeta
   [...root.children].forEach(card=>{
     if (card.nodeType!==1) return;
     card.classList.add('res-card');
-    // intento marcar cabecera (línea que contiene hora)
     const head = [...card.querySelectorAll('*')].find(e=>/\b\d{2}:\d{2}:\d{2}\b/.test(e.textContent||'')) || card.firstElementChild;
     if (head) head.classList.add('res-head');
-    // Armo res-body con bloques que parezcan "alumno" y "profe"
+
     const body = document.createElement('div'); body.className='res-body';
     const alumno = [...card.querySelectorAll('*')].find(e=>/👤|alumno/i.test(e.textContent||''));
     const profe  = [...card.querySelectorAll('*')].find(e=>/profe|entrenador|coach/i.test(e.textContent||''));
@@ -419,10 +454,10 @@ function normalizeReservas(root){
   });
 }
 
-/* Cargas periódicas */
+/* ===== Cargas periódicas ===== */
 function cargarDatos(){
   const f = document.getElementById('fecha')?.value;
-  fetchIntoBody('ajax_ingresos.php', 'ingresos-body');             // solo el body
+  fetchIntoBody('ajax_ingresos.php', 'ingresos-body');                                       // Ingresos (solo body)
   if (f) fetchIntoBody('ajax_reservas.php?fecha='+encodeURIComponent(f), 'reservas-body', normalizeReservas);
   fetchIntoBody('ajax_alumnos_hoy.php', 'alumnos-body', normalizeAlumnos);
 }
