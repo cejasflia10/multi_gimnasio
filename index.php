@@ -186,7 +186,7 @@ body{
 .chart-wrap{ aspect-ratio:16/9; position:relative; width:100%; max-width:820px; margin:0 auto; }
 #disciplinasChart{ position:absolute; inset:0; }
 
-/* ====== Móvil ====== */
+/* ====== Móvil (centrado y columnas completas) ====== */
 @media (max-width:900px){
   .card,.alert,.notice{ text-align:center; }
   .card-header{ flex-direction:column; align-items:center; gap:6px; }
@@ -195,7 +195,7 @@ body{
   .card{ grid-column:1 / -1; }
 }
 
-/* ====== ALUMNOS HOY ====== */
+/* ====== ALUMNOS HOY (lista limpia) ====== */
 #contenedor-alumnos ul.asistencias-hoy{ list-style:none; margin:0; padding:0; }
 #contenedor-alumnos ul.asistencias-hoy li{
   display:flex; justify-content:space-between; align-items:baseline;
@@ -205,7 +205,7 @@ body{
 #contenedor-alumnos .n{ flex:1 1 auto; min-width:0; white-space:normal; word-break:keep-all; overflow-wrap:anywhere; line-height:1.25; }
 #contenedor-alumnos .h{ flex:0 0 auto; font-variant-numeric:tabular-nums; white-space:nowrap; }
 
-/* ====== RESERVAS compacto ====== */
+/* ====== RESERVAS (compacto en móvil) ====== */
 @media (max-width:900px){
   #contenedor-reservas .res-card{
     border:1px solid rgba(15,23,42,.08);
@@ -225,7 +225,7 @@ body{
   @media (max-width:520px){ #contenedor-reservas .res-body{ grid-template-columns:1fr; } }
 }
 
-/* ====== FIX SOLO INGRESOS ====== */
+/* ====== FIX SOLO INGRESOS (evitar vertical y cortes) ====== */
 #contenedor-ingresos *{
   white-space: normal !important;
   word-break: keep-all !important;
@@ -263,9 +263,8 @@ body{
 #contenedor-ingresos [class*="amount"] {
   flex:0 0 auto !important; font-weight:900 !important; font-size:1.5rem !important; white-space:nowrap !important; text-align:right !important;
 }
-/* ====== FIX ingresos SOLO en móvil ====== */
+/* En móvil, fuerza horizontal y quita <br> que apilan letras */
 @media (max-width: 900px){
-  /* nada en vertical, sin rotaciones */
   #contenedor-ingresos, 
   #contenedor-ingresos *{
     writing-mode: horizontal-tb !important;
@@ -274,13 +273,8 @@ body{
     white-space: normal !important;
     line-height: 1.25 !important;
   }
+  #contenedor-ingresos br{ display: none !important; }
 
-  /* oculta <br> que fuerzan columnas verticales */
-  #contenedor-ingresos br{ 
-    display: none !important; 
-  }
-
-  /* cada fila de ingreso: título a la izq, monto a la der */
   #contenedor-ingresos .ing-card,
   #contenedor-ingresos .ing-row,
   #contenedor-ingresos .row,
@@ -291,8 +285,6 @@ body{
     gap: 12px !important;
     padding: 12px 14px !important;
   }
-
-  /* título compacto y horizontal */
   #contenedor-ingresos .ing-titulo,
   #contenedor-ingresos .titulo,
   #contenedor-ingresos .label,
@@ -304,8 +296,6 @@ body{
     color: #b45309 !important;
     font-weight: 800 !important;
   }
-
-  /* monto grande a la derecha */
   #contenedor-ingresos .ing-monto,
   #contenedor-ingresos .monto,
   #contenedor-ingresos .amount{
@@ -315,7 +305,6 @@ body{
     text-align: right !important;
   }
 }
-
 </style>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -507,10 +496,40 @@ function normalizeReservas(root){
   });
 }
 
+/* ===== INGRESOS: evitar vertical/rotaciones y <br> que cortan el título ===== */
+function normalizeIngresos(root){
+  if(!root) return;
+
+  // Quitar estilos inline que fuerzan vertical/rotación
+  root.querySelectorAll('[style]').forEach(el=>{
+    const s = el.getAttribute('style') || '';
+    if (/writing-mode|text-orientation|rotate|transform/i.test(s)){
+      el.style.writingMode = 'horizontal-tb';
+      el.style.textOrientation = 'mixed';
+      el.style.transform = 'none';
+    }
+  });
+
+  // Quitar <br> que apilan “Ingresos del día”
+  root.querySelectorAll('br').forEach(br=>br.remove());
+
+  // Si vino con filas/cols estrechas, pasarlo a fila horizontal
+  root.querySelectorAll('.row,[class*="col"]').forEach(el=>{
+    el.style.display='flex';
+    el.style.flexDirection='row';
+    el.style.flexWrap='nowrap';
+    el.style.alignItems='center';
+    el.style.justifyContent='space-between';
+    el.style.gap='12px';
+    el.style.width='auto';
+    el.style.minWidth='0';
+  });
+}
+
 /* ===== Cargas periódicas ===== */
 function cargarDatos(){
   const f = document.getElementById('fecha')?.value;
-  fetchIntoBody('ajax_ingresos.php', 'ingresos-body');                                       // Ingresos (solo body)
+  fetchIntoBody('ajax_ingresos.php', 'ingresos-body', normalizeIngresos);                         // Ingresos con normalización
   if (f) fetchIntoBody('ajax_reservas.php?fecha='+encodeURIComponent(f), 'reservas-body', normalizeReservas);
   fetchIntoBody('ajax_alumnos_hoy.php', 'alumnos-body', normalizeAlumnos);
 }
