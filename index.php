@@ -382,6 +382,66 @@ ul{ margin:0; padding-left:16px; } li{ margin:6px 0; }
   .card ul{ padding-left: 16px; }
 }
 </style>
+<style>
+/* === Móvil: que no se corten las palabras y todo centrado === */
+@media (max-width: 560px){
+
+  /* Cada tarjeta de ingresos apilada y centrada */
+  #contenedor-ingresos .ing-card{
+    flex-direction: column !important;
+    align-items: center !important;
+    justify-content: center !important;
+    text-align: center !important;
+    padding: 16px 14px !important;
+    gap: 8px !important;
+  }
+
+  /* Títulos más legibles, sin “cortes raros” */
+  #contenedor-ingresos .ing-title{
+    font-size: 1.05rem !important;
+    line-height: 1.35 !important;
+    letter-spacing: 0 !important;
+    white-space: normal !important;
+    word-break: keep-all !important;      /* no partir palabras */
+    overflow-wrap: anywhere !important;   /* permite cortar en espacios si hace falta */
+    hyphens: none !important;             /* sin guiones automáticos */
+    text-wrap: balance;                   /* mejora el salto (si el navegador lo soporta) */
+  }
+
+  /* Monto grande y centrado debajo del título */
+  #contenedor-ingresos .ing-amount{
+    font-size: 1.6rem !important;
+    line-height: 1.2 !important;
+    font-weight: 900 !important;
+    margin-top: 2px !important;
+    display: block !important;
+    text-align: center !important;
+  }
+
+  /* Dos tarjetas por fila en móviles medianos; una por fila en muy chicos */
+  #contenedor-ingresos .ingresos-wrap{
+    grid-template-columns: 1fr !important;   /* una columna por defecto */
+    gap: 12px !important;
+  }
+}
+
+/* Móviles medianos: si te gusta, podés volver a 2 columnas acá */
+@media (min-width: 561px) and (max-width: 900px){
+  #contenedor-ingresos .ingresos-wrap{
+    grid-template-columns: 1fr 1fr !important;
+  }
+}
+
+/* Avisos (saldo negativo / pagos) bien centrados y aireados */
+@media (max-width: 900px){
+  .alert{
+    text-align: center !important;
+    line-height: 1.35 !important;
+    padding: 14px 16px !important;
+  }
+  .alert a{ display: inline-block !important; margin-top: 4px !important; }
+}
+</style>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
