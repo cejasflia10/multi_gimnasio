@@ -174,9 +174,13 @@ body{
 /* Cards / elementos base */
 .card,.notice,.alert,.kpi,.field{ background:var(--card); border:1px solid var(--stroke); border-radius:18px; padding:16px; box-shadow:var(--shadow); }
 .card{ grid-column:span 4; }
-.card-header{ display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; gap:12px; }
-.card-title{ margin:0; color:var(--brand); font-size:1.05rem; }
-.card-sub{ margin:0; color:#64748b; font-size:.9rem; }
+.card-header{ display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; }
+.card-title{ margin:0; color:var(--brand); font-size:1.05rem; flex:1 1 auto; min-width:0; z-index:1; }
+.card-sub{ margin:0; color:#64748b; font-size:.9rem; flex:0 1 320px; min-width:180px; text-align:right; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+@media (max-width:520px){
+  .card-header{ flex-direction:column; align-items:flex-start; gap:6px; }
+  .card-sub{ width:100%; text-align:left; white-space:normal; }
+}
 
 .kpis{ display:flex; gap:12px; flex-wrap:wrap; margin:10px 0 16px; }
 .kpi{ min-width:160px; background:linear-gradient(180deg,#fff,#f8fafc); }
@@ -187,265 +191,41 @@ body{
 .alert{ border:1px dashed #f59e0b66; background:linear-gradient(180deg,#fff,#f9fafb); }
 ul{ margin:0; padding-left:16px; } li{ margin:6px 0; }
 
-.toolbar{ display:flex; justify-content:flex-end; gap:10px; margin:6px 0 12px; }
-.icon-btn{ cursor:pointer; font-size:20px; padding:6px 9px; border-radius:12px; border:1px solid var(--stroke); background:linear-gradient(180deg,#fff,#f8fafc); }
-
-.chart-wrap{ aspect-ratio:16/9; position:relative; width:100%; max-width:820px; margin:0 auto; }
-#disciplinasChart{ position:absolute; inset:0; }
-
-/* Legibilidad general */
-.wrap, .wrap *{
-  letter-spacing:normal !important; line-height:1.35 !important; text-transform:none !important;
-  white-space:normal !important; word-break:normal !important; overflow-wrap:break-word !important;
-  text-shadow:none !important; filter:none !important; mix-blend-mode:normal !important;
-  -webkit-text-fill-color: currentColor !important; opacity:1 !important;
+/* Ingresos ($) móvil */
+@media (max-width:560px){
+  #ingresos-body .ingresos-wrap{ display:grid !important; grid-template-columns:1fr !important; gap:12px !important; }
+  #ingresos-body .ing-card{
+    display:flex !important; flex-direction:column !important; align-items:center !important;
+    text-align:center !important; gap:8px !important; padding:14px 12px !important;
+  }
+  #ingresos-body .ing-title{
+    font-size:.98rem !important; line-height:1.25 !important;
+    white-space:normal !important; word-break:keep-all !important; overflow-wrap:anywhere !important;
+  }
+  #ingresos-body .ing-amount{ font-size:1.55rem !important; line-height:1.15 !important; font-weight:900 !important; }
+}
+@media (min-width:561px) and (max-width:900px){
+  #ingresos-body .ingresos-wrap{ display:grid !important; grid-template-columns:1fr 1fr !important; gap:12px !important; }
 }
 
-/* ======= MODO TARJETAS CENTRADAS + ANTI-VERTICAL (móvil) ======= */
+/* Vencimientos centrado móvil */
 @media (max-width: 900px){
-  body{ background:#f3f4f6 !important; }
-
-  /* Ingresos: grid bonito y horizontal */
-  #contenedor-ingresos{
-    display:block;
-  }
-  #contenedor-ingresos .ingresos-wrap{
-    display:grid; grid-template-columns:1fr 1fr; gap:12px; width:100%;
-  }
-  #contenedor-ingresos .ing-card{
-    display:flex; align-items:center; justify-content:space-between; gap:12px;
-    background:#fff; border-radius:14px; box-shadow:0 4px 12px rgba(0,0,0,.1);
-    padding:14px 16px; box-sizing:border-box;
-  }
-  #contenedor-ingresos .ing-title{ font-weight:700; color:#b45309; font-size:1rem; }
-  #contenedor-ingresos .ing-amount{ font-weight:900; font-size:1.3rem; text-align:right; }
-  /* en teléfonos angostos, 1 columna */
-  @media (max-width:560px){
-    #contenedor-ingresos .ingresos-wrap{ grid-template-columns:1fr; }
-  }
-
-  /* normaliza todo lo inyectado (reservas / alumnos) */
-  :where(#contenedor-ingresos, #contenedor-reservas, #contenedor-alumnos) *{
-    writing-mode: horizontal-tb !important;
-    text-orientation: mixed !important;
-    transform: none !important;
-    white-space: normal !important;
-    word-break: normal !important;
-    overflow-wrap: break-word !important;
-    letter-spacing: normal !important;
-    line-height: 1.4 !important;
-    max-width: 100% !important;
-  }
-  :where(#contenedor-ingresos, #contenedor-reservas, #contenedor-alumnos)
-  :is(.vertical,.titulo-vertical,.rot-90,.rotate-90,.rail-vertical,[data-vertical],[data-rail]){
-    display:none !important;
-  }
-  :where(#contenedor-ingresos, #contenedor-reservas, #contenedor-alumnos) [class*="col"],
-  :where(#contenedor-ingresos, #contenedor-reservas, #contenedor-alumnos) [style*="width:"]{
-    width:auto !important; min-width:0 !important; flex:1 1 100% !important; max-width:100% !important;
-  }
+  #card-venc, #card-venc *{ text-align:center !important; }
+  .alert, .notice{ text-align:center !important; }
+  .alert a, .notice a{ display:inline-block !important; }
 }
 
-/* ===== FIX Vencimientos específico para móvil ===== */
-@media (max-width: 900px){
-  #card-venc, #card-venc *{
-    writing-mode: horizontal-tb !important;
-    text-orientation: mixed !important;
-    transform: none !important;
-    white-space: normal !important;
-    word-break: normal !important;
-    overflow-wrap: break-word !important;
-    letter-spacing: normal !important;
-    line-height: 1.4 !important;
-    max-width: 100% !important;
-  }
-  #card-venc ul{ margin:8px 0; padding-left:18px; }
-}
-</style>
-<style>
-/* === NUCLEAR FIX: fuerza horizontal y anchuras fluidas en móvil === */
-@media (max-width: 900px){
-  .force-horizontal, .force-horizontal *{
-    /* no vertical, no rotaciones */
-    writing-mode: horizontal-tb !important;
-    text-orientation: mixed !important;
-    transform: none !important;
-
-    /* texto normal, sin apilar letras */
-    white-space: normal !important;
-    word-break: normal !important;
-    overflow-wrap: break-word !important;
-    letter-spacing: normal !important;
-    line-height: 1.4 !important;
-
-    /* nada de anchos fijos */
-    max-width: 100% !important;
-    width: auto !important;
-  }
-
-  /* listas “normales” (evita que algún flex/col las apile) */
-  .force-horizontal ul,
-  .force-horizontal ol{
-    display: block !important;
-    padding-left: 18px !important;
-    margin: 8px 0 !important;
-  }
-  .force-horizontal li{
-    display: list-item !important;
-    list-style-position: outside !important;
-  }
-
-  /* si algún contenedor viene en flex-col estrecho, lo soltamos */
-  .force-horizontal [style*="flex-direction:column"],
-  .force-horizontal .col,
-  .force-horizontal [class*="col-"]{
-    flex-direction: row !important;
-    flex-wrap: wrap !important;
-    flex: 1 1 100% !important;
-  }
-
-  /* mata rótulos/raíles típicos verticales */
-  .force-horizontal :is(.vertical,.titulo-vertical,.rot-90,.rotate-90,[data-vertical],[data-rail]){
-    display: none !important;
-  }
-}
-</style>
-<style>
-/* ===== Centrado de Vencimientos, Pagos y demás en móvil ===== */
-@media (max-width: 900px){
-
-  /* Centra contenido de tarjetas/avisos */
-  .card,
-  .alert,
-  .notice{
-    text-align: center !important;
-  }
-
-  /* Encabezados de tarjeta apilados y centrados */
-  .card-header{
-    flex-direction: column !important;
-    align-items: center !important;
-    justify-content: center !important;
-    gap: 6px !important;
-  }
-
-  /* KPIs y toolbar centrados */
-  .kpis{ justify-content: center !important; }
-  .toolbar{ justify-content: center !important; }
-
-  /* Campos/controles (ej. fecha en Reservas) centrados */
-  .field{
-    display: flex !important;
-    justify-content: center !important;
-    align-items: center !important;
-    text-align: center !important;
-  }
-  /* El form de fecha no se pegue a la izquierda */
-  #form-fecha{
-    display: inline-flex !important;
-    justify-content: center !important;
-    align-items: center !important;
-  }
-
-  /* Listas dentro de tarjetas: sin sangría y centradas */
-  .card ul{
-    padding-left: 0 !important;
-    margin: 8px 0 !important;
-    text-align: center !important;
-  }
-  .card ul li{
-    list-style: none !important;
-    margin: 6px 0 !important;
-  }
-
-  /* Específico para Vencimientos */
-  #card-venc,
-  #card-venc *{
-    text-align: center !important;
-  }
-
-  /* Avisos de pagos/cuentas: que el link no “tire” a la izquierda */
-  .alert a,
-  .notice a{
-    display: inline-block !important;
-  }
-
-  /* En móvil, cada .card ocupa todo el ancho disponible del grid */
-  .card{ grid-column: 1 / -1 !important; }
-
-  /* Evita justificados raros del grid */
-  .grid{ justify-items: stretch !important; }
-}
-
-/* Conserva el comportamiento normal en desktop */
-@media (min-width: 901px){
-  .card ul{ padding-left: 16px; }
-}
-</style>
-<style>
-/* === Móvil: que no se corten las palabras y todo centrado === */
-@media (max-width: 560px){
-
-  /* Cada tarjeta de ingresos apilada y centrada */
-  #contenedor-ingresos .ing-card{
-    flex-direction: column !important;
-    align-items: center !important;
-    justify-content: center !important;
-    text-align: center !important;
-    padding: 16px 14px !important;
-    gap: 8px !important;
-  }
-
-  /* Títulos más legibles, sin “cortes raros” */
-  #contenedor-ingresos .ing-title{
-    font-size: 1.05rem !important;
-    line-height: 1.35 !important;
-    letter-spacing: 0 !important;
-    white-space: normal !important;
-    word-break: keep-all !important;      /* no partir palabras */
-    overflow-wrap: anywhere !important;   /* permite cortar en espacios si hace falta */
-    hyphens: none !important;             /* sin guiones automáticos */
-    text-wrap: balance;                   /* mejora el salto (si el navegador lo soporta) */
-  }
-
-  /* Monto grande y centrado debajo del título */
-  #contenedor-ingresos .ing-amount{
-    font-size: 1.6rem !important;
-    line-height: 1.2 !important;
-    font-weight: 900 !important;
-    margin-top: 2px !important;
-    display: block !important;
-    text-align: center !important;
-  }
-
-  /* Dos tarjetas por fila en móviles medianos; una por fila en muy chicos */
-  #contenedor-ingresos .ingresos-wrap{
-    grid-template-columns: 1fr !important;   /* una columna por defecto */
-    gap: 12px !important;
-  }
-}
-
-/* Móviles medianos: si te gusta, podés volver a 2 columnas acá */
-@media (min-width: 561px) and (max-width: 900px){
-  #contenedor-ingresos .ingresos-wrap{
-    grid-template-columns: 1fr 1fr !important;
-  }
-}
-
-/* Avisos (saldo negativo / pagos) bien centrados y aireados */
-@media (max-width: 900px){
-  .alert{
-    text-align: center !important;
-    line-height: 1.35 !important;
-    padding: 14px 16px !important;
-  }
-  .alert a{ display: inline-block !important; margin-top: 4px !important; }
+/* Lista asistencias HOY móvil */
+@media (max-width:768px){
+  #alumnos-body .asistencias-hoy{ margin:0 !important; padding:0 !important; list-style:none !important; }
+  #alumnos-body .asis-item{ display:flex !important; justify-content:space-between !important; align-items:center !important; gap:10px !important; padding:8px 10px !important; border-bottom:1px dashed rgba(15,23,42,.12) !important; }
+  #alumnos-body .asis-item .n{ white-space:nowrap !important; overflow:hidden !important; text-overflow:ellipsis !important; }
 }
 </style>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
-/* Quita estilos embebidos y rieles verticales en parciales AJAX */
+/* Sanitiza estilos embebidos en parciales */
 function sanitizeAjaxContainer(root){
   if(!root) return;
   root.querySelectorAll('style, link[rel="stylesheet"]').forEach(n => n.remove());
@@ -458,36 +238,63 @@ function sanitizeAjaxContainer(root){
     el.style.overflowWrap = 'break-word';
     el.style.maxWidth = '100%';
   });
-  root.querySelectorAll('*').forEach(el => {
-    const r = el.getBoundingClientRect();
-    const txt = (el.innerText || '').replace(/\s+/g,'').trim();
-    if (r.width > 0 && r.height > 0 && r.width < 72 && r.height > r.width * 2 && txt.length >= 6){
-      el.style.display = 'none';
-    }
-  });
 }
 
-/* Fetch + sanitización */
-function fetchInto(url, targetId){
-  const el = document.getElementById(targetId);
-  if(!el) return;
+/* Conteo robusto de items (li | .asis-item | [data-item]) */
+function countItems(root){
+  let n = root.querySelectorAll('li').length;
+  if (!n) n = root.querySelectorAll('.asis-item').length;
+  if (!n) n = root.querySelectorAll('[data-item]').length;
+  return n;
+}
+
+/* Carga AJAX SOLO en el cuerpo (no reemplaza headers) */
+function fetchIntoBody(url, bodyId, afterLoad){
+  const bodyEl = document.getElementById(bodyId);
+  if(!bodyEl) return;
+
   fetch(url, {cache:'no-store'})
     .then(r => r.text())
     .then(html => {
-      el.innerHTML = html;
-      sanitizeAjaxContainer(el);
-      new MutationObserver(() => sanitizeAjaxContainer(el))
-        .observe(el, {subtree:true, childList:true});
+      bodyEl.innerHTML = html;
+      sanitizeAjaxContainer(bodyEl);
+      if (typeof afterLoad === 'function') afterLoad(bodyEl);
+
+      new MutationObserver(() => sanitizeAjaxContainer(bodyEl))
+        .observe(bodyEl, {subtree:true, childList:true});
     })
-    .catch(()=>{});
+    .catch(()=>{
+      // opcional: mostrar error dentro del body
+      bodyEl.innerHTML = '<div style="color:#b91c1c">Error al cargar.</div>';
+    });
 }
 
 /* Cargas periódicas */
 function cargarDatos(){
   const f = document.getElementById('fecha')?.value;
-  fetchInto('ajax_ingresos.php', 'contenedor-ingresos');
-  if (f) fetchInto('ajax_reservas.php?fecha='+encodeURIComponent(f), 'contenedor-reservas');
-  fetchInto('ajax_alumnos_hoy.php', 'contenedor-alumnos');
+
+  // Ingresos (montos): carga en #ingresos-body
+  fetchIntoBody('ajax_ingresos.php', 'ingresos-body');
+
+  // Reservas por fecha: carga en #reservas-body
+  if (f) fetchIntoBody('ajax_reservas.php?fecha='+encodeURIComponent(f), 'reservas-body');
+  else   fetchIntoBody('ajax_reservas.php', 'reservas-body');
+
+  // Alumnos de hoy (asistencias): carga en #alumnos-body y actualiza subtítulo
+  fetchIntoBody('ajax_alumnos_hoy.php', 'alumnos-body', (root) => {
+    const sub = document.getElementById('asis-sub');
+    const total = countItems(root);
+    const hoy = new Date().toLocaleDateString('es-AR', { timeZone: 'America/Argentina/San_Luis' });
+
+    const fullText  = total > 0 ? `${total} ingresos — ${hoy}` : `Sin ingresos — ${hoy}`;
+    const isNarrow  = window.matchMedia('(max-width: 520px)').matches;
+    const shortText = total > 0 ? `${total} ingresos` : `Sin ingresos`;
+
+    if (sub){
+      sub.textContent = isNarrow ? shortText : fullText;
+      sub.title = fullText; // tooltip con texto completo
+    }
+  });
 }
 
 function toggleMontos(){
@@ -559,14 +366,13 @@ window.addEventListener('load', () => {
 
   <div class="grid">
 
-    <!-- INGRESOS (AJAX) -->
+    <!-- INGRESOS ($) -->
     <section class="card bloque-monto" id="contenedor-ingresos">
       <div class="card-header">
         <h3 class="card-title">💰 Ingresos</h3>
         <p class="card-sub">Actualiza cada 10s</p>
       </div>
-      <!-- aquí entra ajax_ingresos.php -->
-      <div class="skeleton" style="min-height:120px"></div>
+      <div id="ingresos-body"><div class="skeleton" style="min-height:120px"></div></div>
     </section>
 
     <!-- CUMPLES -->
@@ -584,7 +390,7 @@ window.addEventListener('load', () => {
       </ul>
     </section>
 
-    <!-- VENCIMIENTOS (ahora con id para el fix móvil) -->
+    <!-- VENCIMIENTOS -->
     <section class="card" id="card-venc">
       <div class="card-header">
         <h3 class="card-title">🗓 Vencimientos</h3>
@@ -599,7 +405,7 @@ window.addEventListener('load', () => {
       </ul>
     </section>
 
-    <!-- RESERVAS (AJAX) -->
+    <!-- RESERVAS (AJAX por fecha) -->
     <section class="card" style="grid-column:span 8">
       <div class="card-header">
         <h3 class="card-title">📋 Reservas del día</h3>
@@ -610,16 +416,16 @@ window.addEventListener('load', () => {
           </form>
         </div>
       </div>
-      <div id="contenedor-reservas"><div class="skeleton" style="min-height:110px"></div></div>
+      <div id="reservas-body"><div class="skeleton" style="min-height:110px"></div></div>
     </section>
 
-    <!-- ALUMNOS (AJAX) -->
+    <!-- ALUMNOS (ASISTENCIAS HOY vía ajax_alumnos_hoy.php) -->
     <section class="card" id="contenedor-alumnos">
       <div class="card-header">
         <h3 class="card-title">🧑‍🎓 Alumnos de hoy</h3>
-        <p class="card-sub">Asistencias/ingresos</p>
+        <p class="card-sub" id="asis-sub">Cargando…</p>
       </div>
-      <div class="skeleton" style="min-height:110px"></div>
+      <div id="alumnos-body"><div class="skeleton" style="min-height:110px"></div></div>
     </section>
 
     <!-- DISCIPLINAS -->
