@@ -205,10 +205,8 @@ ul{ margin:0; padding-left:16px; } li{ margin:6px 0; }
 @media (max-width: 900px){
   body{ background:#f3f4f6 !important; }
 
-  /* Ingresos: grid bonito y horizontal */
-  #contenedor-ingresos{
-    display:block;
-  }
+  /* Ingresos (dinero): grilla adaptable */
+  #contenedor-ingresos{ display:block; }
   #contenedor-ingresos .ingresos-wrap{
     display:grid; grid-template-columns:1fr 1fr; gap:12px; width:100%;
   }
@@ -219,12 +217,9 @@ ul{ margin:0; padding-left:16px; } li{ margin:6px 0; }
   }
   #contenedor-ingresos .ing-title{ font-weight:700; color:#b45309; font-size:1rem; }
   #contenedor-ingresos .ing-amount{ font-weight:900; font-size:1.3rem; text-align:right; }
-  /* en teléfonos angostos, 1 columna */
-  @media (max-width:560px){
-    #contenedor-ingresos .ingresos-wrap{ grid-template-columns:1fr; }
-  }
+  @media (max-width:560px){ #contenedor-ingresos .ingresos-wrap{ grid-template-columns:1fr; } }
 
-  /* normaliza todo lo inyectado (reservas / alumnos) */
+  /* Normaliza contenido AJAX (reservas / alumnos) */
   :where(#contenedor-ingresos, #contenedor-reservas, #contenedor-alumnos) *{
     writing-mode: horizontal-tb !important;
     text-orientation: mixed !important;
@@ -237,209 +232,37 @@ ul{ margin:0; padding-left:16px; } li{ margin:6px 0; }
     max-width: 100% !important;
   }
   :where(#contenedor-ingresos, #contenedor-reservas, #contenedor-alumnos)
-  :is(.vertical,.titulo-vertical,.rot-90,.rotate-90,.rail-vertical,[data-vertical],[data-rail]){
-    display:none !important;
-  }
-  :where(#contenedor-ingresos, #contenedor-reservas, #contenedor-alumnos) [class*="col"],
-  :where(#contenedor-ingresos, #contenedor-reservas, #contenedor-alumnos) [style*="width:"]{
-    width:auto !important; min-width:0 !important; flex:1 1 100% !important; max-width:100% !important;
-  }
+  :is(.vertical,.titulo-vertical,.rot-90,.rotate-90,.rail-vertical,[data-vertical],[data-rail]){ display:none !important; }
+
+  /* Centrado general tarjetas/avisos */
+  .card,.alert,.notice{ text-align:center !important; }
+  .card-header{ flex-direction:column !important; align-items:center !important; gap:6px !important; }
+  .kpis{ justify-content:center !important; }
+  .toolbar{ justify-content:center !important; }
+
+  /* Listas dentro de tarjetas centradas */
+  .card ul{ padding-left:0 !important; margin:8px 0 !important; text-align:center !important; }
+  .card ul li{ list-style:none !important; margin:6px 0 !important; }
+
+  /* Vencimientos centrado */
+  #card-venc, #card-venc *{ text-align:center !important; }
 }
 
-/* ===== FIX Vencimientos específico para móvil ===== */
-@media (max-width: 900px){
-  #card-venc, #card-venc *{
-    writing-mode: horizontal-tb !important;
-    text-orientation: mixed !important;
-    transform: none !important;
-    white-space: normal !important;
-    word-break: normal !important;
-    overflow-wrap: break-word !important;
-    letter-spacing: normal !important;
-    line-height: 1.4 !important;
-    max-width: 100% !important;
-  }
-  #card-venc ul{ margin:8px 0; padding-left:18px; }
-}
-</style>
-<style>
-/* === NUCLEAR FIX: fuerza horizontal y anchuras fluidas en móvil === */
-@media (max-width: 900px){
-  .force-horizontal, .force-horizontal *{
-    /* no vertical, no rotaciones */
-    writing-mode: horizontal-tb !important;
-    text-orientation: mixed !important;
-    transform: none !important;
-
-    /* texto normal, sin apilar letras */
-    white-space: normal !important;
-    word-break: normal !important;
-    overflow-wrap: break-word !important;
-    letter-spacing: normal !important;
-    line-height: 1.4 !important;
-
-    /* nada de anchos fijos */
-    max-width: 100% !important;
-    width: auto !important;
-  }
-
-  /* listas “normales” (evita que algún flex/col las apile) */
-  .force-horizontal ul,
-  .force-horizontal ol{
-    display: block !important;
-    padding-left: 18px !important;
-    margin: 8px 0 !important;
-  }
-  .force-horizontal li{
-    display: list-item !important;
-    list-style-position: outside !important;
-  }
-
-  /* si algún contenedor viene en flex-col estrecho, lo soltamos */
-  .force-horizontal [style*="flex-direction:column"],
-  .force-horizontal .col,
-  .force-horizontal [class*="col-"]{
-    flex-direction: row !important;
-    flex-wrap: wrap !important;
-    flex: 1 1 100% !important;
-  }
-
-  /* mata rótulos/raíles típicos verticales */
-  .force-horizontal :is(.vertical,.titulo-vertical,.rot-90,.rotate-90,[data-vertical],[data-rail]){
-    display: none !important;
-  }
-}
-</style>
-<style>
-/* ===== Centrado de Vencimientos, Pagos y demás en móvil ===== */
-@media (max-width: 900px){
-
-  /* Centra contenido de tarjetas/avisos */
-  .card,
-  .alert,
-  .notice{
-    text-align: center !important;
-  }
-
-  /* Encabezados de tarjeta apilados y centrados */
-  .card-header{
-    flex-direction: column !important;
-    align-items: center !important;
-    justify-content: center !important;
-    gap: 6px !important;
-  }
-
-  /* KPIs y toolbar centrados */
-  .kpis{ justify-content: center !important; }
-  .toolbar{ justify-content: center !important; }
-
-  /* Campos/controles (ej. fecha en Reservas) centrados */
-  .field{
-    display: flex !important;
-    justify-content: center !important;
-    align-items: center !important;
-    text-align: center !important;
-  }
-  /* El form de fecha no se pegue a la izquierda */
-  #form-fecha{
-    display: inline-flex !important;
-    justify-content: center !important;
-    align-items: center !important;
-  }
-
-  /* Listas dentro de tarjetas: sin sangría y centradas */
-  .card ul{
-    padding-left: 0 !important;
-    margin: 8px 0 !important;
-    text-align: center !important;
-  }
-  .card ul li{
-    list-style: none !important;
-    margin: 6px 0 !important;
-  }
-
-  /* Específico para Vencimientos */
-  #card-venc,
-  #card-venc *{
-    text-align: center !important;
-  }
-
-  /* Avisos de pagos/cuentas: que el link no “tire” a la izquierda */
-  .alert a,
-  .notice a{
-    display: inline-block !important;
-  }
-
-  /* En móvil, cada .card ocupa todo el ancho disponible del grid */
-  .card{ grid-column: 1 / -1 !important; }
-
-  /* Evita justificados raros del grid */
-  .grid{ justify-items: stretch !important; }
+/* Reservas más compactas (móvil) */
+@media (max-width:768px){
+  #contenedor-reservas .card{ padding:10px 12px !important; border-radius:14px !important; }
+  #contenedor-reservas .card-header{ margin-bottom:6px !important; gap:6px !important; flex-direction:row !important; align-items:baseline !important; }
+  #contenedor-reservas .card-title{ font-size:1.05rem !important; margin:0 !important; }
+  #contenedor-reservas .card-sub{ font-size:.9rem !important; margin:0 !important; }
 }
 
-/* Conserva el comportamiento normal en desktop */
-@media (min-width: 901px){
-  .card ul{ padding-left: 16px; }
-}
-</style>
-<style>
-/* === Móvil: que no se corten las palabras y todo centrado === */
-@media (max-width: 560px){
-
-  /* Cada tarjeta de ingresos apilada y centrada */
-  #contenedor-ingresos .ing-card{
-    flex-direction: column !important;
-    align-items: center !important;
-    justify-content: center !important;
-    text-align: center !important;
-    padding: 16px 14px !important;
-    gap: 8px !important;
-  }
-
-  /* Títulos más legibles, sin “cortes raros” */
+/* Ingresos (dinero) títulos sin cortes (móvil chico) */
+@media (max-width:560px){
+  #contenedor-ingresos .ing-card{ flex-direction:column !important; align-items:center !important; text-align:center !important; gap:8px !important; padding:14px 12px !important; }
   #contenedor-ingresos .ing-title{
-    font-size: 1.05rem !important;
-    line-height: 1.35 !important;
-    letter-spacing: 0 !important;
-    white-space: normal !important;
-    word-break: keep-all !important;      /* no partir palabras */
-    overflow-wrap: anywhere !important;   /* permite cortar en espacios si hace falta */
-    hyphens: none !important;             /* sin guiones automáticos */
-    text-wrap: balance;                   /* mejora el salto (si el navegador lo soporta) */
+    font-size:.98rem !important; line-height:1.25 !important; white-space:normal !important; word-break:keep-all !important; overflow-wrap:anywhere !important; hyphens:none !important; text-wrap:balance;
   }
-
-  /* Monto grande y centrado debajo del título */
-  #contenedor-ingresos .ing-amount{
-    font-size: 1.6rem !important;
-    line-height: 1.2 !important;
-    font-weight: 900 !important;
-    margin-top: 2px !important;
-    display: block !important;
-    text-align: center !important;
-  }
-
-  /* Dos tarjetas por fila en móviles medianos; una por fila en muy chicos */
-  #contenedor-ingresos .ingresos-wrap{
-    grid-template-columns: 1fr !important;   /* una columna por defecto */
-    gap: 12px !important;
-  }
-}
-
-/* Móviles medianos: si te gusta, podés volver a 2 columnas acá */
-@media (min-width: 561px) and (max-width: 900px){
-  #contenedor-ingresos .ingresos-wrap{
-    grid-template-columns: 1fr 1fr !important;
-  }
-}
-
-/* Avisos (saldo negativo / pagos) bien centrados y aireados */
-@media (max-width: 900px){
-  .alert{
-    text-align: center !important;
-    line-height: 1.35 !important;
-    padding: 14px 16px !important;
-  }
-  .alert a{ display: inline-block !important; margin-top: 4px !important; }
+  #contenedor-ingresos .ing-amount{ font-size:1.55rem !important; line-height:1.15 !important; font-weight:900 !important; }
 }
 </style>
 
@@ -457,13 +280,6 @@ function sanitizeAjaxContainer(root){
     el.style.wordBreak = 'normal';
     el.style.overflowWrap = 'break-word';
     el.style.maxWidth = '100%';
-  });
-  root.querySelectorAll('*').forEach(el => {
-    const r = el.getBoundingClientRect();
-    const txt = (el.innerText || '').replace(/\s+/g,'').trim();
-    if (r.width > 0 && r.height > 0 && r.width < 72 && r.height > r.width * 2 && txt.length >= 6){
-      el.style.display = 'none';
-    }
   });
 }
 
@@ -485,9 +301,9 @@ function fetchInto(url, targetId){
 /* Cargas periódicas */
 function cargarDatos(){
   const f = document.getElementById('fecha')?.value;
-  fetchInto('ajax_ingresos.php', 'contenedor-ingresos');
+  fetchInto('ajax_ingresos.php', 'contenedor-ingresos');              // $ del día/mes
   if (f) fetchInto('ajax_reservas.php?fecha='+encodeURIComponent(f), 'contenedor-reservas');
-  fetchInto('ajax_alumnos_hoy.php', 'contenedor-alumnos');
+  fetchInto('ajax_alumnos_hoy.php', 'contenedor-alumnos');            // ASISTENCIAS de hoy (nombres+hora)
 }
 
 function toggleMontos(){
@@ -559,13 +375,12 @@ window.addEventListener('load', () => {
 
   <div class="grid">
 
-    <!-- INGRESOS (AJAX) -->
+    <!-- INGRESOS ($) - AJAX -->
     <section class="card bloque-monto" id="contenedor-ingresos">
       <div class="card-header">
         <h3 class="card-title">💰 Ingresos</h3>
         <p class="card-sub">Actualiza cada 10s</p>
       </div>
-      <!-- aquí entra ajax_ingresos.php -->
       <div class="skeleton" style="min-height:120px"></div>
     </section>
 
@@ -584,7 +399,7 @@ window.addEventListener('load', () => {
       </ul>
     </section>
 
-    <!-- VENCIMIENTOS (ahora con id para el fix móvil) -->
+    <!-- VENCIMIENTOS -->
     <section class="card" id="card-venc">
       <div class="card-header">
         <h3 class="card-title">🗓 Vencimientos</h3>
@@ -603,7 +418,7 @@ window.addEventListener('load', () => {
     <section class="card" style="grid-column:span 8">
       <div class="card-header">
         <h3 class="card-title">📋 Reservas del día</h3>
-        <div class="field" style="display:flex;align-items:center;gap:8px">
+      <div class="field" style="display:flex;align-items:center;gap:8px">
           <label for="fecha" class="mut">Ver día</label>
           <form id="form-fecha" method="GET" oninput="this.submit()">
             <input type="date" id="fecha" name="fecha" value="<?= htmlspecialchars($fecha_filtro) ?>">
@@ -613,12 +428,8 @@ window.addEventListener('load', () => {
       <div id="contenedor-reservas"><div class="skeleton" style="min-height:110px"></div></div>
     </section>
 
-    <!-- ALUMNOS (AJAX) -->
+    <!-- ALUMNOS (AJAX) — SIN HEADER para que se vea sólo la lista -->
     <section class="card" id="contenedor-alumnos">
-      <div class="card-header">
-        <h3 class="card-title">🧑‍🎓 Alumnos de hoy</h3>
-        <p class="card-sub">Asistencias/ingresos</p>
-      </div>
       <div class="skeleton" style="min-height:110px"></div>
     </section>
 
