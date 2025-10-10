@@ -263,6 +263,59 @@ body{
 #contenedor-ingresos [class*="amount"] {
   flex:0 0 auto !important; font-weight:900 !important; font-size:1.5rem !important; white-space:nowrap !important; text-align:right !important;
 }
+/* ====== FIX ingresos SOLO en móvil ====== */
+@media (max-width: 900px){
+  /* nada en vertical, sin rotaciones */
+  #contenedor-ingresos, 
+  #contenedor-ingresos *{
+    writing-mode: horizontal-tb !important;
+    text-orientation: mixed !important;
+    transform: none !important;
+    white-space: normal !important;
+    line-height: 1.25 !important;
+  }
+
+  /* oculta <br> que fuerzan columnas verticales */
+  #contenedor-ingresos br{ 
+    display: none !important; 
+  }
+
+  /* cada fila de ingreso: título a la izq, monto a la der */
+  #contenedor-ingresos .ing-card,
+  #contenedor-ingresos .ing-row,
+  #contenedor-ingresos .row,
+  #contenedor-ingresos > div > div{
+    display: flex !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    gap: 12px !important;
+    padding: 12px 14px !important;
+  }
+
+  /* título compacto y horizontal */
+  #contenedor-ingresos .ing-titulo,
+  #contenedor-ingresos .titulo,
+  #contenedor-ingresos .label,
+  #contenedor-ingresos .txt{
+    display: inline-flex !important;
+    align-items: center !important;
+    gap: 6px !important;
+    white-space: nowrap !important;
+    color: #b45309 !important;
+    font-weight: 800 !important;
+  }
+
+  /* monto grande a la derecha */
+  #contenedor-ingresos .ing-monto,
+  #contenedor-ingresos .monto,
+  #contenedor-ingresos .amount{
+    font-size: 1.6rem !important;
+    font-weight: 900 !important;
+    white-space: nowrap !important;
+    text-align: right !important;
+  }
+}
+
 </style>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
