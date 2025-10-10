@@ -183,9 +183,6 @@ body{
 .kpi-label{ color:var(--brand); font-size:.8rem; }
 .kpi-value{ font-weight:900; font-size:1.8rem; }
 
-.chart-wrap{ aspect-ratio:16/9; position:relative; width:100%; max-width:820px; margin:0 auto; }
-#disciplinasChart{ position:absolute; inset:0; }
-
 /* ====== Móvil (centrado y columnas completas) ====== */
 @media (max-width:900px){
   .card,.alert,.notice{ text-align:center; }
@@ -224,11 +221,31 @@ body{
   #contenedor-reservas .res-body > div{ display:flex; gap:6px; line-height:1.25; }
   @media (max-width:520px){ #contenedor-reservas .res-body{ grid-template-columns:1fr; } }
 }
+
+/* ===== CENTRAR LAS 3 TARJETAS ===== */
+#contenedor-ingresos,
+#card-venc,
+#card-cumples { text-align:center; }
+
+/* ===== MONTO DE INGRESOS: OCULTO POR DEFECTO ===== */
+body.ocultar-montos #ingresos-body .monto,
+body.ocultar-montos #ingresos-body .amount,
+body.ocultar-montos #ingresos-body [class*="monto"]{
+  filter: blur(10px);
+  pointer-events: none;
+  user-select: none;
+}
+
+/* En PC también centramos el contenido dentro de cada fila de ingreso */
+#ingresos-body .box,
+#ingresos-body .ing-card{
+  display:flex; flex-direction:column; align-items:center; gap:6px;
+}
 </style>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
-<body>
+<body class="ocultar-montos"><!-- ← montos ocultos al cargar -->
 
 <div class="wrap">
   <div class="header">
@@ -274,14 +291,14 @@ body{
     </div>
   <?php endif; ?>
 
-  <div class="toolbar">
-    <span id="icono-ojo" class="icon-btn" title="Mostrar/Ocultar montos" onclick="document.querySelectorAll('.bloque-monto').forEach(b=>b.classList.toggle('hidden'))">👁️‍🗨️</span>
+  <div class="toolbar" style="display:flex; gap:10px; align-items:center">
+    <button id="btn-ojo" class="btn-mini" title="Mostrar/Ocultar montos" onclick="toggleMontos()">👁️‍🗨️ Ver montos</button>
   </div>
 
   <div class="grid">
 
     <!-- INGRESOS (AJAX) -->
-    <section class="card bloque-monto" id="contenedor-ingresos">
+    <section class="card" id="contenedor-ingresos">
       <div class="card-header">
         <h3 class="card-title">💰 Ingresos</h3>
         <p class="card-sub">Actualiza cada 10s</p>
@@ -290,7 +307,7 @@ body{
     </section>
 
     <!-- CUMPLES -->
-    <section class="card">
+    <section class="card" id="card-cumples">
       <div class="card-header">
         <h3 class="card-title">🎂 Próximos Cumpleaños</h3>
         <p class="card-sub">Top 5 próximos</p>
@@ -358,6 +375,14 @@ body{
 </div>
 
 <script>
+/* Mostrar/Ocultar montos de ingresos */
+function toggleMontos(){
+  document.body.classList.toggle('ocultar-montos');
+  const btn = document.getElementById('btn-ojo');
+  const oculto = document.body.classList.contains('ocultar-montos');
+  btn.textContent = oculto ? '👁️‍🗨️ Ver montos' : '🙈 Ocultar montos';
+}
+
 /* Inyecta HTML en el body indicado */
 function fetchIntoBody(url, bodyId, afterLoad){
   const el = document.getElementById(bodyId);
@@ -419,7 +444,7 @@ function normalizeReservas(root){
 function cargarDatos(){
   const f = document.getElementById('fecha')?.value;
 
-  // Ingresos: carga directa (el ajax ya viene correcto y responsive)
+  // Ingresos: el ajax que ya funciona
   fetchIntoBody('ajax_ingresos.php', 'ingresos-body');
 
   if (f) fetchIntoBody('ajax_reservas.php?fecha='+encodeURIComponent(f), 'reservas-body', normalizeReservas);
