@@ -224,87 +224,6 @@ body{
   #contenedor-reservas .res-body > div{ display:flex; gap:6px; line-height:1.25; }
   @media (max-width:520px){ #contenedor-reservas .res-body{ grid-template-columns:1fr; } }
 }
-
-/* ====== FIX SOLO INGRESOS (evitar vertical y cortes) ====== */
-#contenedor-ingresos *{
-  white-space: normal !important;
-  word-break: keep-all !important;
-  overflow-wrap: anywhere !important;
-  letter-spacing: normal !important;
-  line-height: 1.25 !important;
-}
-#contenedor-ingresos [style*="position:absolute"],
-#contenedor-ingresos .abs, 
-#contenedor-ingresos .absolute {
-  position: static !important;
-  left:auto !important; top:auto !important; right:auto !important; bottom:auto !important;
-  transform:none !important;
-}
-#contenedor-ingresos .ing-row,
-#contenedor-ingresos .ing-card,
-#contenedor-ingresos .row,
-#contenedor-ingresos > div > div {
-  display:flex !important; align-items:center !important; justify-content:space-between !important;
-  gap:12px !important; padding:12px 14px !important; border-radius:14px !important; background:#fff !important;
-}
-#contenedor-ingresos .ing-titulo,
-#contenedor-ingresos .titulo,
-#contenedor-ingresos .left,
-#contenedor-ingresos .label,
-#contenedor-ingresos .txt,
-#contenedor-ingresos .desc {
-  flex:1 1 auto !important; min-width:0 !important; color:#b45309 !important; font-weight:800 !important;
-}
-#contenedor-ingresos .ing-monto,
-#contenedor-ingresos .monto,
-#contenedor-ingresos .amount,
-#contenedor-ingresos .right,
-#contenedor-ingresos [class*="monto"],
-#contenedor-ingresos [class*="amount"] {
-  flex:0 0 auto !important; font-weight:900 !important; font-size:1.5rem !important; white-space:nowrap !important; text-align:right !important;
-}
-/* En móvil, fuerza horizontal y quita <br> que apilan letras */
-@media (max-width: 900px){
-  #contenedor-ingresos, 
-  #contenedor-ingresos *{
-    writing-mode: horizontal-tb !important;
-    text-orientation: mixed !important;
-    transform: none !important;
-    white-space: normal !important;
-    line-height: 1.25 !important;
-  }
-  #contenedor-ingresos br{ display: none !important; }
-
-  #contenedor-ingresos .ing-card,
-  #contenedor-ingresos .ing-row,
-  #contenedor-ingresos .row,
-  #contenedor-ingresos > div > div{
-    display: flex !important;
-    align-items: center !important;
-    justify-content: space-between !important;
-    gap: 12px !important;
-    padding: 12px 14px !important;
-  }
-  #contenedor-ingresos .ing-titulo,
-  #contenedor-ingresos .titulo,
-  #contenedor-ingresos .label,
-  #contenedor-ingresos .txt{
-    display: inline-flex !important;
-    align-items: center !important;
-    gap: 6px !important;
-    white-space: nowrap !important;
-    color: #b45309 !important;
-    font-weight: 800 !important;
-  }
-  #contenedor-ingresos .ing-monto,
-  #contenedor-ingresos .monto,
-  #contenedor-ingresos .amount{
-    font-size: 1.6rem !important;
-    font-weight: 900 !important;
-    white-space: nowrap !important;
-    text-align: right !important;
-  }
-}
 </style>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -496,40 +415,13 @@ function normalizeReservas(root){
   });
 }
 
-/* ===== INGRESOS: evitar vertical/rotaciones y <br> que cortan el título ===== */
-function normalizeIngresos(root){
-  if(!root) return;
-
-  // Quitar estilos inline que fuerzan vertical/rotación
-  root.querySelectorAll('[style]').forEach(el=>{
-    const s = el.getAttribute('style') || '';
-    if (/writing-mode|text-orientation|rotate|transform/i.test(s)){
-      el.style.writingMode = 'horizontal-tb';
-      el.style.textOrientation = 'mixed';
-      el.style.transform = 'none';
-    }
-  });
-
-  // Quitar <br> que apilan “Ingresos del día”
-  root.querySelectorAll('br').forEach(br=>br.remove());
-
-  // Si vino con filas/cols estrechas, pasarlo a fila horizontal
-  root.querySelectorAll('.row,[class*="col"]').forEach(el=>{
-    el.style.display='flex';
-    el.style.flexDirection='row';
-    el.style.flexWrap='nowrap';
-    el.style.alignItems='center';
-    el.style.justifyContent='space-between';
-    el.style.gap='12px';
-    el.style.width='auto';
-    el.style.minWidth='0';
-  });
-}
-
 /* ===== Cargas periódicas ===== */
 function cargarDatos(){
   const f = document.getElementById('fecha')?.value;
-  fetchIntoBody('ajax_ingresos.php', 'ingresos-body', normalizeIngresos);                         // Ingresos con normalización
+
+  // Ingresos: carga directa (el ajax ya viene correcto y responsive)
+  fetchIntoBody('ajax_ingresos.php', 'ingresos-body');
+
   if (f) fetchIntoBody('ajax_reservas.php?fecha='+encodeURIComponent(f), 'reservas-body', normalizeReservas);
   fetchIntoBody('ajax_alumnos_hoy.php', 'alumnos-body', normalizeAlumnos);
 }
