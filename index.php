@@ -262,6 +262,126 @@ ul{ margin:0; padding-left:16px; } li{ margin:6px 0; }
   #card-venc ul{ margin:8px 0; padding-left:18px; }
 }
 </style>
+<style>
+/* === NUCLEAR FIX: fuerza horizontal y anchuras fluidas en móvil === */
+@media (max-width: 900px){
+  .force-horizontal, .force-horizontal *{
+    /* no vertical, no rotaciones */
+    writing-mode: horizontal-tb !important;
+    text-orientation: mixed !important;
+    transform: none !important;
+
+    /* texto normal, sin apilar letras */
+    white-space: normal !important;
+    word-break: normal !important;
+    overflow-wrap: break-word !important;
+    letter-spacing: normal !important;
+    line-height: 1.4 !important;
+
+    /* nada de anchos fijos */
+    max-width: 100% !important;
+    width: auto !important;
+  }
+
+  /* listas “normales” (evita que algún flex/col las apile) */
+  .force-horizontal ul,
+  .force-horizontal ol{
+    display: block !important;
+    padding-left: 18px !important;
+    margin: 8px 0 !important;
+  }
+  .force-horizontal li{
+    display: list-item !important;
+    list-style-position: outside !important;
+  }
+
+  /* si algún contenedor viene en flex-col estrecho, lo soltamos */
+  .force-horizontal [style*="flex-direction:column"],
+  .force-horizontal .col,
+  .force-horizontal [class*="col-"]{
+    flex-direction: row !important;
+    flex-wrap: wrap !important;
+    flex: 1 1 100% !important;
+  }
+
+  /* mata rótulos/raíles típicos verticales */
+  .force-horizontal :is(.vertical,.titulo-vertical,.rot-90,.rotate-90,[data-vertical],[data-rail]){
+    display: none !important;
+  }
+}
+</style>
+<style>
+/* ===== Centrado de Vencimientos, Pagos y demás en móvil ===== */
+@media (max-width: 900px){
+
+  /* Centra contenido de tarjetas/avisos */
+  .card,
+  .alert,
+  .notice{
+    text-align: center !important;
+  }
+
+  /* Encabezados de tarjeta apilados y centrados */
+  .card-header{
+    flex-direction: column !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 6px !important;
+  }
+
+  /* KPIs y toolbar centrados */
+  .kpis{ justify-content: center !important; }
+  .toolbar{ justify-content: center !important; }
+
+  /* Campos/controles (ej. fecha en Reservas) centrados */
+  .field{
+    display: flex !important;
+    justify-content: center !important;
+    align-items: center !important;
+    text-align: center !important;
+  }
+  /* El form de fecha no se pegue a la izquierda */
+  #form-fecha{
+    display: inline-flex !important;
+    justify-content: center !important;
+    align-items: center !important;
+  }
+
+  /* Listas dentro de tarjetas: sin sangría y centradas */
+  .card ul{
+    padding-left: 0 !important;
+    margin: 8px 0 !important;
+    text-align: center !important;
+  }
+  .card ul li{
+    list-style: none !important;
+    margin: 6px 0 !important;
+  }
+
+  /* Específico para Vencimientos */
+  #card-venc,
+  #card-venc *{
+    text-align: center !important;
+  }
+
+  /* Avisos de pagos/cuentas: que el link no “tire” a la izquierda */
+  .alert a,
+  .notice a{
+    display: inline-block !important;
+  }
+
+  /* En móvil, cada .card ocupa todo el ancho disponible del grid */
+  .card{ grid-column: 1 / -1 !important; }
+
+  /* Evita justificados raros del grid */
+  .grid{ justify-items: stretch !important; }
+}
+
+/* Conserva el comportamiento normal en desktop */
+@media (min-width: 901px){
+  .card ul{ padding-left: 16px; }
+}
+</style>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
