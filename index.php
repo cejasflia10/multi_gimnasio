@@ -138,8 +138,8 @@ if (!preg_match('/^\d{4}-\d{2}-\d{2}$/',$fecha_filtro)) $fecha_filtro=date('Y-m-
 :root{
   --bg1:#f5f7fb; --bg2:#eef3f9; --ink:#0f172a; --mut:#475569;
   --brand:#b45309; --brand-2:#f59e0b; --brand-3:#fbbf24;
-  --ok:#16a34a; --warn:#f59e0b; --card:#fff; --stroke:rgba(15,23,42,.08);
-  --shadow:0 10px 28px rgba(2,6,23,.08); --radius:18px; --gap:18px;
+  --card:#fff; --stroke:rgba(15,23,42,.08); --shadow:0 10px 28px rgba(2,6,23,.08);
+  --gap:18px;
 }
 *{ box-sizing:border-box }
 html,body{ height:100% }
@@ -171,147 +171,63 @@ body{
 @media (max-width:1100px){ .grid{ grid-template-columns:repeat(8,1fr); } }
 @media (max-width:768px){  .grid{ grid-template-columns:repeat(4,1fr); } }
 
-/* Cards / elementos base */
+/* Cards */
 .card,.notice,.alert,.kpi,.field{ background:var(--card); border:1px solid var(--stroke); border-radius:18px; padding:16px; box-shadow:var(--shadow); }
 .card{ grid-column:span 4; }
-.card-header{ display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; }
-.card-title{ margin:0; color:var(--brand); font-size:1.05rem; flex:1 1 auto; min-width:0; z-index:1; }
-.card-sub{ margin:0; color:#64748b; font-size:.9rem; flex:0 1 320px; min-width:180px; text-align:right; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-@media (max-width:520px){
-  .card-header{ flex-direction:column; align-items:flex-start; gap:6px; }
-  .card-sub{ width:100%; text-align:left; white-space:normal; }
-}
+.card-header{ display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; gap:12px; }
+.card-title{ margin:0; color:var(--brand); font-size:1.05rem; }
+.card-sub{ margin:0; color:#64748b; font-size:.9rem; }
 
 .kpis{ display:flex; gap:12px; flex-wrap:wrap; margin:10px 0 16px; }
 .kpi{ min-width:160px; background:linear-gradient(180deg,#fff,#f8fafc); }
 .kpi-label{ color:var(--brand); font-size:.8rem; }
 .kpi-value{ font-weight:900; font-size:1.8rem; }
 
-.notice-title{ font-weight:700; color:var(--brand); margin-bottom:6px; }
-.alert{ border:1px dashed #f59e0b66; background:linear-gradient(180deg,#fff,#f9fafb); }
-ul{ margin:0; padding-left:16px; } li{ margin:6px 0; }
+.chart-wrap{ aspect-ratio:16/9; position:relative; width:100%; max-width:820px; margin:0 auto; }
+#disciplinasChart{ position:absolute; inset:0; }
 
-/* Ingresos ($) móvil */
-@media (max-width:560px){
-  #ingresos-body .ingresos-wrap{ display:grid !important; grid-template-columns:1fr !important; gap:12px !important; }
-  #ingresos-body .ing-card{
-    display:flex !important; flex-direction:column !important; align-items:center !important;
-    text-align:center !important; gap:8px !important; padding:14px 12px !important;
+/* ====== Móvil: centrado simple y sin cosas raras ====== */
+@media (max-width:900px){
+  .card,.alert,.notice{ text-align:center; }
+  .card-header{ flex-direction:column; align-items:center; gap:6px; }
+  .kpis{ justify-content:center; }
+  .toolbar{ display:flex; justify-content:center; }
+  .card{ grid-column:1 / -1; }
+}
+
+/* ====== ALUMNOS HOY: lista limpia nombre/hora ====== */
+#contenedor-alumnos ul.asistencias-hoy{ list-style:none; margin:0; padding:0; }
+#contenedor-alumnos ul.asistencias-hoy li{
+  display:flex; justify-content:space-between; align-items:baseline;
+  gap:10px; padding:8px 6px; border-bottom:1px dashed rgba(15,23,42,.12);
+}
+#contenedor-alumnos ul.asistencias-hoy li:last-child{ border-bottom:none; }
+#contenedor-alumnos .n{ flex:1 1 auto; min-width:0; white-space:normal; word-break:keep-all; overflow-wrap:anywhere; line-height:1.25; }
+#contenedor-alumnos .h{ flex:0 0 auto; font-variant-numeric:tabular-nums; white-space:nowrap; }
+
+/* ====== RESERVAS: compacto ====== */
+@media (max-width:900px){
+  #contenedor-reservas .res-card{
+    border:1px solid rgba(15,23,42,.08);
+    border-radius:16px; box-shadow:0 6px 16px rgba(2,6,23,.06);
+    padding:10px 12px; margin:10px 0; background:#fff;
+    text-align:left;
   }
-  #ingresos-body .ing-title{
-    font-size:.98rem !important; line-height:1.25 !important;
-    white-space:normal !important; word-break:keep-all !important; overflow-wrap:anywhere !important;
+  #contenedor-reservas .res-head{
+    display:flex; align-items:center; gap:8px;
+    font-weight:800; color:#b45309; font-size:1.02rem; line-height:1.2;
+    margin-bottom:6px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
   }
-  #ingresos-body .ing-amount{ font-size:1.55rem !important; line-height:1.15 !important; font-weight:900 !important; }
-}
-@media (min-width:561px) and (max-width:900px){
-  #ingresos-body .ingresos-wrap{ display:grid !important; grid-template-columns:1fr 1fr !important; gap:12px !important; }
-}
-
-/* Vencimientos centrado móvil */
-@media (max-width: 900px){
-  #card-venc, #card-venc *{ text-align:center !important; }
-  .alert, .notice{ text-align:center !important; }
-  .alert a, .notice a{ display:inline-block !important; }
-}
-
-/* Lista asistencias HOY móvil */
-@media (max-width:768px){
-  #alumnos-body .asistencias-hoy{ margin:0 !important; padding:0 !important; list-style:none !important; }
-  #alumnos-body .asis-item{ display:flex !important; justify-content:space-between !important; align-items:center !important; gap:10px !important; padding:8px 10px !important; border-bottom:1px dashed rgba(15,23,42,.12) !important; }
-  #alumnos-body .asis-item .n{ white-space:nowrap !important; overflow:hidden !important; text-overflow:ellipsis !important; }
+  #contenedor-reservas .res-body{
+    display:grid; grid-template-columns:1fr 1fr; gap:8px; align-items:start;
+  }
+  #contenedor-reservas .res-body > div{ display:flex; gap:6px; line-height:1.25; }
+  @media (max-width:520px){ #contenedor-reservas .res-body{ grid-template-columns:1fr; } }
 }
 </style>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-<script>
-/* Sanitiza estilos embebidos en parciales */
-function sanitizeAjaxContainer(root){
-  if(!root) return;
-  root.querySelectorAll('style, link[rel="stylesheet"]').forEach(n => n.remove());
-  root.querySelectorAll('[style]').forEach(el => {
-    el.style.writingMode = 'horizontal-tb';
-    el.style.textOrientation = 'mixed';
-    el.style.transform = 'none';
-    el.style.whiteSpace = 'normal';
-    el.style.wordBreak = 'normal';
-    el.style.overflowWrap = 'break-word';
-    el.style.maxWidth = '100%';
-  });
-}
-
-/* Conteo robusto de items (li | .asis-item | [data-item]) */
-function countItems(root){
-  let n = root.querySelectorAll('li').length;
-  if (!n) n = root.querySelectorAll('.asis-item').length;
-  if (!n) n = root.querySelectorAll('[data-item]').length;
-  return n;
-}
-
-/* Carga AJAX SOLO en el cuerpo (no reemplaza headers) */
-function fetchIntoBody(url, bodyId, afterLoad){
-  const bodyEl = document.getElementById(bodyId);
-  if(!bodyEl) return;
-
-  fetch(url, {cache:'no-store'})
-    .then(r => r.text())
-    .then(html => {
-      bodyEl.innerHTML = html;
-      sanitizeAjaxContainer(bodyEl);
-      if (typeof afterLoad === 'function') afterLoad(bodyEl);
-
-      new MutationObserver(() => sanitizeAjaxContainer(bodyEl))
-        .observe(bodyEl, {subtree:true, childList:true});
-    })
-    .catch(()=>{
-      // opcional: mostrar error dentro del body
-      bodyEl.innerHTML = '<div style="color:#b91c1c">Error al cargar.</div>';
-    });
-}
-
-/* Cargas periódicas */
-function cargarDatos(){
-  const f = document.getElementById('fecha')?.value;
-
-  // Ingresos (montos): carga en #ingresos-body
-  fetchIntoBody('ajax_ingresos.php', 'ingresos-body');
-
-  // Reservas por fecha: carga en #reservas-body
-  if (f) fetchIntoBody('ajax_reservas.php?fecha='+encodeURIComponent(f), 'reservas-body');
-  else   fetchIntoBody('ajax_reservas.php', 'reservas-body');
-
-  // Alumnos de hoy (asistencias): carga en #alumnos-body y actualiza subtítulo
-  fetchIntoBody('ajax_alumnos_hoy.php', 'alumnos-body', (root) => {
-    const sub = document.getElementById('asis-sub');
-    const total = countItems(root);
-    const hoy = new Date().toLocaleDateString('es-AR', { timeZone: 'America/Argentina/San_Luis' });
-
-    const fullText  = total > 0 ? `${total} ingresos — ${hoy}` : `Sin ingresos — ${hoy}`;
-    const isNarrow  = window.matchMedia('(max-width: 520px)').matches;
-    const shortText = total > 0 ? `${total} ingresos` : `Sin ingresos`;
-
-    if (sub){
-      sub.textContent = isNarrow ? shortText : fullText;
-      sub.title = fullText; // tooltip con texto completo
-    }
-  });
-}
-
-function toggleMontos(){
-  const blocks = document.querySelectorAll('.bloque-monto');
-  const icon  = document.getElementById('icono-ojo');
-  const hidden = blocks.length && blocks[0].classList.contains('hidden');
-  blocks.forEach(b => b.classList.toggle('hidden', !hidden));
-  if(icon) icon.textContent = hidden ? '👁️‍🗨️' : '👁️';
-}
-
-window.addEventListener('load', () => {
-  cargarDatos();
-  setInterval(cargarDatos, 10000);
-});
-</script>
 </head>
-
 <body>
 
 <div class="wrap">
@@ -319,9 +235,7 @@ window.addEventListener('load', () => {
     <div>
       <h1 class="title">🏋️ <?= htmlspecialchars($nombre_gym) ?></h1>
       <p class="sys-exp">🗓 Vencimiento del sistema:
-        <strong class="<?= (is_string($fecha_venc) && $fecha_venc!=='0000-00-00' && strtotime($fecha_venc) && strtotime($fecha_venc)>=time()) ? 'ok' : 'warn' ?>">
-          <?= (is_string($fecha_venc) && $fecha_venc!=='0000-00-00' && strtotime($fecha_venc)) ? date('d/m/Y', strtotime($fecha_venc)) : '---' ?>
-        </strong>
+        <strong><?= (is_string($fecha_venc) && $fecha_venc!=='0000-00-00' && strtotime($fecha_venc)) ? date('d/m/Y', strtotime($fecha_venc)) : '---' ?></strong>
       </p>
     </div>
     <div class="logo-wrap">
@@ -361,12 +275,12 @@ window.addEventListener('load', () => {
   <?php endif; ?>
 
   <div class="toolbar">
-    <span id="icono-ojo" class="icon-btn" title="Mostrar/Ocultar montos" onclick="toggleMontos()">👁️‍🗨️</span>
+    <span id="icono-ojo" class="icon-btn" title="Mostrar/Ocultar montos" onclick="document.querySelectorAll('.bloque-monto').forEach(b=>b.classList.toggle('hidden'))">👁️‍🗨️</span>
   </div>
 
   <div class="grid">
 
-    <!-- INGRESOS ($) -->
+    <!-- INGRESOS (AJAX) -->
     <section class="card bloque-monto" id="contenedor-ingresos">
       <div class="card-header">
         <h3 class="card-title">💰 Ingresos</h3>
@@ -405,7 +319,7 @@ window.addEventListener('load', () => {
       </ul>
     </section>
 
-    <!-- RESERVAS (AJAX por fecha) -->
+    <!-- RESERVAS (AJAX) -->
     <section class="card" style="grid-column:span 8">
       <div class="card-header">
         <h3 class="card-title">📋 Reservas del día</h3>
@@ -416,14 +330,14 @@ window.addEventListener('load', () => {
           </form>
         </div>
       </div>
-      <div id="reservas-body"><div class="skeleton" style="min-height:110px"></div></div>
+      <div id="contenedor-reservas"><div id="reservas-body"><div class="skeleton" style="min-height:110px"></div></div></div>
     </section>
 
-    <!-- ALUMNOS (ASISTENCIAS HOY vía ajax_alumnos_hoy.php) -->
+    <!-- ALUMNOS (AJAX) -->
     <section class="card" id="contenedor-alumnos">
       <div class="card-header">
         <h3 class="card-title">🧑‍🎓 Alumnos de hoy</h3>
-        <p class="card-sub" id="asis-sub">Cargando…</p>
+        <p class="card-sub"><span id="alumnos-count"></span></p>
       </div>
       <div id="alumnos-body"><div class="skeleton" style="min-height:110px"></div></div>
     </section>
@@ -444,6 +358,81 @@ window.addEventListener('load', () => {
 </div>
 
 <script>
+/* ---- Carga simple sin “sanitizar” agresivo ---- */
+function fetchIntoBody(url, bodyId, afterLoad){
+  const el = document.getElementById(bodyId);
+  if(!el) return;
+  fetch(url, {cache:'no-store'})
+    .then(r => r.text())
+    .then(html => {
+      el.innerHTML = html;
+      if (typeof afterLoad === 'function') afterLoad(el);
+    })
+    .catch(()=>{});
+}
+
+/* ===== Normaliza lista de asistencias: Nombre ..... Hora ===== */
+function normalizeAlumnos(root){
+  // intenta detectar un contador "X ingresos"
+  const m = (root.textContent||'').match(/(\d+)\s+ingresos?/i);
+  if (m) document.getElementById('alumnos-count').textContent = m[1]+' ingresos';
+
+  // usa la primera UL que encuentre; si no hay, crea una con los LI existentes
+  let ul = root.querySelector('ul');
+  if (!ul){
+    const items = root.querySelectorAll('li');
+    if (items.length){
+      ul = document.createElement('ul');
+      items.forEach(li => ul.appendChild(li));
+      root.innerHTML = '';
+      root.appendChild(ul);
+    }
+  }
+  if (!ul) return;
+  ul.classList.add('asistencias-hoy');
+
+  ul.querySelectorAll('li').forEach(li=>{
+    const txt = (li.textContent||'').replace(/\s+/g,' ').trim();
+    const mm = txt.match(/^(.*?)[\s\-–]*\b(\d{2}:\d{2}:\d{2})\b.*$/);
+    const nombre = (mm ? mm[1] : txt).trim();
+    const hora   = (mm ? mm[2] : '').trim();
+    li.innerHTML = `<span class="n">${nombre}</span>${hora?`<span class="h">${hora}</span>`:''}`;
+  });
+}
+
+/* ===== Compacta reservas: etiqueta nodos recibidos ===== */
+function normalizeReservas(root){
+  // cada hijo directo lo trato como tarjeta
+  [...root.children].forEach(card=>{
+    if (card.nodeType!==1) return;
+    card.classList.add('res-card');
+    // intento marcar cabecera (línea que contiene hora)
+    const head = [...card.querySelectorAll('*')].find(e=>/\b\d{2}:\d{2}:\d{2}\b/.test(e.textContent||'')) || card.firstElementChild;
+    if (head) head.classList.add('res-head');
+    // Armo res-body con bloques que parezcan "alumno" y "profe"
+    const body = document.createElement('div'); body.className='res-body';
+    const alumno = [...card.querySelectorAll('*')].find(e=>/👤|alumno/i.test(e.textContent||''));
+    const profe  = [...card.querySelectorAll('*')].find(e=>/profe|entrenador|coach/i.test(e.textContent||''));
+    if (alumno){ const d=document.createElement('div'); d.innerHTML=`<span>👤</span><span>${alumno.textContent.trim()}</span>`; body.appendChild(d); }
+    if (profe){  const d=document.createElement('div'); d.innerHTML=`<span>🧑‍🏫</span><span>${profe.textContent.trim()}</span>`; body.appendChild(d); }
+    if (body.children.length) card.appendChild(body);
+  });
+}
+
+/* Cargas periódicas */
+function cargarDatos(){
+  const f = document.getElementById('fecha')?.value;
+  fetchIntoBody('ajax_ingresos.php', 'ingresos-body');             // solo el body
+  if (f) fetchIntoBody('ajax_reservas.php?fecha='+encodeURIComponent(f), 'reservas-body', normalizeReservas);
+  fetchIntoBody('ajax_alumnos_hoy.php', 'alumnos-body', normalizeAlumnos);
+}
+
+window.addEventListener('load', () => {
+  cargarDatos();
+  setInterval(cargarDatos, 10000);
+});
+
+/* ===== Chart ===== */
 (function(){
   const data = <?= json_encode($rows, JSON_UNESCAPED_UNICODE) ?>;
   if(!Array.isArray(data) || !data.length) return;
@@ -458,12 +447,13 @@ window.addEventListener('load', () => {
     data:{ labels:data.map(d=>d.nombre), datasets:[{ label:'Registros', data:data.map(d=>+d.total), backgroundColor:grad, borderColor:'rgba(180,83,9,.9)', borderWidth:2, borderRadius:10 }]},
     options:{
       responsive:true, maintainAspectRatio:false, animation:{duration:800},
-      plugins:{ legend:{labels:{color:'#0f172a'}}, tooltip:{backgroundColor:'rgba(15,23,42,.96)', titleColor:'#fbbf24', bodyColor:'#e2e8f0', borderColor:'rgba(180,83,9,.35)', borderWidth:1} },
-      scales:{ x:{ticks:{color:'#0f172a'}, grid:{color:'rgba(2,6,23,.06)'}}, y:{beginAtZero:true, ticks:{color:'#0f172a', precision:0}, grid:{color:'rgba(2,6,23,.06)'}} }
+      plugins:{ legend:{labels:{color:'#0f172a'}},
+                tooltip:{backgroundColor:'rgba(15,23,42,.96)', titleColor:'#fbbf24', bodyColor:'#e2e8f0', borderColor:'rgba(180,83,9,.35)', borderWidth:1} },
+      scales:{ x:{ticks:{color:'#0f172a'}, grid:{color:'rgba(2,6,23,.06)'}},
+               y:{beginAtZero:true, ticks:{color:'#0f172a', precision:0}, grid:{color:'rgba(2,6,23,.06)'}} }
     }
   });
 })();
 </script>
-
 </body>
 </html>
