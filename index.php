@@ -32,7 +32,7 @@ $estado = $conexion->query("
   LEFT JOIN (
     SELECT cliente_id, MAX(fecha_vencimiento) AS fv
     FROM membresias
-    WHERE gimnasio_id={$gimnasio_id} AND fecha_vencimiento IS NOT NULL AND fecha_vencimiento>='1000-01-01'
+    WHERE gimnasio_id={$gimnasio_id}
     GROUP BY cliente_id
   ) u ON u.cliente_id=c.id
   WHERE c.gimnasio_id={$gimnasio_id}
@@ -46,8 +46,6 @@ $cumples = $conexion->query("
   FROM clientes
   WHERE gimnasio_id={$gimnasio_id}
     AND fecha_nacimiento IS NOT NULL
-    AND fecha_nacimiento>='1000-01-01'
-    AND DATE_FORMAT(fecha_nacimiento,'%m-%d') >= DATE_FORMAT(CURDATE(),'%m-%d')
   ORDER BY DATE_FORMAT(fecha_nacimiento,'%m-%d')
   LIMIT 5
 ");
@@ -58,8 +56,6 @@ $vencimientos = $conexion->query("
   FROM membresias m
   JOIN clientes c ON c.id=m.cliente_id
   WHERE m.gimnasio_id={$gimnasio_id}
-    AND m.fecha_vencimiento IS NOT NULL
-    AND m.fecha_vencimiento>='1000-01-01'
     AND m.fecha_vencimiento >= CURDATE()
   ORDER BY m.fecha_vencimiento ASC
   LIMIT 5
@@ -81,49 +77,6 @@ $cuentas_corrientes = (int)($conexion->query("
   ) x
 ")->fetch_assoc()['t'] ?? 0);
 
-/* Nuevos online */
-$nuevos = $conexion->query("SELECT id, nombre, apellido FROM clientes WHERE gimnasio_id={$gimnasio_id} AND nuevo_online=1");
-$avisos_html = '';
-if ($nuevos && $nuevos->num_rows) {
-  ob_start(); ?>
-  <div class="notice notice-warm">
-    <div class="notice-title">📢 Nuevos registros online</div>
-    <div class="notice-body">
-      <?php while($n=$nuevos->fetch_assoc()): ?>
-        <div class="notice-item">
-          <?= htmlspecialchars($n['nombre'].' '.$n['apellido']) ?>
-          — <a class="link-inline" href="marcar_visto.php?id=<?= (int)$n['id'] ?>">Marcar como visto</a>
-        </div>
-      <?php endwhile; ?>
-    </div>
-  </div>
-  <?php $avisos_html = ob_get_clean();
-}
-
-/* Disciplinas top */
-$rows = [];
-$q = $conexion->query("
-  SELECT nombre_mostrar, total FROM (
-    SELECT
-      MIN(TRIM(REPLACE(REPLACE(COALESCE(d.nombre,c.disciplina),CONVERT(0xC2A0 USING utf8mb4),' '),CHAR(9),' '))) nombre_mostrar,
-      UPPER(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(TRIM(REPLACE(REPLACE(COALESCE(d.nombre,c.disciplina),CONVERT(0xC2A0 USING utf8mb4),' '),CHAR(9),' ')),' ',''),'-',''),'.',''),'_',''),'/','')) clave,
-      COUNT(*) total
-    FROM clientes c
-    LEFT JOIN disciplinas d ON d.id=c.disciplina_id
-    WHERE c.gimnasio_id={$gimnasio_id}
-      AND COALESCE(d.nombre,c.disciplina) IS NOT NULL
-      AND TRIM(REPLACE(REPLACE(COALESCE(d.nombre,c.disciplina),CONVERT(0xC2A0 USING utf8mb4),' '),CHAR(9),' '))<>''
-    GROUP BY clave
-  ) u
-  ORDER BY total DESC
-  LIMIT 10
-");
-if ($q) while($r=$q->fetch_assoc()) $rows[]=['nombre'=>ucwords(strtolower($r['nombre_mostrar'])),'total'=>(int)$r['total']];
-if ($rows){
-  $agg=[]; foreach($rows as $r){ $k=strtolower(trim($r['nombre'])); $agg[$k]['nombre']=$r['nombre']; $agg[$k]['total']=($agg[$k]['total']??0)+(int)$r['total']; }
-  $rows=array_values($agg); usort($rows,fn($a,$b)=>$b['total']<=>$a['total']); $rows=array_slice($rows,0,10);
-}
-
 $fecha_filtro = $_GET['fecha'] ?? date('Y-m-d');
 if (!preg_match('/^\d{4}-\d{2}-\d{2}$/',$fecha_filtro)) $fecha_filtro=date('Y-m-d');
 ?>
@@ -133,337 +86,104 @@ if (!preg_match('/^\d{4}-\d{2}-\d{2}$/',$fecha_filtro)) $fecha_filtro=date('Y-m-
 <meta charset="UTF-8">
 <title>Panel General - <?= htmlspecialchars($nombre_gym) ?></title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
-
 <style>
 :root{
-  --bg1:#f5f7fb; --bg2:#eef3f9; --ink:#0f172a; --mut:#475569;
-  --brand:#b45309; --brand-2:#f59e0b; --brand-3:#fbbf24;
-  --ok:#16a34a; --warn:#f59e0b; --card:#fff; --stroke:rgba(15,23,42,.08);
-  --shadow:0 10px 28px rgba(2,6,23,.08); --radius:18px; --gap:18px;
+  --bg1:#f5f7fb;--bg2:#eef3f9;--ink:#0f172a;--mut:#475569;
+  --brand:#b45309;--brand2:#f59e0b;--ok:#16a34a;--warn:#f59e0b;
+  --card:#fff;--stroke:rgba(15,23,42,.08);
+  --shadow:0 6px 16px rgba(2,6,23,.08);--radius:18px;
 }
-*{ box-sizing:border-box }
-html,body{ height:100% }
-body{
-  margin:0; color:var(--ink);
-  font-family:system-ui,-apple-system,Segoe UI,Roboto,Inter,Arial,sans-serif;
-  background:
-    radial-gradient(900px 600px at -10% -10%, rgba(255,105,0,.08) 0%, transparent 45%),
-    radial-gradient(1200px 700px at 110% -10%, rgba(255,170,0,.08) 0%, transparent 55%),
-    linear-gradient(180deg,var(--bg1) 0%, var(--bg2) 100%);
-}
-.wrap{ max-width:1200px; margin:24px auto; padding:0 16px 40px; }
-
-/* Header */
-.header{ display:grid; grid-template-columns:1fr auto; gap:16px; align-items:center; margin-bottom:16px; }
-.title{
-  margin:0; font-weight:900; letter-spacing:.6px;
-  background:linear-gradient(90deg,var(--brand),var(--brand-2),var(--brand-3));
-  -webkit-background-clip:text; background-clip:text; color:transparent;
-}
-.sys-exp{ margin:.25rem 0 0; color:var(--mut); }
-.logo-wrap{ display:flex; gap:10px; justify-content:flex-end; }
-#logoGym{ max-height:170px; max-width:420px; object-fit:contain; background:#fff; padding:8px; border:1px solid var(--stroke); border-radius:16px; box-shadow:var(--shadow); }
-.btn-mini{ padding:6px 10px; border:1px solid var(--stroke); background:linear-gradient(180deg,#fff,#f7fafc); border-radius:12px; cursor:pointer; }
-@media (max-width:992px){ .header{ grid-template-columns:1fr; } .logo-wrap{ justify-content:flex-start; } #logoGym{ max-height:64px; max-width:180px; padding:6px; } }
-
-/* Grid */
-.grid{ display:grid; grid-template-columns:repeat(12,1fr); gap:var(--gap); }
-@media (max-width:1100px){ .grid{ grid-template-columns:repeat(8,1fr); } }
-@media (max-width:768px){  .grid{ grid-template-columns:repeat(4,1fr); } }
-
-/* Cards / elementos base */
-.card,.notice,.alert,.kpi,.field{ background:var(--card); border:1px solid var(--stroke); border-radius:18px; padding:16px; box-shadow:var(--shadow); }
-.card{ grid-column:span 4; }
-.card-header{ display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; }
-.card-title{ margin:0; color:var(--brand); font-size:1.05rem; flex:1 1 auto; min-width:0; z-index:1; }
-.card-sub{ margin:0; color:#64748b; font-size:.9rem; flex:0 1 320px; min-width:180px; text-align:right; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-@media (max-width:520px){
-  .card-header{ flex-direction:column; align-items:flex-start; gap:6px; }
-  .card-sub{ width:100%; text-align:left; white-space:normal; }
-}
-
-.kpis{ display:flex; gap:12px; flex-wrap:wrap; margin:10px 0 16px; }
-.kpi{ min-width:160px; background:linear-gradient(180deg,#fff,#f8fafc); }
-.kpi-label{ color:var(--brand); font-size:.8rem; }
-.kpi-value{ font-weight:900; font-size:1.8rem; }
-
-.notice-title{ font-weight:700; color:var(--brand); margin-bottom:6px; }
-.alert{ border:1px dashed #f59e0b66; background:linear-gradient(180deg,#fff,#f9fafb); }
-ul{ margin:0; padding-left:16px; } li{ margin:6px 0; }
-
-/* Ingresos ($) móvil */
-@media (max-width:560px){
-  #ingresos-body .ingresos-wrap{ display:grid !important; grid-template-columns:1fr !important; gap:12px !important; }
-  #ingresos-body .ing-card{
-    display:flex !important; flex-direction:column !important; align-items:center !important;
-    text-align:center !important; gap:8px !important; padding:14px 12px !important;
-  }
-  #ingresos-body .ing-title{
-    font-size:.98rem !important; line-height:1.25 !important;
-    white-space:normal !important; word-break:keep-all !important; overflow-wrap:anywhere !important;
-  }
-  #ingresos-body .ing-amount{ font-size:1.55rem !important; line-height:1.15 !important; font-weight:900 !important; }
-}
-@media (min-width:561px) and (max-width:900px){
-  #ingresos-body .ingresos-wrap{ display:grid !important; grid-template-columns:1fr 1fr !important; gap:12px !important; }
-}
-
-/* Vencimientos centrado móvil */
-@media (max-width: 900px){
-  #card-venc, #card-venc *{ text-align:center !important; }
-  .alert, .notice{ text-align:center !important; }
-  .alert a, .notice a{ display:inline-block !important; }
-}
-
-/* Lista asistencias HOY móvil */
-@media (max-width:768px){
-  #alumnos-body .asistencias-hoy{ margin:0 !important; padding:0 !important; list-style:none !important; }
-  #alumnos-body .asis-item{ display:flex !important; justify-content:space-between !important; align-items:center !important; gap:10px !important; padding:8px 10px !important; border-bottom:1px dashed rgba(15,23,42,.12) !important; }
-  #alumnos-body .asis-item .n{ white-space:nowrap !important; overflow:hidden !important; text-overflow:ellipsis !important; }
-}
+body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Inter,sans-serif;background:linear-gradient(180deg,var(--bg1),var(--bg2));color:var(--ink);}
+.wrap{max-width:1200px;margin:24px auto;padding:0 16px 40px}
+.header{display:grid;grid-template-columns:1fr auto;gap:16px;align-items:center;margin-bottom:16px}
+.title{margin:0;font-weight:900;color:var(--brand);}
+.sys-exp{margin:4px 0;color:var(--mut);}
+.logo-wrap{text-align:right}
+#logoGym{max-height:80px;object-fit:contain;background:#fff;padding:6px;border:1px solid var(--stroke);border-radius:12px}
+.grid{display:grid;grid-template-columns:repeat(12,1fr);gap:18px;}
+@media(max-width:900px){.grid{grid-template-columns:repeat(4,1fr);}}
+.card{background:var(--card);border:1px solid var(--stroke);border-radius:18px;box-shadow:var(--shadow);padding:16px;grid-column:span 4;}
+.card-header{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;}
+.card-title{margin:0;color:var(--brand);font-weight:700;}
+.card-sub{margin:0;color:#64748b;font-size:.9rem;flex:1 1 100%;text-align:right;}
+@media(max-width:520px){.card-header{flex-direction:column;align-items:flex-start}.card-sub{text-align:left;width:100%}}
+ul{margin:0;padding-left:18px;}
+/* asistencias ordenadas */
+#alumnos-body li{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:6px 0;border-bottom:1px dashed rgba(15,23,42,.1);}
+#alumnos-body li:last-child{border:none;}
+#alumnos-body .n{flex:1 1 auto;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+#alumnos-body .h{flex:0 0 auto;font-variant-numeric:tabular-nums;}
+/* reservas compactas */
+#reservas-body>div{border:1px solid rgba(15,23,42,.06);border-radius:14px;padding:8px 10px;margin:6px 0;box-shadow:0 3px 8px rgba(0,0,0,.04);}
+#reservas-body strong{color:var(--brand);}
+@media(max-width:520px){#reservas-body>div{padding:6px 8px;font-size:.95rem}}
 </style>
-
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
-/* Sanitiza estilos embebidos en parciales */
-function sanitizeAjaxContainer(root){
-  if(!root) return;
-  root.querySelectorAll('style, link[rel="stylesheet"]').forEach(n => n.remove());
-  root.querySelectorAll('[style]').forEach(el => {
-    el.style.writingMode = 'horizontal-tb';
-    el.style.textOrientation = 'mixed';
-    el.style.transform = 'none';
-    el.style.whiteSpace = 'normal';
-    el.style.wordBreak = 'normal';
-    el.style.overflowWrap = 'break-word';
-    el.style.maxWidth = '100%';
-  });
+function sanitizeAjaxContainer(r){if(!r)return;r.querySelectorAll('style').forEach(n=>n.remove());}
+function countItems(r){let n=r.querySelectorAll('li').length;if(!n)n=r.querySelectorAll('.asis-item').length;return n;}
+function fetchIntoBody(u,id,after){
+ const el=document.getElementById(id);if(!el)return;
+ fetch(u,{cache:'no-store'}).then(r=>r.text()).then(h=>{
+   el.innerHTML=h;sanitizeAjaxContainer(el);
+   if(typeof after==='function')after(el);
+ }).catch(()=>{el.innerHTML='<div style="color:#b91c1c">Error</div>';});
 }
-
-/* Conteo robusto de items (li | .asis-item | [data-item]) */
-function countItems(root){
-  let n = root.querySelectorAll('li').length;
-  if (!n) n = root.querySelectorAll('.asis-item').length;
-  if (!n) n = root.querySelectorAll('[data-item]').length;
-  return n;
-}
-
-/* Carga AJAX SOLO en el cuerpo (no reemplaza headers) */
-function fetchIntoBody(url, bodyId, afterLoad){
-  const bodyEl = document.getElementById(bodyId);
-  if(!bodyEl) return;
-
-  fetch(url, {cache:'no-store'})
-    .then(r => r.text())
-    .then(html => {
-      bodyEl.innerHTML = html;
-      sanitizeAjaxContainer(bodyEl);
-      if (typeof afterLoad === 'function') afterLoad(bodyEl);
-
-      new MutationObserver(() => sanitizeAjaxContainer(bodyEl))
-        .observe(bodyEl, {subtree:true, childList:true});
-    })
-    .catch(()=>{
-      // opcional: mostrar error dentro del body
-      bodyEl.innerHTML = '<div style="color:#b91c1c">Error al cargar.</div>';
-    });
-}
-
-/* Cargas periódicas */
 function cargarDatos(){
-  const f = document.getElementById('fecha')?.value;
-
-  // Ingresos (montos): carga en #ingresos-body
-  fetchIntoBody('ajax_ingresos.php', 'ingresos-body');
-
-  // Reservas por fecha: carga en #reservas-body
-  if (f) fetchIntoBody('ajax_reservas.php?fecha='+encodeURIComponent(f), 'reservas-body');
-  else   fetchIntoBody('ajax_reservas.php', 'reservas-body');
-
-  // Alumnos de hoy (asistencias): carga en #alumnos-body y actualiza subtítulo
-  fetchIntoBody('ajax_alumnos_hoy.php', 'alumnos-body', (root) => {
-    const sub = document.getElementById('asis-sub');
-    const total = countItems(root);
-    const hoy = new Date().toLocaleDateString('es-AR', { timeZone: 'America/Argentina/San_Luis' });
-
-    const fullText  = total > 0 ? `${total} ingresos — ${hoy}` : `Sin ingresos — ${hoy}`;
-    const isNarrow  = window.matchMedia('(max-width: 520px)').matches;
-    const shortText = total > 0 ? `${total} ingresos` : `Sin ingresos`;
-
-    if (sub){
-      sub.textContent = isNarrow ? shortText : fullText;
-      sub.title = fullText; // tooltip con texto completo
-    }
-  });
+ const f=document.getElementById('fecha')?.value;
+ fetchIntoBody('ajax_ingresos.php','ingresos-body');
+ fetchIntoBody('ajax_reservas.php?fecha='+(f?encodeURIComponent(f):''),'reservas-body');
+ fetchIntoBody('ajax_alumnos_hoy.php','alumnos-body',(root)=>{
+   const sub=document.getElementById('asis-sub');
+   const t=countItems(root);
+   const hoy=new Date().toLocaleDateString('es-AR',{timeZone:'America/Argentina/San_Luis'});
+   const txt=t>0?`${t} ingresos — ${hoy}`:`Sin ingresos — ${hoy}`;
+   if(sub){sub.textContent=txt;}
+ });
 }
-
-function toggleMontos(){
-  const blocks = document.querySelectorAll('.bloque-monto');
-  const icon  = document.getElementById('icono-ojo');
-  const hidden = blocks.length && blocks[0].classList.contains('hidden');
-  blocks.forEach(b => b.classList.toggle('hidden', !hidden));
-  if(icon) icon.textContent = hidden ? '👁️‍🗨️' : '👁️';
-}
-
-window.addEventListener('load', () => {
-  cargarDatos();
-  setInterval(cargarDatos, 10000);
-});
+window.addEventListener('load',()=>{cargarDatos();setInterval(cargarDatos,10000);});
 </script>
 </head>
-
 <body>
-
 <div class="wrap">
   <div class="header">
     <div>
       <h1 class="title">🏋️ <?= htmlspecialchars($nombre_gym) ?></h1>
-      <p class="sys-exp">🗓 Vencimiento del sistema:
-        <strong class="<?= (is_string($fecha_venc) && $fecha_venc!=='0000-00-00' && strtotime($fecha_venc) && strtotime($fecha_venc)>=time()) ? 'ok' : 'warn' ?>">
-          <?= (is_string($fecha_venc) && $fecha_venc!=='0000-00-00' && strtotime($fecha_venc)) ? date('d/m/Y', strtotime($fecha_venc)) : '---' ?>
-        </strong>
-      </p>
+      <p class="sys-exp">Vencimiento sistema: <strong><?= htmlspecialchars($fecha_venc) ?></strong></p>
     </div>
-    <div class="logo-wrap">
-      <?php if (!empty($logo)): ?>
-        <div>
-          <img id="logoGym" src="<?= htmlspecialchars($logo) ?>?v=<?= time() ?>" alt="Logo del gimnasio">
-          <div style="margin-top:6px; text-align:right">
-            <button class="btn-mini" onclick="document.getElementById('formLogo').style.display='block'">🖋 Cambiar logo</button>
-            <form id="formLogo" method="POST" action="subir_logo.php" enctype="multipart/form-data" style="display:none; margin-top:6px">
-              <input type="file" name="logo" accept="image/*" required onchange="this.form.submit()">
-            </form>
-          </div>
-        </div>
-      <?php endif; ?>
-    </div>
-  </div>
-
-  <div class="kpis">
-    <div class="kpi"><div class="kpi-label">Activos</div><div class="kpi-value"><?= (int)$activos ?></div></div>
-    <div class="kpi"><div class="kpi-label">Inactivos</div><div class="kpi-value"><?= (int)$inactivos ?></div></div>
-  </div>
-
-  <?= $avisos_html ?>
-
-  <?php if ($cuentas_corrientes > 0): ?>
-    <div class="alert" style="margin:10px 0">
-      ⚠️ Hay <strong><?= $cuentas_corrientes ?></strong> cliente(s) con saldo negativo.
-      <a class="link-inline" href="ver_cuentas_corrientes.php">Ver cuentas corrientes</a>
-    </div>
-  <?php endif; ?>
-
-  <?php if ($pagos_pendientes > 0): ?>
-    <div class="alert" style="margin:10px 0">
-      💸 Hay <strong><?= $pagos_pendientes ?></strong> pago(s) pendiente(s) de clientes.
-      <a class="link-inline" href="ver_pagos_pendientes.php">Ver pagos</a>
-    </div>
-  <?php endif; ?>
-
-  <div class="toolbar">
-    <span id="icono-ojo" class="icon-btn" title="Mostrar/Ocultar montos" onclick="toggleMontos()">👁️‍🗨️</span>
+    <div class="logo-wrap"><?php if($logo):?><img id="logoGym" src="<?= htmlspecialchars($logo) ?>"><?php endif;?></div>
   </div>
 
   <div class="grid">
-
-    <!-- INGRESOS ($) -->
-    <section class="card bloque-monto" id="contenedor-ingresos">
-      <div class="card-header">
-        <h3 class="card-title">💰 Ingresos</h3>
-        <p class="card-sub">Actualiza cada 10s</p>
-      </div>
-      <div id="ingresos-body"><div class="skeleton" style="min-height:120px"></div></div>
+    <section class="card bloque-monto">
+      <div class="card-header"><h3 class="card-title">💰 Ingresos</h3><p class="card-sub">Actualiza cada 10s</p></div>
+      <div id="ingresos-body"><div class="skeleton" style="min-height:100px"></div></div>
     </section>
 
-    <!-- CUMPLES -->
-    <section class="card">
-      <div class="card-header">
-        <h3 class="card-title">🎂 Próximos Cumpleaños</h3>
-        <p class="card-sub">Top 5 próximos</p>
-      </div>
-      <ul>
-        <?php while($c=$cumples->fetch_assoc()): ?>
-          <li><?= htmlspecialchars($c['apellido'].', '.$c['nombre']) ?>
-            (<?= ($c['fecha_nacimiento'] && strtotime($c['fecha_nacimiento'])) ? date('d/m', strtotime($c['fecha_nacimiento'])) : '--' ?>)
-          </li>
-        <?php endwhile; ?>
-      </ul>
-    </section>
+    <section class="card"><div class="card-header"><h3 class="card-title">🎂 Cumpleaños</h3><p class="card-sub">Top 5</p></div><ul>
+      <?php while($c=$cumples->fetch_assoc()):?>
+      <li><?=htmlspecialchars($c['apellido'].', '.$c['nombre'])?></li>
+      <?php endwhile;?>
+    </ul></section>
 
-    <!-- VENCIMIENTOS -->
-    <section class="card" id="card-venc">
-      <div class="card-header">
-        <h3 class="card-title">🗓 Vencimientos</h3>
-        <p class="card-sub">Próximas membresías a vencer</p>
-      </div>
-      <ul>
-        <?php while($v=$vencimientos->fetch_assoc()): ?>
-          <li><?= htmlspecialchars($v['apellido'].', '.$v['nombre']) ?>
-            (<?= ($v['fecha_vencimiento'] && strtotime($v['fecha_vencimiento'])) ? date('d/m', strtotime($v['fecha_vencimiento'])) : '--' ?>)
-          </li>
-        <?php endwhile; ?>
-      </ul>
-    </section>
+    <section class="card" id="card-venc"><div class="card-header"><h3 class="card-title">🗓 Vencimientos</h3><p class="card-sub">Próximos</p></div><ul>
+      <?php while($v=$vencimientos->fetch_assoc()):?>
+      <li><?=htmlspecialchars($v['apellido'].', '.$v['nombre'])?> (<?=date('d/m',strtotime($v['fecha_vencimiento']))?>)</li>
+      <?php endwhile;?>
+    </ul></section>
 
-    <!-- RESERVAS (AJAX por fecha) -->
     <section class="card" style="grid-column:span 8">
       <div class="card-header">
         <h3 class="card-title">📋 Reservas del día</h3>
-        <div class="field" style="display:flex;align-items:center;gap:8px">
-          <label for="fecha" class="mut">Ver día</label>
-          <form id="form-fecha" method="GET" oninput="this.submit()">
-            <input type="date" id="fecha" name="fecha" value="<?= htmlspecialchars($fecha_filtro) ?>">
-          </form>
-        </div>
+        <div><form method="GET"><input type="date" id="fecha" name="fecha" value="<?=htmlspecialchars($fecha_filtro)?>"></form></div>
       </div>
-      <div id="reservas-body"><div class="skeleton" style="min-height:110px"></div></div>
+      <div id="reservas-body"><div class="skeleton" style="min-height:100px"></div></div>
     </section>
 
-    <!-- ALUMNOS (ASISTENCIAS HOY vía ajax_alumnos_hoy.php) -->
     <section class="card" id="contenedor-alumnos">
-      <div class="card-header">
-        <h3 class="card-title">🧑‍🎓 Alumnos de hoy</h3>
-        <p class="card-sub" id="asis-sub">Cargando…</p>
-      </div>
-      <div id="alumnos-body"><div class="skeleton" style="min-height:110px"></div></div>
+      <div class="card-header"><h3 class="card-title">🧑‍🎓 Alumnos de hoy</h3><p class="card-sub" id="asis-sub">Cargando…</p></div>
+      <div id="alumnos-body"><div class="skeleton" style="min-height:100px"></div></div>
     </section>
-
-    <!-- DISCIPLINAS -->
-    <section class="card" style="grid-column:span 8">
-      <div class="card-header">
-        <h3 class="card-title">📊 Disciplinas más registradas</h3>
-        <p class="card-sub">Top 10 normalizadas</p>
-      </div>
-      <div class="chart-wrap">
-        <canvas id="disciplinasChart" role="img" aria-label="Gráfico de barras de disciplinas"></canvas>
-      </div>
-      <?php if (!count($rows)): ?><small class="mut">No hay datos para mostrar.</small><?php endif; ?>
-    </section>
-
   </div>
 </div>
-
-<script>
-(function(){
-  const data = <?= json_encode($rows, JSON_UNESCAPED_UNICODE) ?>;
-  if(!Array.isArray(data) || !data.length) return;
-  const el = document.getElementById('disciplinasChart'); if(!el) return;
-  const ctx = el.getContext('2d');
-  const h = el.offsetHeight || 300;
-  const grad = ctx.createLinearGradient(0,0,0,h);
-  grad.addColorStop(0,'rgba(251,191,36,.95)');
-  grad.addColorStop(1,'rgba(245,158,11,.65)');
-  new Chart(ctx,{
-    type:'bar',
-    data:{ labels:data.map(d=>d.nombre), datasets:[{ label:'Registros', data:data.map(d=>+d.total), backgroundColor:grad, borderColor:'rgba(180,83,9,.9)', borderWidth:2, borderRadius:10 }]},
-    options:{
-      responsive:true, maintainAspectRatio:false, animation:{duration:800},
-      plugins:{ legend:{labels:{color:'#0f172a'}}, tooltip:{backgroundColor:'rgba(15,23,42,.96)', titleColor:'#fbbf24', bodyColor:'#e2e8f0', borderColor:'rgba(180,83,9,.35)', borderWidth:1} },
-      scales:{ x:{ticks:{color:'#0f172a'}, grid:{color:'rgba(2,6,23,.06)'}}, y:{beginAtZero:true, ticks:{color:'#0f172a', precision:0}, grid:{color:'rgba(2,6,23,.06)'}} }
-    }
-  });
-})();
-</script>
-
 </body>
 </html>
