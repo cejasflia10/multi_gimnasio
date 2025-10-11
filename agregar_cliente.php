@@ -65,126 +65,197 @@ function h($s){ return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); }
   <meta charset="utf-8">
   <title>Agregar Cliente</title>
   <meta name="viewport" content="width=device-width,initial-scale=1">
+
+  <!-- Igual que el index -->
   <link rel="stylesheet" href="estilo_unificado.css">
+
   <style>
-    /* Mobile-first */
-    :root{
-      --bg:#0b0b0b; --card:#0f1115; --fg:#eef2f7; --muted:#94a3b8; --accent:#f5c542; --border:rgba(255,255,255,.06);
-      --radius:12px;
+    /* ================== FIX VISIBILIDAD PARA MENÚ HORIZONTAL ==================
+       Fuerza colores legibles sin importar reglas globales (gradientes, a{} dorado, etc.)
+    ============================================================================*/
+    .menu-horizontal, .menu-horizontal *{
+      color: var(--ink) !important;
+      -webkit-text-fill-color: var(--ink) !important;
+      text-shadow: none !important;
+      filter: none !important;
+      mix-blend-mode: normal !important;
+      background: none !important;
+      opacity: 1 !important;
     }
-    *{box-sizing:border-box}
-    body{ margin:0; font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Arial; background:var(--bg); color:var(--fg); -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; }
-    .contenedor{ max-width:980px; margin:14px auto; padding:14px; }
-    a.volver-btn{ display:inline-block; color:var(--muted); margin-bottom:8px; text-decoration:none }
-    h2{ margin:6px 0 14px; font-size:20px; text-align:left }
-    form.card{ background:var(--card); padding:14px; border-radius:var(--radius); border:1px solid var(--border); box-shadow:0 6px 18px rgba(0,0,0,.4) }
-    .grid{ display:grid; gap:10px; grid-template-columns: 1fr; }
-    .row{ display:grid; gap:10px; grid-template-columns: 1fr; }
-    label{ display:block; margin-bottom:6px; font-weight:700; color:var(--accent); font-size:13px }
-    input[type=text], input[type=email], input[type=date], select{ width:100%; padding:10px 12px; border-radius:10px; border:1px solid rgba(255,255,255,.04); background:#0b0d10; color:var(--fg); font-size:15px }
-    .mensaje-error{ color:#fca5a5; display:none; font-size:13px; margin-top:6px }
-    .small-muted{ color:var(--muted); font-size:13px; margin-top:6px }
-    .btn{ display:inline-block; margin-top:12px; padding:10px 14px; border-radius:10px; background:var(--accent); color:#111; font-weight:800; border:none; cursor:pointer; width:100% }
-    .flex{ display:flex; gap:10px; align-items:center }
-    .col-2{ width:50% }
-    .helper{ font-size:13px; color:var(--muted); margin-top:6px }
+    .menu-horizontal{
+      position: sticky; top: 0; z-index: 2147483646;
+      background: #ffffff !important;
+      border-bottom: 1px solid var(--stroke);
+    }
+    .menu-horizontal a{
+      color: var(--brand) !important;
+      font-weight: 800 !important;
+      border-radius: 8px !important;
+      padding: 8px 12px !important;
+      text-decoration: none !important;
+      white-space: nowrap !important;
+    }
+    .menu-horizontal a:hover{
+      background: rgba(251,191,36,.12) !important; /* amarillo suave */
+      color: var(--ink) !important;
+      -webkit-text-fill-color: var(--ink) !important;
+    }
 
-    /* tablet/desktop */
-    @media(min-width:700px){
-      .grid{ grid-template-columns: 1fr 360px; align-items:start }
+    /* ================== ESTILO DE ESTA PÁGINA (alineado al index) =============*/
+    .wrap{ max-width:1200px; margin:24px auto; padding:0 16px 40px; }
+    .contenedor-wide{ max-width:1100px; margin:0 auto; }
+
+    /* Caja principal como card del index */
+    .card-form{
+      background: var(--card);
+      border: 1px solid var(--stroke);
+      border-radius: 18px;
+      box-shadow: var(--shadow);
+      padding: 16px;
+    }
+
+    h2{
+      margin: 0 0 12px 0;
+      font-weight: 900;
+      letter-spacing: .4px;
+      background: linear-gradient(90deg, var(--brand), var(--brand-2), var(--brand-3));
+      -webkit-background-clip: text; background-clip: text; color: transparent;
+    }
+
+    .grid{ display:grid; gap: 12px; grid-template-columns: 1fr; }
+    .row{ display:grid; gap: 12px; grid-template-columns: 1fr; }
+    .row.two{ grid-template-columns: 1fr; }
+
+    @media (min-width: 700px){
+      .grid{ grid-template-columns: 1fr 360px; align-items: start; }
       .row.two{ grid-template-columns: 1fr 1fr; }
-      .btn{ width:auto; padding:12px 18px; }
     }
 
-    /* accesibilidad focus */
-    input:focus, select:focus { outline:3px solid rgba(245,197,66,0.12); box-shadow:0 0 0 3px rgba(245,197,66,0.06); }
+    /* Inputs coherentes con el index (ya define base; aquí afinamos) */
+    label{
+      display:block; margin:6px 0; font-weight:700; color: var(--brand); font-size: .9rem;
+    }
+    .small-muted{ color:var(--mut); font-size: .9rem; }
+    .helper{ color: var(--mut); font-size: .9rem; margin-top: 6px; }
+
+    /* Botón principal con look del index */
+    .btn-primary{
+      display:inline-block;
+      background: linear-gradient(180deg,#fff,#f7fafc);
+      border:1px solid var(--stroke);
+      border-radius:12px;
+      color:var(--ink);
+      padding:12px 16px;
+      font-weight:800; cursor:pointer;
+    }
+    .btn-primary:hover{ box-shadow:0 6px 16px rgba(2,6,23,.06); }
+
+    /* Aside informativo */
+    aside.aside{
+      background:#fff;
+      border:1px solid var(--stroke);
+      border-radius:18px;
+      box-shadow: var(--shadow);
+      padding:16px;
+      height: fit-content;
+    }
+
+    /* Mensaje de error del DNI */
+    .mensaje-error{ color:#b91c1c; display:none; font-size:.9rem; margin-top:6px; }
   </style>
 </head>
 <body>
-<div class="contenedor">
-  <a class="volver-btn" href="index.php">← Volver al Menú</a>
-  <h2>Agregar Cliente</h2>
 
-  <div class="grid">
-    <!-- formulario -->
-    <form id="formCliente" class="card" action="guardar_cliente.php" method="POST" onsubmit="return validarDNI()" autocomplete="off" novalidate>
-      <div class="row two">
-        <div>
-          <label for="apellido">Apellido</label>
-          <input id="apellido" name="apellido" type="text" required>
-        </div>
-        <div>
-          <label for="nombre">Nombre</label>
-          <input id="nombre" name="nombre" type="text" required>
-        </div>
+<div class="wrap">
+  <div class="contenedor-wide">
+    <div class="card-form">
+      <a class="link-inline" href="index.php">← Volver al Menú</a>
+      <h2>Agregar Cliente</h2>
+
+      <div class="grid">
+        <!-- formulario -->
+        <form id="formCliente" class="" action="guardar_cliente.php" method="POST" onsubmit="return validarDNI()" autocomplete="off" novalidate>
+          <div class="row two">
+            <div>
+              <label for="apellido">Apellido</label>
+              <input id="apellido" name="apellido" type="text" required>
+            </div>
+            <div>
+              <label for="nombre">Nombre</label>
+              <input id="nombre" name="nombre" type="text" required>
+            </div>
+          </div>
+
+          <label for="dni">DNI</label>
+          <input id="dni" name="dni" type="text" required oninput="verificarDNI(this.value)">
+          <div id="mensajeDNI" class="mensaje-error">Este DNI ya está registrado en este gimnasio.</div>
+
+          <div class="row two" style="margin-top:8px">
+            <div>
+              <label for="fecha_nacimiento">Fecha de nacimiento</label>
+              <input id="fecha_nacimiento" name="fecha_nacimiento" type="date" required onchange="calcularEdad()">
+            </div>
+            <div>
+              <label for="edad">Edad</label>
+              <input id="edad" name="edad" type="text" readonly>
+            </div>
+          </div>
+
+          <label for="domicilio">Domicilio</label>
+          <input id="domicilio" name="domicilio" type="text">
+
+          <div class="row two">
+            <div>
+              <label for="telefono">Teléfono</label>
+              <input id="telefono" name="telefono" type="text">
+            </div>
+            <div>
+              <label for="email">Email</label>
+              <input id="email" name="email" type="email">
+            </div>
+          </div>
+
+          <label for="disciplina_select">Disciplina</label>
+          <select id="disciplina_select" name="disciplina_id" required>
+            <option value="">Seleccionar</option>
+            <?php if ($rol === 'admin' && !$sel_gimnasio): ?>
+              <?php foreach ($disciplinas as $d): ?>
+                <option value="<?= (int)$d['id'] ?>"><?= h($d['gimnasio_nombre'] . ' — ' . $d['nombre']) ?></option>
+              <?php endforeach; ?>
+            <?php else: ?>
+              <?php foreach ($disciplinas as $d): ?>
+                <option value="<?= (int)$d['id'] ?>"><?= h($d['nombre']) ?></option>
+              <?php endforeach; ?>
+            <?php endif; ?>
+          </select>
+          <div class="helper">Si no ves la disciplina correcta, verificá que esté creada para este gimnasio.</div>
+
+          <?php if ($rol === 'admin'): ?>
+            <label for="gimnasio_id">Gimnasio</label>
+            <select id="gimnasio_id" name="gimnasio_id">
+              <option value="">Seleccionar</option>
+              <?php foreach ($gimnasios as $g): ?>
+                <option value="<?= (int)$g['id'] ?>" <?= ($sel_gimnasio && $sel_gimnasio == $g['id']) ? 'selected' : '' ?>><?= h($g['nombre']) ?></option>
+              <?php endforeach; ?>
+            </select>
+            <div class="small-muted">Al cambiar el gimnasio se recargarán las disciplinas.</div>
+          <?php else: ?>
+            <input type="hidden" name="gimnasio_id" value="<?= (int)$gimnasio_id ?>">
+          <?php endif; ?>
+
+          <div style="margin-top:12px">
+            <button class="btn-primary" type="submit">Guardar Cliente</button>
+          </div>
+        </form>
+
+        <!-- info / ayuda (columna derecha en desktop) -->
+        <aside class="aside">
+          <h3 style="margin-top:0">Notas</h3>
+          <p class="small-muted">Este formulario está optimizado para dispositivos móviles y tablets. El administrador puede cambiar el gimnasio y visualizar las disciplinas disponibles para ese establecimiento.</p>
+          <p class="small-muted">La verificación de DNI se hace por gimnasio para evitar duplicados por sede.</p>
+        </aside>
       </div>
-
-      <label for="dni">DNI</label>
-      <input id="dni" name="dni" type="text" required oninput="verificarDNI(this.value)">
-      <div id="mensajeDNI" class="mensaje-error">Este DNI ya está registrado en este gimnasio.</div>
-
-      <div class="row two" style="margin-top:8px">
-        <div>
-          <label for="fecha_nacimiento">Fecha de nacimiento</label>
-          <input id="fecha_nacimiento" name="fecha_nacimiento" type="date" required onchange="calcularEdad()">
-        </div>
-        <div>
-          <label for="edad">Edad</label>
-          <input id="edad" name="edad" type="text" readonly>
-        </div>
-      </div>
-
-      <label for="domicilio">Domicilio</label>
-      <input id="domicilio" name="domicilio" type="text">
-
-      <div class="row two">
-        <div>
-          <label for="telefono">Teléfono</label>
-          <input id="telefono" name="telefono" type="text">
-        </div>
-        <div>
-          <label for="email">Email</label>
-          <input id="email" name="email" type="email">
-        </div>
-      </div>
-
-      <label for="disciplina_select">Disciplina</label>
-      <select id="disciplina_select" name="disciplina_id" required>
-        <option value="">Seleccionar</option>
-        <?php if ($rol === 'admin' && !$sel_gimnasio): ?>
-          <?php foreach ($disciplinas as $d): ?>
-            <option value="<?= (int)$d['id'] ?>"><?= h($d['gimnasio_nombre'] . ' — ' . $d['nombre']) ?></option>
-          <?php endforeach; ?>
-        <?php else: ?>
-          <?php foreach ($disciplinas as $d): ?>
-            <option value="<?= (int)$d['id'] ?>"><?= h($d['nombre']) ?></option>
-          <?php endforeach; ?>
-        <?php endif; ?>
-      </select>
-      <div class="helper">Si no ves la disciplina correcta, verificá que esté creada para este gimnasio.</div>
-
-      <?php if ($rol === 'admin'): ?>
-        <label for="gimnasio_id">Gimnasio</label>
-        <select id="gimnasio_id" name="gimnasio_id">
-          <option value="">Seleccionar</option>
-          <?php foreach ($gimnasios as $g): ?>
-            <option value="<?= (int)$g['id'] ?>" <?= ($sel_gimnasio && $sel_gimnasio == $g['id']) ? 'selected' : '' ?>><?= h($g['nombre']) ?></option>
-          <?php endforeach; ?>
-        </select>
-        <div class="small-muted">Al cambiar el gimnasio se recargarán las disciplinas.</div>
-      <?php else: ?>
-        <input type="hidden" name="gimnasio_id" value="<?= (int)$gimnasio_id ?>">
-      <?php endif; ?>
-
-      <button class="btn" type="submit">Guardar Cliente</button>
-    </form>
-
-    <!-- info / ayuda (columna derecha en desktop) -->
-    <aside style="padding:14px; border-radius:12px; background:#0f1316; border:1px solid var(--border)">
-      <h3 style="margin-top:0">Notas</h3>
-      <p class="small-muted">Este formulario está optimizado para dispositivos móviles y tablets. El administrador puede cambiar el gimnasio y visualizar las disciplinas disponibles para ese establecimiento.</p>
-      <p class="small-muted">La verificación de DNI se hace por gimnasio para evitar duplicados por sede.</p>
-    </aside>
+    </div>
   </div>
 </div>
 
@@ -206,7 +277,6 @@ let dniValido = true;
 function verificarDNI(dni){
   const msg = document.getElementById('mensajeDNI');
   if (!dni || dni.trim().length < 5) { msg.style.display = 'none'; dniValido = true; return; }
-  // obtener gimnasio actual
   let gid = '';
   const gsel = document.getElementById('gimnasio_id');
   if (gsel) gid = gsel.value;
@@ -218,7 +288,6 @@ function verificarDNI(dni){
     })
     .catch(e => { console.error(e); msg.style.display = 'none'; dniValido = true; });
 }
-
 function validarDNI(){
   if (!dniValido) { alert('El DNI ya existe para este gimnasio.'); return false; }
   return true;
@@ -250,8 +319,6 @@ document.addEventListener('DOMContentLoaded', function(){
         discSel.innerHTML = '<option value="">Seleccionar</option>';
       });
   });
-
-  // Si ya hay gimnasio seleccionado, disparar change para cargar disciplinas al abrir
   if (gSel.value) gSel.dispatchEvent(new Event('change'));
 });
 </script>

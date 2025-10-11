@@ -42,7 +42,6 @@ foreach (['fecha','created_at','fecha_mov','fechahora'] as $fc) {
 
 /* ===== Ampliar group_concat para no truncar urls/rutas largas ===== */
 if ($comprobante_col) {
-    // Ignorar error si el hosting no permite SET SESSION
     @$conexion->query("SET SESSION group_concat_max_len = 1048576");
 }
 
@@ -89,7 +88,6 @@ if ($comprobante_col) {
       LEFT JOIN (
         SELECT
           cliente_id,
-          /* Último según fecha detectada y luego id */
           SUBSTRING_INDEX(
             GROUP_CONCAT($col ORDER BY $fcol DESC, id DESC SEPARATOR '||'),
             '||', 1
@@ -110,7 +108,6 @@ if (!$stmt) {
     exit('Error preparando consulta: ' . $conexion->error);
 }
 if ($comprobante_col) {
-    // 2 placeholders (gimnasio_id para saldos y para comp)
     $stmt->bind_param('ii', $gimnasio_id, $gimnasio_id);
 } else {
     $stmt->bind_param('i', $gimnasio_id);
@@ -121,72 +118,106 @@ $resultado = $stmt->get_result();
 <!DOCTYPE html>
 <html lang="es">
 <head>
-    <meta charset="UTF-8">
-    <title>Cuentas Corrientes</title>
-    <link rel="stylesheet" href="estilo_unificado.css">
-    <style>
-        body { background-color:#000; color:gold; font-family:Arial, sans-serif; }
-        .contenedor { max-width: 1000px; margin:auto; padding:20px; }
-        table { width:100%; background:#111; border-collapse:collapse; margin-top:20px; }
-        th, td { border:1px solid gold; padding:10px; text-align:center; }
-        th { background:#222; }
-        .btn { padding:6px 12px; font-weight:700; border:none; border-radius:5px; cursor:pointer; text-decoration:none; margin:2px; display:inline-block; }
-        .btn-pago { background:green; color:#fff; }
-        .btn-eliminar { background:red; color:#fff; }
-        .btn-ghost { background:#333; color:gold; }
-        .muted { opacity:.7; }
-        .num { text-align:right; white-space:nowrap; }
-        .acciones { white-space:nowrap; }
-        a.btn[href^="http"] { text-decoration:none; }
-    </style>
+  <meta charset="UTF-8">
+  <title>Cuentas Corrientes</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <!-- Tema unificado igual al index -->
+  <link rel="stylesheet" href="estilo_unificado.css">
+  <style>
+    /* ===== Maqueta alineada al index (claro, cards blancas) ===== */
+    .wrap{ max-width:1200px; margin:24px auto; padding:0 16px 40px; }
+    .page-card{
+      background:var(--card); border:1px solid var(--stroke);
+      border-radius:18px; box-shadow:var(--shadow); padding:16px;
+    }
+    .page-title{
+      margin:0 0 12px 0; text-align:center; font-weight:900; letter-spacing:.4px;
+      background:linear-gradient(90deg,var(--brand),var(--brand-2),var(--brand-3));
+      -webkit-background-clip:text; background-clip:text; color:transparent;
+    }
+
+    /* ===== Tabla “tipo index” ===== */
+    .table-wrap{ width:100%; overflow-x:auto; -webkit-overflow-scrolling:touch; }
+    table.tabla{ width:100%; min-width:720px; border-collapse:collapse; background:#fff; }
+    .tabla thead th{
+      position:sticky; top:0; z-index:1; background:#f7fafc; color:#0f172a;
+      border-bottom:1px solid var(--stroke); text-align:center;
+    }
+    .tabla th, .tabla td{
+      padding:10px 12px; border-bottom:1px solid var(--stroke); text-align:center; white-space:nowrap;
+    }
+    .tabla tbody tr:hover{ background:#f9fafb; }
+    .num{ text-align:right; }
+
+    /* Botones coherentes */
+    .acciones{ white-space:nowrap; }
+    .btn{
+      background:linear-gradient(180deg,#fff,#f7fafc);
+      border:1px solid var(--stroke); border-radius:10px;
+      color:var(--ink); padding:8px 12px; font-weight:700; cursor:pointer;
+      text-decoration:none; display:inline-block; margin:0 2px;
+    }
+    .btn:hover{ box-shadow:0 6px 16px rgba(2,6,23,.06); }
+    .btn-pago{ border-color:rgba(22,163,74,.35); }
+    .btn-ghost{ border-color:rgba(180,83,9,.25); }
+    .muted{ color:#64748b; }
+  </style>
 </head>
 <body>
-<div class="contenedor">
-    <h2>🧾 Clientes con Deuda (Cuenta Corriente)</h2>
+  <div class="wrap">
+    <div class="page-card">
+      <h2 class="page-title">🧾 Clientes con Deuda (Cuenta Corriente)</h2>
 
-    <table>
-        <tr>
-            <th>Cliente</th>
-            <th class="num">Saldo</th>
-            <?php if ($comprobante_col): ?>
-                <th>Comprobante</th>
-            <?php endif; ?>
-            <th>Acción</th>
-        </tr>
-        <?php if (!$resultado || $resultado->num_rows === 0): ?>
-            <tr><td colspan="<?= $comprobante_col ? 4 : 3 ?>" class="muted">Sin deudas para este gimnasio.</td></tr>
-        <?php else: ?>
-            <?php while($fila = $resultado->fetch_assoc()): ?>
+      <div class="table-wrap">
+        <table class="tabla" aria-label="Cuentas corrientes con saldo">
+          <thead>
             <tr>
-                <td><?= h(trim(($fila['apellido'] ?? '').' '.($fila['nombre'] ?? ''))) ?></td>
-                <td class="num"><?= money($fila['saldo'] ?? 0) ?></td>
+              <th>Cliente</th>
+              <th class="num">Saldo</th>
+              <?php if ($comprobante_col): ?>
+                <th>Comprobante</th>
+              <?php endif; ?>
+              <th>Acción</th>
+            </tr>
+          </thead>
+          <tbody>
+            <?php if (!$resultado || $resultado->num_rows === 0): ?>
+              <tr>
+                <td colspan="<?= $comprobante_col ? 4 : 3 ?>" class="muted">Sin deudas para este gimnasio.</td>
+              </tr>
+            <?php else: ?>
+              <?php while($fila = $resultado->fetch_assoc()): ?>
+                <tr>
+                  <td><?= h(trim(($fila['apellido'] ?? '').' '.($fila['nombre'] ?? ''))) ?></td>
+                  <td class="num"><?= money($fila['saldo'] ?? 0) ?></td>
 
-                <?php if ($comprobante_col): ?>
-                  <td>
-                    <?php
-                      $url = trim((string)($fila['ultimo_comprobante'] ?? ''));
-                      if ($url !== '') {
-                          // Si es absoluta (http/https) la abrimos directo; si es relativa, también.
-                          $is_abs = (bool)preg_match('~^https?://~i', $url);
-                          $href = $is_abs ? $url : $url;
-                          echo '<a class="btn btn-ghost" href="'.h($href).'" target="_blank" rel="noopener">Ver comprobante</a>';
-                      } else {
-                          echo '<span class="muted">—</span>';
-                      }
-                    ?>
-                  </td>
-                <?php endif; ?>
+                  <?php if ($comprobante_col): ?>
+                    <td>
+                      <?php
+                        $url = trim((string)($fila['ultimo_comprobante'] ?? ''));
+                        if ($url !== '') {
+                            $is_abs = (bool)preg_match('~^https?://~i', $url);
+                            $href = $is_abs ? $url : $url;
+                            echo '<a class="btn btn-ghost" href="'.h($href).'" target="_blank" rel="noopener">Ver comprobante</a>';
+                        } else {
+                            echo '<span class="muted">—</span>';
+                        }
+                      ?>
+                    </td>
+                  <?php endif; ?>
 
-                <td class="acciones">
+                  <td class="acciones">
                     <a href="cc_detalle.php?cliente_id=<?= (int)$fila['cliente_id'] ?>#pago" class="btn btn-pago">Registrar Pago</a>
                     <a href="cc_detalle.php?cliente_id=<?= (int)$fila['cliente_id'] ?>" class="btn">Ver detalle</a>
-                    <!-- Recibo/estado de cuenta en PDF (opcional) -->
                     <a href="cc_comprobante.php?cliente_id=<?= (int)$fila['cliente_id'] ?>" class="btn">PDF</a>
-                </td>
-            </tr>
-            <?php endwhile; ?>
-        <?php endif; ?>
-    </table>
-</div>
+                  </td>
+                </tr>
+              <?php endwhile; ?>
+            <?php endif; ?>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
 </body>
 </html>

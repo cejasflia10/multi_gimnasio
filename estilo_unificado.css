@@ -1,438 +1,208 @@
-/* === ESTILO BASE OSCURO === */
-body {
-    margin: 0;
-    font-family: 'Poppins', sans-serif;
-    background-color: #1c1c1c;
-    color: #ffffff;
+/* =====================================================================
+   ESTILO UNIFICADO (igual al index) — Fondo claro + cards blancas
+   ===================================================================== */
+
+/* Paleta y sombras del INDEX */
+:root{
+  --bg1:#f5f7fb;                 /* fondo superior */
+  --bg2:#eef3f9;                 /* fondo inferior */
+  --ink:#0f172a;                 /* texto base */
+  --mut:#475569;                 /* texto secundario */
+  --brand:#b45309;               /* naranja oscuro */
+  --brand-2:#f59e0b;             /* naranja medio */
+  --brand-3:#fbbf24;             /* naranja claro */
+  --card:#ffffff;                /* tarjetas */
+  --stroke:rgba(15,23,42,.08);   /* bordes sutiles */
+  --shadow:0 10px 28px rgba(2,6,23,.08);
+  --gap:18px;
 }
 
-/* Contenedor centrado */
-.contenedor {
-    max-width: 500px;
-    margin: 50px auto;
-    padding: 30px;
-    background-color: #2c2c2c;
-    border-radius: 12px;
-    box-shadow: 0 0 10px rgba(255, 255, 255, 0.1);
+*{ box-sizing:border-box }
+html,body{ height:100% }
+
+body{
+  margin:0; color:var(--ink);
+  font-family:system-ui,-apple-system,Segoe UI,Roboto,Inter,Arial,sans-serif;
+  background:
+    radial-gradient(900px 600px at -10% -10%, rgba(255,105,0,.08) 0%, transparent 45%),
+    radial-gradient(1200px 700px at 110% -10%, rgba(255,170,0,.08) 0%, transparent 55%),
+    linear-gradient(180deg,var(--bg1) 0%, var(--bg2) 100%);
 }
 
-/* Títulos */
-h1, h2, h3 {
-    color: #ffffff;
-    text-align: center;
+/* ===== Layout general del index ===== */
+.wrap{ max-width:1200px; margin:24px auto; padding:0 16px 40px; }
+
+/* Header */
+.header{
+  display:grid; grid-template-columns:1fr auto;
+  gap:16px; align-items:center; margin-bottom:16px;
+}
+.title{
+  margin:0; font-weight:900; letter-spacing:.6px;
+  background:linear-gradient(90deg,var(--brand),var(--brand-2),var(--brand-3));
+  -webkit-background-clip:text; background-clip:text; color:transparent;
+}
+.sys-exp{ margin:.25rem 0 0; color:var(--mut); }
+
+.logo-wrap{ display:flex; gap:10px; justify-content:flex-end; }
+#logoGym{
+  max-height:170px; max-width:420px; object-fit:contain;
+  background:#fff; padding:8px; border:1px solid var(--stroke);
+  border-radius:16px; box-shadow:var(--shadow);
+}
+.btn-mini{
+  padding:6px 10px; border:1px solid var(--stroke);
+  background:linear-gradient(180deg,#fff,#f7fafc);
+  border-radius:12px; cursor:pointer;
 }
 
-/* Campos de entrada */
+/* Responsivo header */
+@media (max-width:992px){
+  .header{ grid-template-columns:1fr; }
+  .logo-wrap{ justify-content:flex-start; }
+  #logoGym{ max-height:64px; max-width:180px; padding:6px; }
+}
+
+/* ===== Grid del index ===== */
+.grid{ display:grid; grid-template-columns:repeat(12,1fr); gap:var(--gap); }
+@media (max-width:1100px){ .grid{ grid-template-columns:repeat(8,1fr); } }
+@media (max-width:768px){  .grid{ grid-template-columns:repeat(4,1fr); } }
+
+/* ===== Cards + componentes ===== */
+.card,.notice,.alert,.kpi,.field{
+  background:var(--card); border:1px solid var(--stroke);
+  border-radius:18px; padding:16px; box-shadow:var(--shadow);
+}
+.card{ grid-column:span 4; }
+.card-header{
+  display:flex; align-items:center; justify-content:space-between;
+  margin-bottom:10px; gap:12px;
+}
+.card-title{ margin:0; color:var(--brand); font-size:1.05rem; }
+.card-sub{ margin:0; color:#64748b; font-size:.9rem; }
+
+.kpis{ display:flex; gap:12px; flex-wrap:wrap; margin:10px 0 16px; }
+.kpi{ min-width:160px; background:linear-gradient(180deg,#fff,#f8fafc); }
+.kpi-label{ color:var(--brand); font-size:.8rem; }
+.kpi-value{ font-weight:900; font-size:1.8rem; }
+
+/* ===== Móvil: tarjetas a ancho completo ===== */
+@media (max-width:900px){
+  .card,.alert,.notice{ text-align:center; }
+  .card-header{ flex-direction:column; align-items:center; gap:6px; }
+  .kpis{ justify-content:center; }
+  .toolbar{ display:flex; justify-content:center; }
+  .card{ grid-column:1 / -1; }
+}
+
+/* ===== Listado Alumnos Hoy ===== */
+#contenedor-alumnos ul.asistencias-hoy{ list-style:none; margin:0; padding:0; }
+#contenedor-alumnos ul.asistencias-hoy li{
+  display:flex; justify-content:space-between; align-items:baseline;
+  gap:10px; padding:8px 6px; border-bottom:1px dashed rgba(15,23,42,.12);
+}
+#contenedor-alumnos ul.asistencias-hoy li:last-child{ border-bottom:none; }
+#contenedor-alumnos .n{ flex:1 1 auto; min-width:0; white-space:normal; overflow-wrap:anywhere; line-height:1.25; }
+#contenedor-alumnos .h{ flex:0 0 auto; font-variant-numeric:tabular-nums; white-space:nowrap; }
+
+/* ===== Reservas (compacto móvil) ===== */
+@media (max-width:900px){
+  #contenedor-reservas .res-card{
+    border:1px solid rgba(15,23,42,.08);
+    border-radius:16px; box-shadow:0 6px 16px rgba(2,6,23,.06);
+    padding:10px 12px; margin:10px 0; background:#fff; text-align:left;
+  }
+  #contenedor-reservas .res-head{
+    display:flex; align-items:center; gap:8px;
+    font-weight:800; color:#b45309; font-size:1.02rem; line-height:1.2;
+    margin-bottom:6px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  }
+  #contenedor-reservas .res-body{
+    display:grid; grid-template-columns:1fr 1fr; gap:8px; align-items:start;
+  }
+  #contenedor-reservas .res-body > div{ display:flex; gap:6px; line-height:1.25; }
+  @media (max-width:520px){ #contenedor-reservas .res-body{ grid-template-columns:1fr; } }
+}
+
+/* ===== Centrado de tarjetas específicas ===== */
+#contenedor-ingresos, #card-venc, #card-cumples { text-align:center; }
+
+/* ===== Montos ocultos por defecto (igual index) ===== */
+body.ocultar-montos #ingresos-body .monto,
+body.ocultar-montos #ingresos-body .amount,
+body.ocultar-montos #ingresos-body [class*="monto"]{
+  filter: blur(10px);
+  pointer-events: none;
+  user-select: none;
+}
+
+/* Estructura visual interna de Ingresos */
+#ingresos-body .box, #ingresos-body .ing-card{
+  display:flex; flex-direction:column; align-items:center; gap:6px;
+}
+
+/* Utilidades del index */
+.field{ display:inline-flex; align-items:center; gap:8px; }
+.mut{ color:var(--mut); }
+.link-inline{ color:var(--brand); text-decoration:underline; }
+.skeleton{ background:linear-gradient(90deg,#f3f4f6, #e5e7eb, #f3f4f6); background-size:200% 100%; animation:ske 1.2s infinite linear; border-radius:12px; }
+@keyframes ske{ 0%{background-position:200% 0;} 100%{background-position:-200% 0;} }
+
+/* ===== Formularios coherentes en TODAS las páginas ===== */
 input[type="text"],
 input[type="email"],
 input[type="password"],
 input[type="date"],
 input[type="number"],
-select,
-textarea {
-    width: 100%;
-    padding: 12px;
-    margin: 10px 0;
-    background-color: #1c1c1c;
-    border: 1px solid #444;
-    border-radius: 8px;
-    color: #ffffff;
-    font-size: 16px;
+select, textarea{
+  width:100%;
+  padding:10px 12px;
+  border:1px solid var(--stroke);
+  border-radius:10px;
+  background:#fff;
+  color:var(--ink);
+  font-size:15px;
+  outline:none;
+}
+input:focus, select:focus, textarea:focus{
+  border-color:rgba(180,83,9,.35);
+  box-shadow:0 0 0 4px rgba(245,158,11,.15);
 }
 
-/* Botones */
-button,
-input[type="submit"] {
-    width: 100%;
-    padding: 12px;
-    background-color: #ffd600;
-    color: #000000;
-    border: none;
-    border-radius: 8px;
-    font-weight: bold;
-    font-size: 16px;
-    cursor: pointer;
-    transition: background 0.3s ease;
-    margin-top: 10px;
+/* Botones genéricos similares a .btn-mini pero full width opcional */
+.btn, .btn-primary{
+  background:linear-gradient(180deg,#fff,#f7fafc);
+  border:1px solid var(--stroke);
+  border-radius:12px;
+  color:var(--ink);
+  padding:10px 14px;
+  font-weight:700; cursor:pointer;
+}
+.btn:hover{ box-shadow:0 6px 16px rgba(2,6,23,.06); }
+
+/* ===== Ayudas para vistas “no index” ===== */
+.container, .contenedor, .contenedor-wide{
+  max-width:1100px; margin:24px auto; padding:16px;
+}
+.contenedor, .contenedor-wide{
+  background:var(--card); border:1px solid var(--stroke);
+  border-radius:18px; box-shadow:var(--shadow);
 }
 
-button:hover,
-input[type="submit"]:hover {
-    background-color: #ffeb3b;
-}
+/* Tablas (para páginas CRUD) */
+table{ width:100%; border-collapse:collapse; margin-top:14px; background:#fff; }
+th,td{ padding:10px 12px; border-bottom:1px solid var(--stroke); }
+th{ background:#f7fafc; color:#0f172a; text-align:left; }
 
-/* Tablas */
-table {
-    width: 100%;
-    border-collapse: collapse;
-    margin-top: 20px;
-}
+/* Estado de enlaces en general */
+a{ color:var(--brand); text-decoration:none; }
+a:hover{ text-decoration:underline; }
 
-th, td {
-    padding: 12px;
-    text-align: left;
-    border-bottom: 1px solid #444;
-    color: #ffffff;
-}
+/* ===== Toolbar (por si la página usa acciones arriba) ===== */
+.toolbar{ display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
 
-th {
-    background-color: #333;
-}
-
-tr:hover {
-    background-color: #2a2a2a;
-}
-
-/* Enlaces */
-a {
-    color: #ffd600;
-    text-decoration: none;
-}
-
-a:hover {
-    text-decoration: underline;
-}
-
-/* === RESPONSIVE PARA CELULARES === */
-@media (max-width: 600px) {
-    .contenedor {
-        margin: 20px;
-        padding: 20px;
-    }
-
-    h1, h2 {
-        font-size: 20px;
-    }
-
-    input, select, textarea, button {
-        font-size: 16px;
-    }
-
-    table {
-        font-size: 14px;
-        display: block;
-        overflow-x: auto;
-        white-space: nowrap;
-    }
-
-    th, td {
-        padding: 8px;
-    }
-
-    /* Alineación de elementos */
-    .form-group {
-        display: flex;
-        flex-direction: column;
-    }
-
-    label {
-        margin-bottom: 5px;
-    }
-}
-.alerta-mensaje {
-    background: #222;
-    color: gold;
-    padding: 10px;
-    margin: 10px 0;
-    border: 1px solid gold;
-    border-radius: 8px;
-    font-weight: bold;
-    text-align: center;
-    animation: parpadeo 1s infinite alternate;
-}
-
-@keyframes parpadeo {
-    0% { opacity: 1; }
-    100% { opacity: 0.6; }
-}
-.contenedor-mensajes {
-    background: #111;
-    color: gold;
-    border: 1px solid #444;
-    padding: 10px;
-    margin-top: 10px;
-    border-radius: 8px;
-}
-
-.contenedor-mensajes h4 {
-    margin-top: 0;
-    font-size: 16px;
-    color: gold;
-}
-.badge-mensajes {
-    font-weight: bold;
-    color: gold;
-    font-size: 14px;
-}
-.alerta-mensaje {
-    background-color: #111;
-    color: gold;
-    padding: 10px;
-    margin-top: 10px;
-    border: 1px solid gold;
-    border-radius: 5px;
-    font-weight: bold;
-    text-align: center;
-    animation: parpadeo 1s infinite alternate;
-}
-
-@keyframes parpadeo {
-    0% { opacity: 1; }
-    100% { opacity: 0.6; }
-}
-.alerta-mensaje {
-    background-color: #111;
-    color: gold;
-    padding: 10px;
-    border: 1px solid gold;
-    border-radius: 6px;
-    margin-bottom: 10px;
-    animation: parpadeo 1s infinite alternate;
-}
-
-@keyframes parpadeo {
-    0% { opacity: 1; }
-    100% { opacity: 0.7; }
-}
-.oculto {
-  display: none !important;
-}
-.toggle-icon {
-    font-size: 22px;
-    cursor: pointer;
-    float: right;
-    margin-right: 10px;
-    color: gold;
-}
-.menu-eventos {
-  background-color: #111;
-  padding: 10px;
-  position: relative;
-}
-
-.menu-eventos .menu {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  list-style: none;
-  margin: 0;
-  padding: 0;
-}
-
-.menu-eventos .menu li {
-  margin: 5px 10px;
-}
-
-.menu-eventos .menu a {
-  display: block;
-  padding: 8px 12px;
-  background-color: #222;
-  color: gold;
-  text-decoration: none;
-  border-radius: 6px;
-  transition: background 0.3s;
-}
-
-.menu-eventos .menu a:hover {
-  background-color: #333;
-}
-
-.menu-toggle {
-  display: none;
-  background: #222;
-  color: gold;
-  border: none;
-  padding: 10px;
-  font-size: 18px;
-  margin-bottom: 10px;
-  border-radius: 6px;
-}
-
-/* Responsive para móviles */
-@media screen and (max-width: 768px) {
-  .menu-eventos .menu {
-    display: none;
-    flex-direction: column;
-    align-items: center;
-  }
-
-  .menu-eventos .menu.show {
-    display: flex;
-  }
-
-  .menu-toggle {
-    display: block;
-    margin: auto;
-  }
-}
-/* ====== COMPAT MENÚ PROFESOR (.mp-*) con estilo_unificado.css ====== */
-/* No toques nada arriba: esto va al FINAL del archivo para tener prioridad */
-
-.mp-wrap, .mp-wrap * {
-  box-sizing: border-box;
-  font-family: system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Arial !important;
-}
-
-/* Paleta propia del menú */
-:root {
-  --mp-bg:#0b1220; --mp-ink:#e5e7eb; --mp-chip:#111827; --mp-b:#334155;
-  --mp-brand:#22d3ee; --mp-brand2:#06b6d4;
-}
-
-/* Contenedor fijo/pegajoso arriba y por encima */
-.mp-wrap{
-  position: sticky; top: 0; z-index: 2147483647;
-  background: var(--mp-bg);
-  border-bottom: 1px solid var(--mp-b);
-  color: var(--mp-ink);
-}
-
-/* Fila superior */
-.mp-row{
-  max-width: 1200px; margin: 0 auto; padding: 10px 12px;
-  display:flex; align-items:center; gap:10px;
-}
-.mp-title{ font-weight: 800; letter-spacing: .2px; }
-.mp-spacer{ flex: 1; }
-
-/* Enlaces de cabecera (Salir) – neutralizan el dorado global de a{} */
-.mp-toplink{
-  color: var(--mp-ink) !important;
-  text-decoration: none !important;
-  font-weight: 700 !important;
-  padding: 6px 10px !important; border-radius: 8px !important;
-  background: transparent !important; border: 0 !important;
-}
-.mp-toplink:hover{ background: var(--mp-chip) !important; }
-
-/* Tira de navegación horizontal */
-.mp-nav{
-  display:flex; align-items:center; gap:8px;
-  padding:8px 12px; border-top:1px solid var(--mp-b);
-  background: var(--mp-bg);
-  overflow-x:auto; -webkit-overflow-scrolling:touch; scrollbar-width:thin;
-}
-
-/* Chip "☰ Menú" */
-.mp-chip{
-  background: linear-gradient(90deg,var(--mp-brand),var(--mp-brand2)) !important;
-  color:#111 !important; font-weight:800 !important;
-  padding:8px 12px !important; border-radius:999px !important;
-  text-decoration:none !important; white-space:nowrap !important;
-  flex: 0 0 auto !important;
-}
-
-/* Botones: DOS LÍNEAS exactas, todos iguales */
-.mp-btn{
-  color: var(--mp-ink) !important;
-  background: var(--mp-chip) !important;
-  border: 1px solid var(--mp-b) !important;
-  border-radius: 10px !important;
-  text-decoration: none !important;
-
-  display: -webkit-box !important;        /* line clamp */
-  -webkit-box-orient: vertical !important;
-  -webkit-line-clamp: 2 !important;       /* <= dos líneas */
-  overflow: hidden !important;
-  white-space: normal !important;
-  text-align: center !important;
-
-  font-size: 14px !important; font-weight: 700 !important; letter-spacing: .2px !important;
-  width: 210px !important; height: 56px !important; line-height: 1.15 !important;
-  padding: 8px 10px !important;
-  flex: 0 0 auto !important;
-}
-.mp-btn:hover{ border-color: var(--mp-brand) !important; }
-
-/* Activo */
-.mp-btn.active{
-  border-color: var(--mp-brand) !important;
-  outline: 2px solid rgba(34,211,238,.35) !important;
-}
-
-/* 🔒 Neutraliza estilos globales que podrían "pintar" el menú */
-.mp-wrap a, .mp-wrap a *{
-  color: inherit !important;              /* ignora a{ color: #ffd600 } global */
-  -webkit-text-fill-color: currentColor !important;
-  background: none !important;            /* sin gradientes heredados */
-  -webkit-background-clip: initial !important;
-  background-clip: initial !important;
-  text-shadow: none !important;
-  filter: none !important; opacity: 1 !important;
-}
-/* Evita que .contenedor, table, etc. afecten al menú */
-.mp-wrap table, .mp-wrap .contenedor { all: unset; } /* el menú no usa estas estructuras */
-/* ====== /COMPAT MENÚ ====== */
-/* === HOTFIX VISIBILIDAD TEXTO MENÚ (.mp-*) === */
-.mp-wrap a,
-.mp-wrap a *{
-  color: var(--mp-ink) !important;                 /* texto claro por defecto */
-  -webkit-text-fill-color: var(--mp-ink) !important;
-  text-shadow: none !important;
-  filter: none !important;
-  opacity: 1 !important;
-  background: none !important;                     /* evita text-gradient */
-  -webkit-background-clip: initial !important;
-  background-clip: initial !important;
-}
-
-/* Asegura todos los estados del link */
-.mp-wrap a:link,
-.mp-wrap a:visited,
-.mp-wrap a:hover,
-.mp-wrap a:active{
-  color: var(--mp-ink) !important;
-  -webkit-text-fill-color: var(--mp-ink) !important;
-}
-
-/* El chip de título (☰ Menú) usa texto oscuro sobre fondo celeste */
-.mp-chip,
-.mp-chip *{
-  color: #111 !important;
-  -webkit-text-fill-color: #111 !important;
-}
-
-/* Por si alguna regla global baja la opacidad del contenedor */
-.mp-wrap{ opacity: 1 !important; }
-/* === ULTRA-HOTFIX: texto visible SIEMPRE en el menú (.mp-wrap) === */
-.mp-wrap, .mp-wrap *{
-  /* Color y fill sólidos */
-  color: var(--mp-ink) !important;
-  -webkit-text-fill-color: var(--mp-ink) !important;
-
-  /* Quita cualquier truco de texto con gradientes */
-  background: none !important;
-  background-image: none !important;
-  -webkit-background-clip: initial !important;
-  background-clip: initial !important;
-
-  /* Nada de mezclas ni filtros raros */
-  mix-blend-mode: normal !important;
-  filter: none !important;
-  text-shadow: none !important;
-
-  /* Evita “parpadeos” por animaciones/transiciones heredadas */
-  animation: none !important;
-  transition: none !important;
-
-  /* Asegura opacidad plena */
-  opacity: 1 !important;
-}
-
-/* Estados del link forzados (por si hay reglas globales) */
-.mp-wrap a:link,
-.mp-wrap a:visited,
-.mp-wrap a:hover,
-.mp-wrap a:active,
-.mp-wrap a *,
-.mp-wrap a:hover *{
-  color: var(--mp-ink) !important;
-  -webkit-text-fill-color: var(--mp-ink) !important;
-}
-
-/* Botón “☰ Menú” necesita texto oscuro sobre celeste */
-.mp-chip,
-.mp-chip *{
-  color: #111 !important;
-  -webkit-text-fill-color: #111 !important;
+/* ===== Ayuda responsiva para páginas antiguas ===== */
+@media (max-width:768px){
+  .container, .contenedor, .contenedor-wide{ margin:16px; padding:12px; }
+  table{ display:block; overflow-x:auto; white-space:nowrap; }
 }

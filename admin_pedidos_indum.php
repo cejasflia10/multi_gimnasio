@@ -4,8 +4,6 @@ if (session_status() === PHP_SESSION_NONE) session_start();
 require_once __DIR__.'/conexion.php';
 require_once __DIR__ . '/menu_horizontal.php';
 
-// require_once __DIR__.'/menu_admin.php';
-
 if (!isset($conexion) || !($conexion instanceof mysqli)) { http_response_code(500); exit('❌ Sin conexión a BD'); }
 @$conexion->set_charset('utf8mb4');
 
@@ -115,28 +113,55 @@ if (isset($_GET['export']) && $_GET['export']==='csv') {
 <head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>🧾 Pedidos Indumentaria</title>
+<link rel="stylesheet" href="estilo_unificado.css">
 <style>
-  body{font-family:system-ui,Segoe UI,Roboto,Arial;background:#0e1117;color:#fff;margin:0}
-  .wrap{max-width:1200px;margin:0 auto;padding:16px}
-  .card{background:#141a2a;border:1px solid #2a3550;border-radius:12px;padding:16px;margin:12px 0}
-  table{width:100%;border-collapse:collapse}
-  th,td{padding:10px;border-bottom:1px solid #2a3550;text-align:left}
-  th{background:#0f1628}
-  input,select{padding:10px;border-radius:10px;border:1px solid #2a3550;background:#0d1322;color:#fff}
-  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:end}
-  .btn{padding:10px 14px;border:0;border-radius:10px;background:#3b82f6;color:#fff;cursor:pointer;text-decoration:none;display:inline-block}
-  .btn.gray{background:#475569}
-  .btn.danger{background:#dc2626}
-  .muted{color:#9fb0d3;font-size:12px}
-  .right{text-align:right}
-  .nowrap{white-space:nowrap}
-  .msg{padding:10px;border-radius:10px;margin:8px 0}
-  .ok{background:#12321c;border:1px solid #1f7a3b}
+  /* ===== Estilo alineado al index (claro, con vars) ===== */
+  .wrap{ max-width:1200px; margin:24px auto; padding:0 16px 40px; }
+  .page-title{
+    margin:0 0 10px 0; font-weight:900; letter-spacing:.4px;
+    background:linear-gradient(90deg,var(--brand),var(--brand-2),var(--brand-3));
+    -webkit-background-clip:text; background-clip:text; color:transparent;
+  }
+  .card{ background:var(--card); border:1px solid var(--stroke); border-radius:18px; padding:16px; box-shadow:var(--shadow); margin:12px 0; }
+  .muted{ color:#64748b; }
+
+  /* Filtros */
+  .row{ display:flex; gap:10px; flex-wrap:wrap; align-items:end; }
+  input[type="date"], select{
+    padding:10px 12px; border-radius:12px; border:1px solid var(--stroke);
+    background:linear-gradient(180deg,#fff,#f7fafc); color:var(--ink); font-size:14px;
+  }
+  .btn{
+    padding:10px 14px; border-radius:12px; border:1px solid var(--stroke);
+    background:linear-gradient(180deg,#fff,#f7fafc); color:var(--ink);
+    font-weight:800; cursor:pointer; text-decoration:none; display:inline-block;
+  }
+  .btn.danger{ background:linear-gradient(180deg,#fee2e2,#fecaca); }
+  .btn.gray{ background:linear-gradient(180deg,#f1f5f9,#e2e8f0); }
+
+  /* Totales */
+  .totals{ display:flex; gap:18px; flex-wrap:wrap; }
+  .totals > div{ background:#fff; border:1px solid var(--stroke); border-radius:12px; padding:10px 12px; }
+
+  /* Tabla unificada */
+  .table-wrap{ width:100%; overflow:auto; -webkit-overflow-scrolling:touch; }
+  table.tabla{ width:100%; min-width:980px; border-collapse:collapse; background:#fff; }
+  .tabla thead th{
+    background:#f7fafc; color:#0f172a; position:sticky; top:0; z-index:1;
+    border-bottom:1px solid var(--stroke); text-align:left;
+  }
+  .tabla th, .tabla td{ padding:10px 12px; border-bottom:1px solid var(--stroke); vertical-align:middle; }
+  .right{ text-align:right; }
+  .nowrap{ white-space:nowrap; }
+  .tabla tbody tr:hover{ background:#f9fafb; }
+
+  /* Mensaje */
+  .msg.ok{ background:#f0fdf4; border:1px solid #bbf7d0; color:#166534; border-radius:12px; }
 </style>
 </head>
 <body>
 <div class="wrap">
-  <h1>🧾 Pedidos de Indumentaria</h1>
+  <h1 class="page-title">🧾 Pedidos de Indumentaria</h1>
 
   <?php if ($msg): ?>
     <div class="card msg ok"><?= h($msg) ?></div>
@@ -144,9 +169,16 @@ if (isset($_GET['export']) && $_GET['export']==='csv') {
 
   <div class="card">
     <form class="row" method="get">
-      <div><label>Desde</label><br><input type="date" name="desde" value="<?=h($desde)?>"></div>
-      <div><label>Hasta</label><br><input type="date" name="hasta" value="<?=h($hasta)?>"></div>
-      <div><label>Estado</label><br>
+      <div>
+        <label class="muted">Desde</label><br>
+        <input type="date" name="desde" value="<?=h($desde)?>">
+      </div>
+      <div>
+        <label class="muted">Hasta</label><br>
+        <input type="date" name="hasta" value="<?=h($hasta)?>">
+      </div>
+      <div>
+        <label class="muted">Estado</label><br>
         <select name="estado">
           <option value="">Todos</option>
           <option value="pendiente"   <?= $estado==='pendiente'?'selected':''; ?>>Pendiente</option>
@@ -154,7 +186,8 @@ if (isset($_GET['export']) && $_GET['export']==='csv') {
           <option value="cancelado"   <?= $estado==='cancelado'?'selected':''; ?>>Cancelado</option>
         </select>
       </div>
-      <div><label>Pago</label><br>
+      <div>
+        <label class="muted">Pago</label><br>
         <select name="pago">
           <option value="">Todos</option>
           <option value="sena_efectivo"       <?= $pago==='sena_efectivo'?'selected':''; ?>>Seña (Efectivo)</option>
@@ -163,13 +196,13 @@ if (isset($_GET['export']) && $_GET['export']==='csv') {
           <option value="total_transferencia" <?= $pago==='total_transferencia'?'selected':''; ?>>Total (Transferencia)</option>
         </select>
       </div>
-      <div><br><button class="btn">Filtrar</button></div>
+      <div><br><button class="btn" type="submit">Filtrar</button></div>
       <div><br><a class="btn" href="?desde=<?=h($desde)?>&hasta=<?=h($hasta)?>&estado=<?=h($estado)?>&pago=<?=h($pago)?>&export=csv">⬇️ CSV</a></div>
     </form>
   </div>
 
   <div class="card">
-    <div style="display:flex;gap:18px;flex-wrap:wrap">
+    <div class="totals">
       <div><strong>Total facturado:</strong> $<?=number_format($total_facturado,2,',','.')?></div>
       <div><strong>Señas:</strong> $<?=number_format($total_senas,2,',','.')?></div>
       <div><strong>Cobrado (según pago):</strong> $<?=number_format($total_cobrado,2,',','.')?></div>
@@ -181,8 +214,8 @@ if (isset($_GET['export']) && $_GET['export']==='csv') {
     <?php if (empty($pedidos)): ?>
       <p class="muted">Sin pedidos en el rango.</p>
     <?php else: ?>
-      <div style="overflow:auto">
-        <table>
+      <div class="table-wrap">
+        <table class="tabla" aria-label="Listado de pedidos de indumentaria">
           <thead>
             <tr>
               <th>ID</th><th>Fecha</th><th>Cliente</th><th>Estado</th><th>Pago</th>

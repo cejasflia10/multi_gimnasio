@@ -6,151 +6,185 @@ include 'menu_horizontal.php';
 date_default_timezone_set('America/Argentina/Buenos_Aires');
 
 // ✅ Verificar sesión
-$gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
-if (!$gimnasio_id) {
+$gimnasio_id = (int)($_SESSION['gimnasio_id'] ?? 0);
+if ($gimnasio_id <= 0) {
     header("Location: login.php");
     exit;
 }
 
 // ✅ Validar mes y año
-$mes = $_GET['mes'] ?? date('m');
+$mes  = $_GET['mes']  ?? date('m');
 $anio = $_GET['anio'] ?? date('Y');
-if (!preg_match('/^(0[1-9]|1[0-2])$/', $mes)) $mes = date('m');
-if (!preg_match('/^\d{4}$/', $anio)) $anio = date('Y');
+if (!preg_match('/^(0[1-9]|1[0-2])$/', $mes))  $mes  = date('m');
+if (!preg_match('/^\d{4}$/', $anio))           $anio = date('Y');
+$mes_int  = (int)$mes;   // <-- bind como int
+$anio_int = (int)$anio;
 
 $meses = [
-    '01' => 'Enero', '02' => 'Febrero', '03' => 'Marzo',
-    '04' => 'Abril', '05' => 'Mayo', '06' => 'Junio',
-    '07' => 'Julio', '08' => 'Agosto', '09' => 'Septiembre',
-    '10' => 'Octubre', '11' => 'Noviembre', '12' => 'Diciembre'
+    '01'=>'Enero','02'=>'Febrero','03'=>'Marzo','04'=>'Abril','05'=>'Mayo','06'=>'Junio',
+    '07'=>'Julio','08'=>'Agosto','09'=>'Septiembre','10'=>'Octubre','11'=>'Noviembre','12'=>'Diciembre'
 ];
 
-// ✅ Consulta preparada para mayor seguridad
+/* ================== Datos ================== */
 $stmt = $conexion->prepare("
     SELECT m.fecha_inicio, m.fecha_vencimiento,
-           m.pago_efectivo, m.pago_transferencia, m.pago_debito,
-           m.pago_credito, m.pago_cuenta_corriente,
-           IFNULL(m.otros_pagos, 0) AS otros_pagos,
-           IFNULL(m.total_pagado, 0) AS total,
+           IFNULL(m.pago_efectivo,0)          AS pago_efectivo,
+           IFNULL(m.pago_transferencia,0)     AS pago_transferencia,
+           IFNULL(m.pago_debito,0)            AS pago_debito,
+           IFNULL(m.pago_credito,0)           AS pago_credito,
+           IFNULL(m.pago_cuenta_corriente,0)  AS pago_cuenta_corriente,
+           IFNULL(m.otros_pagos,0)            AS otros_pagos,
+           IFNULL(m.total_pagado,0)           AS total,
            c.apellido, c.nombre
     FROM membresias m
     INNER JOIN clientes c ON m.cliente_id = c.id
     WHERE MONTH(m.fecha_inicio) = ? AND YEAR(m.fecha_inicio) = ? AND m.gimnasio_id = ?
     ORDER BY m.fecha_inicio DESC
 ");
-$stmt->bind_param("iii", $mes, $anio, $gimnasio_id);
+$stmt->bind_param("iii", $mes_int, $anio_int, $gimnasio_id);
 $stmt->execute();
 $resultado = $stmt->get_result();
 
-$pagos = [];
-$total_mes = 0;
-
-function obtenerMetodoPago($fila) {
+function obtenerMetodoPago(array $f): string {
     $metodos = [];
-    if ($fila['pago_efectivo'] > 0) $metodos[] = 'Efectivo';
-    if ($fila['pago_transferencia'] > 0) $metodos[] = 'Transferencia';
-    if ($fila['pago_debito'] > 0) $metodos[] = 'Débito';
-    if ($fila['pago_credito'] > 0) $metodos[] = 'Crédito';
-    if ($fila['pago_cuenta_corriente'] > 0) $metodos[] = 'Cuenta Corriente';
+    if ($f['pago_efectivo']          > 0) $metodos[] = 'Efectivo';
+    if ($f['pago_transferencia']     > 0) $metodos[] = 'Transferencia';
+    if ($f['pago_debito']            > 0) $metodos[] = 'Débito';
+    if ($f['pago_credito']           > 0) $metodos[] = 'Crédito';
+    if ($f['pago_cuenta_corriente']  > 0) $metodos[] = 'Cuenta Corriente';
     return implode(' + ', $metodos);
 }
 
+$pagos = [];
+$total_mes = 0.0;
 while ($fila = $resultado->fetch_assoc()) {
     $fila['metodo_pago'] = obtenerMetodoPago($fila);
     $pagos[] = $fila;
-    $total_mes += floatval($fila['total']);
+    $total_mes += (float)$fila['total'];
 }
+$stmt->close();
 ?>
-
 <!DOCTYPE html>
 <html lang="es">
 <head>
-    <meta charset="UTF-8">
-    <title>Pagos del Mes</title>
-    <link rel="stylesheet" href="estilo_unificado.css">
-    <style>
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 20px;
-        }
-        th, td {
-            padding: 8px;
-            border: 1px solid #666;
-            text-align: center;
-        }
-        th { background-color: #222; color: gold; }
-        td { background-color: #111; color: white; }
-        .boton-descarga {
-            margin-top: 10px;
-            display: inline-block;
-            padding: 8px 15px;
-            background-color: gold;
-            color: black;
-            text-decoration: none;
-            border-radius: 5px;
-        }
-    </style>
+  <meta charset="UTF-8">
+  <title>Pagos del Mes</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <!-- Tema unificado igual al index -->
+  <link rel="stylesheet" href="estilo_unificado.css">
+  <style>
+    /* ===== Estructura alineada al index ===== */
+    .wrap{ max-width:1200px; margin:24px auto; padding:0 16px 40px; }
+    .page-card{
+      background:var(--card); border:1px solid var(--stroke);
+      border-radius:18px; box-shadow:var(--shadow); padding:16px;
+    }
+    .page-title{
+      margin:0 0 12px 0; text-align:center; font-weight:900; letter-spacing:.4px;
+      background:linear-gradient(90deg,var(--brand),var(--brand-2),var(--brand-3));
+      -webkit-background-clip:text; background-clip:text; color:transparent;
+    }
+
+    /* Filtros (mes/año) con estilos del sistema */
+    .toolbar{
+      display:flex; align-items:center; justify-content:center; gap:10px; flex-wrap:wrap; margin-bottom:12px;
+    }
+    .toolbar select, .toolbar button, .toolbar a{
+      padding:10px 12px; border-radius:12px; border:1px solid var(--stroke);
+      background:linear-gradient(180deg,#fff,#f7fafc); color:var(--ink); font-weight:700; cursor:pointer;
+      text-decoration:none; display:inline-block;
+    }
+    .toolbar button:hover, .toolbar a:hover{
+      box-shadow:0 6px 16px rgba(2,6,23,.06);
+    }
+
+    /* ===== Tabla “tipo index” ===== */
+    .table-wrap{ width:100%; overflow-x:auto; -webkit-overflow-scrolling:touch; }
+    table.tabla{ width:100%; min-width:900px; border-collapse:collapse; background:#fff; }
+    .tabla thead th{
+      position:sticky; top:0; z-index:1; background:#f7fafc; color:#0f172a;
+      border-bottom:1px solid var(--stroke);
+    }
+    .tabla th, .tabla td{
+      padding:10px 12px; border-bottom:1px solid var(--stroke); text-align:center; white-space:nowrap;
+    }
+    .tabla tbody tr:hover{ background:#f9fafb; }
+
+    .muted{ color:#64748b; }
+    .amount-strong{ font-weight:800; color:#0f172a; }
+    .amount-total{ color:var(--brand); font-weight:900; }
+  </style>
 </head>
 <body>
-<div class="contenedor">
-    <h2 style="text-align:center;">💳 Pagos de <?= $meses[$mes] ?> <?= $anio ?></h2>
+  <div class="wrap">
+    <div class="page-card">
+      <h2 class="page-title">💳 Pagos de <?= htmlspecialchars($meses[$mes]) ?> <?= (int)$anio ?></h2>
 
-    <form method="get" style="text-align:center; margin-bottom:20px;">
-        <label>Mes:</label>
-        <select name="mes">
-            <?php foreach ($meses as $num => $nombre): ?>
-                <option value="<?= $num ?>" <?= $mes == $num ? 'selected' : '' ?>><?= $nombre ?></option>
-            <?php endforeach; ?>
+      <form method="get" class="toolbar" role="search">
+        <label for="mes" class="mut">Mes:</label>
+        <select id="mes" name="mes">
+          <?php foreach ($meses as $num => $nombre): ?>
+            <option value="<?= $num ?>" <?= ($mes === $num ? 'selected' : '') ?>><?= htmlspecialchars($nombre) ?></option>
+          <?php endforeach; ?>
         </select>
 
-        <label>Año:</label>
-        <select name="anio">
-            <?php for ($y = date('Y'); $y >= 2020; $y--): ?>
-                <option value="<?= $y ?>" <?= $anio == $y ? 'selected' : '' ?>><?= $y ?></option>
-            <?php endfor; ?>
+        <label for="anio" class="mut">Año:</label>
+        <select id="anio" name="anio">
+          <?php for ($y = (int)date('Y'); $y >= 2020; $y--): ?>
+            <option value="<?= $y ?>" <?= ((int)$anio === $y ? 'selected' : '') ?>><?= $y ?></option>
+          <?php endfor; ?>
         </select>
 
         <button type="submit">Filtrar</button>
 
-        <!-- ✅ Se pasa el gimnasio_id en la URL para que funcione en APK -->
-        <a class="boton-descarga" 
-   href="<?= "https://".$_SERVER['HTTP_HOST']."/exportar_pagos_pdf.php?mes=$mes&anio=$anio&gimnasio_id=$gimnasio_id" ?>" 
-   target="_blank">
-   📄 Descargar PDF
-</a>
+        <!-- PDF con gimnasio_id en la URL (APK compat) -->
+        <a
+          href="<?= 'https://'.$_SERVER['HTTP_HOST'].'/exportar_pagos_pdf.php?mes='.$mes.'&anio='.$anio.'&gimnasio_id='.$gimnasio_id ?>"
+          target="_blank" rel="noopener"
+          >📄 Descargar PDF</a>
+      </form>
 
-    </form>
-
-    <table>
-        <tr>
-            <th>Cliente</th>
-            <th>Fecha Inicio</th>
-            <th>Vencimiento</th>
-            <th>Método Pago</th>
-            <th>Otros Pagos</th>
-            <th>Total ($)</th>
-        </tr>
-        <?php if (empty($pagos)): ?>
-            <tr><td colspan="6" style="color:red;">❌ No hay pagos registrados.</td></tr>
-        <?php else: ?>
-            <?php foreach ($pagos as $fila): ?>
-                <tr>
-                    <td><?= htmlspecialchars($fila['apellido'] . ' ' . $fila['nombre']) ?></td>
-                    <td><?= $fila['fecha_inicio'] ?></td>
-                    <td><?= $fila['fecha_vencimiento'] ?></td>
-                    <td><?= $fila['metodo_pago'] ?: '<span style="color:red;">Sin especificar</span>' ?></td>
-                    <td>$<?= number_format($fila['otros_pagos'], 0, ',', '.') ?></td>
-                    <td><strong style="color:lime;">$<?= number_format($fila['total'], 0, ',', '.') ?></strong></td>
-                </tr>
+      <div class="table-wrap">
+        <table class="tabla" aria-label="Pagos del mes">
+          <thead>
+            <tr>
+              <th>Cliente</th>
+              <th>Fecha Inicio</th>
+              <th>Vencimiento</th>
+              <th>Método Pago</th>
+              <th>Otros Pagos</th>
+              <th>Total ($)</th>
+            </tr>
+          </thead>
+          <tbody>
+          <?php if (empty($pagos)): ?>
+            <tr><td colspan="6" class="muted">❌ No hay pagos registrados.</td></tr>
+          <?php else: ?>
+            <?php foreach ($pagos as $f): ?>
+              <tr>
+                <td><?= htmlspecialchars(($f['apellido'] ?? '').' '.($f['nombre'] ?? '')) ?></td>
+                <td><?= htmlspecialchars($f['fecha_inicio']) ?></td>
+                <td><?= htmlspecialchars($f['fecha_vencimiento']) ?></td>
+                <td>
+                  <?php if ($f['metodo_pago']): ?>
+                    <?= htmlspecialchars($f['metodo_pago']) ?>
+                  <?php else: ?>
+                    <span class="muted">Sin especificar</span>
+                  <?php endif; ?>
+                </td>
+                <td style="text-align:right">$<?= number_format((float)$f['otros_pagos'], 0, ',', '.') ?></td>
+                <td style="text-align:right"><span class="amount-strong">$<?= number_format((float)$f['total'], 0, ',', '.') ?></span></td>
+              </tr>
             <?php endforeach; ?>
-        <?php endif; ?>
-    </table>
+          <?php endif; ?>
+          </tbody>
+        </table>
+      </div>
 
-    <h3 style="text-align:right; margin-top:20px;">
-        💰 Total del mes: 
-        <span style="color:gold;">$<?= number_format($total_mes, 0, ',', '.') ?></span>
-    </h3>
-</div>
+      <h3 style="text-align:right; margin-top:16px;">
+        💰 Total del mes: <span class="amount-total">$<?= number_format((float)$total_mes, 0, ',', '.') ?></span>
+      </h3>
+    </div>
+  </div>
 </body>
 </html>

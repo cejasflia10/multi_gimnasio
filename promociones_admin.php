@@ -35,9 +35,7 @@ if (function_exists('cloud_init')) {
   try { cloud_init(); } catch (Throwable $e) { $__cloud_err = 'Init Cloudy falló: '.$e->getMessage(); }
 }
 
-/* ------------------------
-  Fallback DIRECTO a Cloudinary (sin SDK ni bootstrap)
-  ------------------------ */
+/* ------------------------ Fallback DIRECTO a Cloudinary ------------------------ */
 function cloud_sign_params(array $params, string $api_secret): string {
   ksort($params);
   $pairs = [];
@@ -264,9 +262,7 @@ function borrar_en_cloudinary(string $url): void {
         }
       }
     }
-  } catch (\Throwable $e) {
-    // no interrumpir
-  }
+  } catch (\Throwable $e) { /* no interrumpir */ }
 }
 
 /* ============================================================
@@ -275,7 +271,7 @@ function borrar_en_cloudinary(string $url): void {
 if ($_SERVER['REQUEST_METHOD']==='POST') {
   $act = $_POST['act'] ?? '';
 
-  // CSRF validación básica
+  // CSRF
   if (empty($_POST['csrf']) || !hash_equals($_SESSION['csrf_token'] ?? '', (string)$_POST['csrf'])) {
     $msg = '❌ CSRF inválido.';
   } else {
@@ -318,7 +314,6 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
                   WHERE id=? AND gimnasio_id=?";
           $st = $conexion->prepare($sql);
           if ($st) {
-            // 8 strings (titulo..fecha_fin) + 4 integers (prioridad, activo, id, gimnasio_id)
             $st->bind_param('ssssssssiiii',
               $tit,$desc,$img_final,$lnk,$bg,$fg,$fi,$ff,$pri,$actv,$id,$gym_id
             );
@@ -331,7 +326,6 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
                   VALUES (?,?,?,?,?,?,?,?,?,?,?)";
           $st = $conexion->prepare($sql);
           if ($st) {
-            // 1 int (gimnasio_id) + 8 strings + 2 ints (prioridad, activo)
             $st->bind_param('issssssssii',
               $gym_id,$tit,$desc,$img_final,$lnk,$bg,$fg,$fi,$ff,$pri,$actv
             );
@@ -346,7 +340,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
             $last_uploaded_url = is_array($img_subida) && !empty($img_subida['secure_url']) ? $img_subida['secure_url'] : (is_string($img_subida) ? $img_subida : null);
             if ($last_uploaded_url) {
               $msg .= ' URL subida: ';
-              $msg .= '<a href="'.h($last_uploaded_url).'" target="_blank" style="color:#9fe6ff">'.h($last_uploaded_url).'</a>';
+              $msg .= '<a href="'.h($last_uploaded_url).'" target="_blank" style="color:#0ea5e9">'.h($last_uploaded_url).'</a>';
               $msg .= ' <button type="button" class="btn-copy" data-url="'.h($last_uploaded_url).'">Copiar</button>';
             }
           } elseif ($img_final && is_cloud_url($img_final)) {
@@ -424,8 +418,8 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
         }
       }
     }
-  } // end csrf else
-} // end POST
+  }
+}
 
 /* ============================================================
    Carga edición y listado
@@ -451,242 +445,256 @@ if ($rs) { while($r=$rs->fetch_assoc()) $items[]=$r; }
 <head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>📣 Promociones</title>
+<link rel="stylesheet" href="estilo_unificado.css">
 <style>
-  :root{--bg:#000;--fg:gold;--card:#101114;--line:#262a33;--muted:#a0a7b4;}
-  *{box-sizing:border-box}
-  body{margin:0;background:var(--bg);color:var(--fg);font-family:Arial,Helvetica,sans-serif}
-  .wrap{max-width:1100px;margin:0 auto;padding:16px}
-  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px;margin:12px 0}
-  input,textarea,select{width:100%;padding:10px;border-radius:8px;border:1px solid var(--line);background:#0d0f14;color:var(--fg)}
-  .grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-  .grid-3{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
-  .btn{display:inline-block;padding:8px 12px;border-radius:8px;border:1px solid var(--line);background:#1a1f2b;color:#fff;text-decoration:none;cursor:pointer}
-  .btn:hover{background:#21293a}
-  .btn-copy{padding:4px 8px;margin-left:6px;background:#0a6;border:color:#0a6;border-radius:6px;border:0;color:#000;cursor:pointer}
-  .btn-copy:hover{opacity:0.9}
-  table{width:100%;border-collapse:collapse}
-  th,td{border:1px solid var(--line);padding:8px;text-align:left}
-  th{background:#141824}
-  .muted{color:var(--muted);font-size:12px}
-  .thumb{width:70px;height:40px;object-fit:cover;border-radius:6px;border:1px solid #333;background:#000}
-  .swatch{display:flex;gap:6px;align-items:center;margin-top:6px;flex-wrap:wrap}
-  .dot{width:18px;height:18px;border-radius:50%;border:1px solid #333;cursor:pointer}
-  .cloud-badge{display:inline-block;padding:2px 6px;border-radius:8px;background:#044;border;color:#bff;font-size:12px;margin-left:6px}
-  .cloud-off{display:inline-block;padding:2px 6px;border-radius:8px;background:#440;border;color:#fbb;font-size:12px;margin-left:6px}
-  .request-form-inline{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
-  .request-form-inline input{width:auto;padding:8px}
-  @media (max-width:900px){ .grid,.grid-3{grid-template-columns:1fr} .request-form-inline{flex-direction:column;align-items:stretch} }
+  /* ===== Maqueta alineada al index ===== */
+  .wrap{ max-width:1200px; margin:24px auto; padding:0 16px 40px; }
+  .page-card{ background:var(--card); border:1px solid var(--stroke); border-radius:18px; box-shadow:var(--shadow); padding:16px; }
+  .page-title{
+    margin:0 0 12px 0; font-weight:900; letter-spacing:.4px; text-align:left;
+    background:linear-gradient(90deg,var(--brand),var(--brand-2),var(--brand-3));
+    -webkit-background-clip:text; background-clip:text; color:transparent;
+  }
+  .mut{ color:#64748b; }
+
+  /* Formulario (inputs/botones con look del sistema) */
+  form .row{ display:grid; gap:10px; grid-template-columns:1fr; }
+  @media (min-width:900px){ form .row.two{ grid-template-columns:1fr 1fr; } form .row.three{ grid-template-columns:1fr 1fr 1fr; } }
+  input, textarea, select{
+    width:100%; padding:10px 12px; border-radius:12px; border:1px solid var(--stroke);
+    background:linear-gradient(180deg,#fff,#f7fafc); color:var(--ink); font-size:15px;
+  }
+  .btn{
+    display:inline-block; padding:10px 12px; border-radius:12px; border:1px solid var(--stroke);
+    background:linear-gradient(180deg,#fff,#f7fafc); color:var(--ink); font-weight:800; cursor:pointer; text-decoration:none;
+  }
+  .btn:hover{ box-shadow:0 6px 16px rgba(2,6,23,.06); }
+  .btn-copy{ padding:6px 10px; border-radius:10px; border:1px solid var(--stroke); background:#f1f5f9; cursor:pointer; }
+
+  /* Tabla clara tipo index */
+  .table-wrap{ width:100%; overflow-x:auto; -webkit-overflow-scrolling:touch; }
+  table.tabla{ width:100%; min-width:960px; border-collapse:collapse; background:#fff; }
+  .tabla thead th{
+    position:sticky; top:0; z-index:1; background:#f7fafc; color:#0f172a;
+    border-bottom:1px solid var(--stroke); text-align:left;
+  }
+  .tabla th, .tabla td{ padding:10px 12px; border-bottom:1px solid var(--stroke); vertical-align:top; }
+  .tabla tbody tr:hover{ background:#f9fafb; }
+
+  .thumb{ width:76px; height:46px; object-fit:cover; border-radius:8px; border:1px solid var(--stroke); background:#fff; }
+  .swatch{ display:flex; gap:6px; align-items:center; flex-wrap:wrap; }
+  .dot{ width:18px; height:18px; border-radius:50%; border:1px solid var(--stroke); cursor:pointer; }
+  .badges{ display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+  .cloud-badge{ display:inline-block; padding:3px 8px; border-radius:999px; background:#e0f2fe; color:#0c4a6e; font-size:12px; font-weight:800; }
+  .cloud-off{ display:inline-block; padding:3px 8px; border-radius:999px; background:#fee2e2; color:#7f1d1d; font-size:12px; font-weight:800; }
 </style>
 </head>
 <body>
 <div class="wrap">
-  <h1>📣 Promociones</h1>
+  <div class="page-card">
+    <h1 class="page-title">📣 Promociones</h1>
 
-  <div style="margin-bottom:8px">
-    <?php if ($__cloud_ready): ?>
-      <span class="cloud-badge">Cloudy activo: <?= h(defined('CLOUD_NAME')?CLOUD_NAME:'(sin nombre)') ?></span>
-    <?php else: ?>
-      <span class="cloud-off">Cloudy no disponible</span>
-      <?php if (!empty($__cloud_err)): ?>
-        <span class="muted" style="margin-left:8px">Error: <?= h($__cloud_err) ?></span>
+    <div class="badges" style="margin-bottom:10px">
+      <?php if ($__cloud_ready): ?>
+        <span class="cloud-badge">Cloudy activo: <?= h(defined('CLOUD_NAME')?CLOUD_NAME:'(sin nombre)') ?></span>
+      <?php else: ?>
+        <span class="cloud-off">Cloudy no disponible</span>
+        <?php if (!empty($__cloud_err)): ?><span class="mut">Error: <?= h($__cloud_err) ?></span><?php endif; ?>
       <?php endif; ?>
+    </div>
+
+    <?php if (!empty($msg)): ?>
+      <div class="page-card" style="padding:12px; background:#fff; border-style:dashed; margin-bottom:12px"><?= $msg ?></div>
     <?php endif; ?>
-  </div>
 
-  <?php if (!empty($msg)): ?>
-    <div class="card"><?= $msg ?></div>
-  <?php endif; ?>
+    <!-- ========== Form alta/edición ========== -->
+    <div class="page-card" style="margin-bottom:16px">
+      <h3 style="margin-top:0"><?= $edit ? 'Editar promoción' : 'Nueva promoción' ?></h3>
+      <form method="POST" enctype="multipart/form-data">
+        <input type="hidden" name="act" value="save">
+        <input type="hidden" name="id" value="<?= (int)($edit['id'] ?? 0) ?>">
+        <input type="hidden" name="csrf" value="<?= h($csrf_token) ?>">
 
-  <div class="card">
-    <h3 style="margin-top:0"><?= $edit ? 'Editar promoción' : 'Nueva promoción' ?></h3>
-    <form method="POST" enctype="multipart/form-data">
-      <input type="hidden" name="act" value="save">
-      <input type="hidden" name="id" value="<?= (int)($edit['id'] ?? 0) ?>">
-      <input type="hidden" name="csrf" value="<?= h($csrf_token) ?>">
-
-      <div class="grid">
-        <div>
-          <label>Título</label>
-          <input name="titulo" required value="<?= h($edit['titulo'] ?? '') ?>">
-        </div>
-        <div>
-          <label>Prioridad (número)</label>
-          <input name="prioridad" type="number" value="<?= h((string)($edit['prioridad'] ?? '0')) ?>">
-        </div>
-      </div>
-
-      <div>
-        <label>Descripción</label>
-        <textarea name="descripcion"><?= h($edit['descripcion'] ?? '') ?></textarea>
-      </div>
-
-      <div class="grid">
-        <div>
-          <label>Imagen (archivo → sube a Cloudinary con tu bootstrap)</label>
-          <input type="file" name="imagen_file" accept="image/*">
-          <?php if (!empty($edit['imagen_url'])): ?>
-            <div class="muted" style="margin-top:6px">Actual: <?= h($edit['imagen_url']) ?>
-              <?php if (is_cloud_url($edit['imagen_url'])): ?>
-                <span class="cloud-badge">Cloudy</span>
-              <?php endif; ?>
-            </div>
-          <?php endif; ?>
-        </div>
-        <div>
-          <label>Imagen (URL opcional)</label>
-          <input name="imagen_url" value="<?= h($edit['imagen_url'] ?? '') ?>" placeholder="https://...">
-        </div>
-      </div>
-
-      <div>
-        <label>Link (opcional)</label>
-        <input name="link_url" value="<?= h($edit['link_url'] ?? '') ?>" placeholder="https://...">
-      </div>
-
-      <div class="grid-3">
-        <div>
-          <label>Color fondo</label>
-          <input name="color_fondo" type="color" value="<?= h($edit['color_fondo'] ?? '#111111') ?>">
-        </div>
-        <div>
-          <label>Color texto</label>
-          <input name="color_texto" type="color" value="<?= h($edit['color_texto'] ?? '#FFD700') ?>">
-        </div>
-        <div>
-          <label style="display:block">Paletas rápidas</label>
-          <div class="swatch">
-            <span class="dot" style="background:#111" data-bg="#111111" data-fg="#FFD700" title="Oscuro/Dorado"></span>
-            <span class="dot" style="background:#001f3f" data-bg="#001f3f" data-fg="#66b2ff" title="Azul/Claro"></span>
-            <span class="dot" style="background:#660000" data-bg="#660000" data-fg="#ffcccc" title="Rojo"></span>
-            <span class="dot" style="background:#004d26" data-bg="#004d26" data-fg="#d9f2e6" title="Verde"></span>
-            <span class="dot" style="background:#1a1d23" data-bg="#1a1d23" data-fg="#f1f5f9" title="Gris/Blanco"></span>
+        <div class="row two">
+          <div>
+            <label>Título</label>
+            <input name="titulo" required value="<?= h($edit['titulo'] ?? '') ?>">
+          </div>
+          <div>
+            <label>Prioridad (número)</label>
+            <input name="prioridad" type="number" value="<?= h((string)($edit['prioridad'] ?? '0')) ?>">
           </div>
         </div>
-      </div>
 
-      <div class="grid">
         <div>
-          <label>Desde</label>
-          <input name="fecha_inicio" type="date" value="<?= h($edit['fecha_inicio'] ?? date('Y-m-d')) ?>">
+          <label>Descripción</label>
+          <textarea name="descripcion" rows="3"><?= h($edit['descripcion'] ?? '') ?></textarea>
         </div>
+
+        <div class="row two">
+          <div>
+            <label>Imagen (archivo → sube a Cloudinary)</label>
+            <input type="file" name="imagen_file" accept="image/*">
+            <?php if (!empty($edit['imagen_url'])): ?>
+              <div class="mut" style="margin-top:6px">Actual: <?= h($edit['imagen_url']) ?>
+                <?php if (is_cloud_url($edit['imagen_url'])): ?>
+                  <span class="cloud-badge">Cloudy</span>
+                <?php endif; ?>
+              </div>
+            <?php endif; ?>
+          </div>
+          <div>
+            <label>Imagen (URL opcional)</label>
+            <input name="imagen_url" value="<?= h($edit['imagen_url'] ?? '') ?>" placeholder="https://...">
+          </div>
+        </div>
+
         <div>
-          <label>Hasta</label>
-          <input name="fecha_fin" type="date" value="<?= h($edit['fecha_fin'] ?? date('Y-m-d')) ?>">
+          <label>Link (opcional)</label>
+          <input name="link_url" value="<?= h($edit['link_url'] ?? '') ?>" placeholder="https://...">
         </div>
-      </div>
 
-      <label style="display:inline-block;margin-top:8px">
-        <input type="checkbox" name="activo" <?= ((int)($edit['activo'] ?? 1)===1)?'checked':''; ?>> Activa
-      </label>
+        <div class="row three">
+          <div>
+            <label>Color fondo</label>
+            <input name="color_fondo" type="color" value="<?= h($edit['color_fondo'] ?? '#111111') ?>">
+          </div>
+          <div>
+            <label>Color texto</label>
+            <input name="color_texto" type="color" value="<?= h($edit['color_texto'] ?? '#FFD700') ?>">
+          </div>
+          <div>
+            <label style="display:block">Paletas rápidas</label>
+            <div class="swatch">
+              <span class="dot" style="background:#111" data-bg="#111111" data-fg="#FFD700" title="Oscuro/Dorado"></span>
+              <span class="dot" style="background:#001f3f" data-bg="#001f3f" data-fg="#66b2ff" title="Azul/Claro"></span>
+              <span class="dot" style="background:#660000" data-bg="#660000" data-fg="#ffcccc" title="Rojo"></span>
+              <span class="dot" style="background:#004d26" data-bg="#004d26" data-fg="#d9f2e6" title="Verde"></span>
+              <span class="dot" style="background:#1a1d23" data-bg="#1a1d23" data-fg="#f1f5f9" title="Gris/Blanco"></span>
+            </div>
+          </div>
+        </div>
 
-      <div style="margin-top:10px">
-        <button class="btn" type="submit">💾 Guardar</button>
-        <?php if ($edit): ?>
-          <a class="btn" href="promociones_admin.php">Nueva</a>
-        <?php endif; ?>
-      </div>
-    </form>
-  </div>
+        <div class="row two">
+          <div>
+            <label>Desde</label>
+            <input name="fecha_inicio" type="date" value="<?= h($edit['fecha_inicio'] ?? date('Y-m-d')) ?>">
+          </div>
+          <div>
+            <label>Hasta</label>
+            <input name="fecha_fin" type="date" value="<?= h($edit['fecha_fin'] ?? date('Y-m-d')) ?>">
+          </div>
+        </div>
 
-  <div class="card">
-    <h3 style="margin-top:0">Listado</h3>
-    <div style="overflow:auto">
-      <table>
-        <thead>
-          <tr>
-            <th>#</th><th>Img</th><th>Título</th><th>Vigencia</th><th>Prioridad</th>
-            <th>Colores</th><th>Estado</th><th>Acciones</th>
-          </tr>
-        </thead>
-        <tbody>
-          <?php foreach($items as $it): ?>
+        <label style="display:inline-block;margin-top:8px">
+          <input type="checkbox" name="activo" <?= ((int)($edit['activo'] ?? 1)===1)?'checked':''; ?>> Activa
+        </label>
+
+        <div style="margin-top:10px; display:flex; gap:10px; flex-wrap:wrap">
+          <button class="btn" type="submit">💾 Guardar</button>
+          <?php if ($edit): ?><a class="btn" href="promociones_admin.php">Nueva</a><?php endif; ?>
+        </div>
+      </form>
+    </div>
+
+    <!-- ========== Listado ========== -->
+    <div class="page-card">
+      <h3 style="margin-top:0">Listado</h3>
+      <div class="table-wrap">
+        <table class="tabla" aria-label="Listado de promociones">
+          <thead>
             <tr>
-              <td><?= (int)$it['id'] ?></td>
-              <td>
-                <?php if (!empty($it['imagen_url'])): ?>
-                  <img class="thumb" src="<?= h($it['imagen_url']) ?>" alt="thumb">
-                  <?php if (is_cloud_url($it['imagen_url'])): ?>
+              <th>#</th><th>Img</th><th>Título</th><th>Vigencia</th><th>Prioridad</th>
+              <th>Colores</th><th>Estado</th><th>Acciones</th>
+            </tr>
+          </thead>
+          <tbody>
+            <?php foreach($items as $it): ?>
+              <tr>
+                <td><?= (int)$it['id'] ?></td>
+                <td>
+                  <?php if (!empty($it['imagen_url'])): ?>
+                    <img class="thumb" src="<?= h($it['imagen_url']) ?>" alt="thumb">
                     <div style="margin-top:6px">
-                      <span class="cloud-badge">Cloudy</span>
+                      <?php if (is_cloud_url($it['imagen_url'])): ?><span class="cloud-badge">Cloudy</span><?php endif; ?>
                       <button class="btn-copy" data-url="<?= h($it['imagen_url']) ?>">Copiar URL</button>
                     </div>
                   <?php else: ?>
-                    <div style="margin-top:6px"><button class="btn-copy" data-url="<?= h($it['imagen_url']) ?>">Copiar URL</button></div>
+                    <span class="mut">—</span>
                   <?php endif; ?>
-                <?php else: ?>
-                  <span class="muted">—</span>
-                <?php endif; ?>
-              </td>
-              <td>
-                <div style="font-weight:bold"><?= h($it['titulo']) ?></div>
-                <div class="muted" style="max-width:360px"><?= nl2br(h($it['descripcion'] ?? '')) ?></div>
-                <?php if (!empty($it['link_url'])): ?>
-                  <div class="muted">🔗 <a href="<?= h($it['link_url']) ?>" target="_blank" style="color:#66b2ff"><?= h($it['link_url']) ?></a></div>
-                <?php endif; ?>
-              </td>
-              <td><?= h($it['fecha_inicio'] ?: '—') ?> → <?= h($it['fecha_fin'] ?: '—') ?></td>
-              <td><?= (int)$it['prioridad'] ?></td>
-              <td>
-                <div class="swatch">
-                  <span class="dot" style="background:<?= h($it['color_fondo'] ?: '#111') ?>;"></span>
-                  <span class="dot" style="background:<?= h($it['color_texto'] ?: '#FFD700') ?>;"></span>
-                </div>
-                <div class="muted"><?= h($it['color_fondo'] ?: '#111') ?> / <?= h($it['color_texto'] ?: '#FFD700') ?></div>
-              </td>
-              <td><?= ((int)$it['activo']===1)?'✅ Activa':'⛔ Inactiva' ?></td>
-              <td style="white-space:nowrap">
-                <a class="btn" href="?edit=<?= (int)$it['id'] ?>">✏️ Editar</a>
-
-                <form method="POST" style="display:inline" onsubmit="return confirm('¿Cambiar estado?');">
-                  <input type="hidden" name="act" value="toggle">
-                  <input type="hidden" name="id" value="<?= (int)$it['id'] ?>">
-                  <input type="hidden" name="v" value="<?= ((int)$it['activo']===1)?0:1 ?>">
-                  <input type="hidden" name="csrf" value="<?= h($csrf_token) ?>">
-                  <button class="btn" type="submit"><?= ((int)$it['activo']===1)?'Desactivar':'Activar' ?></button>
-                </form>
-
-                <form method="POST" style="display:inline" onsubmit="return confirm('¿Eliminar promoción?');">
-                  <input type="hidden" name="act" value="delete">
-                  <input type="hidden" name="id" value="<?= (int)$it['id'] ?>">
-                  <input type="hidden" name="csrf" value="<?= h($csrf_token) ?>">
-                  <button class="btn" type="submit">🗑️</button>
-                </form>
-
-                <!-- FORMULARIO PÚBLICO: Quiero esta promoción -->
-                <div style="margin-top:8px">
-                  <?php if (empty($_SESSION['cliente_id'])): ?>
-                    <form method="POST" class="request-form-inline" onsubmit="return confirm('Enviar solicitud?');">
-                      <input type="hidden" name="act" value="request_promo">
-                      <input type="hidden" name="promo_id" value="<?= (int)$it['id'] ?>">
-                      <input type="hidden" name="csrf" value="<?= h($csrf_token) ?>">
-                      <input name="nombre_cliente" placeholder="Tu nombre" required>
-                      <input name="email_cliente" placeholder="tu@correo.com" type="email" required>
-                      <button class="btn" type="submit">Quiero esta promoción</button>
-                    </form>
-                  <?php else: ?>
-                    <form method="POST" class="request-form-inline" onsubmit="return true;">
-                      <input type="hidden" name="act" value="request_promo">
-                      <input type="hidden" name="promo_id" value="<?= (int)$it['id'] ?>">
-                      <input type="hidden" name="csrf" value="<?= h($csrf_token) ?>">
-                      <button class="btn" type="submit">Quiero esta promoción</button>
-                    </form>
+                </td>
+                <td>
+                  <div style="font-weight:900"><?= h($it['titulo']) ?></div>
+                  <div class="mut" style="max-width:360px"><?= nl2br(h($it['descripcion'] ?? '')) ?></div>
+                  <?php if (!empty($it['link_url'])): ?>
+                    <div class="mut">🔗 <a href="<?= h($it['link_url']) ?>" target="_blank" style="color:#0ea5e9"><?= h($it['link_url']) ?></a></div>
                   <?php endif; ?>
-                </div>
+                </td>
+                <td><?= h($it['fecha_inicio'] ?: '—') ?> → <?= h($it['fecha_fin'] ?: '—') ?></td>
+                <td><?= (int)$it['prioridad'] ?></td>
+                <td>
+                  <div class="swatch">
+                    <span class="dot" style="background:<?= h($it['color_fondo'] ?: '#111') ?>;"></span>
+                    <span class="dot" style="background:<?= h($it['color_texto'] ?: '#FFD700') ?>;"></span>
+                  </div>
+                  <div class="mut"><?= h($it['color_fondo'] ?: '#111') ?> / <?= h($it['color_texto'] ?: '#FFD700') ?></div>
+                </td>
+                <td><?= ((int)$it['activo']===1)?'✅ Activa':'⛔ Inactiva' ?></td>
+                <td style="white-space:nowrap">
+                  <a class="btn" href="?edit=<?= (int)$it['id'] ?>">✏️ Editar</a>
 
-              </td>
-            </tr>
-          <?php endforeach; if (empty($items)): ?>
-            <tr><td colspan="8" class="muted">Sin promociones cargadas.</td></tr>
-          <?php endif; ?>
-        </tbody>
-      </table>
+                  <form method="POST" style="display:inline" onsubmit="return confirm('¿Cambiar estado?');">
+                    <input type="hidden" name="act" value="toggle">
+                    <input type="hidden" name="id" value="<?= (int)$it['id'] ?>">
+                    <input type="hidden" name="v" value="<?= ((int)$it['activo']===1)?0:1 ?>">
+                    <input type="hidden" name="csrf" value="<?= h($csrf_token) ?>">
+                    <button class="btn" type="submit"><?= ((int)$it['activo']===1)?'Desactivar':'Activar' ?></button>
+                  </form>
+
+                  <form method="POST" style="display:inline" onsubmit="return confirm('¿Eliminar promoción?');">
+                    <input type="hidden" name="act" value="delete">
+                    <input type="hidden" name="id" value="<?= (int)$it['id'] ?>">
+                    <input type="hidden" name="csrf" value="<?= h($csrf_token) ?>">
+                    <button class="btn" type="submit">🗑️</button>
+                  </form>
+
+                  <!-- FORMULARIO PÚBLICO: Quiero esta promoción -->
+                  <div style="margin-top:8px">
+                    <?php if (empty($_SESSION['cliente_id'])): ?>
+                      <form method="POST" class="request-form-inline" onsubmit="return confirm('Enviar solicitud?');" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+                        <input type="hidden" name="act" value="request_promo">
+                        <input type="hidden" name="promo_id" value="<?= (int)$it['id'] ?>">
+                        <input type="hidden" name="csrf" value="<?= h($csrf_token) ?>">
+                        <input name="nombre_cliente" placeholder="Tu nombre" required>
+                        <input name="email_cliente" placeholder="tu@correo.com" type="email" required>
+                        <button class="btn" type="submit">Quiero esta promoción</button>
+                      </form>
+                    <?php else: ?>
+                      <form method="POST" onsubmit="return true;" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+                        <input type="hidden" name="act" value="request_promo">
+                        <input type="hidden" name="promo_id" value="<?= (int)$it['id'] ?>">
+                        <input type="hidden" name="csrf" value="<?= h($csrf_token) ?>">
+                        <button class="btn" type="submit">Quiero esta promoción</button>
+                      </form>
+                    <?php endif; ?>
+                  </div>
+
+                </td>
+              </tr>
+            <?php endforeach; if (empty($items)): ?>
+              <tr><td colspan="8" class="mut">Sin promociones cargadas.</td></tr>
+            <?php endif; ?>
+          </tbody>
+        </table>
+      </div>
     </div>
-  </div>
 
+  </div>
 </div>
 
 <script>
 document.addEventListener('DOMContentLoaded', () => {
+  // Paletas rápidas
   document.querySelectorAll('.dot[data-bg]').forEach(d => {
     d.addEventListener('click', () => {
       const bgInp = document.querySelector('input[name="color_fondo"]');
@@ -697,17 +705,18 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 
+  // Copiar URL de imagen
   document.querySelectorAll('.btn-copy').forEach(btn => {
     btn.addEventListener('click', () => {
       const url = btn.getAttribute('data-url') || '';
       if (!url) return alert('No hay URL para copiar');
-      navigator.clipboard?.writeText(url).then(() => {
-        const prev = btn.textContent;
-        btn.textContent = 'Copiado ✓';
-        setTimeout(()=> btn.textContent = prev, 1800);
-      }).catch(()=> {
-        prompt('Copiar manualmente (CTRL+C):', url);
-      });
+      (navigator.clipboard?.writeText(url) || Promise.reject())
+        .then(() => {
+          const prev = btn.textContent;
+          btn.textContent = 'Copiado ✓';
+          setTimeout(()=> btn.textContent = prev, 1800);
+        })
+        .catch(()=> { prompt('Copiar manualmente (CTRL+C):', url); });
     });
   });
 });

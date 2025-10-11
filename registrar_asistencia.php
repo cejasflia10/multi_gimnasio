@@ -28,7 +28,7 @@ if ($gimnasio_id > 0) {
   }
 }
 
-/* ===== Rutas seguras (evita 404/“//”) ===== */
+/* ===== Rutas seguras ===== */
 $scriptName = $_SERVER['SCRIPT_NAME'] ?? '';
 $basePath   = str_replace('\\','/', dirname($scriptName));
 if ($basePath === '.' || $basePath === '/' || $basePath === '\\') $basePath = '';
@@ -36,11 +36,11 @@ $URL_AJAX_SELF   = $basePath . '/' . basename(__FILE__) . '?ajax=1';
 $URL_AJAX_PROF   = $basePath . '/ajax_ingresos_profesores.php';
 $URL_AJAX_CLIENT = $basePath . '/ajax_ingresos_clientes.php';
 
-/* ===== Lógica principal (profesores / clientes) ===== */
+/* ===== Lógica principal ===== */
 function procesar_codigo(mysqli $db, int $gymId, string $codigo, string $hoy, string $hora_actual): array {
   $mensaje = ""; $tipo = "ok";
 
-  // ---- Profesor por DNI ----
+  // Profesor por DNI
   $prof_stmt = $db->prepare("SELECT id, apellido, nombre FROM profesores WHERE dni = ? AND gimnasio_id = ?");
   $prof_stmt->bind_param("si", $codigo, $gymId);
   $prof_stmt->execute();
@@ -79,7 +79,7 @@ function procesar_codigo(mysqli $db, int $gymId, string $codigo, string $hoy, st
     return [$mensaje, $tipo];
   }
 
-  // ---- Cliente por DNI ----
+  // Cliente por DNI
   $stmt = $db->prepare("SELECT id FROM clientes WHERE dni = ? AND gimnasio_id = ?");
   $stmt->bind_param("si", $codigo, $gymId);
   $stmt->execute();
@@ -131,7 +131,6 @@ function procesar_codigo(mysqli $db, int $gymId, string $codigo, string $hoy, st
 
 /* ===== Respuesta AJAX ===== */
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_GET['ajax'])) {
-  // JSON limpio (sin notices ni espacios)
   ini_set('display_errors', '0');
   while (ob_get_level()) ob_end_clean();
   header('Content-Type: application/json; charset=utf-8');
@@ -158,7 +157,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_GET['ajax'])) {
   exit;
 }
 
-/* ===== Flujo no-AJAX (submit directo) ===== */
+/* ===== Flujo no-AJAX ===== */
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['codigo']) && !isset($_GET['ajax'])) {
   $codigo  = trim((string)$_POST['codigo']);
   $csrf_in = (string)($_POST['csrf'] ?? '');
@@ -179,31 +178,64 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['codigo']) && !isset($
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <link rel="stylesheet" href="estilo_unificado.css">
   <style>
-    :root { --bg:#111; --fg:#ffd700; --ok:#7CFC00; --err:#ff5757; --muted:#444; }
-    * { box-sizing: border-box }
-    body { margin:0; background:var(--bg); color:var(--fg); font-family: system-ui,-apple-system,Segoe UI,Roboto,Arial; }
-    .contenedor { padding: 16px; max-width: 1100px; margin: 0 auto; }
-    .encabezado { display:flex; justify-content:space-between; align-items:center; gap:12px; }
-    .encabezado h1 { margin:0; font-size: clamp(18px, 4vw, 28px); letter-spacing:.5px; }
-    .clock { font-size: clamp(12px, 2.5vw, 14px); opacity:.8 }
-    .scan { margin: 14px 0; }
+    /* ===== Maqueta clara y coherente con el index ===== */
+    .wrap{ max-width:1200px; margin:24px auto; padding:0 16px 40px; }
+
+    .page-card{
+      background:var(--card); border:1px solid var(--stroke);
+      border-radius:18px; box-shadow:var(--shadow); padding:16px;
+    }
+
+    .encabezado{
+      display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:12px;
+    }
+    .encabezado h1{
+      margin:0; font-weight:900; letter-spacing:.4px;
+      background:linear-gradient(90deg,var(--brand),var(--brand-2),var(--brand-3));
+      -webkit-background-clip:text; background-clip:text; color:transparent;
+    }
+    #logoGym{ height:70px; object-fit:contain; background:#fff; border:1px solid var(--stroke); border-radius:12px; padding:6px; box-shadow:var(--shadow); }
+
+    .clock{ color:var(--mut); }
+
+    /* Input de escaneo grande, claro */
+    .scan{ margin: 14px 0; }
     .scan input[type="text"]{
       font-size: clamp(18px, 4.5vw, 22px);
       line-height: 1.2;
       padding: 14px 16px; width: 100%;
-      border: 1px solid var(--muted); border-radius: 12px;
-      outline: none; background:#000; color: var(--fg); min-height: 52px;
+      border: 1px solid var(--stroke); border-radius: 12px;
+      background:linear-gradient(180deg,#fff,#f7fafc); color:var(--ink); min-height: 52px;
+      outline: none;
     }
-    .table-wrap{ background:#0e0e0e; border:1px solid #1f1f1f; border-radius: 12px; overflow:auto; -webkit-overflow-scrolling:touch; }
-    table{ width:100%; border-collapse: collapse; min-width: 520px; }
-    thead th{ background:#1a1a1a; position: sticky; top: 0; z-index: 1; }
-    table th, table td{ border-bottom: 1px solid #1f1f1f; padding: clamp(8px, 2.2vw, 12px); text-align:center; font-size: clamp(13px, 3.3vw, 15px); white-space:nowrap; }
-    .advertencia{ font-size: clamp(16px, 3.8vw, 18px); margin: 12px 0; }
-    .advertencia.ok{ color: var(--ok); }
-    .advertencia.err{ color: var(--err); }
-    .row{ display:grid; grid-template-columns: 1fr; gap:16px; }
-    @media (min-width: 900px){ .row{ grid-template-columns: 1fr 1fr; gap:24px; } }
-    @media (max-width: 599px){ .contenedor{ padding: 12px; } img[alt="logo"]{ height: 56px; } }
+    .scan input[type="text"]:focus{
+      box-shadow:0 0 0 3px rgba(245,158,11,.18);
+    }
+
+    /* Avisos */
+    .advertencia{ font-size: clamp(16px, 3.8vw, 18px); margin: 8px 0 14px; font-weight:800; text-align:center; }
+    .advertencia.ok{ color:#16a34a; }
+    .advertencia.err{ color:#b91c1c; }
+
+    /* Grid de tablas */
+    .row{ display:grid; grid-template-columns: 1fr 1fr; gap:16px; }
+    @media (max-width: 900px){ .row{ grid-template-columns: 1fr; } }
+
+    section h2{ margin:6px 0 10px; color:var(--brand); }
+
+    /* Tabla clara tipo index */
+    .table-wrap{ background:#fff; border:1px solid var(--stroke); border-radius: 16px; overflow:auto; -webkit-overflow-scrolling:touch; box-shadow:var(--shadow); }
+    table{ width:100%; border-collapse: collapse; min-width: 520px; background:#fff; }
+    thead th{
+      background:#f7fafc; position: sticky; top: 0; z-index: 1; color:#0f172a;
+      border-bottom:1px solid var(--stroke);
+    }
+    table th, table td{
+      border-bottom: 1px solid var(--stroke); padding: 10px 12px; text-align:center; white-space:nowrap;
+    }
+    tbody tr:hover{ background:#f9fafb; }
+
+    @media (max-width: 599px){ #logoGym{ height:56px; } }
   </style>
   <script>
     const URL_AJAX_SELF   = <?= json_encode($URL_AJAX_SELF) ?>;
@@ -286,50 +318,52 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['codigo']) && !isset($
   </script>
 </head>
 <body>
-  <div class="contenedor">
-    <div class="encabezado">
-      <img src="<?= htmlspecialchars($logo_gimnasio) ?>" height="70" alt="logo">
-      <div>
-        <h1><?= strtoupper(htmlspecialchars($nombre_gimnasio)) ?></h1>
-        <div class="clock">Hora: <span id="clock"></span></div>
+  <div class="wrap">
+    <div class="page-card">
+      <div class="encabezado">
+        <img id="logoGym" src="<?= htmlspecialchars($logo_gimnasio) ?>" alt="logo">
+        <div>
+          <h1><?= strtoupper(htmlspecialchars($nombre_gimnasio)) ?></h1>
+          <div class="clock">Hora: <span id="clock"></span></div>
+        </div>
       </div>
-    </div>
 
-    <form id="form-scan" class="scan" method="POST" action="">
-      <input id="codigo" name="codigo" type="text" inputmode="numeric" autocomplete="off" placeholder="Ingresar DNI..." autofocus>
-      <input type="hidden" name="csrf" value="<?= htmlspecialchars($csrf) ?>">
-    </form>
+      <form id="form-scan" class="scan" method="POST" action="">
+        <input id="codigo" name="codigo" type="text" inputmode="numeric" autocomplete="off" placeholder="Ingresar DNI..." autofocus>
+        <input type="hidden" name="csrf" value="<?= htmlspecialchars($csrf) ?>">
+      </form>
 
-    <?php if ($advertencia): ?>
-      <div id="adv" class="advertencia <?= ($tipo_resultado === 'alerta') ? 'err' : 'ok' ?>"><?= htmlspecialchars($advertencia) ?></div>
-    <?php else: ?>
-      <div id="adv" class="advertencia" style="min-height: 24px;"></div>
-    <?php endif; ?>
+      <?php if ($advertencia): ?>
+        <div id="adv" class="advertencia <?= ($tipo_resultado === 'alerta') ? 'err' : 'ok' ?>"><?= htmlspecialchars($advertencia) ?></div>
+      <?php else: ?>
+        <div id="adv" class="advertencia" style="min-height: 24px;"></div>
+      <?php endif; ?>
 
-    <!-- Sonidos -->
-    <audio id="snd-ok" preload="auto"><source src="ok.mp3" type="audio/mpeg"></audio>
-    <audio id="snd-alerta" preload="auto"><source src="alerta.mp3" type="audio/mpeg"></audio>
+      <!-- Sonidos -->
+      <audio id="snd-ok" preload="auto"><source src="ok.mp3" type="audio/mpeg"></audio>
+      <audio id="snd-alerta" preload="auto"><source src="alerta.mp3" type="audio/mpeg"></audio>
 
-    <div class="row">
-      <section>
-        <h2>👨‍🏫 Profesores Hoy</h2>
-        <div class="table-wrap">
-          <table>
-            <thead><tr><th>Apellido</th><th>Ingreso</th><th>Salida</th></tr></thead>
-            <tbody id="tabla_profesores"></tbody>
-          </table>
-        </div>
-      </section>
+      <div class="row">
+        <section>
+          <h2>👨‍🏫 Profesores Hoy</h2>
+          <div class="table-wrap">
+            <table aria-label="Profesores de hoy">
+              <thead><tr><th>Apellido</th><th>Ingreso</th><th>Salida</th></tr></thead>
+              <tbody id="tabla_profesores"></tbody>
+            </table>
+          </div>
+        </section>
 
-      <section>
-        <h2>🏋️ Clientes Hoy</h2>
-        <div class="table-wrap">
-          <table>
-            <thead><tr><th>Apellido</th><th>Hora</th><th>Clases</th><th>Vencimiento</th></tr></thead>
-            <tbody id="tabla_clientes"></tbody>
-          </table>
-        </div>
-      </section>
+        <section>
+          <h2>🏋️ Clientes Hoy</h2>
+          <div class="table-wrap">
+            <table aria-label="Clientes de hoy">
+              <thead><tr><th>Apellido</th><th>Hora</th><th>Clases</th><th>Vencimiento</th></tr></thead>
+              <tbody id="tabla_clientes"></tbody>
+            </table>
+          </div>
+        </section>
+      </div>
     </div>
   </div>
 </body>
