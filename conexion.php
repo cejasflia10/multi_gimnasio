@@ -1,7 +1,7 @@
 <?php
 // conexion.php
 // ------------------------------------------------------------
-// Conexión a BD (Railway) + utilidades básicas
+// Conexión a BD (AlwaysData) + utilidades básicas
 // ------------------------------------------------------------
 
 // (Opcional) Evitar "headers already sent" si haces redirecciones luego
@@ -12,32 +12,34 @@ if (!headers_sent()) {
   }
 }
 
-// Mostrar errores en desarrollo (podés apagar en producción)
+// Mostrar errores en desarrollo (apagalo en producción)
 ini_set('display_errors', '1');
 ini_set('display_startup_errors', '1');
 error_reporting(E_ALL);
 
 // ------------------------------------------------------------
 // Dominio/base pública del sitio (con barra final)
-// Usado para construir URLs absolutas (WhatsApp, comprobantes, etc.)
 // ------------------------------------------------------------
 if (!defined('APP_BASE_URL')) {
-  define('APP_BASE_URL', 'https://multi-gimnasio-51bq.onrender.com/');
+  define('APP_BASE_URL', 'https://multi-gimnasio-51bq.onrender.com/'); // dejalo como usás hoy
 }
 
-// (Opcional) Zona horaria coherente
+// Zona horaria
 if (function_exists('date_default_timezone_set')) {
   date_default_timezone_set('America/Argentina/Buenos_Aires');
 }
 
 // ------------------------------------------------------------
-// Credenciales BD (pueden venir por variables de entorno o usar defaults)
+// Credenciales BD
+// Prioridad: variables de entorno -> valores por defecto (AlwaysData)
 // ------------------------------------------------------------
-$DB_HOST = getenv('DB_HOST') ?: 'shuttle.proxy.rlwy.net';
-$DB_PORT = (int)(getenv('DB_PORT') ?: 51676);
-$DB_USER = getenv('DB_USER') ?: 'root';
-$DB_PASS = getenv('DB_PASS') ?: 'bZwtwptDJTaiWydjpfMWTBGwcwMzSKTt';
-$DB_NAME = getenv('DB_NAME') ?: 'railway';
+// Seteá estos env si querés overridear sin tocar código:
+//  DB_HOST, DB_PORT, DB_USER, DB_PASS, DB_NAME
+$DB_HOST = getenv('DB_HOST') ?: 'mysql-daniel24533.alwaysdata.net';
+$DB_PORT = (int)(getenv('DB_PORT') ?: 3306);
+$DB_USER = getenv('DB_USER') ?: 'daniel24533';              // tu usuario MySQL (con prefijo)
+$DB_PASS = getenv('DB_PASS') ?: 'Catalina160gus';         // <-- poné tu clave MySQL
+$DB_NAME = getenv('DB_NAME') ?: 'daniel24533_cjsgym_db';    // tu base
 
 // Evitar warnings de mysqli en producción
 if (function_exists('mysqli_report')) {
@@ -45,14 +47,14 @@ if (function_exists('mysqli_report')) {
 }
 
 // ------------------------------------------------------------
-// Crear conexión sólo si no existe
+// Crear conexión (si no existe)
 // ------------------------------------------------------------
 if (!isset($conexion) || !($conexion instanceof mysqli)) {
   $conexion = @new mysqli($DB_HOST, $DB_USER, $DB_PASS, $DB_NAME, $DB_PORT);
 
-  if ($conexion->connect_error) {
+  if ($conexion->connect_errno) {
     http_response_code(500);
-    exit('❌ Sin conexión a la base de datos.');
+    exit('❌ Sin conexión a la base de datos: ' . $conexion->connect_error);
   }
 
   // Charset Unicode completo
@@ -60,12 +62,12 @@ if (!isset($conexion) || !($conexion instanceof mysqli)) {
     @$conexion->set_charset('utf8mb4');
   }
 
-  // Opcional: endurecer SQL_MODE si querés más seguridad/consistencia
+  // (Opcional) modo SQL más estricto
   // @$conexion->query("SET SESSION sql_mode = 'STRICT_TRANS_TABLES,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION'");
 }
 
 // ------------------------------------------------------------
-// (Opcional) Helper para construir URLs absolutas
+// Helper para construir URLs absolutas
 // ------------------------------------------------------------
 if (!function_exists('app_url')) {
   /**
