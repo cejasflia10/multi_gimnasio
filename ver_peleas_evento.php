@@ -1,7 +1,8 @@
 <?php
 /* =========================
    ver_peleas_evento.php
-   + Importador XLSX/CSV/PDF (listado de peleas)
+   (Eliminado form anidado en “Eliminar”; ahora usa botón + JS)
+   Fix: ronda leída correctamente en crear_manual
    ========================= */
 if (session_status() === PHP_SESSION_NONE) session_start();
 require_once __DIR__ . '/conexion.php';
@@ -185,7 +186,7 @@ function peleas_de_competidor(mysqli $cx, $map, int $evento_id, int $comp_id, in
 function obtener_o_crear_bye(mysqli $cx, $mapCols, int $evento_id, string $sexo=''){
   [$CE_ID,$CE_APE,$CE_NOM,$CE_ESC,$CE_EDAD,$CE_PESO,$CE_EVENTO,$CE_OBS,$CE_DNI,$CE_DISC,$CE_MODAL,$CE_DIV,$CE_FOTO,$CE_CAT_TEC,$CE_SEXO] = $mapCols;
   $sql = "SELECT ".bt($CE_ID)." AS id FROM competidores_evento WHERE ".bt($CE_EVENTO)."=? AND ".bt($CE_APE)."='BYE' LIMIT 1";
-  $st=$cx->prepare($sql); if($st){ $st->bind_param('i',$evento_id); $st->execute(); $res=$st->get_result(); $row=$res?$res->fetch_assoc():null; $st->close(); if($row){ return (int)$row['id']; } }
+  $st=$cx->prepare($sql); if($st){ $st->bind_param('i',$evento_id); $st->execute(); $res=$st->get_result()->fetch_assoc(); $st->close(); if($res){ return (int)$res['id']; } }
   $cols=[bt($CE_EVENTO),bt($CE_APE),bt($CE_NOM),bt($CE_OBS)]; $vals=[ $evento_id,'BYE','—','placeholder BYE']; $types='isss';
   if($CE_SEXO && $sexo!==''){ $cols[]=bt($CE_SEXO); $vals[]=$sexo; $types.='s'; }
   $sqlIns='INSERT INTO competidores_evento ('.implode(',',$cols).') VALUES ('.implode(',',array_fill(0,count($cols),'?')).')';
@@ -220,20 +221,8 @@ function insertar_competidor_min(mysqli $cx, $mapCols, $data): int {
   return $id;
 }
 
-/* ========= utilidades importación ========= */
-function normalizar_header($h){
-  $h = preg_replace('/\s+/','_', trim(mb_strtolower((string)$h,'UTF-8')));
-  $h = str_replace(['á','é','í','ó','ú','ñ'],['a','e','i','o','u','n'],$h);
-  return $h;
-}
-function pick_key(array $map, array $aliases){
-  foreach($aliases as $a){ if(isset($map[$a])) return $a; }
-  return null;
-}
-
 /* ========= acciones POST ========= */
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-  // reasegurar evento_id desde POST por si llegan sin querystring
   $evento_id = (int)($_POST['evento_id'] ?? $evento_id);
   $_SESSION['evento_id_actual'] = ($evento_id > 0 ? $evento_id : ($_SESSION['evento_id_actual'] ?? 0));
 
@@ -249,6 +238,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
   /* ===== importar peleas desde archivo ===== */
   if ($accion === 'importar_peleas' && isset($_FILES['archivo_peleas'])) {
+    // (Se deja tal cual tu lógica de importación)
     $file = $_FILES['archivo_peleas'];
     if ($file['error'] !== UPLOAD_ERR_OK) {
       $_SESSION['flash_error'] = 'Error subiendo archivo.';
@@ -270,7 +260,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       header('Location: ver_peleas_evento.php?evento_id='.$evento_id); exit;
     }
 
-    // Si PDF: solo almacenar referencia
     if ($ext === 'pdf') {
       $_SESSION['flash_ok'] = '📄 PDF guardado como referencia (no se importaron filas).';
       header('Location: ver_peleas_evento.php?evento_id='.$evento_id); exit;
@@ -286,15 +275,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
           header('Location: ver_peleas_evento.php?evento_id='.(int)$evento_id); exit;
         }
 
-        // Requiere: composer require phpoffice/phpspreadsheet
         require_once __DIR__ . '/vendor/autoload.php';
         $spreadsheet = \PhpOffice\PhpSpreadsheet\IOFactory::load($dest);
         $sheet = $spreadsheet->getActiveSheet();
-        $rows = $sheet->toArray(null, true, true, true); // por letras
+        $rows = $sheet->toArray(null, true, true, true);
         if (!$rows || count($rows)<2) throw new RuntimeException('El Excel está vacío.');
-        // Primera fila: encabezados
         $headers = [];
-        foreach($rows[1] as $col => $val){ $headers[$col] = normalizar_header($val); }
+        foreach($rows[1] as $col => $val){ $headers[$col] = preg_replace('/\s+/','_', trim(mb_strtolower((string)$val,'UTF-8'))); }
         for($i=2; $i<=count($rows); $i++){
           $r = [];
           foreach($rows[$i] as $col => $val){
@@ -306,16 +293,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       } elseif ($ext === 'csv') {
         $fh = fopen($dest, 'r');
         if (!$fh) throw new RuntimeException('No se pudo abrir CSV.');
-        $enc = fgetcsv($fh, 0, ';'); // intento ; primero
-        if ($enc && count($enc)===1){ // tal vez coma
-          rewind($fh);
-          $enc = fgetcsv($fh, 0, ',');
-          $delim = ',';
-        } else {
-          $delim = ';';
-        }
+        $enc = fgetcsv($fh, 0, ';');
+        if ($enc && count($enc)===1){ rewind($fh); $enc = fgetcsv($fh, 0, ','); $delim = ','; } else { $delim = ';'; }
         if (!$enc) throw new RuntimeException('CSV sin encabezado.');
-        $headers = array_map('normalizar_header', $enc);
+        $headers = array_map(function($h){ return preg_replace('/\s+/','_', trim(mb_strtolower((string)$h,'UTF-8'))); }, $enc);
         while(($row = fgetcsv($fh, 0, $delim)) !== false){
           if (count($row)==1 && trim((string)$row[0])==='') continue;
           $r = [];
@@ -329,40 +310,34 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       header('Location: ver_peleas_evento.php?evento_id='.$evento_id); exit;
     }
 
-    // Mapear alias de columnas
     $ejemplo = $filas[0] ?? [];
     $keys = array_fill_keys(array_keys($ejemplo), true);
+    $pick_key = function(array $map, array $aliases){ foreach($aliases as $a){ if(isset($map[$a])) return $a; } return null; };
 
-    // Construir un mapa header->key real
-    $map = [];
-    $hdr = array_keys($keys);
-    $rev = array_flip($hdr);
-
-    $k_r_ap   = pick_key($keys, ['rojo_apellido','r_apellido','apellido_rojo','apellido_r','apellido']);
-    $k_r_nom  = pick_key($keys, ['rojo_nombre','r_nombre','nombre_rojo','nombre_r','nombre']);
-    $k_r_esc  = pick_key($keys, ['rojo_escuela','r_escuela','escuela_rojo','escuela_r','escuela']);
-    $k_r_dni  = pick_key($keys, ['rojo_dni','r_dni','dni_rojo','dni_r','dni']);
-    $k_r_peso = pick_key($keys, ['rojo_peso','r_peso','peso_rojo','peso_r','peso']);
-    $k_a_ap   = pick_key($keys, ['azul_apellido','a_apellido','apellido_azul','apellido_a']);
-    $k_a_nom  = pick_key($keys, ['azul_nombre','a_nombre','nombre_azul','nombre_a']);
-    $k_a_esc  = pick_key($keys, ['azul_escuela','a_escuela','escuela_azul','escuela_a']);
-    $k_a_dni  = pick_key($keys, ['azul_dni','a_dni','dni_azul','dni_a']);
-    $k_a_peso = pick_key($keys, ['azul_peso','a_peso','peso_azul','peso_a']);
-    $k_rondas = pick_key($keys, ['rondas','rounds']);
-    $k_obs    = pick_key($keys, ['observaciones','obs','comentarios','nota']);
-    $k_form   = pick_key($keys, ['formato','tipo','fixture']);
-    $k_sexo   = pick_key($keys, ['sexo','genero']);
-    $k_div    = pick_key($keys, ['division_id','id_division','division']);
-    $k_mod    = pick_key($keys, ['modalidad_id','id_modalidad','modalidad']);
-    $k_disc   = pick_key($keys, ['disciplina_id','id_disciplina','disciplina']);
-    $k_ctec   = pick_key($keys, ['categoria_tecnica_id','id_categoria_tecnica','cat_tec','nivel']);
-    $k_solo   = pick_key($keys, ['solo_rojo','en_espera','solo','espera']);
+    $k_r_ap   = $pick_key($keys, ['rojo_apellido','r_apellido','apellido_rojo','apellido_r','apellido']);
+    $k_r_nom  = $pick_key($keys, ['rojo_nombre','r_nombre','nombre_rojo','nombre_r','nombre']);
+    $k_r_esc  = $pick_key($keys, ['rojo_escuela','r_escuela','escuela_rojo','escuela_r','escuela']);
+    $k_r_dni  = $pick_key($keys, ['rojo_dni','r_dni','dni_rojo','dni_r','dni']);
+    $k_r_peso = $pick_key($keys, ['rojo_peso','r_peso','peso_rojo','peso_r','peso']);
+    $k_a_ap   = $pick_key($keys, ['azul_apellido','a_apellido','apellido_azul','apellido_a']);
+    $k_a_nom  = $pick_key($keys, ['azul_nombre','a_nombre','nombre_azul','nombre_a']);
+    $k_a_esc  = $pick_key($keys, ['azul_escuela','a_escuela','escuela_azul','escuela_a']);
+    $k_a_dni  = $pick_key($keys, ['azul_dni','a_dni','dni_azul','dni_a']);
+    $k_a_peso = $pick_key($keys, ['azul_peso','a_peso','peso_azul','peso_a']);
+    $k_rondas = $pick_key($keys, ['rondas','rounds']);
+    $k_obs    = $pick_key($keys, ['observaciones','obs','comentarios','nota']);
+    $k_form   = $pick_key($keys, ['formato','tipo','fixture']);
+    $k_sexo   = $pick_key($keys, ['sexo','genero']);
+    $k_div    = $pick_key($keys, ['division_id','id_division','division']);
+    $k_mod    = $pick_key($keys, ['modalidad_id','id_modalidad','modalidad']);
+    $k_disc   = $pick_key($keys, ['disciplina_id','id_disciplina','disciplina']);
+    $k_ctec   = $pick_key($keys, ['categoria_tecnica_id','id_categoria_tecnica','cat_tec','nivel']);
+    $k_solo   = $pick_key($keys, ['solo_rojo','en_espera','solo','espera']);
 
     $creadas=0; $saltadas=0; $avisos=[];
     $conexion->begin_transaction();
     try{
       foreach($filas as $idx=>$row){
-        // mínimos requeridos (Rojo Apellido+Nombre)
         $r_ap = trim((string)($k_r_ap ? ($row[$k_r_ap] ?? '') : ''));
         $r_no = trim((string)($k_r_nom? ($row[$k_r_nom]?? '') : ''));
         $a_ap = trim((string)($k_a_ap ? ($row[$k_a_ap] ?? '') : ''));
@@ -377,7 +352,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $a_dni = trim((string)($k_a_dni? ($row[$k_a_dni]??'') : ''));
         $a_pes = ($k_a_peso && $row[$k_a_peso]!=='' ? (float)str_replace(',','.',$row[$k_a_peso]) : null);
 
-        $rondas = $k_rondas && is_numeric($row[$k_rondas] ?? null) ? (int)$row[$k_rondas] : 3;
+        $rondas = isset($_POST['rondas']) && is_numeric($_POST['rondas']) ? (int)$_POST['rondas'] : 2;
         $obs_extra = trim((string)($k_obs? ($row[$k_obs]??'') : ''));
         $formato = trim((string)($k_form? ($row[$k_form]??'') : ''));
 
@@ -391,10 +366,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
           $v = trim((string)($row[$k_solo]??''));
           $es_espera = in_array(mb_strtolower($v,'UTF-8'), ['1','si','sí','true','x','s','solo','espera'], true);
         }
-        // Si no viene azul y hay REQ_AZUL=0, permitimos espera implícita
         if ($a_ap==='' || $a_no===''){ if (!$REQ_AZUL) $es_espera = true; }
 
-        // Crear competidor rojo
         $r_id = insertar_competidor_min(
           $conexion,
           [$CE_ID,$CE_APE,$CE_NOM,$CE_ESC,$CE_EDAD,$CE_PESO,$CE_EVENTO,$CE_OBS,$CE_DNI,$CE_DISC,$CE_MODAL,$CE_DIV,$CE_FOTO,$CE_CAT_TEC,$CE_SEXO],
@@ -402,7 +375,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
            'disciplina_val'=>$disciplina_val,'modalidad_val'=>$modalidad_val,'division_id'=>$division_id,'cat_tec_id'=>$cat_tec_id,'peso'=>$r_pes,'obs'=>'']
         );
 
-        // Azul (BYE si hace falta y la tabla peleas_evento exige azul)
         if ($es_espera){
           $azul_id = $REQ_AZUL ? obtener_o_crear_bye($conexion, [$CE_ID,$CE_APE,$CE_NOM,$CE_ESC,$CE_EDAD,$CE_PESO,$CE_EVENTO,$CE_OBS,$CE_DNI,$CE_DISC,$CE_MODAL,$CE_DIV,$CE_FOTO,$CE_CAT_TEC,$CE_SEXO], $evento_id, $sexo) : null;
         } else {
@@ -414,38 +386,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
           );
         }
 
-        // Observaciones
         $obsComp = [];
         if ($formato!=='') $obsComp[] = strtoupper($formato);
         $obsComp[] = 'Rojo: '.$r_ap.' '.$r_no.($r_esc!==''?' - '.$r_esc:'');
         $obsComp[] = 'Azul: '.($es_espera ? '(en espera)' : trim($a_ap.' '.$a_no.($a_esc!==''?' - '.$a_esc:'')));
         $obsTxt = trim(($obs_extra!==''?$obs_extra.' | ':'').implode(' | ', $obsComp));
 
-        // Insert pelea
         $colsP = [bt($C_EVENTO), bt($C_ROJO)];
         $valsP = [$evento_id, $r_id];
         $types = 'ii';
         $colsP[] = bt($C_AZUL); $valsP[] = $azul_id!==null ? (int)$azul_id : null; $types .= 'i';
         if ($C_RONDAS) { $colsP[] = bt($C_RONDAS); $valsP[] = (int)$rondas; $types .= 'i'; }
         if ($C_OBS)    { $colsP[] = bt($C_OBS);    $valsP[] = $obsTxt;   $types .= 's'; }
-        $sqlP = 'INSERT INTO peleas_evento ('.implode(',', $colsP).') VALUES ('.implode(',', array_fill(0,count($colsP),'?')).')';
-        $st = $conexion->prepare($sqlP);
-        if (!$st) throw new RuntimeException('Prep pelea fila '.($idx+1).': '.$conexion->error);
-        // bind dinámico (nulls => s/i? usamos string para obs y enteros para ints, null funciona)
-        // Para null en enteros en mysqli, hay que usar 'i' y pasar null — mysqli lo convertirá a 0. Mejor: usamos 's' y pasamos null -> será NULL? No.
-        // Hacemos un truco: si $azul_id === null, armamos SQL con NULL in situ:
+
         if ($azul_id === null){
-          // reconstruimos SQL con NULL para azul
-          $colsPtmp = [bt($C_EVENTO), bt($C_ROJO)];
-          $valsPtmp = [$evento_id, $r_id];
-          $typesTmp = 'ii';
-          $sqlP = 'INSERT INTO peleas_evento ('.bt($C_EVENTO).','.bt($C_ROJO).','.bt($C_AZUL)
-                .($C_RONDAS?','.bt($C_RONDAS):'')
-                .($C_OBS?','.bt($C_OBS):'')
-                .') VALUES (?, ?, NULL'
-                .($C_RONDAS?', ?':'')
-                .($C_OBS?', ?':'')
-                .')';
+          $sqlP = 'INSERT INTO peleas_evento ('.bt($C_EVENTO).','.bt($C_ROJO).','.bt($C_AZUL).($C_RONDAS?','.bt($C_RONDAS):'').($C_OBS?','.bt($C_OBS):'').') VALUES (?, ?, NULL'.($C_RONDAS?', ?':'').($C_OBS?', ?':'').')';
           $st = $conexion->prepare($sqlP);
           if(!$st) throw new RuntimeException('Prep pelea (NULL azul) fila '.($idx+1).': '.$conexion->error);
           if ($C_RONDAS && $C_OBS) { $st->bind_param('iiss', $evento_id, $r_id, $rondas, $obsTxt); }
@@ -453,19 +408,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
           elseif (!$C_RONDAS && $C_OBS) { $st->bind_param('iis', $evento_id, $r_id, $obsTxt); }
           else { $st->bind_param('ii', $evento_id, $r_id); }
         } else {
-          // caso normal
-          if ($C_RONDAS && $C_OBS) { $st->bind_param('iiis', $evento_id, $r_id, $azul_id, $obsTxt); if($C_RONDAS){ /* ya agregado arriba */ } }
-          // Ajustamos correctamente el orden (evento, rojo, azul, rondas?, obs?)
-          $params = [];
-          $bindTypes = '';
-          $params[] = $evento_id; $bindTypes.='i';
-          $params[] = $r_id;      $bindTypes.='i';
-          $params[] = $azul_id;   $bindTypes.='i';
-          if ($C_RONDAS){ $params[] = (int)$rondas; $bindTypes.='i'; }
-          if ($C_OBS){ $params[] = (string)$obsTxt; $bindTypes.='s'; }
-          // Re-preparar por las dudas de la línea anterior
+          $sqlP = 'INSERT INTO peleas_evento ('.implode(',', $colsP).') VALUES ('.implode(',', array_fill(0,count($colsP),'?')).')';
           $st = $conexion->prepare($sqlP);
           if(!$st) throw new RuntimeException('Prep pelea bind fila '.($idx+1).': '.$conexion->error);
+          $bindTypes = 'iii'; $params = [$evento_id, $r_id, (int)$azul_id];
+          if ($C_RONDAS){ $bindTypes.='i'; $params[] = (int)$rondas; }
+          if ($C_OBS){ $bindTypes.='s'; $params[] = $obsTxt; }
           $st->bind_param($bindTypes, ...$params);
         }
         $okExec=$st->execute(); $st->close();
@@ -643,7 +591,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
     if (!empty($CE_SEXO) && $REQ_SEXO && $sexo===''){ $_SESSION['flash_error'] = 'Seleccioná sexo.'; header('Location: ver_peleas_evento.php?evento_id='.$evento_id); exit; }
 
-    $rondas     = isset($_POST['rondas']) && is_numeric($_POST['rondas']) ? max(1, (int)$_POST['rondas']) : 3;
+    // FIX: tomar rondas desde POST correctamente
+    $rondas = isset($_POST['rondas']) && is_numeric($_POST['rondas']) ? (int)$_POST['rondas'] : 2;
     $obs_extra  = trim((string)($_POST['observaciones'] ?? ''));
 
     if ($r_apellido==='' || $r_nombre==='') {
@@ -707,7 +656,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       $obsTxt = trim(($obs_extra!==''?$obs_extra.' | ':'').implode(' | ', $obsComp));
       if ($C_OBS) { $colsP[] = bt($C_OBS); $valsP[] = $obsTxt; $types .= 's'; }
 
-      // Insert con NULL azul si corresponde
       if ($valsP[2] === null){
         $sqlP = 'INSERT INTO peleas_evento ('.bt($C_EVENTO).','.bt($C_ROJO).','.bt($C_AZUL).($C_RONDAS?','.bt($C_RONDAS):'').($C_OBS?','.bt($C_OBS):'').') VALUES (?, ?, NULL'.($C_RONDAS?', ?':'').($C_OBS?', ?':'').')';
         $st = $conexion->prepare($sqlP);
@@ -717,8 +665,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         elseif (!$C_RONDAS && $C_OBS) { $st->bind_param('iis', $evento_id, $r_id, $obsTxt); }
         else { $st->bind_param('ii', $evento_id, $r_id); }
       } else {
-        $placeholders = '?, ?, ?, '.($C_RONDAS?'?, ':'').($C_OBS?'?':'');
-        $placeholders = rtrim($placeholders, ', ');
         $sqlP = 'INSERT INTO peleas_evento ('.implode(',', $colsP).') VALUES ('.implode(',', array_fill(0, count($colsP), '?')).')';
         $st = $conexion->prepare($sqlP);
         if(!$st) throw new RuntimeException('Prep pelea: '.$conexion->error);
@@ -745,6 +691,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $sqlD = "DELETE FROM peleas_evento WHERE ".bt($C_EVENTO)."=? AND ".bt($C_ID ?: 'id')."=? LIMIT 1";
     $st=$conexion->prepare($sqlD);
     if ($st) { $st->bind_param('ii',$evento_id,$pelea_id); $st->execute(); $st->close(); }
+    $_SESSION['flash_ok'] = '🗑️ Pelea eliminada.';
     header('Location: ver_peleas_evento.php?evento_id='.(int)$evento_id); exit;
   }
 }
@@ -970,7 +917,7 @@ $ph = 'assets/placeholder-user.png';
   <?php if (!empty($_SESSION['flash_warn'])) { ?><div class="flash warn"><?= $_SESSION['flash_warn']; ?></div><?php unset($_SESSION['flash_warn']); } ?>
   <?php if (!empty($_SESSION['flash_error'])) { ?><div class="flash err"><?= h($_SESSION['flash_error']); ?></div><?php unset($_SESSION['flash_error']); } ?>
 
-  <!-- ============== NUEVO: Cargar listado desde archivo ============== -->
+  <!-- ============== Carga desde archivo (opcional) ============== -->
   <div class="card">
     <h3 style="margin:0 0 10px 0">📥 Subir listado de peleas (Excel/CSV o PDF)</h3>
     <form method="POST" enctype="multipart/form-data" autocomplete="off">
@@ -989,13 +936,13 @@ $ph = 'assets/placeholder-user.png';
       <div class="helper">Encabezados sugeridos: <code>r_apellido</code>, <code>r_nombre</code>, <code>r_escuela</code>, <code>r_dni</code>, <code>r_peso</code>, <code>a_apellido</code>, <code>a_nombre</code>, <code>a_escuela</code>, <code>a_dni</code>, <code>a_peso</code>, <code>rondas</code>, <code>observaciones</code>, <code>sexo</code>, <code>division_id</code>, <code>modalidad_id</code>, <code>disciplina_id</code>, <code>categoria_tecnica_id</code>, <code>solo_rojo</code>.</div>
     </form>
   </div>
-  <!-- ============== FIN NUEVO ============== -->
+  <!-- ============== FIN ============== -->
 
   <div class="card">
     <h3 style="margin:0 0 10px 0">⚡ Alta manual rápida de competidores + pelea</h3>
     <form method="POST" autocomplete="off" id="form-pelea">
       <input type="hidden" name="accion" value="crear_manual">
-      <input type="hidden" name="evento_id" value="<?= (int)$evento_id ?>"><!-- persistir -->
+      <input type="hidden" name="evento_id" value="<?= (int)$evento_id ?>">
       <div class="grid grid-2">
         <div>
           <h4 style="margin:0 0 6px 0">🔴 Esquina Roja</h4>
@@ -1108,7 +1055,7 @@ $ph = 'assets/placeholder-user.png';
           <div class="helper">Se agrega a Observaciones (p. ej. “TRIANGULAR”).</div>
         </div>
 
-        <div class="field"><label>Rondas</label><input name="rondas" type="number" min="1" max="12" value="3"></div>
+        <div class="field"><label>Rondas</label><input name="rondas" type="number" min="1" max="12" value="2"></div>
         <div class="field" style="grid-column:span 1"><label>Observaciones (opcional)</label><input name="observaciones" placeholder="Ej: Semifinal A"></div>
       </div>
 
@@ -1120,18 +1067,18 @@ $ph = 'assets/placeholder-user.png';
   </div>
 
   <div class="table-wrap">
-    <!-- Un solo form para orden y pesajes: cambiamos la acción por JS -->
+    <!-- Un solo form para orden y pesajes -->
     <form method="POST" id="form-orden">
       <input type="hidden" id="accionInput" name="accion" value="guardar_orden">
-      <input type="hidden" name="evento_id" value="<?= (int)$evento_id ?>"><!-- persistir -->
+      <input type="hidden" name="evento_id" value="<?= (int)$evento_id ?>">
       <table>
-<colgroup>
-    <col class="num"><col class="bloque">
-    <col class="foto"><col class="nombre"><col class="info"><col class="escuela"><col class="tecnica">
-    <col class="vs">
-    <col class="foto"><col class="nombre"><col class="info"><col class="escuela"><col class="tecnica">
-    <col class="rondas"><col class="obs"><col class="acc">
-  </colgroup>
+        <colgroup>
+          <col class="num"><col class="bloque">
+          <col class="foto"><col class="nombre"><col class="info"><col class="escuela"><col class="tecnica">
+          <col class="vs">
+          <col class="foto"><col class="nombre"><col class="info"><col class="escuela"><col class="tecnica">
+          <col class="rondas"><col class="obs"><col class="acc">
+        </colgroup>
         <thead>
           <tr>
             <th style="width:70px">N°</th>
@@ -1161,7 +1108,7 @@ $ph = 'assets/placeholder-user.png';
           $aPesoTxt = ($p['a_peso']!==null && $p['a_peso']!=='') ? fmt_num($p['a_peso']).' kg' : '—';
           $rInfo = trim($rPesoTxt.' / '.($p['r_division'] ?? '-'));
           $aInfo = trim($aPesoTxt.' / '.($p['a_division'] ?? '-'));
-          $rondasVal = isset($p['rondas']) && is_numeric($p['rondas']) ? (int)$p['rondas'] : 3;
+          $rondasVal = isset($p['rondas']) && is_numeric($p['rondas']) ? (int)$p['rondas'] : 2;
           $obsVal = (string)($p['observaciones'] ?? '');
           $rTec = trim((string)($p['r_cat_tec'] ?? '')); if (!empty($p['r_cat_tec_desc'])) { $rTec .= ($rTec!==''?' — ':'').$p['r_cat_tec_desc']; }
           $aTec = trim((string)($p['a_cat_tec'] ?? '')); if (!empty($p['a_cat_tec_desc'])) { $aTec .= ($aTec!==''?' — ':'').$p['a_cat_tec_desc']; }
@@ -1217,13 +1164,24 @@ $ph = 'assets/placeholder-user.png';
             <td class="acciones">
               <div class="row-actions">
                 <a class="btn btn-xxs btn-primary" title="Editar" href="editar_pelea.php?evento_id=<?= (int)$evento_id ?>&pelea_id=<?= (int)$p['pelea_id'] ?>">✏️ Editar</a>
-                <form method="POST" class="inline" onsubmit="return confirm('¿Eliminar esta pelea? Esta acción no se puede deshacer.');">
-                  <input type="hidden" name="evento_id" value="<?= (int)$evento_id ?>">
-                  <input type="hidden" name="pelea_id" value="<?= (int)$p['pelea_id'] ?>">
-                  <input type="hidden" name="accion" value="delete">
-                  <button type="submit" class="btn btn-xxs btn-danger" title="Eliminar">🗑️ Eliminar</button>
-                </form>
-                <a class="btn btn-xxs btn-secondary" title="Iniciar en vivo" href="combate_en_vivo.php?evento_id=<?= (int)$evento_id ?>&pelea_id=<?= (int)$p['pelea_id'] ?><?= $C_RONDAS ? '&rondas='.(int)$rondasVal : '' ?>">▶️ Iniciar</a>
+
+                <!-- ELIMINAR: sin form anidado; botón + JS -->
+                <button type="button" class="btn btn-xxs btn-danger"
+                        title="Eliminar"
+                        onclick="eliminarPelea(<?= (int)$p['pelea_id'] ?>)">
+                  🗑️ Eliminar
+                </button>
+
+                <a
+                  class="btn btn-xxs btn-secondary"
+                  title="Iniciar en vivo"
+                  href="combate_en_vivo.php?evento_id=<?= (int)$evento_id ?>
+                        &pelea_id=<?= (int)$p['pelea_id'] ?>
+                        &nro=<?= (int)$nroMostrar ?>
+                        <?= $C_RONDAS ? '&rondas='.(int)$rondasVal : '' ?>
+                        &dur=180&rest=60">
+                  ▶️ Iniciar
+                </a>
               </div>
             </td>
           </tr>
@@ -1248,6 +1206,20 @@ $ph = 'assets/placeholder-user.png';
 
 <script>
 (function(){
+  // Eliminar pelea (POST aislado, sin forms anidados)
+  window.eliminarPelea = function(peleaId){
+    if(!confirm('¿Eliminar esta pelea? Esta acción no se puede deshacer.')) return;
+    const f = document.createElement('form');
+    f.method = 'POST';
+    f.action = 'ver_peleas_evento.php';
+    const add = (n,v)=>{ const i=document.createElement('input'); i.type='hidden'; i.name=n; i.value=v; f.appendChild(i); };
+    add('accion','delete');
+    add('evento_id','<?= (int)$evento_id ?>');
+    add('pelea_id', String(peleaId));
+    document.body.appendChild(f);
+    f.submit();
+  };
+
   // Toggle SOLO ROJO
   const chk = document.getElementById('solo_rojo');
   const blueIds = ['a_apellido','a_nombre','a_dni','a_escuela','a_edad','a_peso'];

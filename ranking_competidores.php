@@ -25,12 +25,64 @@ function has_col(mysqli $db, string $table, string $col): bool {
 }
 function pick_col(array $cands, array $pool){ foreach($cands as $c){ $lc=strtolower($c); if(isset($pool[$lc])) return $pool[$lc]; } return null; }
 
+/* ===== Normalización y similitud ===== */
+function normalize_dni($dni){
+  $d = preg_replace('~\D+~','',(string)$dni);
+  return (strlen($d)===8) ? $d : null;
+}
+function strip_accents($str){
+  $str = (string)$str;
+  $rep = ['Á'=>'A','É'=>'E','Í'=>'I','Ó'=>'O','Ú'=>'U','Ñ'=>'N','á'=>'a','é'=>'e','í'=>'i','ó'=>'o','ú'=>'u','ñ'=>'n'];
+  $str = strtr($str,$rep);
+  $x = @iconv('UTF-8','ASCII//TRANSLIT//IGNORE',$str);
+  if ($x !== false) $str = $x;
+  return $str;
+}
+function norm_txt($s){
+  $s = mb_strtolower(strip_accents(trim((string)$s)),'UTF-8');
+  $s = preg_replace('~\s+~',' ',$s);
+  return $s;
+}
+function normalize_name_key($ape,$nom){
+  $ape = norm_txt($ape); $nom = norm_txt($nom);
+  if ($ape === '' && $nom === '') return null;
+  return trim($ape.' '.$nom);
+}
+function first_name($full){
+  $t = trim((string)$full);
+  $t = preg_replace('~\s+~',' ',$t);
+  $parts = explode(' ', $t);
+  return norm_txt($parts[0] ?? '');
+}
+function is_similar_lev($a,$b,$max=2){
+  $a = norm_txt($a); $b = norm_txt($b);
+  if ($a === '' || $b === '') return false;
+  if ($a === $b) return true;
+  return levenshtein($a,$b) <= $max;
+}
+function metaphone_similar($a,$b,$max=1){
+  $a = norm_txt($a); $b = norm_txt($b);
+  if ($a === '' || $b === '') return false;
+  $ma = metaphone($a); $mb = metaphone($b);
+  if ($ma === '' || $mb === '') return false;
+  if ($ma === $mb) return true;
+  return levenshtein($ma,$mb) <= $max;
+}
+function is_similar_name($a,$b,$maxLev=2){
+  // Coincide si Levenshtein o Metaphone "cercanos"
+  return is_similar_lev($a,$b,$maxLev) || metaphone_similar($a,$b,1);
+}
+function like_ratio($a,$b){
+  $a = norm_txt($a); $b = norm_txt($b);
+  similar_text($a,$b,$p);
+  return $p;
+}
+
 /* ===== Tablas mínimas ===== */
 if (!has_table($conexion,'competidores_evento')) { exit('❌ Falta la tabla requerida: competidores_evento'); }
 $hasPeleas = has_table($conexion,'peleas_evento');
 
 /* ===== Columnas dinámicas ===== */
-/* peleas_evento (opcional) */
 $colsPe = [];
 if ($hasPeleas && ($q=$conexion->query("SHOW COLUMNS FROM `peleas_evento`"))) {
   while($r=$q->fetch_assoc()){ $colsPe[strtolower($r['Field'])]=$r['Field']; }
@@ -56,14 +108,12 @@ $C_PESO_ID   = pick_col(['categoria_peso_id','peso_id'], $colsCe);
 $C_MODAL_ID  = pick_col(['modalidad_id'], $colsCe);
 $C_ACTIVO    = pick_col(['activo'], $colsCe);
 $C_ESTADO    = pick_col(['estado'], $colsCe);
-/* récord al registrarse */
-$C_WINS   = pick_col(['wins','win','w','ganadas','ganada'], $colsCe);
-$C_LOSSES = pick_col(['losses','loss','l','perdidas','perdida'], $colsCe);
-$C_DRAWS  = pick_col(['draws','draw','d','empates','empate'], $colsCe);
-$C_NC     = pick_col(['no_contest','nocontest','nc','no_decision','no-decision','sin_decision','sin-decision'], $colsCe);
+$C_WINS      = pick_col(['wins','win','w','ganadas','ganada'], $colsCe);
+$C_LOSSES    = pick_col(['losses','loss','l','perdidas','perdida'], $colsCe);
+$C_DRAWS     = pick_col(['draws','draw','d','empates','empate'], $colsCe);
+$C_NC        = pick_col(['no_contest','nocontest','nc','no_decision','no-decision','sin_decision','sin-decision'], $colsCe);
 
 if (!$C_ID) { exit('❌ No se detectó columna ID en competidores_evento.'); }
-
 $scoreColsPresent = (bool)($C_WINS && $C_LOSSES && $C_DRAWS && $C_NC);
 
 /* ===== Mayoría por pelea (resultados_jueces, opcional) ===== */
@@ -90,7 +140,6 @@ if ($hasPeleas && $C_AZUL && $C_ROJO) {
   if ($C_FECHA)  $peleaCols.=", p.".bt($C_FECHA)." AS f";
   if ($C_EVENTO) $peleaCols.=", p.".bt($C_EVENTO)." AS evento_id";
   if ($C_GANADOR_PELEA) $peleaCols.=", p.".bt($C_GANADOR_PELEA)." AS ganador_pelea";
-
   if ($r=$conexion->query("SELECT $peleaCols FROM `peleas_evento` p")){
     while($row=$r->fetch_assoc()){
       $row['pelea_id']=(int)$row['pelea_id'];
@@ -101,14 +150,14 @@ if ($hasPeleas && $C_AZUL && $C_ROJO) {
         $gg = strtolower(trim((string)$row['ganador_pelea']));
         if (in_array($gg,['azul','rojo','empate'],true)) $g = $gg;
       }
-      $row['g'] = $g; // null => no suma
+      $row['g'] = $g;
       $peleas[]=$row;
     }
     $r->close();
   }
 }
 
-/* ===== Traer todas las fichas ===== */
+/* ===== Traer fichas crudas ===== */
 $selCe = "c.".bt($C_ID)." AS id";
 $selCe.= $C_DNI     ? ", c.".bt($C_DNI)    ." AS dni"       : ", NULL AS dni";
 $selCe.= $C_APELLIDO? ", c.".bt($C_APELLIDO)." AS apellido" : ", NULL AS apellido";
@@ -133,7 +182,7 @@ else { $selExtra.=", NULL AS modalidad"; }
 if (has_table($conexion,'categorias_peso_evento')) { $joins.=" LEFT JOIN categorias_peso_evento cp ON cp.id = c.".bt($C_PESO_ID); $selExtra.=", cp.nombre AS peso"; }
 else { $selExtra.=", NULL AS peso"; }
 
-$fichas=[]; // por ID
+$fichas=[];
 if ($r=$conexion->query("SELECT $selCe $selExtra FROM `competidores_evento` c $joins ORDER BY c.".bt($C_ID)." ASC")){
   while($row=$r->fetch_assoc()){
     $id=(int)$row['id'];
@@ -158,118 +207,242 @@ if ($r=$conexion->query("SELECT $selCe $selExtra FROM `competidores_evento` c $j
   $r->close();
 }
 
-/* ===== Agrupar Global =====
-   - Si hay DNI: agrupamos por DNI.
-   - Si NO hay DNI: quedamos por ficha (ID).
-   - Base:
-       * Si existen columnas de score => base = score de la ÚLTIMA ficha del DNI.
-       * Si NO existen columnas => base = 0 (se avisará en UI) y luego sumamos TODAS las peleas de TODAS las fichas del DNI.
-   - Suma de peleas:
-       * Si existen columnas => sumamos SOLO las peleas de la ÚLTIMA ficha (evento actual).
-       * Si NO existen columnas => sumamos peleas de TODAS las fichas.
-*/
-$usarDNI = (bool)$C_DNI;
-$global = [];        // key: dni o id
-$mapIdToKey = [];    // id_competidor_evento -> key
+/* ===== Unificación de duplicados ===== */
+$grupos = [];         // key => data unificada (datos de la ficha más nueva + acumuladores)
+$idsPorGrupo = [];    // key => [ids...]
+$indexApellidoDNI = []; // apellido normalizado => [dni válidos]
+$indexApellidoGrupoConDNI = []; // apellido => key de grupo con DNI (si único)
 
-if ($usarDNI) {
-  // localizar última ficha por DNI
-  $ultimaPorDni = []; // dni => ficha
-  foreach ($fichas as $f) {
-    $dni = trim((string)($f['dni'] ?? ''));
-    if ($dni === '') {
-      // sin dni, tratar por ID único
-      $k = 'id:'.$f['id'];
-      $global[$k] = [
-        'key'=>$k, 'dni'=>null, 'id_base'=>$f['id'],
-        'nombre'=>trim($f['apellido'].' '.$f['nombre']),
-        'escuela'=>$f['escuela'], 'logo'=>$f['escuela_logo'], 'foto'=>$f['foto'],
-        'modalidad'=>$f['modalidad'], 'peso'=>$f['peso'],
-        'W'=> $scoreColsPresent ? $f['W_base'] : 0,
-        'L'=> $scoreColsPresent ? $f['L_base'] : 0,
-        'D'=> $scoreColsPresent ? $f['D_base'] : 0,
-        'NC'=> $scoreColsPresent ? $f['NC_base'] : 0,
-        'badge'=> (isset($f['activo']) && $f['activo']!=='' && (int)$f['activo']===0) ? ' (archivado)' : ((isset($f['estado']) && $f['estado'])? (' ('.$f['estado'].')') : '')
+/* 1) Primero crear grupos por DNI válido y preparar índices por apellido */
+foreach ($fichas as $f) {
+  $dniNorm = normalize_dni($f['dni'] ?? '');
+  $apeNorm = norm_txt($f['apellido'] ?? '');
+  if ($dniNorm) {
+    $key = 'dni:'.$dniNorm;
+    if (!isset($grupos[$key])) {
+      $grupos[$key] = [
+        'key'=>$key,'dni'=>$dniNorm,'id_base'=>$f['id'],
+        'apellido'=>$f['apellido'],'nombre'=>$f['nombre'],
+        'escuela'=>$f['escuela'],'escuelas'=>array_filter([$f['escuela']]),
+        'logo'=>$f['escuela_logo'],'foto'=>$f['foto'],
+        'modalidad'=>$f['modalidad'],'peso'=>$f['peso'],
+        // acumuladores de score: SUMA de todas las fichas del grupo
+        'W_acc'=>(int)$f['W_base'],'L_acc'=>(int)$f['L_base'],'D_acc'=>(int)$f['D_base'],'NC_acc'=>(int)$f['NC_base'],
+        'badge'=>(isset($f['activo']) && $f['activo']!=='' && (int)$f['activo']===0) ? ' (archivado)' : ((isset($f['estado']) && $f['estado'])? (' ('.$f['estado'].')') : '')
       ];
-      $mapIdToKey[$f['id']] = $k;
-      continue;
-    }
-    if (!isset($ultimaPorDni[$dni]) || $f['id'] > $ultimaPorDni[$dni]['id']) $ultimaPorDni[$dni] = $f;
-  }
-
-  // armar base por DNI
-  foreach ($ultimaPorDni as $dni => $f) {
-    $k = 'dni:'.$dni;
-    $global[$k] = [
-      'key'=>$k, 'dni'=>$dni, 'id_base'=>$f['id'],
-      'nombre'=>trim($f['apellido'].' '.$f['nombre']),
-      'escuela'=>$f['escuela'], 'logo'=>$f['escuela_logo'], 'foto'=>$f['foto'],
-      'modalidad'=>$f['modalidad'], 'peso'=>$f['peso'],
-      'W'=> $scoreColsPresent ? $f['W_base'] : 0,
-      'L'=> $scoreColsPresent ? $f['L_base'] : 0,
-      'D'=> $scoreColsPresent ? $f['D_base'] : 0,
-      'NC'=> $scoreColsPresent ? $f['NC_base'] : 0,
-      'badge'=> (isset($f['activo']) && $f['activo']!=='' && (int)$f['activo']===0) ? ' (archivado)' : ((isset($f['estado']) && $f['estado'])? (' ('.$f['estado'].')') : '')
-    ];
-    $mapIdToKey[$f['id']] = $k;
-  }
-
-  // si NO existen columnas de score, como fallback sumamos peleas de TODAS las fichas del DNI
-  if (!$scoreColsPresent && $peleas){
-    // mapear todos los ids por DNI
-    $idsPorDni = [];
-    foreach ($fichas as $f) {
-      $dni = trim((string)($f['dni'] ?? ''));
-      if ($dni!=='') $idsPorDni[$dni][] = (int)$f['id'];
-    }
-    foreach ($peleas as $p){
-      $g = $p['g']; if ($g===null) continue;
-      foreach ($idsPorDni as $dni => $idsList){
-        $k = 'dni:'.$dni;
-        if (!isset($global[$k])) continue;
-        $az=(int)$p['azul_id']; $ro=(int)$p['rojo_id'];
-        // si la pelea involucra cualquiera de los ids del DNI, sumamos
-        if (in_array($az,$idsList,true) || in_array($ro,$idsList,true)){
-          if ($g==='empate'){ $global[$k]['D']++; }
-          elseif ($g==='azul'){ $global[$k]['W'] += in_array($az,$idsList,true) ? 1 : 0; $global[$k]['L'] += in_array($ro,$idsList,true) ? 1 : 0; }
-          elseif ($g==='rojo'){ $global[$k]['W'] += in_array($ro,$idsList,true) ? 1 : 0; $global[$k]['L'] += in_array($az,$idsList,true) ? 1 : 0; }
+      $idsPorGrupo[$key]=[$f['id']];
+    } else {
+      // usar el más nuevo para mostrar datos
+      if ($f['id'] > $grupos[$key]['id_base']) {
+        $grupos[$key]['id_base']=$f['id'];
+        foreach (['apellido','nombre','escuela','logo','foto','modalidad','peso'] as $fld){
+          $src = ($fld==='logo')?($f['escuela_logo']??''):($f[$fld]??'');
+          if (!empty($src)) $grupos[$key][$fld]=$src;
         }
       }
-    }
-  }
+      // acumular score
+      $grupos[$key]['W_acc'] += (int)$f['W_base'];
+      $grupos[$key]['L_acc'] += (int)$f['L_base'];
+      $grupos[$key]['D_acc'] += (int)$f['D_base'];
+      $grupos[$key]['NC_acc']+= (int)$f['NC_base'];
 
-} else {
-  // sin DNI: por ficha (ID)
-  foreach ($fichas as $f) {
-    $k = 'id:'.$f['id'];
-    $global[$k] = [
-      'key'=>$k, 'dni'=>null, 'id_base'=>$f['id'],
-      'nombre'=>trim($f['apellido'].' '.$f['nombre']),
-      'escuela'=>$f['escuela'], 'logo'=>$f['escuela_logo'], 'foto'=>$f['foto'],
-      'modalidad'=>$f['modalidad'], 'peso'=>$f['peso'],
-      'W'=>$f['W_base'],'L'=>$f['L_base'],'D'=>$f['D_base'],'NC'=>$f['NC_base'],
-      'badge'=> (isset($f['activo']) && $f['activo']!=='' && (int)$f['activo']===0) ? ' (archivado)' : ((isset($f['estado']) && $f['estado'])? (' ('.$f['estado'].')') : '')
-    ];
-    $mapIdToKey[$f['id']] = $k;
+      if (!empty($f['escuela'])) $grupos[$key]['escuelas'][]=$f['escuela'];
+      $idsPorGrupo[$key][]=$f['id'];
+    }
+    if ($apeNorm!=='') $indexApellidoDNI[$apeNorm][$dniNorm]=true;
   }
 }
 
-/* ===== Sumar peleas del EVENTO ACTUAL (solo para la última ficha) cuando SÍ hay columnas de score ===== */
-if ($scoreColsPresent && $peleas){
-  foreach($peleas as $p){
-    $g=$p['g']; if ($g===null) continue;
-    $az=(int)$p['azul_id']; $ro=(int)$p['rojo_id'];
+/* Si para un apellido hay un único DNI canónico, guardamos referencia rápida */
+foreach ($indexApellidoDNI as $ape=>$dniSet){
+  $dnis = array_keys($dniSet);
+  if (count($dnis)===1){
+    $dni = $dnis[0];
+    $indexApellidoGrupoConDNI[$ape] = 'dni:'.$dni;
+  }
+}
 
-    foreach ([$az,$ro] as $cid) {
-      if (!isset($mapIdToKey[$cid])) continue; // solo la última ficha mapeada
-      $key = $mapIdToKey[$cid];
-      if (!isset($global[$key])) continue;
+/* 2) Fichas SIN DNI válido: unir por apellido + nombre (Levenshtein + Metaphone) o por escuela parecida */
+foreach ($fichas as $f) {
+  $dniNorm = normalize_dni($f['dni'] ?? '');
+  if ($dniNorm) continue;
 
-      if ($g==='azul' && $cid===$az) $global[$key]['W']++;
-      elseif ($g==='azul' && $cid===$ro) $global[$key]['L']++;
-      elseif ($g==='rojo' && $cid===$ro) $global[$key]['W']++;
-      elseif ($g==='rojo' && $cid===$az) $global[$key]['L']++;
-      elseif ($g==='empate') $global[$key]['D']++;
+  $ape = (string)($f['apellido'] ?? '');
+  $nom = (string)($f['nombre'] ?? '');
+  $apeNorm = norm_txt($ape);
+  $nomNorm = norm_txt($nom);
+
+  $attached = false;
+
+  // 2.a) Grupo único con DNI para este apellido → comparar nombre (lev+metaphone) o escuela ~80%
+  if ($apeNorm !== '' && isset($indexApellidoGrupoConDNI[$apeNorm])) {
+    $k = $indexApellidoGrupoConDNI[$apeNorm];
+    $g = $grupos[$k];
+
+    $nombreBase = first_name($g['nombre'] ?? '');
+    $nombreNuevo= first_name($nom);
+
+    $escG = $g['escuela'] ?? '';
+    $escN = $f['escuela'] ?? '';
+    $escLike = like_ratio($escG,$escN);
+
+    if ( ($nombreBase!=='' && $nombreNuevo!=='' && is_similar_name($nombreBase,$nombreNuevo,2)) || ($escG!=='' && $escN!=='' && $escLike>=80) ) {
+      // datos visibles: ficha más nueva
+      if ($f['id'] > $g['id_base']) {
+        $grupos[$k]['id_base']=$f['id'];
+        foreach (['apellido','nombre','escuela','logo','foto','modalidad','peso'] as $fld){
+          $src = ($fld==='logo')?($f['escuela_logo']??''):($f[$fld]??'');
+          if (!empty($src)) $grupos[$k][$fld]=$src;
+        }
+      } else {
+        if (!$grupos[$k]['escuela']   && !empty($f['escuela']))      $grupos[$k]['escuela'] = $f['escuela'];
+        if (!$grupos[$k]['logo']      && !empty($f['escuela_logo'])) $grupos[$k]['logo'] = $f['escuela_logo'];
+        if (!$grupos[$k]['foto']      && !empty($f['foto']))         $grupos[$k]['foto'] = $f['foto'];
+        if (!$grupos[$k]['modalidad'] && !empty($f['modalidad']))    $grupos[$k]['modalidad'] = $f['modalidad'];
+        if (!$grupos[$k]['peso']      && !empty($f['peso']))         $grupos[$k]['peso'] = $f['peso'];
+      }
+      // acumular score
+      $grupos[$k]['W_acc'] += (int)$f['W_base'];
+      $grupos[$k]['L_acc'] += (int)$f['L_base'];
+      $grupos[$k]['D_acc'] += (int)$f['D_base'];
+      $grupos[$k]['NC_acc']+= (int)$f['NC_base'];
+
+      if (!empty($f['escuela'])) $grupos[$k]['escuelas'][]=$f['escuela'];
+      $idsPorGrupo[$k][]=$f['id'];
+      $attached = true;
+    }
+  }
+
+  if ($attached) continue;
+
+  /* 2.b) Agrupar por (Apellido+Nombre) con tolerancia (Levenshtein + Metaphone en ambos) */
+  $nameKey = normalize_name_key($ape,$nom);
+  if ($nameKey) {
+    $k = 'nx:'.$nameKey;
+    // buscar algún grupo nx:* muy similar en apellido y nombre (lev o metaphone)
+    $foundKey = null;
+    foreach ($grupos as $gk=>$g){
+      if (strpos($gk,'nx:')===0){
+        $okApe = is_similar_name($g['apellido'] ?? '', $ape, 2);
+        $okNom = is_similar_name($g['nombre'] ?? '', $nom, 2);
+        if ($okApe && $okNom){ $foundKey=$gk; break; }
+      }
+    }
+    if ($foundKey!==null) $k = $foundKey;
+
+    if (!isset($grupos[$k])){
+      $grupos[$k]=[
+        'key'=>$k,'dni'=>null,'id_base'=>$f['id'],
+        'apellido'=>$ape,'nombre'=>$nom,
+        'escuela'=>$f['escuela'],'escuelas'=>array_filter([$f['escuela']]),
+        'logo'=>$f['escuela_logo'],'foto'=>$f['foto'],
+        'modalidad'=>$f['modalidad'],'peso'=>$f['peso'],
+        'W_acc'=>(int)$f['W_base'],'L_acc'=>(int)$f['L_base'],'D_acc'=>(int)$f['D_base'],'NC_acc'=>(int)$f['NC_base'],
+        'badge'=>(isset($f['activo']) && $f['activo']!=='' && (int)$f['activo']===0) ? ' (archivado)' : ((isset($f['estado']) && $f['estado'])? (' ('.$f['estado'].')') : '')
+      ];
+      $idsPorGrupo[$k]=[$f['id']];
+    } else {
+      if ($f['id'] > $grupos[$k]['id_base']) {
+        $grupos[$k]['id_base']=$f['id'];
+        foreach (['apellido','nombre','escuela','logo','foto','modalidad','peso'] as $fld){
+          $src = ($fld==='logo')?($f['escuela_logo']??''):($f[$fld]??'');
+          if (!empty($src)) $grupos[$k][$fld]=$src;
+        }
+      } else {
+        if (!$grupos[$k]['escuela']   && !empty($f['escuela']))      $grupos[$k]['escuela'] = $f['escuela'];
+        if (!$grupos[$k]['logo']      && !empty($f['escuela_logo'])) $grupos[$k]['logo'] = $f['escuela_logo'];
+        if (!$grupos[$k]['foto']      && !empty($f['foto']))         $grupos[$k]['foto'] = $f['foto'];
+        if (!$grupos[$k]['modalidad'] && !empty($f['modalidad']))    $grupos[$k]['modalidad'] = $f['modalidad'];
+        if (!$grupos[$k]['peso']      && !empty($f['peso']))         $grupos[$k]['peso'] = $f['peso'];
+      }
+      // acumuladores
+      $grupos[$k]['W_acc'] += (int)$f['W_base'];
+      $grupos[$k]['L_acc'] += (int)$f['L_base'];
+      $grupos[$k]['D_acc'] += (int)$f['D_base'];
+      $grupos[$k]['NC_acc']+= (int)$f['NC_base'];
+
+      if (!empty($f['escuela'])) $grupos[$k]['escuelas'][]=$f['escuela'];
+      $idsPorGrupo[$k][]=$f['id'];
+    }
+  } else {
+    // sin datos para agrupar: queda por ID propio
+    $k = 'id:'.$f['id'];
+    $grupos[$k]=[
+      'key'=>$k,'dni'=>null,'id_base'=>$f['id'],
+      'apellido'=>$f['apellido'],'nombre'=>$f['nombre'],
+      'escuela'=>$f['escuela'],'escuelas'=>array_filter([$f['escuela']]),
+      'logo'=>$f['escuela_logo'],'foto'=>$f['foto'],
+      'modalidad'=>$f['modalidad'],'peso'=>$f['peso'],
+      'W_acc'=>(int)$f['W_base'],'L_acc'=>(int)$f['L_base'],'D_acc'=>(int)$f['D_base'],'NC_acc'=>(int)$f['NC_base'],
+      'badge'=>(isset($f['activo']) && $f['activo']!=='' && (int)$f['activo']===0) ? ' (archivado)' : ((isset($f['estado']) && $f['estado'])? (' ('.$f['estado'].')') : '')
+    ];
+    $idsPorGrupo[$k]=[$f['id']];
+  }
+}
+
+/* ===== Preparar lista final (antes de sumar peleas) ===== */
+$global = [];
+$mapIdToKey = [];
+foreach ($grupos as $key => $g) {
+  $nombre = trim(($g['apellido'] ?? '').' '.($g['nombre'] ?? ''));
+  $escuelasUnicas = array_values(array_unique(array_filter($g['escuelas'])));
+  $escuelaFinal = $g['escuela'] ?: ($escuelasUnicas ? end($escuelasUnicas) : '');
+
+  $global[$key] = [
+    'key'     => $key,
+    'dni'     => $g['dni'],
+    'id_base' => $g['id_base'],
+    'nombre'  => ($nombre !== '') ? $nombre : '—',
+    'escuela' => $escuelaFinal,
+    'logo'    => $g['logo'] ?: '',
+    'foto'    => $g['foto'] ?: '',
+    'modalidad' => $g['modalidad'] ?: '',
+    'peso'      => $g['peso'] ?: '',
+    // empezar con la SUMA acumulada de fichas del grupo
+    'W'       => (int)$g['W_acc'],
+    'L'       => (int)$g['L_acc'],
+    'D'       => (int)$g['D_acc'],
+    'NC'      => (int)$g['NC_acc'],
+    'badge'   => $g['badge'] ?? ''
+  ];
+  $mapIdToKey[$g['id_base']] = $key; // peleas del id_base (si hay score base por ficha)
+}
+
+/* ===== Sumar peleas ===== */
+if ($peleas){
+  if ($scoreColsPresent){
+    // si existen columnas de score en la tabla, sumamos peleas SOLO a id_base de cada grupo
+    foreach($peleas as $p){
+      $g=$p['g']; if ($g===null) continue;
+      foreach (['azul_id','rojo_id'] as $side){
+        $cid = (int)$p[$side];
+        if (!isset($mapIdToKey[$cid])) continue;
+        $k = $mapIdToKey[$cid];
+        if (!isset($global[$k])) continue;
+        if     ($g==='azul' && $cid===(int)$p['azul_id']) $global[$k]['W']++;
+        elseif ($g==='azul' && $cid===(int)$p['rojo_id']) $global[$k]['L']++;
+        elseif ($g==='rojo' && $cid===(int)$p['rojo_id']) $global[$k]['W']++;
+        elseif ($g==='rojo' && $cid===(int)$p['azul_id']) $global[$k]['L']++;
+        elseif ($g==='empate')                            $global[$k]['D']++;
+      }
+    }
+  } else {
+    // si NO hay columnas de score, sumamos peleas a TODO el grupo (cualquier id dentro del grupo)
+    foreach($peleas as $p){
+      $g=$p['g']; if ($g===null) continue;
+      foreach ($idsPorGrupo as $k => $idsList){
+        $az = (int)$p['azul_id']; $ro = (int)$p['rojo_id'];
+        if (in_array($az,$idsList,true) || in_array($ro,$idsList,true)){
+          if     ($g==='empate'){ $global[$k]['D']++; }
+          elseif ($g==='azul'){
+            $global[$k]['W'] += in_array($az,$idsList,true) ? 1 : 0;
+            $global[$k]['L'] += in_array($ro,$idsList,true) ? 1 : 0;
+          } elseif ($g==='rojo'){
+            $global[$k]['W'] += in_array($ro,$idsList,true) ? 1 : 0;
+            $global[$k]['L'] += in_array($az,$idsList,true) ? 1 : 0;
+          }
+        }
+      }
     }
   }
 }
@@ -299,67 +472,77 @@ usort($lista,function($a,$b) use($orden){
   }
 });
 
-/* ===== Render ===== */
-$phUser='assets/placeholder-user.png';
-$phGym ='assets/placeholder-gym.png';
+/* ===== Placeholders (SVG embebidos) + rutas locales ===== */
+$LOCAL_USER = 'assets/img/placeholder_user.png';
+$LOCAL_GYM  = 'assets/img/placeholder_gym.png';
+
+$SVG_USER = 'data:image/svg+xml;utf8,'.rawurlencode(
+  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128"><rect width="128" height="128" fill="#0b0d12"/><circle cx="64" cy="46" r="26" fill="#2a3450"/><path d="M16 120c0-26 21-36 48-36s48 10 48 36" fill="#2a3450"/></svg>'
+);
+$SVG_GYM = 'data:image/svg+xml;utf8,'.rawurlencode(
+  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128"><rect width="128" height="128" fill="#0b0d12"/><rect x="18" y="54" width="92" height="20" fill="#2a3450"/><rect x="8" y="48" width="20" height="32" fill="#2a3450"/><rect x="100" y="48" width="20" height="32" fill="#2a3450"/></svg>'
+);
+
 ?>
 <!doctype html>
 <html lang="es">
 <head>
-<meta charset="utf-8">
-<title>📊 Competidores — Global</title>
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<link rel="stylesheet" href="estilo_unificado.css">
-<style>
-  body{background:#0b1115;color:#e6eef4}
-  .wrap{max-width:1100px;margin:20px auto;padding:12px}
-  .card{background:#0f1720;border:1px solid #1f2a33;border-radius:14px;padding:14px}
-  .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
-  input,select{padding:10px;border-radius:10px;border:1px solid #263341;background:#111a24;color:#e6eef4}
-  .table-wrap{overflow-x:auto;border:1px solid #1f2a33;border-radius:12px;margin-top:12px}
-  table{width:100%;border-collapse:collapse}
-  th,td{padding:10px;border-bottom:1px solid #1c2a36}
-  th{color:#9ecbff;background:#0f1a26;position:sticky;top:0}
-  .pfp{width:52px;height:52px;object-fit:cover;border-radius:10px;border:1px solid #2b3c4f}
-  .logo{width:40px;height:40px;object-fit:contain;background:#0b131c;border-radius:8px;border:1px solid #263341}
-  .pill{display:inline-block;padding:2px 8px;border-radius:999px;border:1px solid #27455c;font-size:12px;margin-right:4px}
-  .muted{color:#bcd8ff}
-  a.rowlink{display:flex;gap:8px;align-items:center;text-decoration:none;color:inherit}
-  a.rowlink:hover{text-decoration:underline}
-</style>
+  <meta charset="utf-8">
+  <title>📊 Competidores — Global (Unificado)</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <!-- CSS UNIFICADO -->
+  <link rel="stylesheet" href="estilo_unificado.css?v=6">
+  <script>
+    // Fallback en cadena: src original → archivo local → SVG embebido
+    function phChain(img, localSrc, svgData) {
+      const step = img.dataset.phStep || '0';
+      if (step === '0') {
+        img.dataset.phStep = '1';
+        img.src = localSrc;
+      } else {
+        img.onerror = null;
+        img.src = svgData;
+      }
+    }
+  </script>
 </head>
 <body>
 <?php @include __DIR__.'/menu_eventos.php'; ?>
 
 <div class="wrap">
-  <div class="card">
-    <h2 style="margin:0 0 8px 0">📊 Competidores (global por DNI)</h2>
+  <div class="page-card">
+    <div class="encabezado" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <h2 style="margin:0">📊 Competidores (unificados por DNI o Nombre+Apellido)</h2>
+      <a class="btn" href="index.php">Volver</a>
+    </div>
 
     <?php if (!$scoreColsPresent): ?>
-      <div style="margin:8px 0;padding:10px;border-radius:10px;background:#2a1414;border:1px solid #5e2626;color:#ffb4b4">
-        Aviso: no se detectaron las columnas <b>wins / losses / draws / no_contest</b> en <code>competidores_evento</code>.
-        Se muestran totales solo con las peleas cargadas. Si querés ver el score “cargado al registrarse”, agregá esas columnas (ver SQL en comentarios del archivo).
+      <div class="msg warn" style="margin-bottom:12px">
+        No se detectaron las columnas <b>wins/losses/draws/no_contest</b> en <code>competidores_evento</code>.
+        Se suman resultados por peleas de todos los IDs unificados.
+      </div>
+    <?php else: ?>
+      <div class="msg" style="margin-bottom:12px">
+        La puntuación muestra la <b>suma</b> de W/L/D/NC de las fichas unificadas, más las peleas del evento actual (id base).
       </div>
     <?php endif; ?>
 
-    <form method="get" class="row" style="margin-top:6px">
-      <input type="text" name="q" placeholder="Buscar por nombre o academia…" value="<?= h($busca) ?>" style="min-width:220px">
-      <label>Orden:
-        <select name="sort">
-          <option value="wins" <?= $orden==='wins'?'selected':''; ?>>Más ganadas</option>
-          <option value="name" <?= $orden==='name'?'selected':''; ?>>Nombre</option>
-          <option value="gym"  <?= $orden==='gym'?'selected':'';  ?>>Academia</option>
-        </select>
-      </label>
-      <button style="padding:10px 14px;border-radius:10px;border:1px solid #27455c;background:#0e7ad1;color:#fff;cursor:pointer">Aplicar</button>
+    <form method="get" class="toolbar" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
+      <input class="input" type="text" name="q" placeholder="Buscar por nombre o academia…" value="<?= h($busca) ?>" style="min-width:220px">
+      <select class="input" name="sort" aria-label="Orden">
+        <option value="wins" <?= $orden==='wins'?'selected':''; ?>>Más ganadas</option>
+        <option value="name" <?= $orden==='name'?'selected':''; ?>>Nombre</option>
+        <option value="gym"  <?= $orden==='gym'?'selected':'';  ?>>Academia</option>
+      </select>
+      <button class="btn" type="submit">Aplicar</button>
     </form>
 
     <div class="table-wrap">
-      <table>
+      <table aria-label="Listado global unificado de competidores">
         <thead>
           <tr>
-            <th>Competidor</th>
-            <th>Academia</th>
+            <th style="text-align:left">Competidor</th>
+            <th style="text-align:left">Academia</th>
             <th>Modalidad</th>
             <th>Peso</th>
             <th>W</th>
@@ -370,53 +553,56 @@ $phGym ='assets/placeholder-gym.png';
         </thead>
         <tbody>
         <?php if (!$lista): ?>
-          <tr><td colspan="8" class="muted">Sin registros.</td></tr>
+          <tr><td colspan="8" class="muted" style="text-align:center">Sin registros.</td></tr>
         <?php else: foreach($lista as $c):
           $nombre = trim($c['nombre']) ?: '—';
-          $foto = $c['foto'] ?: $phUser;
-          $logo = $c['logo'] ?: $phGym;
-
-          // URL al perfil individual (prioriza DNI si existe)
+          $foto = $c['foto'] ?: $LOCAL_USER; // primer intento: local
+          $logo = $c['logo'] ?: $LOCAL_GYM;  // primer intento: local
           $perfilUrl = !empty($c['dni'])
             ? 'ver_competidor_ranking.php?dni='.urlencode($c['dni'])
             : 'ver_competidor_ranking.php?id='.(int)$c['id_base'];
         ?>
           <tr>
-            <td>
-              <a class="rowlink" href="<?= h($perfilUrl) ?>">
-                <img class="pfp" src="<?= h($foto) ?>" alt="foto">
+            <td style="text-align:left">
+              <a class="rowlink" href="<?= h($perfilUrl) ?>" style="display:flex;gap:10px;align-items:center;color:inherit;text-decoration:none">
+                <img class="pfp" src="<?= h($foto) ?>" alt="foto"
+                     style="width:52px;height:52px;object-fit:cover;border-radius:10px;border:1px solid var(--stroke);background:#0b0d12"
+                     onerror="phChain(this,'<?= h($LOCAL_USER) ?>','<?= h($SVG_USER) ?>')">
                 <div>
                   <div style="font-weight:800"><?= h($nombre) ?><?= h($c['badge'] ?? '') ?></div>
                   <?php if (!empty($c['dni'])): ?>
-                    <div class="muted" style="font-size:12px">DNI: <?= h($c['dni']) ?> • Ficha ID base: <?= (int)$c['id_base'] ?></div>
+                    <div class="muted" style="font-size:12px">DNI: <?= h($c['dni']) ?> • Ficha base: <?= (int)$c['id_base'] ?></div>
                   <?php else: ?>
-                    <div class="muted" style="font-size:12px">Ficha ID: <?= (int)$c['id_base'] ?></div>
+                    <div class="muted" style="font-size:12px">Ficha base: <?= (int)$c['id_base'] ?></div>
                   <?php endif; ?>
                 </div>
               </a>
             </td>
-            <td>
-              <div class="row" style="gap:8px;align-items:center">
-                <img class="logo" src="<?= h($logo) ?>" alt="logo">
+            <td style="text-align:left">
+              <div style="display:flex;gap:8px;align-items:center">
+                <img class="logo" src="<?= h($logo) ?>" alt="logo"
+                     style="width:40px;height:40px;object-fit:contain;border-radius:8px;border:1px solid var(--stroke);background:#0b0d12"
+                     onerror="phChain(this,'<?= h($LOCAL_GYM) ?>','<?= h($SVG_GYM) ?>')">
                 <div><?= h($c['escuela'] ?: '—') ?></div>
               </div>
             </td>
             <td><?= h($c['modalidad'] ?: '—') ?></td>
             <td><?= h($c['peso'] ?: '—') ?></td>
-            <td><span class="pill" style="border-color:#1d6f3a"><?= (int)$c['W'] ?></span></td>
-            <td><span class="pill" style="border-color:#6f1d1d"><?= (int)$c['L'] ?></span></td>
-            <td><span class="pill" style="border-color:#6f5a1d"><?= (int)$c['D'] ?></span></td>
-            <td><span class="pill" style="border-color:#3a3f50"><?= (int)$c['NC'] ?></span></td>
+            <td><span class="pill"><?= (int)$c['W'] ?></span></td>
+            <td><span class="pill"><?= (int)$c['L'] ?></span></td>
+            <td><span class="pill"><?= (int)$c['D'] ?></span></td>
+            <td><span class="pill"><?= (int)$c['NC'] ?></span></td>
           </tr>
         <?php endforeach; endif; ?>
         </tbody>
       </table>
     </div>
 
-    <div class="muted" style="margin-top:8px">
-      • Con columnas de score: Base = score cargado en la <b>última ficha</b> de cada DNI + peleas con resultado de ese evento.<br>
-      • Sin columnas de score: se muestran totales sólo según peleas cargadas (todas las fichas del DNI).
-    </div>
+    <p class="muted" style="margin-top:8px">
+      • Se prioriza <b>DNI válido (8 dígitos)</b>. Registros sin DNI se adhieren por <b>Apellido+Nombre</b> con tolerancia (Levenshtein + Metaphone) o por <b>escuela muy parecida</b>.<br>
+      • Si aparecen personas distintas con el mismo apellido pero nombres distintos (p. ej. Roberto vs Daniel), <u>no</u> se mezclan salvo que compartan el mismo DNI.<br>
+      • La ficha visible es la <b>más nueva</b> del grupo; el score es la <b>suma</b> de todas las fichas unificadas + peleas.
+    </p>
   </div>
 </div>
 </body>
