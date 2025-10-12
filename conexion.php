@@ -37,7 +37,7 @@ if (function_exists('date_default_timezone_set')) {
 //  DB_HOST, DB_PORT, DB_USER, DB_PASS, DB_NAME
 $DB_HOST = getenv('DB_HOST') ?: 'mysql-daniel24533.alwaysdata.net';
 $DB_PORT = (int)(getenv('DB_PORT') ?: 3306);
-$DB_USER = getenv('DB_USER') ?: 'daniel24533';              // tu usuario MySQL (con prefijo)
+$DB_USER = getenv('DB_USER') ?: '435000_db';              // tu usuario MySQL (con prefijo)
 $DB_PASS = getenv('DB_PASS') ?: 'Catalina160gus';         // <-- poné tu clave MySQL
 $DB_NAME = getenv('DB_NAME') ?: 'daniel24533_cjsgym_db';    // tu base
 
