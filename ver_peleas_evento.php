@@ -1,6 +1,7 @@
 <?php
 /* =========================
    ver_peleas_evento.php — Lista de peleas con impresión/compartir optimizada
+   • Buscador por Apellido y Escuela/Academia (filtra rojo/azul)
    • Modalidad visible (prioriza pelea > texto > obs)
    • SIN columna “Técnica”
    • Tarjetas con recuadros marcados
@@ -54,11 +55,11 @@ $_SESSION['evento_id_actual'] = $evento_id;
 
 $SHARE = (isset($_GET['share']) && (string)$_GET['share'] === '1'); // vista limpia para imprimir/compartir
 
-/* ========= nombre del evento =========
-   — Primero intenta en eventos_deportivos.titulo
-   — Fallbacks: eventos.nombre, evento.nombre
-   — Fallback JOINs desde peleas/competidores a eventos_deportivos
-*/
+/* === parámetros de búsqueda (nuevo) === */
+$s_ape = trim((string)($_GET['ape'] ?? '')); // Apellido
+$s_esc = trim((string)($_GET['esc'] ?? '')); // Escuela/Academia
+
+/* ========= nombre del evento ========= */
 function obtener_nombre_evento(mysqli $cx, int $evento_id, bool $debug=false): string {
   if ($evento_id <= 0) return 'Evento #'.$evento_id;
 
@@ -66,7 +67,6 @@ function obtener_nombre_evento(mysqli $cx, int $evento_id, bool $debug=false): s
   $log = function($m) use (&$logs,$debug){ if($debug) $logs[] = $m; };
   $dumpLogs = function() use (&$logs,$debug){ if($debug){ foreach($logs as $l){ echo "<!-- $l -->\n"; } }};
 
-  // helper: existe tabla
   $existe = function(string $tabla) use ($cx): bool {
     $sql = "SELECT 1 FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?";
     if (!($st = $cx->prepare($sql))) return false;
@@ -74,7 +74,6 @@ function obtener_nombre_evento(mysqli $cx, int $evento_id, bool $debug=false): s
     $res = $st->get_result(); $ok = $res && $res->num_rows===1; $st->close();
     return $ok;
   };
-  // helper: SELECT simple
   $trySimple = function(string $sql, int $id, string $nota) use ($cx,$log){
     $log("Intento: $nota");
     if(!($st=$cx->prepare($sql))){ $log("  ✗ prepare: ".$cx->error); return null; }
@@ -95,13 +94,11 @@ function obtener_nombre_evento(mysqli $cx, int $evento_id, bool $debug=false): s
   $tPE = $existe('peleas_evento');
   $tCE = $existe('competidores_evento');
 
-  // 1) eventos_deportivos.titulo
   if ($tED) {
     if ($nom = $trySimple("SELECT `titulo` FROM `eventos_deportivos` WHERE `id`=? LIMIT 1", $evento_id, "eventos_deportivos.id -> titulo")) {
       $dumpLogs(); return $nom;
     }
   }
-  // 2) fallbacks
   if ($tEv) {
     if ($nom = $trySimple("SELECT `nombre` FROM `eventos` WHERE `id`=? LIMIT 1", $evento_id, "eventos.id -> nombre")) {
       $dumpLogs(); return $nom;
@@ -112,7 +109,6 @@ function obtener_nombre_evento(mysqli $cx, int $evento_id, bool $debug=false): s
       $dumpLogs(); return $nom;
     }
   }
-  // 3) JOINs desde peleas/competidores
   if ($tPE && $tED) {
     if ($nom = $trySimple(
       "SELECT ed.`titulo` AS titulo
@@ -208,7 +204,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$SHARE) {
       $conexion->rollback();
       $_SESSION['flash_error'] = 'Error guardando numeración: '.$e->getMessage();
     }
-    header('Location: ver_peleas_evento.php?evento_id='.$evento_id); exit;
+    header('Location: ver_peleas_evento.php?evento_id='.$evento_id.'&ape='.urlencode($s_ape).'&esc='.urlencode($s_esc)); exit;
   }
 
   if ($accion === 'guardar_pesajes') {
@@ -251,18 +247,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$SHARE) {
       $conexion->rollback();
       $_SESSION['flash_error'] = 'Error guardando pesajes: '.$e->getMessage();
     }
-    header('Location: ver_peleas_evento.php?evento_id='.(int)$evento_id); exit;
+    header('Location: ver_peleas_evento.php?evento_id='.(int)$evento_id.'&ape='.urlencode($s_ape).'&esc='.urlencode($s_esc)); exit;
   }
 
   if ($accion === 'delete' && $pelea_id > 0) {
     $st=$conexion->prepare("DELETE FROM peleas_evento WHERE ".bt($C_EVENTO)."=? AND ".bt($C_ID ?: 'id')."=? LIMIT 1");
     if ($st) { $st->bind_param('ii',$evento_id,$pelea_id); $st->execute(); $st->close(); }
     $_SESSION['flash_ok'] = '🗑️ Pelea eliminada.';
-    header('Location: ver_peleas_evento.php?evento_id='.(int)$evento_id); exit;
+    header('Location: ver_peleas_evento.php?evento_id='.(int)$evento_id.'&ape='.urlencode($s_ape).'&esc='.urlencode($s_esc)); exit;
   }
 }
 
-/* ========= listado de peleas ========= */
+/* ========= listado de peleas con filtros (NUEVO) ========= */
 $orderPieces = [];
 if ($C_ORDEN) $orderPieces[] = 'p.'.bt($C_ORDEN).' IS NULL';
 if ($C_ORDEN) $orderPieces[] = 'p.'.bt($C_ORDEN);
@@ -276,14 +272,12 @@ $selectParts[] = 'p.'.bt($C_ID ?: 'id').' AS pelea_id';
 $selectParts[] = $C_ORDEN  ? 'p.'.bt($C_ORDEN).' AS orden_manual' : 'NULL AS orden_manual';
 $selectParts[] = $C_RONDAS ? 'p.'.bt($C_RONDAS).' AS rondas' : 'NULL AS rondas';
 $selectParts[] = $C_OBS    ? 'p.'.bt($C_OBS).' AS observaciones' : 'NULL AS observaciones';
-/* Pesajes reales */
 $selectParts[] = $C_PESO_REAL_R ? 'p.'.bt($C_PESO_REAL_R).' AS peso_real_r' : "NULL AS peso_real_r";
 $selectParts[] = $C_PESO_REAL_A ? 'p.'.bt($C_PESO_REAL_A).' AS peso_real_a' : "NULL AS peso_real_a";
-/* Modalidad a nivel PELEA */
 if ($C_MODAL_P_TXT) { $selectParts[] = 'p.'.bt($C_MODAL_P_TXT).' AS modalidad_pelea_txt'; } else { $selectParts[] = "NULL AS modalidad_pelea_txt"; }
 if ($tablaModal && $C_MODAL_P_ID) { $joins[] = "LEFT JOIN $tablaModal mp ON mp.id = p.".bt($C_MODAL_P_ID); $selectParts[] = 'mp.'.bt($MOD_LABEL_COL).' AS modalidad_pelea'; }
 else { $selectParts[] = "NULL AS modalidad_pelea"; }
-/* competidores (ajusta si tus nombres reales difieren) */
+/* competidores (ajustá si tus nombres reales difieren) */
 $selectParts[] = 'cr.apellido AS r_apellido';
 $selectParts[] = 'cr.nombre   AS r_nombre';
 $selectParts[] = 'cr.escuela_nombre AS r_escuela';
@@ -294,10 +288,9 @@ $selectParts[] = 'ca.nombre   AS a_nombre';
 $selectParts[] = 'ca.escuela_nombre AS a_escuela';
 $selectParts[] = 'ca.foto_competidor AS a_foto';
 $selectParts[] = 'ca.escuela_logo AS a_logo';
-/* pesos declarados */
 $selectParts[] = 'cr.peso_kg AS r_peso';
 $selectParts[] = 'ca.peso_kg AS a_peso';
-/* divisiones */
+
 if ($tablaDiv) {
   $joins[] = "LEFT JOIN $tablaDiv dvr ON dvr.id = cr.division_id";
   $joins[] = "LEFT JOIN $tablaDiv dva ON dva.id = ca.division_id";
@@ -308,17 +301,48 @@ if ($tablaDiv) {
   $selectParts[] = "NULL AS a_division";
 }
 
+/* --- WHERE dinámico con filtros --- */
+$where = ["p.".bt($C_EVENTO)." = ?"];
+$types = 'i';
+$params = [$evento_id];
+
+if ($s_ape !== '') {
+  $tokens = preg_split('/\s+/', $s_ape);
+  foreach ($tokens as $tk) {
+    $tk = trim($tk); if ($tk==='') continue;
+    // Busca en APELLIDO (y también nombre por si acaso)
+    $where[] = "(cr.apellido LIKE CONCAT('%', ?, '%')
+                 OR ca.apellido LIKE CONCAT('%', ?, '%')
+                 OR cr.nombre LIKE CONCAT('%', ?, '%')
+                 OR ca.nombre LIKE CONCAT('%', ?, '%'))";
+    $types .= 'ssss';
+    $params[] = $tk; $params[] = $tk; $params[] = $tk; $params[] = $tk;
+  }
+}
+
+if ($s_esc !== '') {
+  $tokens = preg_split('/\s+/', $s_esc);
+  foreach ($tokens as $tk) {
+    $tk = trim($tk); if ($tk==='') continue;
+    // Escuela / Academia (ambas esquinas)
+    $where[] = "(cr.escuela_nombre LIKE CONCAT('%', ?, '%')
+                 OR ca.escuela_nombre LIKE CONCAT('%', ?, '%'))";
+    $types .= 'ss';
+    $params[] = $tk; $params[] = $tk;
+  }
+}
+
 $sql = "SELECT
   ".implode(",\n  ", $selectParts)."
 FROM peleas_evento p
 JOIN competidores_evento cr ON p.".bt($C_ROJO)." = cr.id
 LEFT JOIN competidores_evento ca ON p.".bt($C_AZUL)." = ca.id
 ".implode("\n", $joins)."
-WHERE p.".bt($C_EVENTO)." = ?
+WHERE ".implode(' AND ', $where)."
 ORDER BY $orderBy";
 $st = $conexion->prepare($sql);
 if (!$st) { echo '<div style="max-width:900px;margin:16px auto;padding:12px;border:1px solid #ffcdd2;background:#ffebee;color:#b71c1c;border-radius:8px;">Error preparando la lista de peleas: '.h($conexion->error).'</div>'; exit; }
-$st->bind_param('i', $evento_id);
+$st->bind_param($types, ...$params);
 $st->execute();
 $peleas = $st->get_result()->fetch_all(MYSQLI_ASSOC);
 $st->close();
@@ -405,10 +429,8 @@ $st->close();
       .table-wrap { overflow: visible !important; }
       table { width: 100% !important; margin: 0 auto !important; border-collapse: separate !important; border-spacing: 0 8px !important; }
       th, td { white-space: normal !important; word-break: normal !important; overflow-wrap: break-word !important; hyphens: auto !important; }
-      /* ocultar inputs/deltas y mostrar texto del real */
       input.peso-real, .delta-pill { display:none !important; }
       .real-text{ display:inline !important; }
-      /* evitar cortes de tarjeta */
       tbody tr.row-card { break-inside: avoid !important; page-break-inside: avoid !important; }
       tbody tr.row-card td { background:#fff !important; box-shadow:none !important; outline:1px solid #cbd5e1 !important; border:0 !important; padding:8px 10px !important; }
       img, .ph-avatar, .ph-logo { break-inside: avoid !important; page-break-inside: avoid !important; }
@@ -418,61 +440,72 @@ $st->close();
     .flash.ok{border:1px solid #c8e6c9;background:#e8f5e9;color:#1b5e20;padding:8px 10px;border-radius:8px;margin:8px 0;font-weight:700}
     .flash.warn{border:1px solid #ffeeba;background:#fff3cd;color:#856404;padding:8px 10px;border-radius:8px;margin:8px 0;font-weight:700}
     .flash.err{border:1px solid #ffcdd2;background:#ffebee;color:#b71c1c;padding:8px 10px;border-radius:8px;margin:8px 0;font-weight:700}
- /* ---- Encabezado sticky ---- */
-.topbar-sticky{
-  position: sticky;
-  top: 0;
-  z-index: 1000;
-  background: #fff;
-  /* un poco de separación visual */
-  border-bottom: 1px solid var(--line);
-  box-shadow: 0 4px 12px rgba(0,0,0,.06);
-  /* Para que no quede “pegado” al borde en mobile */
-  margin-left: -14px;
-  margin-right: -14px;
-  padding-left: 14px;
-  padding-right: 14px;
-  /* Evita “saltos” cuando el sticky entra/sale */
-  will-change: transform;
-}
 
-/* Cuando hay scroll dentro de .contenedor, el sticky sigue funcionando
-   porque el scroll principal es del body (no hace falta extra overflow)
-*/
+    /* ---- Encabezado sticky ---- */
+    .topbar-sticky{
+      position: sticky;
+      top: 0;
+      z-index: 1000;
+      background: #fff;
+      border-bottom: 1px solid var(--line);
+      box-shadow: 0 4px 12px rgba(0,0,0,.06);
+      margin-left: -14px;
+      margin-right: -14px;
+      padding-left: 14px;
+      padding-right: 14px;
+      will-change: transform;
+    }
+    body.solo-vista .topbar-sticky{ position: static; box-shadow: none; border-bottom: 0; }
+    @media print{ .topbar-sticky{ position: static !important; box-shadow: none !important; border-bottom: 0 !important; } }
 
-/* En vista solo-impresión/compartir y al imprimir: no fijar */
-body.solo-vista .topbar-sticky{ position: static; box-shadow: none; border-bottom: 0; }
-
-@media print{
-  .topbar-sticky{ position: static !important; box-shadow: none !important; border-bottom: 0 !important; }
-}
- </style>
+    /* form buscador */
+    .search-grid{display:grid;grid-template-columns:1fr 1fr auto;gap:8px;align-items:end}
+    .search-grid .field{display:flex;flex-direction:column;gap:4px}
+    .search-grid input{height:36px;border:1px solid #94a3b8;border-radius:8px;padding:6px 8px}
+  </style>
 </head>
 <?php $bodyClass = $SHARE ? 'solo-vista' : ''; ?>
 <body class="<?= $bodyClass ?>">
 <div class="contenedor">
-  <!-- Título grande del evento -->
-<div class="topbar-sticky">
-  <!-- Título grande del evento -->
-  <h1 class="titulo-evento">🥊 <?= h($evento_nombre) ?></h1>
+  <div class="topbar-sticky">
+    <h1 class="titulo-evento">🥊 <?= h($evento_nombre) ?></h1>
 
-  <div class="toolbar">
-    <h2>Peleas programadas</h2>
-    <div class="orden-tools">
-      <?php if (!$SHARE) { ?>
-        <?php if (!empty($C_ORDEN)) { ?>
-          <button class="btn btn-secondary" type="button" id="btnEditarOrden">✏️ Editar numeración</button>
-        <?php } else { ?>
-          <span class="muted">ℹ️ Para numeración manual, agregá una columna <b>orden</b> (INT) en <b>peleas_evento</b>.</span>
+    <div class="toolbar">
+      <h2>Peleas programadas</h2>
+      <div class="orden-tools">
+        <?php if (!$SHARE) { ?>
+          <?php if (!empty($C_ORDEN)) { ?>
+            <button class="btn btn-secondary" type="button" id="btnEditarOrden">✏️ Editar numeración</button>
+          <?php } else { ?>
+            <span class="muted">ℹ️ Para numeración manual, agregá una columna <b>orden</b> (INT) en <b>peleas_evento</b>.</span>
+          <?php } ?>
+          <a class="btn btn-mini btn-secondary" href="organizar_pelea.php?evento_id=<?= (int)$evento_id ?>">➕ Nueva pelea</a>
+          <a class="btn btn-mini btn-secondary" href="pesajes.php?evento_id=<?= (int)$evento_id ?>">⚖️ Pesajes</a>
+          <button class="btn btn-mini btn-secondary" type="button" onclick="window.print()">🖨️ Imprimir / PDF</button>
         <?php } ?>
-        <a class="btn btn-mini btn-secondary" href="organizar_pelea.php?evento_id=<?= (int)$evento_id ?>">➕ Nueva pelea</a>
-        <a class="btn btn-mini btn-secondary" href="pesajes.php?evento_id=<?= (int)$evento_id ?>">⚖️ Pesajes</a>
-        <button class="btn btn-mini btn-secondary" type="button" onclick="window.print()">🖨️ Imprimir / PDF</button>
-      <?php } ?>
-      <a class="btn btn-mini btn-secondary" href="ver_peleas_evento.php?evento_id=<?= (int)$evento_id ?>&share=1" target="_blank">🔗 Vista para imprimir/compartir</a>
+        <a class="btn btn-mini btn-secondary" href="ver_peleas_evento.php?evento_id=<?= (int)$evento_id ?>&share=1" target="_blank">🔗 Vista para imprimir/compartir</a>
+      </div>
     </div>
+
+    <!-- === BUSCADOR (Apellido + Escuela/Academia) === -->
+    <form method="GET" class="search-grid" autocomplete="off" action="ver_peleas_evento.php" style="margin-top:8px;margin-bottom:4px">
+      <input type="hidden" name="evento_id" value="<?= (int)$evento_id ?>">
+      <?php if ($SHARE) { ?><input type="hidden" name="share" value="1"><?php } ?>
+      <div class="field">
+        <label style="font-weight:700">Apellido</label>
+        <input type="text" name="ape" value="<?= h($s_ape) ?>" placeholder="Ej: González">
+      </div>
+      <div class="field">
+        <label style="font-weight:700">Escuela / Academia</label>
+        <input type="text" name="esc" value="<?= h($s_esc) ?>" placeholder="Ej: Academia Central">
+      </div>
+      <div class="field" style="gap:6px;flex-direction:row">
+        <button class="btn btn-primary" type="submit">🔎 Buscar</button>
+        <a class="btn btn-secondary" href="ver_peleas_evento.php?evento_id=<?= (int)$evento_id ?><?= $SHARE?'&share=1':'' ?>">Limpiar</a>
+      </div>
+    </form>
+    <!-- === /BUSCADOR === -->
   </div>
-</div>
 
   <?php if (!$SHARE) { ?>
     <?php if (!empty($_SESSION['flash_ok'])) { ?><div class="flash ok"><?= h($_SESSION['flash_ok']); ?></div><?php unset($_SESSION['flash_ok']); } ?>
@@ -513,7 +546,7 @@ body.solo-vista .topbar-sticky{ position: static; box-shadow: none; border-botto
         </thead>
         <tbody>
         <?php if (!$peleas) { ?>
-          <tr class="row-card"><td colspan="14">No hay peleas programadas todavía.</td></tr>
+          <tr class="row-card"><td colspan="14">No hay peleas programadas con esos filtros.</td></tr>
         <?php } else { foreach ($peleas as $p){
           $rFoto = trim((string)($p['r_foto'] ?? ''));
           $aFoto = trim((string)($p['a_foto'] ?? ''));
@@ -641,7 +674,6 @@ body.solo-vista .topbar-sticky{ position: static; box-shadow: none; border-botto
       </table>
 
       <?php if (!$SHARE) { ?>
-        <!-- ACCIONES DE NUMERACIÓN SIEMPRE VISIBLES -->
         <div class="form-actions" id="orden-actions" style="margin-top:10px; display:flex; gap:8px; align-items:center">
           <button class="btn btn-secondary" type="button" id="btnAutoSec">↻ Auto-secuenciar</button>
           <button class="btn btn-primary" type="button" id="btnGuardarOrden">💾 Guardar edición de numeración</button>
@@ -661,11 +693,9 @@ body.solo-vista .topbar-sticky{ position: static; box-shadow: none; border-botto
 
 <script>
 (function(){
-  // Placeholders programáticos
   window.phAvatar = function(text){ const d=document.createElement('div'); d.className='ph-avatar'; d.textContent=text||'—'; return d; };
   window.phLogo   = function(text){ const d=document.createElement('div'); d.className='ph-logo';   d.textContent=text||'G';  return d; };
 
-  // Eliminar pelea (POST)
   window.eliminarPelea = function(peleaId){
     if(!confirm('¿Eliminar esta pelea?')) return;
     const f = document.createElement('form');
@@ -699,9 +729,7 @@ body.solo-vista .topbar-sticky{ position: static; box-shadow: none; border-botto
   }
   if (btnGuardarOrden) {
     btnGuardarOrden.addEventListener('click', ()=>{
-      // habilitamos edición por si no estaba activa (así los inputs dejan de estar disabled)
       setEditing(true);
-      // aseguramos que todos los inputs de orden envíen su valor
       document.querySelectorAll('#form-orden .orden-input').forEach(i => i.disabled = false);
       accionInput.value = 'guardar_orden';
       formOrden.submit();
@@ -715,7 +743,6 @@ body.solo-vista .topbar-sticky{ position: static; box-shadow: none; border-botto
   }
   setEditing(false);
 
-  // Pesaje: diferencia vs declarado (visual) + espejo de texto para impresión/compartir
   function parseKg(s){ const n = parseFloat((s||'').toString().replace(',', '.')); return isNaN(n)?null:n; }
   function regla(diffKg){
     if (diffKg === null) return {txt:'Δ —', cls:''};
