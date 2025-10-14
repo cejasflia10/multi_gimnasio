@@ -9,6 +9,7 @@
    • Encabezado con NOMBRE DEL EVENTO BIEN GRANDE (eventos_deportivos.titulo si existe)
    • Pesajes (inputs + delta) — en share/print se ocultan inputs y se muestra texto
    • Link de “Vista para imprimir/compartir”: ?share=1
+   • NUEVO: share se auto-actualiza (polling) sin reenviar link
    ========================= */
 if (session_status() === PHP_SESSION_NONE) session_start();
 require_once __DIR__ . '/conexion.php';
@@ -58,6 +59,58 @@ $SHARE = (isset($_GET['share']) && (string)$_GET['share'] === '1'); // vista lim
 /* === parámetros de búsqueda (nuevo) === */
 $s_ape = trim((string)($_GET['ape'] ?? '')); // Apellido
 $s_esc = trim((string)($_GET['esc'] ?? '')); // Escuela/Academia
+
+/* ========= (NUEVO) utilidades de firma/versión + endpoint poll ========= */
+function pick_col_from_list(array $colsMap, array $cands){
+  foreach ($cands as $c){ $lc=strtolower($c); if (isset($colsMap[$lc])) return $colsMap[$lc]; }
+  return null;
+}
+
+/** Calcula firma estable del estado de un evento (cambia si cambian sus peleas/orden/fechas) */
+function compute_event_signature(mysqli $cx, int $evento_id, array $colsMap): string {
+  if ($evento_id <= 0) return 'ev0';
+
+  $C_ID  = pick_col_from_list($colsMap, ['id','pelea_id','id_pelea']);
+  $C_EVT = pick_col_from_list($colsMap, ['evento_id','id_evento','evento']);
+  $C_ORD = pick_col_from_list($colsMap, ['orden','orden_manual','nro','nro_orden','posicion','position','sequence','rank','numero','nro_pelea','sort']);
+  $C_FEC = pick_col_from_list($colsMap, ['updated_at','modificado_en','editado_en','last_update','ts','timestamp','fecha','creado_en','created_at','fh_creacion']);
+
+  $parts = ["COUNT(*) AS c"];
+  if ($C_ID)  $parts[] = "MAX(`$C_ID`) AS mid";
+  if ($C_ORD) $parts[] = "MAX(`$C_ORD`) AS mord";
+  if ($C_FEC) $parts[] = "MAX(`$C_FEC`) AS mfec";
+
+  $sql = "SELECT ".implode(", ", $parts)." FROM `peleas_evento` WHERE ".($C_EVT ? "`$C_EVT`=?" : "1=0");
+  if (!($st = $cx->prepare($sql))) {
+    return 'ev_fallback_'.md5((string)time());
+  }
+  $st->bind_param('i',$evento_id);
+  $st->execute();
+  $res = $st->get_result();
+  $row = $res ? $res->fetch_assoc() : null;
+  $st->close();
+
+  $sigBase = json_encode($row ?: []);
+  return 'ev'.md5($sigBase ?: 'x');
+}
+
+/* Endpoint AJAX: ver_peleas_evento.php?ajax=poll&evento_id=123  -> {ok:true, ver:"..."} */
+if (isset($_GET['ajax']) && $_GET['ajax']==='poll') {
+  while (ob_get_level()) { ob_end_clean(); }
+  header_remove('Set-Cookie');
+  header('Content-Type: application/json; charset=utf-8');
+
+  $evento_id_poll = (int)($_GET['evento_id'] ?? 0);
+
+  $colsMap = [];
+  if ($r = $conexion->query("SHOW COLUMNS FROM `peleas_evento`")) {
+    while($c = $r->fetch_assoc()){ $colsMap[strtolower($c['Field'])] = $c['Field']; }
+    $r->close();
+  }
+  $ver = compute_event_signature($conexion, $evento_id_poll, $colsMap);
+  echo json_encode(['ok'=>true,'ver'=>$ver], JSON_UNESCAPED_UNICODE);
+  exit;
+}
 
 /* ========= nombre del evento ========= */
 function obtener_nombre_evento(mysqli $cx, int $evento_id, bool $debug=false): string {
@@ -160,6 +213,9 @@ $C_MODAL_P_TXT = $pick(['modalidad','modo','reglamento']);
 if (!$C_EVENTO || !$C_ROJO || !$C_AZUL) {
   echo '<div style="max-width:900px;margin:16px auto;padding:12px;border:1px solid #fdecea;background:#ffebee;color:#b71c1c;border-radius:8px;">Faltan columnas obligatorias en <b>peleas_evento</b> (evento/rojo/azul).</div>'; exit;
 }
+
+/* ========= (NUEVO) firma actual del evento ========= */
+$__evento_sig = compute_event_signature($conexion, $evento_id, $cols);
 
 /* ========= catálogos ========= */
 $tablaModal = (($t=$conexion->query("SHOW TABLES LIKE 'modalidades_evento'")) && $t->num_rows>0) ? 'modalidades_evento' : null;
@@ -465,7 +521,7 @@ $st->close();
   </style>
 </head>
 <?php $bodyClass = $SHARE ? 'solo-vista' : ''; ?>
-<body class="<?= $bodyClass ?>">
+<body class="<?= $bodyClass ?>" data-ver="<?= h($__evento_sig) ?>" data-evento="<?= (int)$evento_id ?>">
 <div class="contenedor">
   <div class="topbar-sticky">
     <h1 class="titulo-evento">🥊 <?= h($evento_nombre) ?></h1>
@@ -758,6 +814,7 @@ $st->close();
   }
   function actualizarFila(input){
     const peleaId = input.getAttribute('data-pelea');
+    theSide = input.getAttribute('data-side');
     const side = input.getAttribute('data-side');
     const td = input.closest('td'); if (!td) return;
     const chip = td.querySelector('.pill');
@@ -779,6 +836,62 @@ $st->close();
     actualizarFila(inp);
     if (!SHARE) inp.addEventListener('input', ()=> actualizarFila(inp));
   });
+
+  /* ===== (NUEVO) Auto-refresh SOLO en vista de compartir (share=1) ===== */
+  (function(){
+    const isShare = SHARE === true;
+    if (!isShare) return;
+
+    const eventoId = parseInt(document.body.getAttribute('data-evento'), 10) || 0;
+    const ver0 = document.body.getAttribute('data-ver') || '';
+
+    const baseUrl = new URL(window.location.href);
+    function reloadSameQS(){
+      baseUrl.searchParams.set('_r', String(Date.now())); // cache-bust
+      window.location.replace(baseUrl.toString());
+    }
+
+    let lastVer = ver0;
+    let backoff = 10000; // 10s
+    let timer = null;
+
+    async function tick(){
+      try{
+        const u = new URL(window.location.origin + '/ver_peleas_evento.php');
+        u.searchParams.set('ajax','poll');
+        u.searchParams.set('evento_id', String(eventoId));
+        u.searchParams.set('_', String(Date.now()));
+        const ctrl = new AbortController();
+        const t = setTimeout(()=>ctrl.abort(), 8000);
+        const r = await fetch(u.toString(), {cache:'no-store', signal:ctrl.signal});
+        clearTimeout(t);
+        if (!r.ok) throw new Error('HTTP '+r.status);
+        const j = await r.json();
+        if (j && j.ok && j.ver){
+          if (j.ver !== lastVer){
+            reloadSameQS();
+            return;
+          }
+        }
+        backoff = 10000; // estable
+      }catch(e){
+        backoff = Math.min(backoff + 5000, 30000); // backoff suave en error
+      }finally{
+        timer = setTimeout(tick, backoff);
+      }
+    }
+
+    document.addEventListener('visibilitychange', ()=>{
+      if (document.visibilityState === 'visible'){
+        if (timer) clearTimeout(timer);
+        backoff = 1000;
+        tick();
+      }
+    });
+
+    tick();
+  })();
+
 })();
 </script>
 </body>

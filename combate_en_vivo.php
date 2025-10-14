@@ -1,7 +1,8 @@
 <?php
 /* ============================================
    COMBATE EN VIVO — Solo manual (sin jueces)
-   Graba resultado en peleas_evento y (opcional) resultados_combates
+   Con botones de ganador por round (Azul/Rojo/Empate)
+   Empate global => habilita round extra automático
    ============================================ */
 if (session_status() === PHP_SESSION_NONE) session_start();
 require_once __DIR__ . '/conexion.php';
@@ -9,8 +10,8 @@ require_once __DIR__ . '/conexion.php';
 error_reporting(E_ALL);
 ini_set('display_errors', '1');
 header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
-header('Pragma: no-cache');
-header('Expires: 0');
+header('Pragma', 'no-cache');
+header('Expires', '0');
 if (function_exists('opcache_invalidate')) { @opcache_invalidate(__FILE__, true); }
 $__BUILD = @filemtime(__FILE__) ?: time();
 
@@ -18,6 +19,7 @@ if (!isset($conexion) || !($conexion instanceof mysqli)) { http_response_code(50
 if (function_exists('mysqli_report')) { mysqli_report(MYSQLI_REPORT_OFF); }
 @$conexion->set_charset('utf8mb4');
 
+/* ===== Helpers PHP ===== */
 function h($s){ return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); }
 function bt($c){ return '`'.str_replace('`','``',(string)$c).'`'; }
 function table_exists(mysqli $db, string $name): bool {
@@ -75,13 +77,13 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'finalizar') {
     $tmp = json_decode((string)$_POST['manual_scores_json'], true);
     if (is_array($tmp)) $manual_scores = $tmp; // [{round:1, azul:10, rojo:9}, ...]
   }
-  $manual_win  = strtolower(trim((string)($_POST['manual_win']  ?? ''))); // azul|rojo|empate|''
+  $manual_win  = strtolower(trim((string)($_POST['manual_win']  ?? ''))); // azul|rojo|empate|'' (se setea automático si viene vacío)
   $manual_tipo = strtoupper(trim((string)($_POST['manual_tipo'] ?? ''))); // KO|TKO|SUM|PTS|DQ|NC|''
   $manual_rf   = get_int_qs($_POST, 'manual_round_fin', 0) ?? 0;
   $manual_time = trim((string)($_POST['manual_time'] ?? '')); // mm:ss (informativo)
 
   if (!$manual_mode || empty($manual_scores)) {
-    echo json_encode(['ok'=>false,'error'=>'sin_datos','msg'=>'No hay tarjetas manuales. Activá "Carga manual" y cargá puntajes.'], JSON_UNESCAPED_UNICODE);
+    echo json_encode(['ok'=>false,'error'=>'sin_datos','msg'=>'No hay rounds cargados. Marcá el ganador de cada round.'], JSON_UNESCAPED_UNICODE);
     exit;
   }
 
@@ -89,7 +91,7 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'finalizar') {
   $sumA = 0; $sumR = 0;
   foreach ($manual_scores as $r) { $sumA += (int)($r['azul'] ?? 0); $sumR += (int)($r['rojo'] ?? 0); }
 
-  // Resolver ganador
+  // Resolver ganador si no vino explícito
   $gan=''; $metodo=''; $detalle='';
   if (in_array($manual_win, ['azul','rojo','empate'], true)) {
     $gan    = $manual_win;
@@ -194,17 +196,11 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'finalizar') {
 }
 
 /* ===== Vista HTML ===== */
-// Intentar tomar pelea_id del QS; si no viene, usar el de sesión como último recurso
+// Intentar tomar pelea_id del QS; si no viene, usar el de sesión
 $pelea_id = get_int_qs($_GET, 'pelea_id', 0) ?? 0;
-if ($pelea_id <= 0 && !empty($_SESSION['pelea_id_actual'])) {
-  $pelea_id = (int)$_SESSION['pelea_id_actual'];
-}
-if ($pelea_id > 0) { $_SESSION['pelea_id_actual'] = (int)$pelea_id; }
-
-if ($pelea_id <= 0) {
-  echo '<div style="max-width:900px;margin:16px auto;padding:12px;border:1px solid #f5c6cb;background:#fdecea;color:#b71c1c;border-radius:8px;">Falta <b>pelea_id</b>.</div>';
-  exit;
-}
+if ($pelea_id <= 0 && !empty($_SESSION['pelea_id_actual'])) $pelea_id = (int)$_SESSION['pelea_id_actual'];
+if ($pelea_id > 0) $_SESSION['pelea_id_actual'] = (int)$pelea_id;
+if ($pelea_id <= 0) { echo '<div style="max-width:900px;margin:16px auto;padding:12px;border:1px solid #f5c6cb;background:#fdecea;color:#b71c1c;border-radius:8px;">Falta <b>pelea_id</b>.</div>'; exit; }
 
 /* QS (solo vista) */
 $nroQS    = get_int_qs($_GET,'nro',null);
@@ -215,7 +211,7 @@ $restQS   = get_int_qs($_GET,'rest',null);
 $timerDur  = ($durQS  && $durQS  > 0) ? $durQS  : 120;
 $timerRest = ($restQS && $restQS > 0) ? $restQS : 60;
 
-/* Datos de pelea + competidores con extras */
+/* Datos de pelea + competidores */
 $evento_id = null; $rondasEsperadas = 3; $pelea_numero = null;
 
 $azul_nom='Azul'; $rojo_nom='Rojo';
@@ -367,12 +363,20 @@ $__s_init = str_pad((string)($__t_init%60), 2, '0', STR_PAD_LEFT);
   .btn-ghost{background:transparent;border:1px solid #334250}
   .timer{font-size:110px;font-weight:900;line-height:1;letter-spacing:1px}
   .round{font-size:18px;font-weight:700;margin-bottom:6px}
-  .tbl-manual{width:100%;border-collapse:collapse;margin-top:6px}
-  .tbl-manual th,.tbl-manual td{border:1px solid #26313a;padding:6px;text-align:center}
-  .tbl-manual input{width:70px;text-align:center;padding:8px;border-radius:8px;border:1px solid #334250;background:#141a20;color:#fff;pointer-events:auto;touch-action:manipulation}
   .badge{padding:6px 10px;border-radius:999px;background:#121a24;border:1px solid #2a3a4a;margin-right:6px}
   .muted{color:var(--muted)}
   .switch{display:inline-flex;align-items:center;gap:8px}
+
+  /* Tabla de rounds con botones */
+  .tbl-rounds{width:100%;border-collapse:collapse;margin-top:8px}
+  .tbl-rounds th,.tbl-rounds td{border:1px solid #26313a;padding:6px;text-align:center}
+  .chip{display:inline-flex;align-items:center;gap:6px;padding:8px 12px;border-radius:10px;border:1px solid #2a3a4a;background:#141a20;color:#e5eef7;font-weight:700;cursor:pointer;user-select:none}
+  .chip[data-v="azul"]{border-color:#0b5aa6}
+  .chip[data-v="rojo"]{border-color:#a60b1f}
+  .chip[data-v="empate"]{border-color:#606b7a}
+  .chip.active{outline:2px solid #fff2; box-shadow:0 0 0 2px #fff2 inset}
+  .chip:hover{filter:brightness(1.1)}
+  .r-extra{background:#151b22}
 </style>
 </head>
 <body>
@@ -388,6 +392,7 @@ $__s_init = str_pad((string)($__t_init%60), 2, '0', STR_PAD_LEFT);
   <div class="sub" style="margin-bottom:10px">
     <?= $evento_id!==null ? ('Evento #'.(int)$evento_id) : '(sin evento_id)' ?>
     · Rondas configuradas: <b id="lblRondas"><?= (int)$rondasEsperadas ?></b>
+    · Rondas en juego: <b id="lblJugadas"><?= (int)$rondasEsperadas ?></b>
   </div>
 
   <div class="grid">
@@ -426,24 +431,24 @@ $__s_init = str_pad((string)($__t_init%60), 2, '0', STR_PAD_LEFT);
         <input id="selRest" type="number" class="btn btn-gray" style="width:110px" min="10" max="600" step="5" value="<?= (int)$timerRest ?>">
       </div>
 
-      <h4 style="margin:14px 0 4px">📝 Carga manual</h4>
-      <label class="switch sub" style="margin-bottom:6px">
-        <input id="chkManual" type="checkbox" checked>
-        <span>Habilitar carga manual</span>
-      </label>
+      <h4 style="margin:14px 0 4px">📝 Ganador por round (rápido)</h4>
+      <div class="sub" style="margin-bottom:6px">Tocá el ganador de cada round. Si al finalizar hay empate global, se agrega un round extra automáticamente.</div>
 
-      <table class="tbl-manual" id="tblManual">
-        <thead><tr><th>Round</th><th>Azul</th><th>Rojo</th></tr></thead>
-        <tbody id="tbManualRows"></tbody>
+      <table class="tbl-rounds" id="tblRounds">
+        <thead><tr><th style="width:90px">Round</th><th>Ganador</th><th style="width:180px">Marcado</th></tr></thead>
+        <tbody id="tbRoundRows"></tbody>
         <tfoot>
-          <tr><th>Σ</th><th id="sumAz">0</th><th id="sumRo">0</th></tr>
+          <tr>
+            <th>Σ</th>
+            <th style="text-align:center">
+              <span class="badge">Rounds Azul: <b id="rAz">0</b></span>
+              <span class="badge">Rounds Rojo: <b id="rRo">0</b></span>
+              <span class="badge">Empates: <b id="rEq">0</b></span>
+            </th>
+            <th><span class="badge">Sugerido: <b id="bSug">—</b></span></th>
+          </tr>
         </tfoot>
       </table>
-      <div style="margin-top:8px">
-        <span class="badge">Suma Azul: <b id="bAz">0</b></span>
-        <span class="badge">Suma Rojo: <b id="bRo">0</b></span>
-        <span class="badge">Sugerido: <b id="bSug">—</b></span>
-      </div>
 
       <div class="sub" style="margin:10px 0 4px">Fallo manual (opcional)</div>
       <div class="controls">
@@ -498,7 +503,7 @@ $__s_init = str_pad((string)($__t_init%60), 2, '0', STR_PAD_LEFT);
 
 <script>
 (function(){
-  // ===== Timer =====
+  /* ====== Timer ====== */
   let duration=<?= (int)$timerDur ?>, rest=<?= (int)$timerRest ?>, remain=<?= (int)$timerDur ?>, round=1, t=null, inRest=false;
   const timer=document.getElementById('timer'), rnd=document.getElementById('round');
   const selDur=document.getElementById('selDur'), selRest=document.getElementById('selRest');
@@ -522,61 +527,129 @@ $__s_init = str_pad((string)($__t_init%60), 2, '0', STR_PAD_LEFT);
   selDur.onchange =()=>{ duration=clamp(selDur.value,30,900); selDur.value=duration; if(!inRest&&remain>duration) remain=duration; paint(); };
   selRest.onchange=()=>{ rest=clamp(selRest.value,10,600); selRest.value=rest; if(inRest&&remain>rest) remain=rest; paint(); };
 
-  // ===== Carga manual =====
-  const tbManualRows = document.getElementById('tbManualRows');
-  const sumAz = document.getElementById('sumAz'); const sumRo = document.getElementById('sumRo');
-  const bAz = document.getElementById('bAz'); const bRo = document.getElementById('bRo'); const bSug = document.getElementById('bSug');
-  const selWin = document.getElementById('selWin'); const selTipo = document.getElementById('selTipo');
-  const inRoundFin = document.getElementById('inRoundFin'); const inTime = document.getElementById('inTime');
-  const banner = document.getElementById('banner'); const peleaId = <?= (int)$pelea_id ?>;
+  /* ====== Rondas con botones ====== */
+  const MAX_ROUNDS = 12; // límite de seguridad
   let rondasConfig = parseInt(document.getElementById('lblRondas').textContent, 10);
-  if (!Number.isFinite(rondasConfig) || rondasConfig < 1) rondasConfig = 3; // Fallback seguro
-  const chkManual = document.getElementById('chkManual');
+  if (!Number.isFinite(rondasConfig) || rondasConfig < 1) rondasConfig = 3;
+  let rondasEnJuego = rondasConfig;
 
-  function renderManualRows(){
-    let html=''; 
-    for(let r=1;r<=rondasConfig;r++){
-      html+=`<tr>
-        <td>R${r}</td>
-        <td><input type="number" tabindex="0" min="0" max="99" step="1" value="10" data-r="${r}" data-c="azul" inputmode="numeric" pattern="[0-9]*"></td>
-        <td><input type="number" tabindex="0" min="0" max="99" step="1" value="9"  data-r="${r}" data-c="rojo" inputmode="numeric" pattern="[0-9]*"></td>
+  const tblBody = document.getElementById('tbRoundRows');
+  const rAz = document.getElementById('rAz'), rRo = document.getElementById('rRo'), rEq = document.getElementById('rEq');
+  const bSug = document.getElementById('bSug');
+  const lblJugadas = document.getElementById('lblJugadas');
+
+  // roundResults: { r:1..n, v:'azul'|'rojo'|'empate'|null }
+  let roundResults = [];
+
+  function renderRows(){
+    let html = '';
+    for(let r=1; r<=rondasEnJuego; r++){
+      const val = (roundResults[r-1]?.v) || null;
+      const isExtra = r > rondasConfig;
+      html += `<tr ${isExtra?'class="r-extra"':''}>
+        <td>R${r}${isExtra?' <small>(extra)</small>':''}</td>
+        <td>
+          <div class="controls" style="justify-content:center">
+            <div class="chip ${val==='azul'?'active':''}" data-r="${r}" data-v="azul">🔵 Azul</div>
+            <div class="chip ${val==='rojo'?'active':''}" data-r="${r}" data-v="rojo">🔴 Rojo</div>
+            <div class="chip ${val==='empate'?'active':''}" data-r="${r}" data-v="empate">⚖️ Empate</div>
+          </div>
+        </td>
+        <td id="mark-${r}" class="sub">${val? (val==='azul'?'🔵 Azul':(val==='rojo'?'🔴 Rojo':'⚖️ Empate')) : '—'}</td>
       </tr>`;
     }
-    tbManualRows.innerHTML = html;
-    tbManualRows.querySelectorAll('input').forEach(i=>{
-      i.addEventListener('input', recalcSums);
-      i.addEventListener('focus', e=> e.target.select());
-      i.disabled = !chkManual.checked;
+    tblBody.innerHTML = html;
+    tblBody.querySelectorAll('.chip').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        const r = parseInt(btn.dataset.r,10);
+        const v = btn.dataset.v;
+        setRound(r, v);
+      });
     });
-    recalcSums();
+    lblJugadas.textContent = String(rondasEnJuego);
+    recalcTotals();
   }
 
-  function setManualEnabled(enabled){
-    tbManualRows.querySelectorAll('input').forEach(i=>{ i.disabled = !enabled; });
+  function setRound(r, v){
+    while (roundResults.length < r) roundResults.push({r: roundResults.length+1, v: null});
+    roundResults[r-1].v = v;
+    // refrescar UI del row r
+    const rowChips = tblBody.querySelectorAll(`.chip[data-r="${r}"]`);
+    rowChips.forEach(c => c.classList.toggle('active', c.dataset.v===v));
+    const mark = document.getElementById(`mark-${r}`);
+    if (mark) mark.textContent = (v==='azul'?'🔵 Azul':(v==='rojo'?'🔴 Rojo':'⚖️ Empate'));
+
+    recalcTotals();
+
+    // Si ya están todos los rounds base cargados y hay empate global, agregar uno extra
+    if (allBaseFilled() && isGlobalTie() && rondasEnJuego < MAX_ROUNDS){
+      rondasEnJuego++;
+      renderRows();
+    }
   }
 
-  function recalcSums(){
+  function allBaseFilled(){
+    for(let i=0;i<rondasConfig;i++){
+      if (!roundResults[i] || !roundResults[i].v) return false;
+    }
+    return true;
+  }
+
+  function isGlobalTie(){
     let az=0, ro=0;
-    tbManualRows.querySelectorAll('input').forEach(i=>{
-      const v=parseInt(i.value,10); const val = Number.isFinite(v)? v : 0;
-      if (i.dataset.c==='azul') az+=val; else ro+=val;
+    roundResults.forEach(rr=>{
+      if (rr?.v==='azul') az++;
+      else if (rr?.v==='rojo') ro++;
     });
-    sumAz.textContent = az; sumRo.textContent = ro; bAz.textContent = az; bRo.textContent = ro;
+    return az===ro;
+  }
+
+  function recalcTotals(){
+    let az=0, ro=0, eq=0;
+    roundResults.forEach(rr=>{
+      if (!rr || !rr.v) return;
+      if (rr.v==='azul') az++;
+      else if (rr.v==='rojo') ro++;
+      else eq++;
+    });
+    rAz.textContent = az; rRo.textContent = ro; rEq.textContent = eq;
     bSug.textContent = (az>ro?'🔵 Azul':(ro>az?'🔴 Rojo':'⚖️ Empate'));
   }
 
-  function collectManualScores(){
-    const out=[]; tbManualRows.querySelectorAll('tr').forEach(tr=>{
-      const inA = tr.querySelector('input[data-c="azul"]'); const inR = tr.querySelector('input[data-c="rojo"]');
-      const r = parseInt(inA.dataset.r,10)||0; 
-      const a = parseInt(inA.value,10); const rr= parseInt(inR.value,10);
-      out.push({round:r, azul:Number.isFinite(a)?a:0, rojo:Number.isFinite(rr)?rr:0});
-    }); return out;
+  function collectManualScoresAsPoints(){
+    // Convertimos a tarjetas 10-9 / 9-10 / 10-10 para backend compatible
+    const out = [];
+    for (let r=1; r<=roundResults.length; r++){
+      const v = roundResults[r-1]?.v || null;
+      if (!v){ // si no está marcado, asumimos empate 10-10 para evitar errores
+        out.push({round:r, azul:10, rojo:10});
+      } else if (v==='azul'){
+        out.push({round:r, azul:10, rojo:9});
+      } else if (v==='rojo'){
+        out.push({round:r, azul:9, rojo:10});
+      } else { // empate
+        out.push({round:r, azul:10, rojo:10});
+      }
+    }
+    return out;
   }
 
-  renderManualRows();
-  chkManual.addEventListener('change', ()=> setManualEnabled(chkManual.checked));
+  function autoWinnerFromResults(){
+    let az=0, ro=0;
+    roundResults.forEach(rr=>{
+      if (rr?.v==='azul') az++;
+      else if (rr?.v==='rojo') ro++;
+    });
+    if (az>ro) return 'azul';
+    if (ro>az) return 'rojo';
+    return 'empate';
+  }
 
+  // Init rows
+  roundResults = Array.from({length: rondasConfig}, (_,i)=>({r:i+1, v:null}));
+  renderRows();
+
+  /* ====== Envío ====== */
   async function fetchJSON(url, opt={}){
     const ctrl = new AbortController(); const to = setTimeout(()=>ctrl.abort(), opt.timeout||15000);
     try{
@@ -587,23 +660,45 @@ $__s_init = str_pad((string)($__t_init%60), 2, '0', STR_PAD_LEFT);
     }catch(e){ console.warn('AJAX error', e); return null; } finally{ clearTimeout(to); }
   }
 
+  const selWin = document.getElementById('selWin');
+  const selTipo = document.getElementById('selTipo');
+  const inRoundFin = document.getElementById('inRoundFin');
+  const inTime = document.getElementById('inTime');
+  const banner = document.getElementById('banner');
+  const peleaId = <?= (int)$pelea_id ?>;
+
   document.getElementById('btnFinish').onclick = async ()=>{
+    // auto-add extra si está todo cargado y sigue empate
+    if (allBaseFilled() && isGlobalTie() && rondasEnJuego < MAX_ROUNDS){
+      alert('Empate global: se agregó un round extra. Marcá el ganador del round extra antes de finalizar.');
+      rondasEnJuego++;
+      renderRows();
+      return;
+    }
+
     if(!confirm('¿Finalizar el combate y enviar a resultados?')) return;
     if(t){ clearInterval(t); t=null; }
     try{document.getElementById('snd-fightend').play().catch(()=>{});}catch(e){}
 
+    // Autocompletar ganador si no lo eligieron en el selector manual
+    if (!selWin.value){
+      const autoGan = autoWinnerFromResults();
+      selWin.value = autoGan; // azul/rojo/empate
+      if (!selTipo.value) selTipo.value = (autoGan==='empate' ? '' : 'PTS');
+    }
+
     const form = new FormData();
     form.append('pelea_id', String(peleaId));
     form.append('manual_mode', '1');
-    form.append('manual_scores_json', JSON.stringify(collectManualScores()));
+    form.append('manual_scores_json', JSON.stringify(collectManualScoresAsPoints()));
     form.append('manual_win', selWin.value || '');
     form.append('manual_tipo', selTipo.value || '');
-    form.append('manual_round_fin', inRoundFin.value || '0');
+    form.append('manual_round_fin', inRoundFin.value || String(roundResults.length));
     form.append('manual_time', inTime.value || '');
 
     const j = await fetchJSON('combate_en_vivo.php?ajax=finalizar', {method:'POST', body:form, timeout:15000});
     if (!j || !j.ok){
-      alert((j && j.msg) ? j.msg : 'No se pudo finalizar. Cargá puntajes manuales y/o el fallo manual.');
+      alert((j && j.msg) ? j.msg : 'No se pudo finalizar. Marcá los rounds.');
       return;
     }
     const lbl = (j.ganador==='azul'?'🔵 AZUL':(j.ganador==='rojo'?'🔴 ROJO':'⚖️ EMPATE'));
