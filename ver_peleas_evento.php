@@ -1,6 +1,6 @@
 <?php
 /* =========================
-   ver_peleas_evento.php — Lista de peleas con impresión/compartir optimizada
+   ver_peleas_evento.php — Lista de peleas con impresión/compartir optimizada + MOBILE FIRST
    • Buscador por Apellido y Escuela/Academia (filtra rojo/azul)
    • Modalidad visible (prioriza pelea > texto > obs)
    • SIN columna “Técnica”
@@ -9,7 +9,8 @@
    • Encabezado con NOMBRE DEL EVENTO BIEN GRANDE (eventos_deportivos.titulo si existe)
    • Pesajes (inputs + delta) — en share/print se ocultan inputs y se muestra texto
    • Link de “Vista para imprimir/compartir”: ?share=1
-   • NUEVO: share se auto-actualiza (polling) sin reenviar link
+   • Auto-actualización en share (polling)
+   • FULL RESPONSIVE (celulares/tablets) + botón Compartir
    ========================= */
 if (session_status() === PHP_SESSION_NONE) session_start();
 require_once __DIR__ . '/conexion.php';
@@ -60,53 +61,35 @@ $SHARE = (isset($_GET['share']) && (string)$_GET['share'] === '1'); // vista lim
 $s_ape = trim((string)($_GET['ape'] ?? '')); // Apellido
 $s_esc = trim((string)($_GET['esc'] ?? '')); // Escuela/Academia
 
-/* ========= (NUEVO) utilidades de firma/versión + endpoint poll ========= */
+/* ========= utilidades de firma/versión + endpoint poll ========= */
 function pick_col_from_list(array $colsMap, array $cands){
   foreach ($cands as $c){ $lc=strtolower($c); if (isset($colsMap[$lc])) return $colsMap[$lc]; }
   return null;
 }
-
-/** Calcula firma estable del estado de un evento (cambia si cambian sus peleas/orden/fechas) */
 function compute_event_signature(mysqli $cx, int $evento_id, array $colsMap): string {
   if ($evento_id <= 0) return 'ev0';
-
   $C_ID  = pick_col_from_list($colsMap, ['id','pelea_id','id_pelea']);
   $C_EVT = pick_col_from_list($colsMap, ['evento_id','id_evento','evento']);
   $C_ORD = pick_col_from_list($colsMap, ['orden','orden_manual','nro','nro_orden','posicion','position','sequence','rank','numero','nro_pelea','sort']);
   $C_FEC = pick_col_from_list($colsMap, ['updated_at','modificado_en','editado_en','last_update','ts','timestamp','fecha','creado_en','created_at','fh_creacion']);
-
   $parts = ["COUNT(*) AS c"];
   if ($C_ID)  $parts[] = "MAX(`$C_ID`) AS mid";
   if ($C_ORD) $parts[] = "MAX(`$C_ORD`) AS mord";
   if ($C_FEC) $parts[] = "MAX(`$C_FEC`) AS mfec";
-
   $sql = "SELECT ".implode(", ", $parts)." FROM `peleas_evento` WHERE ".($C_EVT ? "`$C_EVT`=?" : "1=0");
-  if (!($st = $cx->prepare($sql))) {
-    return 'ev_fallback_'.md5((string)time());
-  }
-  $st->bind_param('i',$evento_id);
-  $st->execute();
-  $res = $st->get_result();
-  $row = $res ? $res->fetch_assoc() : null;
-  $st->close();
-
-  $sigBase = json_encode($row ?: []);
-  return 'ev'.md5($sigBase ?: 'x');
+  if (!($st = $cx->prepare($sql))) return 'ev_fallback_'.md5((string)time());
+  $st->bind_param('i',$evento_id); $st->execute();
+  $res = $st->get_result(); $row = $res ? $res->fetch_assoc() : null; $st->close();
+  return 'ev'.md5(json_encode($row ?: []) ?: 'x');
 }
-
-/* Endpoint AJAX: ver_peleas_evento.php?ajax=poll&evento_id=123  -> {ok:true, ver:"..."} */
+/* Endpoint poll JSON */
 if (isset($_GET['ajax']) && $_GET['ajax']==='poll') {
   while (ob_get_level()) { ob_end_clean(); }
   header_remove('Set-Cookie');
   header('Content-Type: application/json; charset=utf-8');
-
   $evento_id_poll = (int)($_GET['evento_id'] ?? 0);
-
   $colsMap = [];
-  if ($r = $conexion->query("SHOW COLUMNS FROM `peleas_evento`")) {
-    while($c = $r->fetch_assoc()){ $colsMap[strtolower($c['Field'])] = $c['Field']; }
-    $r->close();
-  }
+  if ($r = $conexion->query("SHOW COLUMNS FROM `peleas_evento`")) { while($c = $r->fetch_assoc()){ $colsMap[strtolower($c['Field'])] = $c['Field']; } $r->close(); }
   $ver = compute_event_signature($conexion, $evento_id_poll, $colsMap);
   echo json_encode(['ok'=>true,'ver'=>$ver], JSON_UNESCAPED_UNICODE);
   exit;
@@ -115,75 +98,26 @@ if (isset($_GET['ajax']) && $_GET['ajax']==='poll') {
 /* ========= nombre del evento ========= */
 function obtener_nombre_evento(mysqli $cx, int $evento_id, bool $debug=false): string {
   if ($evento_id <= 0) return 'Evento #'.$evento_id;
-
-  $logs = [];
-  $log = function($m) use (&$logs,$debug){ if($debug) $logs[] = $m; };
-  $dumpLogs = function() use (&$logs,$debug){ if($debug){ foreach($logs as $l){ echo "<!-- $l -->\n"; } }};
-
   $existe = function(string $tabla) use ($cx): bool {
     $sql = "SELECT 1 FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?";
     if (!($st = $cx->prepare($sql))) return false;
-    $st->bind_param('s',$tabla); $st->execute();
-    $res = $st->get_result(); $ok = $res && $res->num_rows===1; $st->close();
-    return $ok;
+    $st->bind_param('s',$tabla); $st->execute(); $res = $st->get_result(); $ok = $res && $res->num_rows===1; $st->close(); return $ok;
   };
-  $trySimple = function(string $sql, int $id, string $nota) use ($cx,$log){
-    $log("Intento: $nota");
-    if(!($st=$cx->prepare($sql))){ $log("  ✗ prepare: ".$cx->error); return null; }
-    $st->bind_param('i',$id); $st->execute();
-    $res = $st->get_result(); $out=null;
-    if($res && ($row=$res->fetch_assoc())){
-      $nom = trim((string)($row['nombre'] ?? $row['titulo'] ?? ''));
-      if($nom!=='') $out=$nom;
-    }
-    $st->close();
-    $log($out ? "  ✓ $out" : "  ✗ sin filas");
-    return $out;
+  $trySimple = function(string $sql, int $id) use ($cx){
+    if(!($st=$cx->prepare($sql))) return null;
+    $st->bind_param('i',$id); $st->execute(); $res = $st->get_result(); $out=null;
+    if($res && ($row=$res->fetch_assoc())){ $nom = trim((string)($row['nombre'] ?? $row['titulo'] ?? '')); if($nom!=='') $out=$nom; }
+    $st->close(); return $out;
   };
-
-  $tED = $existe('eventos_deportivos');
-  $tEv = $existe('eventos');
-  $tEvt= $existe('evento');
-  $tPE = $existe('peleas_evento');
-  $tCE = $existe('competidores_evento');
-
-  if ($tED) {
-    if ($nom = $trySimple("SELECT `titulo` FROM `eventos_deportivos` WHERE `id`=? LIMIT 1", $evento_id, "eventos_deportivos.id -> titulo")) {
-      $dumpLogs(); return $nom;
-    }
+  if ($existe('eventos_deportivos')) if ($nom=$trySimple("SELECT `titulo` FROM `eventos_deportivos` WHERE `id`=? LIMIT 1",$evento_id)) return $nom;
+  if ($existe('eventos'))           if ($nom=$trySimple("SELECT `nombre` FROM `eventos` WHERE `id`=? LIMIT 1",$evento_id)) return $nom;
+  if ($existe('evento'))            if ($nom=$trySimple("SELECT `nombre` FROM `evento` WHERE `id`=? LIMIT 1",$evento_id)) return $nom;
+  if ($existe('peleas_evento') && $existe('eventos_deportivos')){
+    if ($nom=$trySimple("SELECT ed.`titulo` AS t FROM `peleas_evento` p JOIN `eventos_deportivos` ed ON ed.`id`=p.`evento_id` WHERE p.`evento_id`=? LIMIT 1",$evento_id)) return $nom;
   }
-  if ($tEv) {
-    if ($nom = $trySimple("SELECT `nombre` FROM `eventos` WHERE `id`=? LIMIT 1", $evento_id, "eventos.id -> nombre")) {
-      $dumpLogs(); return $nom;
-    }
+  if ($existe('competidores_evento') && $existe('eventos_deportivos')){
+    if ($nom=$trySimple("SELECT ed.`titulo` AS t FROM `competidores_evento` c JOIN `eventos_deportivos` ed ON ed.`id`=c.`evento_id` WHERE c.`evento_id`=? LIMIT 1",$evento_id)) return $nom;
   }
-  if ($tEvt) {
-    if ($nom = $trySimple("SELECT `nombre` FROM `evento` WHERE `id`=? LIMIT 1", $evento_id, "evento.id -> nombre")) {
-      $dumpLogs(); return $nom;
-    }
-  }
-  if ($tPE && $tED) {
-    if ($nom = $trySimple(
-      "SELECT ed.`titulo` AS titulo
-         FROM `peleas_evento` p
-         JOIN `eventos_deportivos` ed ON ed.`id` = p.`evento_id`
-        WHERE p.`evento_id`=? LIMIT 1",
-      $evento_id,
-      "JOIN peleas_evento → eventos_deportivos"
-    )) { $dumpLogs(); return $nom; }
-  }
-  if ($tCE && $tED) {
-    if ($nom = $trySimple(
-      "SELECT ed.`titulo` AS titulo
-         FROM `competidores_evento` c
-         JOIN `eventos_deportivos` ed ON ed.`id` = c.`evento_id`
-        WHERE c.`evento_id`=? LIMIT 1",
-      $evento_id,
-      "JOIN competidores_evento → eventos_deportivos"
-    )) { $dumpLogs(); return $nom; }
-  }
-
-  $dumpLogs();
   return 'Evento #'.$evento_id;
 }
 $evento_nombre = obtener_nombre_evento($conexion, $evento_id, isset($_GET['debug']));
@@ -205,8 +139,6 @@ $C_FECHA    = $pick(['fecha','creado_en','created_at','created','fh_creacion']);
 $C_ORDEN    = $pick(['orden','orden_manual','nro','nro_orden','posicion','position','sequence','rank','numero','nro_pelea','sort']);
 $C_PESO_REAL_R = $pick(['peso_real_rojo','rojo_peso_real','peso_real_r']);
 $C_PESO_REAL_A = $pick(['peso_real_azul','azul_peso_real','peso_real_a']);
-
-/* Modalidad a nivel PELEA (si existe) */
 $C_MODAL_P_ID  = $pick(['modalidad_id','id_modalidad','modalidad_evento_id']);
 $C_MODAL_P_TXT = $pick(['modalidad','modo','reglamento']);
 
@@ -214,7 +146,7 @@ if (!$C_EVENTO || !$C_ROJO || !$C_AZUL) {
   echo '<div style="max-width:900px;margin:16px auto;padding:12px;border:1px solid #fdecea;background:#ffebee;color:#b71c1c;border-radius:8px;">Faltan columnas obligatorias en <b>peleas_evento</b> (evento/rojo/azul).</div>'; exit;
 }
 
-/* ========= (NUEVO) firma actual del evento ========= */
+/* ========= firma actual del evento ========= */
 $__evento_sig = compute_event_signature($conexion, $evento_id, $cols);
 
 /* ========= catálogos ========= */
@@ -222,14 +154,8 @@ $tablaModal = (($t=$conexion->query("SHOW TABLES LIKE 'modalidades_evento'")) &&
 $tablaDiv   = (($t=$conexion->query("SHOW TABLES LIKE 'divisiones_evento'")) && $t->num_rows>0) ? 'divisiones_evento' : null;
 
 $MOD_LABEL_COL='nombre'; $DIV_LABEL_COL='nombre';
-if ($tablaModal){
-  $mc=[]; if($rc=$conexion->query("SHOW COLUMNS FROM $tablaModal")){ while($r=$rc->fetch_assoc()){ $mc[strtolower($r['Field'])]=$r['Field']; } }
-  $MOD_LABEL_COL=$mc['nombre']??($mc['modalidad']??($mc['descripcion']??($mc['name']??'nombre')));
-}
-if ($tablaDiv){
-  $dv=[]; if($rc=$conexion->query("SHOW COLUMNS FROM $tablaDiv")){ while($r=$rc->fetch_assoc()){ $dv[strtolower($r['Field'])]=$r['Field']; } }
-  $DIV_LABEL_COL=$dv['nombre']??($dv['division']??($dv['descripcion']??($dv['name']??'nombre')));
-}
+if ($tablaModal){ $mc=[]; if($rc=$conexion->query("SHOW COLUMNS FROM $tablaModal")){ while($r=$rc->fetch_assoc()){ $mc[strtolower($r['Field'])]=$r['Field']; } } $MOD_LABEL_COL=$mc['nombre']??($mc['modalidad']??($mc['descripcion']??($mc['name']??'nombre'))); }
+if ($tablaDiv){ $dv=[]; if($rc=$conexion->query("SHOW COLUMNS FROM $tablaDiv")){ while($r=$rc->fetch_assoc()){ $dv[strtolower($r['Field'])]=$r['Field']; } } $DIV_LABEL_COL=$dv['nombre']??($dv['division']??($dv['descripcion']??($dv['name']??'nombre'))); }
 
 /* ========= acciones POST ========= */
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$SHARE) {
@@ -314,7 +240,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$SHARE) {
   }
 }
 
-/* ========= listado de peleas con filtros (NUEVO) ========= */
+/* ========= listado de peleas con filtros ========= */
 $orderPieces = [];
 if ($C_ORDEN) $orderPieces[] = 'p.'.bt($C_ORDEN).' IS NULL';
 if ($C_ORDEN) $orderPieces[] = 'p.'.bt($C_ORDEN);
@@ -322,18 +248,17 @@ if ($C_FECHA) $orderPieces[] = 'p.'.bt($C_FECHA);
 $orderPieces[] = 'p.'.bt($C_ID ?: 'id');
 $orderBy = implode(', ', $orderPieces);
 
-$selectParts = [];
-$joins = [];
+$selectParts = []; $joins = [];
 $selectParts[] = 'p.'.bt($C_ID ?: 'id').' AS pelea_id';
 $selectParts[] = $C_ORDEN  ? 'p.'.bt($C_ORDEN).' AS orden_manual' : 'NULL AS orden_manual';
 $selectParts[] = $C_RONDAS ? 'p.'.bt($C_RONDAS).' AS rondas' : 'NULL AS rondas';
 $selectParts[] = $C_OBS    ? 'p.'.bt($C_OBS).' AS observaciones' : 'NULL AS observaciones';
 $selectParts[] = $C_PESO_REAL_R ? 'p.'.bt($C_PESO_REAL_R).' AS peso_real_r' : "NULL AS peso_real_r";
 $selectParts[] = $C_PESO_REAL_A ? 'p.'.bt($C_PESO_REAL_A).' AS peso_real_a' : "NULL AS peso_real_a";
-if ($C_MODAL_P_TXT) { $selectParts[] = 'p.'.bt($C_MODAL_P_TXT).' AS modalidad_pelea_txt'; } else { $selectParts[] = "NULL AS modalidad_pelea_txt"; }
+$selectParts[] = $C_MODAL_P_TXT ? 'p.'.bt($C_MODAL_P_TXT).' AS modalidad_pelea_txt' : "NULL AS modalidad_pelea_txt";
 if ($tablaModal && $C_MODAL_P_ID) { $joins[] = "LEFT JOIN $tablaModal mp ON mp.id = p.".bt($C_MODAL_P_ID); $selectParts[] = 'mp.'.bt($MOD_LABEL_COL).' AS modalidad_pelea'; }
 else { $selectParts[] = "NULL AS modalidad_pelea"; }
-/* competidores (ajustá si tus nombres reales difieren) */
+
 $selectParts[] = 'cr.apellido AS r_apellido';
 $selectParts[] = 'cr.nombre   AS r_nombre';
 $selectParts[] = 'cr.escuela_nombre AS r_escuela';
@@ -352,39 +277,19 @@ if ($tablaDiv) {
   $joins[] = "LEFT JOIN $tablaDiv dva ON dva.id = ca.division_id";
   $selectParts[] = 'dvr.'.bt($DIV_LABEL_COL).' AS r_division';
   $selectParts[] = 'dva.'.bt($DIV_LABEL_COL).' AS a_division';
-} else {
-  $selectParts[] = "NULL AS r_division";
-  $selectParts[] = "NULL AS a_division";
-}
+} else { $selectParts[] = "NULL AS r_division"; $selectParts[] = "NULL AS a_division"; }
 
-/* --- WHERE dinámico con filtros --- */
-$where = ["p.".bt($C_EVENTO)." = ?"];
-$types = 'i';
-$params = [$evento_id];
-
+$where = ["p.".bt($C_EVENTO)." = ?"]; $types = 'i'; $params = [$evento_id];
 if ($s_ape !== '') {
-  $tokens = preg_split('/\s+/', $s_ape);
-  foreach ($tokens as $tk) {
-    $tk = trim($tk); if ($tk==='') continue;
-    // Busca en APELLIDO (y también nombre por si acaso)
-    $where[] = "(cr.apellido LIKE CONCAT('%', ?, '%')
-                 OR ca.apellido LIKE CONCAT('%', ?, '%')
-                 OR cr.nombre LIKE CONCAT('%', ?, '%')
-                 OR ca.nombre LIKE CONCAT('%', ?, '%'))";
-    $types .= 'ssss';
-    $params[] = $tk; $params[] = $tk; $params[] = $tk; $params[] = $tk;
+  foreach (preg_split('/\s+/', $s_ape) as $tk) { $tk=trim($tk); if($tk==='') continue;
+    $where[]="(cr.apellido LIKE CONCAT('%', ?, '%') OR ca.apellido LIKE CONCAT('%', ?, '%') OR cr.nombre LIKE CONCAT('%', ?, '%') OR ca.nombre LIKE CONCAT('%', ?, '%'))";
+    $types.='ssss'; array_push($params,$tk,$tk,$tk,$tk);
   }
 }
-
 if ($s_esc !== '') {
-  $tokens = preg_split('/\s+/', $s_esc);
-  foreach ($tokens as $tk) {
-    $tk = trim($tk); if ($tk==='') continue;
-    // Escuela / Academia (ambas esquinas)
-    $where[] = "(cr.escuela_nombre LIKE CONCAT('%', ?, '%')
-                 OR ca.escuela_nombre LIKE CONCAT('%', ?, '%'))";
-    $types .= 'ss';
-    $params[] = $tk; $params[] = $tk;
+  foreach (preg_split('/\s+/', $s_esc) as $tk) { $tk=trim($tk); if($tk==='') continue;
+    $where[]="(cr.escuela_nombre LIKE CONCAT('%', ?, '%') OR ca.escuela_nombre LIKE CONCAT('%', ?, '%'))";
+    $types.='ss'; array_push($params,$tk,$tk);
   }
 }
 
@@ -398,8 +303,7 @@ WHERE ".implode(' AND ', $where)."
 ORDER BY $orderBy";
 $st = $conexion->prepare($sql);
 if (!$st) { echo '<div style="max-width:900px;margin:16px auto;padding:12px;border:1px solid #ffcdd2;background:#ffebee;color:#b71c1c;border-radius:8px;">Error preparando la lista de peleas: '.h($conexion->error).'</div>'; exit; }
-$st->bind_param($types, ...$params);
-$st->execute();
+$st->bind_param($types, ...$params); $st->execute();
 $peleas = $st->get_result()->fetch_all(MYSQLI_ASSOC);
 $st->close();
 
@@ -412,7 +316,7 @@ $st->close();
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
     :root{
-      --bg:#ffffff; --card:#ffffff; --text:#0b0f19; --muted:#111827; --line:#94a3b8;
+      --bg:#ffffff; --card:#ffffff; --text:#0b0f19; --muted:#475569; --line:#cbd5e1;
       --pill-bg:#e2e8f0; --pill-text:#111;
       --btn:#1e88e5; --btn-sec-bg:#e5e7eb; --btn-dg:#d32f2f;
       --thead:#e2e8f0; --thead-text:#0b0f19;
@@ -432,16 +336,16 @@ $st->close();
     body.solo-vista .real-text{ display:inline !important; }
 
     .contenedor{max-width:1200px;margin:0 auto;padding:14px;}
-    .titulo-evento{font-size:clamp(28px,5vw,46px);font-weight:900;letter-spacing:.2px;margin:4px 0 14px;text-align:center}
+    .titulo-evento{font-size:clamp(24px,5vw,46px);font-weight:900;letter-spacing:.2px;margin:4px 0 14px;text-align:center}
     .toolbar{display:flex;gap:8px;align-items:center;justify-content:space-between;flex-wrap:wrap;margin-bottom:12px;background:#fff;border:1px solid var(--line);border-radius:10px;padding:10px 12px}
     .toolbar h2{margin:0;color:#0b0f19;font-weight:800;letter-spacing:.2px}
     .orden-tools{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
-    .btn{display:inline-block;padding:8px 11px;border-radius:10px;border:0;cursor:pointer;text-decoration:none;color:#0b0f19;font-weight:700}
+    .btn{display:inline-block;padding:10px 12px;border-radius:10px;border:0;cursor:pointer;text-decoration:none;color:#0b0f19;font-weight:700;line-height:1}
     .btn-primary{background:var(--btn);color:#fff !important}
     .btn-secondary{background:var(--btn-sec-bg)}
     .btn-danger{background:var(--btn-dg);color:#fff !important}
-    .btn-mini{padding:4px 8px;font-size:11px;border-radius:6px;font-weight:700}
-    .btn-xxs{padding:3px 6px;font-size:10.5px;border-radius:6px;font-weight:700}
+    .btn-mini{padding:7px 10px;font-size:12px;border-radius:8px;font-weight:700}
+    .btn-xxs{padding:6px 8px;font-size:11.5px;border-radius:8px;font-weight:700}
 
     .table-wrap{width:100%;overflow-x:auto;margin-top:6px}
     table{width:100%;border-collapse:separate;border-spacing:0 10px;background:transparent}
@@ -454,7 +358,7 @@ $st->close();
     tbody tr.row-card:hover td{outline:2px solid #cbd5e1}
 
     th,td{vertical-align:middle}
-    td{font-size:13.2px;color:#0b0f19;padding:10px}
+    td{font-size:13.4px;color:#0b0f19;padding:10px}
 
     .avatar{width:46px;height:46px;object-fit:cover;border-radius:8px;display:inline-block;border:1px solid #cbd5e1;background:#f1f5f9}
     .logo{width:28px;height:28px;object-fit:cover;border-radius:4px;border:1px solid #cbd5e1;background:#f1f5f9}
@@ -466,16 +370,64 @@ $st->close();
     .muted{color:var(--muted);font-size:12.5px}
     .acciones{text-align:center;white-space:nowrap}
     .vs{font-weight:900;text-transform:uppercase;text-align:center;color:#0b0f19}
-    .modalidad{font-size:12.3px;color:#0b0f19;font-weight:800}
+    .modalidad{font-size:12.6px;color:#0b0f19;font-weight:800}
     .num{font-weight:900}
     #form-orden .orden-input{width:64px;text-align:center;border-radius:8px;border:1px solid #94a3b8;padding:6px 8px;opacity:.85;pointer-events:none;font-weight:800}
     #form-orden.editing .orden-input{opacity:1;pointer-events:auto}
 
     .pesaje{display:block;font-size:12px;margin-top:6px}
-    .pesaje input.peso-real{width:94px;height:32px;padding:4px 6px;border:1px solid #94a3b8;border-radius:6px}
+    .pesaje input.peso-real{width:94px;height:36px;padding:6px 8px;border:1px solid #94a3b8;border-radius:8px}
     .delta-pill{display:inline-block;padding:2px 8px;border-radius:999px;font-size:12px;margin-left:6px;border:1px solid #cbd5e1;font-weight:700}
     .delta-ok{background:#e8f5e9} .delta-1{background:#fff3cd} .delta-2{background:#ffe0b2} .delta-dq{background:#ffebee}
     .real-text{display:none;margin-left:6px;font-weight:800}
+
+    /* ====== MOBILE/TABLET: convertir la tabla en tarjetas apiladas ====== */
+    @media (max-width: 980px) {
+      .toolbar { gap: 6px; }
+      .orden-tools { width: 100%; justify-content: flex-start; }
+      .btn-mini { font-size: 12px; padding: 8px 10px; }
+      .titulo-evento { font-size: clamp(20px, 6.2vw, 34px); }
+
+      thead { display: none; }
+      table, tbody, tr, td { display: block; width: 100%; }
+      table { border-spacing: 0; }
+      tbody tr.row-card { margin-bottom: 12px; border-radius: 12px; overflow: hidden; }
+      tbody tr.row-card td { border: 0; border-bottom: 1px solid var(--line); box-shadow: none; padding: 10px 12px; }
+      tbody tr.row-card td:last-child { border-bottom: 0; }
+
+      /* Cabecera compacta: N° + Modalidad */
+      td[data-label="N°"], td[data-label="Modalidad"] { display: inline-block; vertical-align: middle; }
+      td[data-label="N°"] { width: auto; padding-right: 10px; font-size: 15px; }
+      td[data-label="Modalidad"] { font-size: 14px; font-weight: 800; }
+
+      /* Cada esquina como bloque */
+      td[data-label="Roja · Foto"], td[data-label="Azul · Foto"] { display: none; } /* Oculto foto en cel si ya mostramos avatar en nombre */
+      td[data-label="Roja · Nombre"], td[data-label="Azul · Nombre"] {
+        display: flex; align-items: center; gap: 10px; font-size: 15px; font-weight: 800;
+      }
+      td[data-label="Roja · Nombre"] .avatar,
+      td[data-label="Azul · Nombre"] .avatar { width:42px; height:42px; }
+      td[data-label="Roja · Info"], td[data-label="Azul · Info"] { padding-top: 4px; }
+      td[data-label="Roja · Escuela"], td[data-label="Azul · Escuela"] .muted { font-size: 13px; }
+
+      td[data-label="VS"] { text-align: center; font-weight: 900; text-transform: uppercase; background: #f8fafc; }
+
+      td[data-label="Rondas"], td[data-label="Obs."], td[data-label="Acciones"] { font-size: 13px; }
+
+      /* Inputs touch-friendly */
+      .pesaje input.peso-real { width: 110px; height: 40px; font-size: 15px; }
+      .delta-pill { display: inline-block; margin-top: 6px; }
+    }
+
+    @media (max-width: 640px) {
+      .contenedor { padding: 10px; }
+      .search-grid { grid-template-columns: 1fr; }
+      .btn, .btn-mini { width: auto; }
+      .toolbar h2 { font-size: 16px; }
+      .pill { display: inline-block; font-size: 12px; }
+      .muted { font-size: 12px; }
+      .btn-xxs { font-size: 11px; }
+    }
 
     @media print {
       @page { size: A4 portrait; margin: 10mm; }
@@ -499,17 +451,9 @@ $st->close();
 
     /* ---- Encabezado sticky ---- */
     .topbar-sticky{
-      position: sticky;
-      top: 0;
-      z-index: 1000;
-      background: #fff;
-      border-bottom: 1px solid var(--line);
-      box-shadow: 0 4px 12px rgba(0,0,0,.06);
-      margin-left: -14px;
-      margin-right: -14px;
-      padding-left: 14px;
-      padding-right: 14px;
-      will-change: transform;
+      position: sticky; top: 0; z-index: 1000; background: #fff;
+      border-bottom: 1px solid var(--line); box-shadow: 0 4px 12px rgba(0,0,0,.06);
+      margin-left: -14px; margin-right: -14px; padding-left: 14px; padding-right: 14px;
     }
     body.solo-vista .topbar-sticky{ position: static; box-shadow: none; border-bottom: 0; }
     @media print{ .topbar-sticky{ position: static !important; box-shadow: none !important; border-bottom: 0 !important; } }
@@ -517,7 +461,11 @@ $st->close();
     /* form buscador */
     .search-grid{display:grid;grid-template-columns:1fr 1fr auto;gap:8px;align-items:end}
     .search-grid .field{display:flex;flex-direction:column;gap:4px}
-    .search-grid input{height:36px;border:1px solid #94a3b8;border-radius:8px;padding:6px 8px}
+    .search-grid input{height:40px;border:1px solid #94a3b8;border-radius:10px;padding:8px 10px;font-size:14px}
+
+    /* Snack */
+    .snack{position:fixed;left:50%;bottom:16px;transform:translateX(-50%);background:#111827;color:#fff;padding:10px 14px;border-radius:10px;font-weight:700;opacity:0;pointer-events:none;transition:.25s}
+    .snack.show{opacity:1}
   </style>
 </head>
 <?php $bodyClass = $SHARE ? 'solo-vista' : ''; ?>
@@ -539,11 +487,11 @@ $st->close();
           <a class="btn btn-mini btn-secondary" href="pesajes.php?evento_id=<?= (int)$evento_id ?>">⚖️ Pesajes</a>
           <button class="btn btn-mini btn-secondary" type="button" onclick="window.print()">🖨️ Imprimir / PDF</button>
         <?php } ?>
-        <a class="btn btn-mini btn-secondary" href="ver_peleas_evento.php?evento_id=<?= (int)$evento_id ?>&share=1" target="_blank">🔗 Vista para imprimir/compartir</a>
+        <a class="btn btn-mini btn-secondary" id="btnCompartir" href="ver_peleas_evento.php?evento_id=<?= (int)$evento_id ?>&share=1" target="_blank">🔗 Vista para imprimir/compartir</a>
       </div>
     </div>
 
-    <!-- === BUSCADOR (Apellido + Escuela/Academia) === -->
+    <!-- === BUSCADOR === -->
     <form method="GET" class="search-grid" autocomplete="off" action="ver_peleas_evento.php" style="margin-top:8px;margin-bottom:4px">
       <input type="hidden" name="evento_id" value="<?= (int)$evento_id ?>">
       <?php if ($SHARE) { ?><input type="hidden" name="share" value="1"><?php } ?>
@@ -555,7 +503,7 @@ $st->close();
         <label style="font-weight:700">Escuela / Academia</label>
         <input type="text" name="esc" value="<?= h($s_esc) ?>" placeholder="Ej: Academia Central">
       </div>
-      <div class="field" style="gap:6px;flex-direction:row">
+      <div class="field" style="gap:6px;flex-direction:row;flex-wrap:wrap">
         <button class="btn btn-primary" type="submit">🔎 Buscar</button>
         <a class="btn btn-secondary" href="ver_peleas_evento.php?evento_id=<?= (int)$evento_id ?><?= $SHARE?'&share=1':'' ?>">Limpiar</a>
       </div>
@@ -639,23 +587,26 @@ $st->close();
           $pref_a = $p['peso_real_a'] ?? ($_SESSION['pesajes'][$evento_id][$p['pelea_id']]['a'] ?? '');
         ?>
           <tr class="row-card">
-            <td class="num">
+            <td class="num" data-label="N°">
               <?php if ($C_ORDEN) { ?>
                 <input class="orden-input" type="number" name="orden[<?= (int)$p['pelea_id'] ?>]" value="<?= h($p['orden_manual']) ?>" disabled>
               <?php } else { ?><?= (int)$nroMostrar ?><?php } ?>
             </td>
-            <td class="modalidad"><?= h($modalidadLbl) ?></td>
+            <td class="modalidad" data-label="Modalidad"><?= h($modalidadLbl) ?></td>
 
             <!-- ROJA -->
-            <td style="text-align:center">
+            <td style="text-align:center" data-label="Roja · Foto">
               <?php if ($rFoto!=='') { ?>
                 <img src="<?= h($rFoto) ?>" class="avatar" alt="Roja" onerror="this.onerror=null;this.replaceWith(phAvatar('<?= h($rIni) ?>'))">
               <?php } else { ?>
                 <div class="ph-avatar"><?= h($rIni) ?></div>
               <?php } ?>
             </td>
-            <td style="font-weight:800"><?= h($rName !== '' ? $rName : '—') ?></td>
-            <td>
+            <td style="font-weight:800" data-label="Roja · Nombre">
+              <?php if ($rFoto!=='') { ?><img src="<?= h($rFoto) ?>" class="avatar" alt="Roja" style="display:inline-block;margin-right:8px" onerror="this.onerror=null;this.remove()"><?php } else { ?><span class="ph-avatar" style="width:36px;height:36px;font-size:12px;margin-right:8px"><?= h($rIni) ?></span><?php } ?>
+              <?= h($rName !== '' ? $rName : '—') ?>
+            </td>
+            <td data-label="Roja · Info">
               <span class="pill"><?= h($rInfo) ?></span>
               <div class="pesaje">
                 Real:
@@ -667,7 +618,7 @@ $st->close();
                 <span class="delta-pill" id="delta_r_<?= (int)$p['pelea_id'] ?>">Δ —</span>
               </div>
             </td>
-            <td class="muted">
+            <td class="muted" data-label="Roja · Escuela">
               <div style="display:flex;align-items:center;gap:8px">
                 <?php if ($rLogo!=='') { ?>
                   <img src="<?= h($rLogo) ?>" class="logo" alt="Logo escuela roja" onerror="this.onerror=null;this.replaceWith(phLogo('<?= h($rGymIni) ?>'))">
@@ -678,18 +629,21 @@ $st->close();
               </div>
             </td>
 
-            <td class="vs">vs</td>
+            <td class="vs" data-label="VS">vs</td>
 
             <!-- AZUL -->
-            <td style="text-align:center">
+            <td style="text-align:center" data-label="Azul · Foto">
               <?php if ($aFoto!=='') { ?>
                 <img src="<?= h($aFoto) ?>" class="avatar" alt="Azul" onerror="this.onerror=null;this.replaceWith(phAvatar('<?= h($aIni) ?>'))">
               <?php } else { ?>
                 <div class="ph-avatar"><?= h($aIni) ?></div>
               <?php } ?>
             </td>
-            <td style="font-weight:800"><?= h($aName !== '' ? $aName : '—') ?></td>
-            <td>
+            <td style="font-weight:800" data-label="Azul · Nombre">
+              <?php if ($aFoto!=='') { ?><img src="<?= h($aFoto) ?>" class="avatar" alt="Azul" style="display:inline-block;margin-right:8px" onerror="this.onerror=null;this.remove()"><?php } else { ?><span class="ph-avatar" style="width:36px;height:36px;font-size:12px;margin-right:8px"><?= h($aIni) ?></span><?php } ?>
+              <?= h($aName !== '' ? $aName : '—') ?>
+            </td>
+            <td data-label="Azul · Info">
               <span class="pill"><?= h($aInfo) ?></span>
               <div class="pesaje">
                 Real:
@@ -701,7 +655,7 @@ $st->close();
                 <span class="delta-pill" id="delta_a_<?= (int)$p['pelea_id'] ?>">Δ —</span>
               </div>
             </td>
-            <td class="muted">
+            <td class="muted" data-label="Azul · Escuela">
               <div style="display:flex;align-items:center;gap:8px">
                 <?php if ($aLogo!=='') { ?>
                   <img src="<?= h($aLogo) ?>" class="logo" alt="Logo escuela azul" onerror="this.onerror=null;this.replaceWith(phLogo('<?= h($aGymIni) ?>'))">
@@ -712,10 +666,10 @@ $st->close();
               </div>
             </td>
 
-            <td style="font-weight:800"><?= (int)$rondasVal ?></td>
-            <td class="obs" style="font-weight:700"><?= h($obsVal) ?></td>
-            <td class="acciones">
-              <div class="row-actions">
+            <td style="font-weight:800" data-label="Rondas"><?= (int)$rondasVal ?></td>
+            <td class="obs" style="font-weight:700" data-label="Obs."><?= h($obsVal) ?></td>
+            <td class="acciones" data-label="Acciones">
+              <div class="row-actions" style="display:flex;gap:6px;flex-wrap:wrap;justify-content:center">
                 <a class="btn btn-xxs btn-primary" title="Editar" href="editar_pelea_evento.php?evento_id=<?= (int)$evento_id ?>&pelea_id=<?= (int)$p['pelea_id'] ?>">✏️ Editar</a>
                 <button type="button" class="btn btn-xxs btn-danger" title="Eliminar" onclick="eliminarPelea(<?= (int)$p['pelea_id'] ?>)">🗑️ Eliminar</button>
                 <a class="btn btn-xxs btn-secondary" title="Iniciar en vivo"
@@ -730,13 +684,13 @@ $st->close();
       </table>
 
       <?php if (!$SHARE) { ?>
-        <div class="form-actions" id="orden-actions" style="margin-top:10px; display:flex; gap:8px; align-items:center">
+        <div class="form-actions" id="orden-actions" style="margin-top:10px; display:flex; gap:8px; align-items:center; flex-wrap:wrap">
           <button class="btn btn-secondary" type="button" id="btnAutoSec">↻ Auto-secuenciar</button>
           <button class="btn btn-primary" type="button" id="btnGuardarOrden">💾 Guardar edición de numeración</button>
           <span class="muted" style="font-weight:700">Tip: activá “✏️ Editar numeración” para escribir a mano, o guardá directo.</span>
         </div>
 
-        <div class="form-actions" style="margin-top:10px; display:flex; align-items:center; justify-content:space-between">
+        <div class="form-actions" style="margin-top:10px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px">
           <div class="muted" style="font-weight:700">Regla de pesaje: ≤0.5kg ✅ · ≤1.0kg −1 · ≤1.5kg −2 · ≥2.0kg ❌</div>
           <div>
             <button class="btn btn-primary" type="button" id="btnGuardarPesajes">💾 Guardar pesajes</button>
@@ -746,6 +700,8 @@ $st->close();
     </form>
   </div>
 </div>
+
+<div class="snack" id="snack">Link copiado</div>
 
 <script>
 (function(){
@@ -814,7 +770,6 @@ $st->close();
   }
   function actualizarFila(input){
     const peleaId = input.getAttribute('data-pelea');
-    theSide = input.getAttribute('data-side');
     const side = input.getAttribute('data-side');
     const td = input.closest('td'); if (!td) return;
     const chip = td.querySelector('.pill');
@@ -837,58 +792,83 @@ $st->close();
     if (!SHARE) inp.addEventListener('input', ()=> actualizarFila(inp));
   });
 
-  /* ===== (NUEVO) Auto-refresh SOLO en vista de compartir (share=1) ===== */
+  /* ===== Compartir / Copiar link para móviles ===== */
+  (function(){
+    const btn = document.getElementById('btnCompartir');
+    const snack = document.getElementById('snack');
+    if (!btn) return;
+
+    btn.addEventListener('click', async (e)=>{
+      // construimos link con filtros actuales
+      const url = new URL(window.location.origin + '/ver_peleas_evento.php');
+      url.searchParams.set('evento_id','<?= (int)$evento_id ?>');
+      url.searchParams.set('share','1');
+      const ape = new URL(window.location.href).searchParams.get('ape') || '';
+      const esc = new URL(window.location.href).searchParams.get('esc') || '';
+      if (ape) url.searchParams.set('ape', ape);
+      if (esc) url.searchParams.set('esc', esc);
+
+      // si el botón es un <a>, evitamos abrir en nueva pestaña cuando hay Web Share
+      if (navigator.share) { e.preventDefault(); }
+
+      try{
+        if (navigator.share) {
+          await navigator.share({
+            title: '<?= str_replace("'", "\\'", $evento_nombre) ?>',
+            text: 'Programación de peleas',
+            url: url.toString()
+          });
+        } else if (navigator.clipboard && window.isSecureContext) {
+          e.preventDefault();
+          await navigator.clipboard.writeText(url.toString());
+          snack.textContent = 'Link copiado';
+          snack.classList.add('show');
+          setTimeout(()=>snack.classList.remove('show'), 1800);
+        } // si no, deja que el <a> abra el link
+      }catch(err){
+        // fallback a copiar
+        try{
+          e.preventDefault();
+          const ta = document.createElement('textarea');
+          ta.value = url.toString(); document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove();
+          snack.textContent = 'Link copiado';
+          snack.classList.add('show');
+          setTimeout(()=>snack.classList.remove('show'), 1800);
+        }catch(_){}
+      }
+    });
+  })();
+
+  /* ===== Auto-refresh SOLO en share ===== */
   (function(){
     const isShare = SHARE === true;
     if (!isShare) return;
-
     const eventoId = parseInt(document.body.getAttribute('data-evento'), 10) || 0;
     const ver0 = document.body.getAttribute('data-ver') || '';
-
     const baseUrl = new URL(window.location.href);
     function reloadSameQS(){
       baseUrl.searchParams.set('_r', String(Date.now())); // cache-bust
       window.location.replace(baseUrl.toString());
     }
-
-    let lastVer = ver0;
-    let backoff = 10000; // 10s
-    let timer = null;
-
+    let lastVer = ver0, backoff = 10000, timer = null;
     async function tick(){
       try{
         const u = new URL(window.location.origin + '/ver_peleas_evento.php');
-        u.searchParams.set('ajax','poll');
-        u.searchParams.set('evento_id', String(eventoId));
-        u.searchParams.set('_', String(Date.now()));
-        const ctrl = new AbortController();
-        const t = setTimeout(()=>ctrl.abort(), 8000);
-        const r = await fetch(u.toString(), {cache:'no-store', signal:ctrl.signal});
-        clearTimeout(t);
+        u.searchParams.set('ajax','poll'); u.searchParams.set('evento_id', String(eventoId)); u.searchParams.set('_', String(Date.now()));
+        const ctrl = new AbortController(); const t = setTimeout(()=>ctrl.abort(), 8000);
+        const r = await fetch(u.toString(), {cache:'no-store', signal:ctrl.signal}); clearTimeout(t);
         if (!r.ok) throw new Error('HTTP '+r.status);
         const j = await r.json();
-        if (j && j.ok && j.ver){
-          if (j.ver !== lastVer){
-            reloadSameQS();
-            return;
-          }
-        }
-        backoff = 10000; // estable
-      }catch(e){
-        backoff = Math.min(backoff + 5000, 30000); // backoff suave en error
-      }finally{
-        timer = setTimeout(tick, backoff);
-      }
+        if (j && j.ok && j.ver && j.ver !== lastVer){ reloadSameQS(); return; }
+        backoff = 10000;
+      }catch(e){ backoff = Math.min(backoff + 5000, 30000); }
+      finally{ timer = setTimeout(tick, backoff); }
     }
-
     document.addEventListener('visibilitychange', ()=>{
       if (document.visibilityState === 'visible'){
-        if (timer) clearTimeout(timer);
-        backoff = 1000;
-        tick();
+        if (timer) clearTimeout(timer); backoff = 1000; tick();
       }
     });
-
     tick();
   })();
 
