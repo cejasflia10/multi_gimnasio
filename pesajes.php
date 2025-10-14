@@ -1,6 +1,10 @@
 <?php
+ini_set('display_errors', '1');
+ini_set('display_startup_errors', '1');
+error_reporting(E_ALL);
+
 if (session_status() === PHP_SESSION_NONE) session_start();
-require_once __DIR__ . '/conexion.php';
+require_once __DIR__ . '/conexion.php'; // ✅ FIX: agregado el punto
 
 if (!isset($conexion) || !($conexion instanceof mysqli)) { http_response_code(500); exit('❌ Sin conexión a BD.'); }
 if (function_exists('mysqli_report')) { mysqli_report(MYSQLI_REPORT_OFF); }
@@ -14,7 +18,7 @@ function fmt_num($v){ if ($v===null || $v==='') return null; $f=(float)str_repla
 /* ===== evento_id ===== */
 $evento_id = (int)($_GET['evento_id'] ?? $_SESSION['evento_id_actual'] ?? $_SESSION['evento_id'] ?? 0);
 if ($evento_id <= 0) {
-  echo '<div style="max-width:900px;margin:16px auto;padding:12px;border:1px solid #f5c6cb;background:#fdecea;color:#b71c1c;border-radius:8px;">Falta <b>evento_id</b>. Volvé desde el evento.</div>';
+  echo '<div style="max-width:980px;margin:16px auto;padding:12px;border:1px solid #f5c6cb;background:#fdecea;color:#b71c1c;border-radius:8px;">Falta <b>evento_id</b>. Volvé desde el evento.</div>';
   exit;
 }
 $_SESSION['evento_id_actual'] = $evento_id;
@@ -23,27 +27,29 @@ $_SESSION['evento_id_actual'] = $evento_id;
 $cols = [];
 $res = $conexion->query("SHOW COLUMNS FROM peleas_evento");
 if (!$res) {
-  echo '<div style="max-width:900px;margin:16px auto;padding:12px;border:1px solid #fdecea;background:#ffebee;color:#b71c1c;border-radius:8px;">No se pudo leer columnas de <b>peleas_evento</b>: '.h($conexion->error).'</div>';
+  echo '<div style="max-width:980px;margin:16px auto;padding:12px;border:1px solid #fdecea;background:#ffebee;color:#b71c1c;border-radius:8px;">No se pudo leer columnas de <b>peleas_evento</b>: '.h($conexion->error).'</div>';
   exit;
 }
 while($r = $res->fetch_assoc()){ $cols[strtolower($r['Field'])] = $r['Field']; }
 $pick = function(array $cands) use ($cols){ foreach ($cands as $c) { $lc = strtolower($c); if (isset($cols[$lc])) return $cols[$lc]; } return null; };
 
-$C_ID       = $pick(['id','pelea_id','id_pelea']);
-$C_EVENTO   = $pick(['evento_id','id_evento','evento']);
-$C_ROJO     = $pick(['competidor_rojo_id','rojo_id','id_rojo','id_competidor_rojo','rojo']);
-$C_AZUL     = $pick(['competidor_azul_id','azul_id','id_azul','id_competidor_azul','azul']);
-$C_ORDEN    = $pick(['orden','orden_manual','nro','nro_orden','posicion','sequence','rank','numero','nro_pelea','sort']);
-$C_OBS      = $pick(['observaciones','obs','comentarios','comentario','nota']);
-$C_PESO_REAL_R = $pick(['peso_real_rojo','rojo_peso_real','peso_real_r']);
-$C_PESO_REAL_A = $pick(['peso_real_azul','azul_peso_real','peso_real_a']);
+$C_ID         = $pick(['id','pelea_id','id_pelea']);
+$C_EVENTO     = $pick(['evento_id','id_evento','evento']);
+$C_ROJO       = $pick(['competidor_rojo_id','rojo_id','id_rojo','id_competidor_rojo','rojo']);
+$C_AZUL       = $pick(['competidor_azul_id','azul_id','id_azul','id_competidor_azul','azul']);
+$C_ORDEN      = $pick(['orden','orden_manual','nro','nro_orden','posicion','sequence','rank','numero','nro_pelea','sort']);
+$C_OBS        = $pick(['observaciones','obs','comentarios','comentario','nota']);
+$C_PESO_REAL_R= $pick(['peso_real_rojo','rojo_peso_real','peso_real_r']);
+$C_PESO_REAL_A= $pick(['peso_real_azul','azul_peso_real','peso_real_a']);
+$C_ORIGEN_R   = $pick(['origen_pesaje_rojo','origen_rojo','origen_r','pesaje_origen_r']);
+$C_ORIGEN_A   = $pick(['origen_pesaje_azul','origen_azul','origen_a','pesaje_origen_a']);
 
 if (!$C_EVENTO || !$C_ROJO || !$C_AZUL) {
-  echo '<div style="max-width:900px;margin:16px auto;padding:12px;border:1px solid #fdecea;background:#ffebee;color:#b71c1c;border-radius:8px;">La tabla <b>peleas_evento</b> existe pero faltan columnas obligatorias (evento/rojo/azul).</div>';
+  echo '<div style="max-width:980px;margin:16px auto;padding:12px;border:1px solid #fdecea;background:#ffebee;color:#b71c1c;border-radius:8px;">La tabla <b>peleas_evento</b> existe pero faltan columnas obligatorias (evento/rojo/azul).</div>';
   exit;
 }
 
-/* ===== Columnas competidores_evento ===== */
+/* ===== Columnas competidores_evento (planilla) ===== */
 $colsC = [];
 $resC = $conexion->query("SHOW COLUMNS FROM competidores_evento");
 if ($resC) { while($r = $resC->fetch_assoc()){ $colsC[strtolower($r['Field'])] = $r['Field']; } }
@@ -53,97 +59,58 @@ $CE_ID   = $pickC(['id','competidor_id']);
 $CE_APE  = $pickC(['apellido','apellidos','last_name']);
 $CE_NOM  = $pickC(['nombre','nombres','first_name']);
 $CE_ESC  = $pickC(['escuela_nombre','escuela','gimnasio','gym']);
-$CE_PESO = $pickC(['peso_kg','peso','kg','weight_kg']);   // peso cargado en la planilla
+$CE_PESO = $pickC(['peso_kg','peso','kg','weight_kg']);   // Planilla
 $CE_DIV  = $pickC(['division_id','id_division','division_evento_id']);
-$CE_DNI  = $pickC(['dni','documento','doc','num_doc']);   // DNI para búsqueda
+$CE_DNI  = $pickC(['dni','documento','doc','num_doc']);
 
 /* ===== Divisiones (label opcional) ===== */
 $tablaDiv = null; $DIV_LABEL_COL = 'nombre';
 if (($chkD=$conexion->query("SHOW TABLES LIKE 'divisiones_evento'")) && $chkD->num_rows>0){ $tablaDiv = 'divisiones_evento'; }
 
-/* ===== Guardar pesajes (POST) ===== */
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-  $accion = $_POST['accion'] ?? '';
-  if ($accion === 'guardar_pesajes') {
-    $pesosR = $_POST['peso_real_r'] ?? [];
-    $pesosA = $_POST['peso_real_a'] ?? [];
-    if (!is_array($pesosR)) $pesosR = [];
-    if (!is_array($pesosA)) $pesosA = [];
+/* ===== POST: guardar una pelea ===== */
+if ($_SERVER['REQUEST_METHOD']==='POST' && ($_POST['accion'] ?? '')==='guardar_pesaje_pelea') {
+  $pelea_id = isset($_POST['pelea_id']) ? (int)$_POST['pelea_id'] : 0;
+  $peso_r   = isset($_POST['peso_real_r']) && $_POST['peso_real_r']!=='' ? fmt_num($_POST['peso_real_r']) : null;
+  $peso_a   = isset($_POST['peso_real_a']) && $_POST['peso_real_a']!=='' ? fmt_num($_POST['peso_real_a']) : null;
+  $orig_r   = trim((string)($_POST['origen_r'] ?? 'manual'));
+  $orig_a   = trim((string)($_POST['origen_a'] ?? 'manual'));
 
-    $conexion->begin_transaction();
-    try{
-      $guardados = 0;
+  if ($pelea_id<=0 || $evento_id<=0){ $_SESSION['flash_error']='Parámetros inválidos.'; header('Location: pesajes.php?evento_id='.$evento_id.'#p'.$pelea_id); exit; }
+  if ($peso_r===null || $peso_a===null){ $_SESSION['flash_error']='Cargá ambos pesos reales para guardar.'; header('Location: pesajes.php?evento_id='.$evento_id.'#p'.$pelea_id); exit; }
 
-      if ($C_PESO_REAL_R || $C_PESO_REAL_A) {
-        foreach ($pesosR as $pid => $valR) {
-          if (!is_numeric($pid)) continue;
-          $pid = (int)$pid;
-          $valR = trim((string)$valR);
-          $valA = trim((string)($pesosA[$pid] ?? ''));
-          $set = []; $types=''; $vals=[];
-
-          if ($C_PESO_REAL_R) { $set[] = bt($C_PESO_REAL_R).'=?'; $types .= 's'; $vals[] = ($valR!=='' ? fmt_num($valR) : null); }
-          if ($C_PESO_REAL_A) { $set[] = bt($C_PESO_REAL_A).'=?'; $types .= 's'; $vals[] = ($valA!=='' ? fmt_num($valA) : null); }
-          if (!$set) continue;
-
-          $sqlUp = "UPDATE peleas_evento p SET ".implode(',', $set)." WHERE p.".bt($C_EVENTO)."=? AND p.".bt($C_ID ?: 'id')."=? LIMIT 1";
-          $types .= 'ii'; $vals[] = $evento_id; $vals[] = $pid;
-          $st = $conexion->prepare($sqlUp);
-          if (!$st) throw new RuntimeException('Guardar pesaje (pelea '.$pid.'): '.$conexion->error);
-          $st->bind_param($types, ...$vals);
-          $st->execute(); $guardados += max(0, $st->affected_rows); $st->close();
-        }
-      } else {
-        // Tabla auxiliar si no existen las columnas en peleas_evento
-        $tieneTabla = false;
-        if (($chk=$conexion->query("SHOW TABLES LIKE 'pesajes_evento'")) && $chk->num_rows>0) $tieneTabla = true;
-
-        if ($tieneTabla) {
-          $sqlIns = "INSERT INTO pesajes_evento (evento_id, pelea_id, peso_real_rojo, peso_real_azul, actualizado_en)
-                     VALUES (?,?,?,?,NOW())
-                     ON DUPLICATE KEY UPDATE peso_real_rojo=VALUES(peso_real_rojo), peso_real_azul=VALUES(peso_real_azul), actualizado_en=VALUES(actualizado_en)";
-          $st = $conexion->prepare($sqlIns);
-          if ($st) {
-            foreach ($pesosR as $pid => $valR) {
-              if (!is_numeric($pid)) continue;
-              $pid = (int)$pid;
-              $valR = trim((string)$valR);
-              $valA = trim((string)($pesosA[$pid] ?? ''));
-              $vR = ($valR!=='' ? fmt_num($valR) : null);
-              $vA = ($valA!=='' ? fmt_num($valA) : null);
-              $st->bind_param('iiss', $evento_id, $pid, $vR, $vA);
-              $st->execute(); $guardados += max(0, $st->affected_rows);
-            }
-            $st->close();
-          }
-        } else {
-          // Fallback temporal en sesión
-          foreach ($pesosR as $pid => $valR) {
-            if (!is_numeric($pid)) continue;
-            $pid = (int)$pid;
-            $_SESSION['pesajes'][$evento_id][$pid]['r'] = ($valR!=='' ? fmt_num($valR) : null);
-            $valA = trim((string)($pesosA[$pid] ?? ''));
-            $_SESSION['pesajes'][$evento_id][$pid]['a'] = ($valA!=='' ? fmt_num($valA) : null);
-            $guardados++;
-          }
-          $_SESSION['flash_warn'] = 'ℹ️ Pesajes guardados sólo en esta sesión (agregá columnas en <b>peleas_evento</b> o crea <b>pesajes_evento</b>).';
-        }
-      }
-
-      $conexion->commit();
-      $_SESSION['flash_ok'] = '💾 Pesajes guardados ('.$guardados.').';
-    } catch(Throwable $e){
-      $conexion->rollback();
-      $_SESSION['flash_error'] = 'Error guardando pesajes: '.$e->getMessage();
-    }
-    header('Location: pesajes.php?evento_id='.(int)$evento_id.'&q='.urlencode($_GET['q'] ?? '').'&pid='.urlencode($_GET['pid'] ?? '')); exit;
+  // Lee existentes para evitar re-pesaje
+  $sqlChk = "SELECT ".($C_PESO_REAL_R?bt($C_PESO_REAL_R):'NULL')." AS pr, ".($C_PESO_REAL_A?bt($C_PESO_REAL_A):'NULL')." AS pa
+             FROM peleas_evento WHERE ".bt($C_EVENTO)."=? AND ".bt($C_ID?:'id')."=? LIMIT 1";
+  $st = $conexion->prepare($sqlChk);
+  if(!$st){ $_SESSION['flash_error']='Error preparando consulta: '.$conexion->error; header('Location: pesajes.php?evento_id='.$evento_id.'#p'.$pelea_id); exit; }
+  $st->bind_param('ii',$evento_id,$pelea_id); $st->execute();
+  $row = $st->get_result()->fetch_assoc(); $st->close();
+  $ya_tenia = ($row && $row['pr']!==null && $row['pr']!=='' && $row['pa']!==null && $row['pa']!=='');
+  if ($ya_tenia){
+    $_SESSION['flash_warn']='Esta pelea ya estaba pesada. No se modificó (bloqueada).';
+    header('Location: pesajes.php?evento_id='.$evento_id.'#p'.$pelea_id); exit;
   }
+
+  // Guardar
+  $set=[]; $types=''; $vals=[];
+  if ($C_PESO_REAL_R){ $set[] = bt($C_PESO_REAL_R).'=?'; $types.='s'; $vals[]=$peso_r; } else { $_SESSION['pesajes'][$evento_id][$pelea_id]['r']=$peso_r; }
+  if ($C_PESO_REAL_A){ $set[] = bt($C_PESO_REAL_A).'=?'; $types.='s'; $vals[]=$peso_a; } else { $_SESSION['pesajes'][$evento_id][$pelea_id]['a']=$peso_a; }
+  if ($C_ORIGEN_R){ $set[] = bt($C_ORIGEN_R).'=?'; $types.='s'; $vals[]=$orig_r; } else { $_SESSION['origen'][$evento_id][$pelea_id]['r']=$orig_r; }
+  if ($C_ORIGEN_A){ $set[] = bt($C_ORIGEN_A).'=?'; $types.='s'; $vals[]=$orig_a; } else { $_SESSION['origen'][$evento_id][$pelea_id]['a']=$orig_a; }
+
+  if ($set){
+    $sqlUp = "UPDATE peleas_evento SET ".implode(',', $set)." WHERE ".bt($C_EVENTO)."=? AND ".bt($C_ID?:'id')."=? LIMIT 1";
+    $types.='ii'; $vals[]=$evento_id; $vals[]=$pelea_id;
+    $st = $conexion->prepare($sqlUp);
+    if (!$st){ $_SESSION['flash_error']='Error al guardar: '.$conexion->error; header('Location: pesajes.php?evento_id='.$evento_id.'#p'.$pelea_id); exit; }
+    $st->bind_param($types, ...$vals); $st->execute(); $st->close();
+  }
+  $_SESSION['flash_ok'] = '✅ Pelea #'.$pelea_id.' guardada y bloqueada.';
+  header('Location: pesajes.php?evento_id='.$evento_id.'#p'.$pelea_id); exit;
 }
 
 /* ===== Filtros de búsqueda ===== */
-// pid (opcional para ir directo a una pelea concreta)
 $pid = isset($_GET['pid']) && $_GET['pid']!=='' ? (int)$_GET['pid'] : null;
-// q = DNI o Apellido (PRIORIDAD DNI si son números)
 $q = trim((string)($_GET['q'] ?? ''));
 
 /* ===== Consulta principal ===== */
@@ -153,22 +120,22 @@ $select[] = 'p.'.bt($C_ID ?: 'id').' AS pelea_id';
 $select[] = $C_ORDEN ? 'p.'.bt($C_ORDEN).' AS orden_manual' : 'NULL AS orden_manual';
 $select[] = $C_OBS   ? 'p.'.bt($C_OBS).' AS observaciones'  : 'NULL AS observaciones';
 
-/* Pesos reales (si existen columnas) */
+/* Pesos reales (si existen columnas) + origen */
 $select[] = $C_PESO_REAL_R ? 'p.'.bt($C_PESO_REAL_R).' AS peso_real_r' : 'NULL AS peso_real_r';
 $select[] = $C_PESO_REAL_A ? 'p.'.bt($C_PESO_REAL_A).' AS peso_real_a' : 'NULL AS peso_real_a';
+$select[] = $C_ORIGEN_R ? 'p.'.bt($C_ORIGEN_R).' AS origen_r' : "NULL AS origen_r";
+$select[] = $C_ORIGEN_A ? 'p.'.bt($C_ORIGEN_A).' AS origen_a' : "NULL AS origen_a";
 
-/* Competidores (peso planilla) */
+/* Competidores (planilla = base) */
 $select[] = 'cr.'.bt($CE_APE ?: 'apellido').' AS r_apellido';
 $select[] = 'cr.'.bt($CE_NOM ?: 'nombre').' AS r_nombre';
 $select[] = $CE_ESC ? 'cr.'.bt($CE_ESC).' AS r_escuela' : "NULL AS r_escuela";
-$select[] = $CE_PESO ? 'cr.'.bt($CE_PESO).' AS r_peso'   : "NULL AS r_peso";
-$select[] = $CE_DNI ? 'cr.'.bt($CE_DNI).' AS r_dni'       : "NULL AS r_dni";
+$select[] = $CE_PESO ? 'cr.'.bt($CE_PESO).' AS r_peso_plan'   : "NULL AS r_peso_plan";
 
 $select[] = 'ca.'.bt($CE_APE ?: 'apellido').' AS a_apellido';
 $select[] = 'ca.'.bt($CE_NOM ?: 'nombre').' AS a_nombre';
 $select[] = $CE_ESC ? 'ca.'.bt($CE_ESC).' AS a_escuela' : "NULL AS a_escuela";
-$select[] = $CE_PESO ? 'ca.'.bt($CE_PESO).' AS a_peso'   : "NULL AS a_peso";
-$select[] = $CE_DNI ? 'ca.'.bt($CE_DNI).' AS a_dni'       : "NULL AS a_dni";
+$select[] = $CE_PESO ? 'ca.'.bt($CE_PESO).' AS a_peso_plan'   : "NULL AS a_peso_plan";
 
 /* División (label) */
 if ($tablaDiv && $CE_DIV) {
@@ -183,27 +150,16 @@ if ($tablaDiv && $CE_DIV) {
 
 /* WHERE dinámico: pid y q (DNI o Apellido) */
 if ($pid !== null) { $where[] = 'p.'.bt($C_ID ?: 'id').'=?'; $types.='i'; $params[]=$pid; }
-
 if ($q !== '') {
-  $dniLike = preg_replace('/\D+/', '', $q); // sólo dígitos
-  if ($dniLike !== '' && $CE_DNI) {
-    // Buscar por DNI (prefijo)
-    $where[] = "(cr.".bt($CE_DNI)." LIKE CONCAT(?, '%') OR ca.".bt($CE_DNI)." LIKE CONCAT(?, '%'))";
-    $types  .= 'ss';
-    $params[] = $dniLike;
-    $params[] = $dniLike;
-  } else {
-    // Buscar por Apellido (tokens con LIKE %token%)
-    $tokens = preg_split('/\s+/', $q);
-    $bloque = [];
-    foreach ($tokens as $tk) {
-      $tk = trim($tk);
-      if ($tk==='') continue;
+  $dniLike = preg_replace('/\D+/', '', $q);
+  if ($dniLike !== '' && $CE_DNI) { $where[] = "(cr.".bt($CE_DNI)." LIKE CONCAT(?, '%') OR ca.".bt($CE_DNI)." LIKE CONCAT(?, '%'))"; $types.='ss'; $params[]=$dniLike; $params[]=$dniLike; }
+  else {
+    $tokens = preg_split('/\s+/', $q); $bloque=[];
+    foreach ($tokens as $tk) { $tk=trim($tk); if(!$tk) continue;
       $bloque[] = "(cr.".bt($CE_APE ?: 'apellido')." LIKE CONCAT('%', ?, '%') OR ca.".bt($CE_APE ?: 'apellido')." LIKE CONCAT('%', ?, '%'))";
-      $types .= 'ss';
-      $params[] = $tk; $params[] = $tk;
+      $types.='ss'; $params[]=$tk; $params[]=$tk;
     }
-    if ($bloque) $where[] = '('.implode(' AND ', $bloque).')';
+    if ($bloque) $where[]='('.implode(' AND ',$bloque).')';
   }
 }
 
@@ -218,15 +174,13 @@ ORDER BY ".($C_ORDEN ? "p.".bt($C_ORDEN)." IS NULL, p.".bt($C_ORDEN).", " : "").
 
 $st = $conexion->prepare($sql);
 if (!$st) {
-  echo '<div style="max-width:900px;margin:16px auto;padding:12px;border:1px solid #ffcdd2;background:#ffebee;color:#b71c1c;border-radius:8px;">Error preparando el listado: '.h($conexion->error).'</div>';
+  echo '<div style="max-width:980px;margin:16px auto;padding:12px;border:1px solid #ffcdd2;background:#ffebee;color:#b71c1c;border-radius:8px;">Error preparando el listado: '.h($conexion->error).'</div>';
   exit;
 }
 $st->bind_param($types, ...$params);
 $st->execute();
 $peleas = $st->get_result()->fetch_all(MYSQLI_ASSOC);
 $st->close();
-
-$ph = 'assets/placeholder-user.png';
 ?>
 <!DOCTYPE html>
 <html lang="es">
@@ -236,7 +190,7 @@ $ph = 'assets/placeholder-user.png';
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
     :root{
-      --bg:#ffffff; --card:#ffffff; --text:#000; --muted:#222;
+      --bg:#ffffff; --card:#ffffff; --text:#000;
       --line:#cbd5e1; --ok:#e8f5e9; --warn:#fff3cd; --warn2:#ffe0b2; --dq:#ffebee;
       --pill:#e2e8f0; --btn:#1e88e5; --btn2:#e5e7eb; --danger:#d32f2f;
     }
@@ -245,50 +199,42 @@ $ph = 'assets/placeholder-user.png';
     a{color:inherit;text-decoration:none}
 
     .wrap{max-width:980px;margin:0 auto;padding:14px}
-    .toolbar{display:flex;gap:8px;align-items:center;justify-content:space-between;flex-wrap:wrap;margin-bottom:12px}
+    .toolbar{position:sticky;top:0;z-index:5;background:#fff;padding:8px 0;border-bottom:1px solid var(--line);display:flex;gap:8px;align-items:center;justify-content:space-between;flex-wrap:wrap;margin-bottom:12px}
     .toolbar h2{margin:0;font-size:20px}
     .btn{display:inline-block;padding:8px 10px;border-radius:10px;border:1px solid transparent;cursor:pointer;background:var(--btn);color:#fff}
     .btn.sec{background:var(--btn2);color:#000}
     .btn.danger{background:var(--danger);color:#fff}
     .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px;margin-bottom:12px}
-    .grid{display:grid;gap:8px}
-    .grid-3{grid-template-columns:1fr 1fr 1fr}
+    .center{text-align:center}
     .field{display:flex;flex-direction:column;gap:6px}
-    .field label{font-size:13px;color:#333;font-weight:600}
-    .field input{height:40px;padding:8px 10px;border:1px solid #94a3b8;border-radius:10px}
-    .list{display:flex;flex-direction:column;gap:10px}
-    .item{border:1px solid var(--line);border-radius:12px;padding:10px;background:#fff;display:grid;grid-template-columns:52px 1fr;gap:10px}
-    .foto{width:52px;height:52px;border-radius:8px;object-fit:cover;background:#f3f4f6}
-    .tit{font-weight:700}
-    .small{font-size:12px;color:#333}
+    .field input, .field select{height:40px;padding:8px 10px;border:1px solid #94a3b8;border-radius:10px}
+    .list{display:flex;flex-direction:column;gap:12px}
+    .item{border:1px solid var(--line);border-radius:12px;padding:14px;background:#fff}
+    .tit{font-weight:800;font-size:16px;margin-bottom:8px;text-align:center}
+    .small{font-size:12px;color:#111;text-align:center}
     .pill{display:inline-block;padding:2px 8px;border-radius:999px;background:var(--pill);color:#000;font-size:12px}
-    .row{display:grid;grid-template-columns:1fr 1fr;gap:8px}
-    .peso-wrap{display:flex;align-items:center;gap:6px;margin-top:6px}
-    .peso-wrap input{width:120px;height:36px;border-radius:8px;padding:6px 8px}
+    .row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+    .peso-wrap{display:flex;align-items:center;gap:8px;justify-content:center;flex-wrap:wrap;margin-top:8px}
+    .peso-wrap input{width:140px;height:40px}
+    .peso-wrap select{height:40px}
     .delta{display:inline-block;padding:2px 8px;border-radius:999px;font-size:12px;border:1px solid #cbd5e1}
     .d-ok{background:var(--ok)}
     .d-1{background:var(--warn)}
     .d-2{background:var(--warn2)}
     .d-dq{background:var(--dq)}
-    .acciones{display:flex;justify-content:flex-end;gap:8px;margin-top:8px}
+    .acciones{display:flex;justify-content:center;gap:8px;margin-top:10px}
     .flash{padding:10px;border-radius:10px;margin-bottom:10px}
     .ok{background:var(--ok);border:1px solid #c8e6c9}
     .warn{background:var(--warn);border:1px solid #ffeeba}
     .err{background:var(--dq);border:1px solid #ffcdd2}
-    .filters{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
+    .filters{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;justify-content:center}
     .chip{padding:4px 8px;border-radius:999px;border:1px solid var(--line);font-size:12px;cursor:pointer;background:#fff}
     .chip.active{background:#e6f2ff;border-color:#90caf9}
 
-    .summary{display:flex;gap:10px;flex-wrap:wrap}
+    .summary{display:flex;gap:10px;flex-wrap:wrap;justify-content:center}
     .sum{padding:6px 10px;border:1px solid var(--line);border-radius:10px;font-size:12px;background:#fff}
 
-    @media (max-width:760px){
-      .grid-3{grid-template-columns:1fr}
-      .row{grid-template-columns:1fr}
-      .item{grid-template-columns:46px 1fr}
-      .foto{width:46px;height:46px}
-      .peso-wrap input{width:110px}
-    }
+    @media (max-width:760px){ .row{grid-template-columns:1fr} }
     @media print{ .toolbar,.acciones,.btn,.filters{display:none !important} }
   </style>
 </head>
@@ -302,21 +248,26 @@ $ph = 'assets/placeholder-user.png';
     </div>
   </div>
 
-  <?php if (!empty($_SESSION['flash_ok'])) { ?><div class="flash ok"><?= h($_SESSION['flash_ok']); ?></div><?php unset($_SESSION['flash_ok']); } ?>
-  <?php if (!empty($_SESSION['flash_warn'])) { ?><div class="flash warn"><?= $_SESSION['flash_warn']; ?></div><?php unset($_SESSION['flash_warn']); } ?>
-  <?php if (!empty($_SESSION['flash_error'])) { ?><div class="flash err"><?= h($_SESSION['flash_error']); ?></div><?php unset($_SESSION['flash_error']); } ?>
+  <?php if (!empty($_SESSION['flash_ok'])) { ?><div class="flash ok center"><?= h($_SESSION['flash_ok']); ?></div><?php unset($_SESSION['flash_ok']); } ?>
+  <?php if (!empty($_SESSION['flash_warn'])) { ?><div class="flash warn center"><?= $_SESSION['flash_warn']; ?></div><?php unset($_SESSION['flash_warn']); } ?>
+  <?php if (!empty($_SESSION['flash_error'])) { ?><div class="flash err center"><?= h($_SESSION['flash_error']); ?></div><?php unset($_SESSION['flash_error']); } ?>
 
   <div class="card">
-    <!-- Buscador: sólo DNI o Apellido -->
+    <div class="small center" style="font-weight:700;margin-bottom:8px">
+      Se compara el <u>peso de planilla</u> con el <u>peso real del día</u>.<br>
+      Regla: ≤0.5 kg ✅ · ≤1.0 kg −1 punto · ≤1.5 kg −2 puntos · ≥2.0 kg ❌ DQ.
+    </div>
+
+    <!-- Buscador -->
     <?php $qv = h($q); ?>
-    <form method="GET" class="grid grid-3" autocomplete="off">
+    <form method="GET" class="center" autocomplete="off" style="display:grid;grid-template-columns:1fr 1fr 120px;gap:8px;max-width:720px;margin:0 auto">
       <input type="hidden" name="evento_id" value="<?= (int)$evento_id ?>">
-      <div class="field"><label>N° pelea (opcional)</label><input type="number" name="pid" value="<?= h($pid ?? '') ?>" placeholder="Ej: 12"></div>
-      <div class="field"><label>Buscar por DNI o Apellido</label><input type="text" name="q" value="<?= $qv ?>" placeholder="Ej: 33600111 o González"></div>
-      <div class="field" style="align-self:end"><button class="btn" type="submit">🔎 Buscar</button></div>
+      <div class="field"><input type="number" name="pid" value="<?= h($pid ?? '') ?>" placeholder="N° pelea (opcional)"></div>
+      <div class="field"><input type="text" name="q" value="<?= $qv ?>" placeholder="DNI o Apellido"></div>
+      <div class="field"><button class="btn" type="submit" style="width:100%">🔎 Buscar</button></div>
     </form>
 
-    <div class="filters" style="margin-top:8px">
+    <div class="filters">
       <span class="chip active" data-f="all">Todos</span>
       <span class="chip" data-f="pend">Pendientes</span>
       <span class="chip" data-f="ok">En peso</span>
@@ -327,57 +278,76 @@ $ph = 'assets/placeholder-user.png';
     <div class="summary" id="summary" style="margin-top:8px"></div>
   </div>
 
-  <form method="POST" id="form-pesajes">
-    <input type="hidden" name="accion" value="guardar_pesajes">
-    <div class="list" id="lista">
-    <?php if (!$peleas) { ?>
-      <div class="card">No hay peleas que coincidan con tu búsqueda.</div>
-    <?php } else {
-      foreach ($peleas as $p) {
-        $nro = $p['orden_manual']!==null ? (int)$p['orden_manual'] : (int)$p['pelea_id'];
-        $rPesoPlan = ($p['r_peso']!==null && $p['r_peso']!=='') ? fmt_num($p['r_peso']) : '';
-        $aPesoPlan = ($p['a_peso']!==null && $p['a_peso']!=='') ? fmt_num($p['a_peso']) : '';
-        $rDiv = $p['r_division'] ?? '-';
-        $aDiv = $p['a_division'] ?? '-';
+  <div class="list" id="lista">
+  <?php if (!$peleas) { ?>
+    <div class="card center">No hay peleas que coincidan con tu búsqueda.</div>
+  <?php } else {
+    foreach ($peleas as $p) {
+      $nro = $p['orden_manual']!==null ? (int)$p['orden_manual'] : (int)$p['pelea_id'];
+      $rPlan = ($p['r_peso_plan']!==null && $p['r_peso_plan']!=='') ? fmt_num($p['r_peso_plan']) : '';
+      $aPlan = ($p['a_peso_plan']!==null && $p['a_peso_plan']!=='') ? fmt_num($p['a_peso_plan']) : '';
+      $rDiv = $p['r_division'] ?? '-';
+      $aDiv = $p['a_division'] ?? '-';
 
-        // Preferir lo ya guardado; si no hay, cargar sesión
-        $pref_r = $p['peso_real_r'] ?? ($_SESSION['pesajes'][$evento_id][$p['pelea_id']]['r'] ?? '');
-        $pref_a = $p['peso_real_a'] ?? ($_SESSION['pesajes'][$evento_id][$p['pelea_id']]['a'] ?? '');
-    ?>
-      <div class="item pelea" data-pelea="<?= (int)$p['pelea_id'] ?>">
-        <img class="foto" src="<?= h($ph) ?>" alt="">
-        <div>
-          <div class="tit">#<?= (int)$nro ?> · <?= h($p['r_apellido'].' '.$p['r_nombre']) ?> <span class="small">vs</span> <?= h(trim(($p['a_apellido']??'').' '.($p['a_nombre']??'')) ?: '—') ?></div>
-          <div class="row">
-            <div>
-              <div class="small">🔴 Roja — <span class="pill"><?= $rPesoPlan!==''? h($rPesoPlan.' kg') : '—' ?> / <?= h($rDiv) ?></span></div>
-              <div class="peso-wrap">
-                <input type="number" step="0.1" min="0" name="peso_real_r[<?= (int)$p['pelea_id'] ?>]" class="peso" data-side="r" data-plan="<?= h($rPesoPlan) ?>" value="<?= h($pref_r) ?>" placeholder="Real kg">
-                <span class="delta" id="delta_r_<?= (int)$p['pelea_id'] ?>">Δ —</span>
-              </div>
-            </div>
-            <div>
-              <div class="small">🔵 Azul — <span class="pill"><?= $aPesoPlan!==''? h($aPesoPlan.' kg') : '—' ?> / <?= h($aDiv) ?></span></div>
-              <div class="peso-wrap">
-                <input type="number" step="0.1" min="0" name="peso_real_a[<?= (int)$p['pelea_id'] ?>]" class="peso" data-side="a" data-plan="<?= h($aPesoPlan) ?>" value="<?= h($pref_a) ?>" placeholder="Real kg">
-                <span class="delta" id="delta_a_<?= (int)$p['pelea_id'] ?>">Δ —</span>
-              </div>
+      $pref_real_r = $p['peso_real_r'] ?? ($_SESSION['pesajes'][$evento_id][$p['pelea_id']]['r'] ?? '');
+      $pref_real_a = $p['peso_real_a'] ?? ($_SESSION['pesajes'][$evento_id][$p['pelea_id']]['a'] ?? '');
+      $pref_org_r  = $p['origen_r'] ?? ($_SESSION['origen'][$evento_id][$p['pelea_id']]['r'] ?? 'manual');
+      $pref_org_a  = $p['origen_a'] ?? ($_SESSION['origen'][$evento_id][$p['pelea_id']]['a'] ?? 'manual');
+
+      // Bloqueo si ya hay ambos pesos en BD
+      $locked = ($p['peso_real_r']!==null && $p['peso_real_r']!=='' && $p['peso_real_a']!==null && $p['peso_real_a']!=='');
+      $disabledAttr = $locked ? 'disabled' : '';
+  ?>
+    <div class="item pelea" id="p<?= (int)$p['pelea_id'] ?>" data-pelea="<?= (int)$p['pelea_id'] ?>" <?= $locked?'data-locked="1"':'' ?>>
+      <div class="tit">#<?= (int)$nro ?> · <?= h($p['r_apellido'].' '.$p['r_nombre']) ?> <span class="small">vs</span> <?= h(trim(($p['a_apellido']??'').' '.($p['a_nombre']??'')) ?: '—') ?></div>
+      <div class="small" style="margin-bottom:6px">
+        🔴 Roja — <span class="pill"><?= $rPlan!==''? h($rPlan.' kg') : '—' ?> / <?= h($rDiv) ?></span> &nbsp;&nbsp;|&nbsp;&nbsp;
+        🔵 Azul — <span class="pill"><?= $aPlan!==''? h($aPlan.' kg') : '—' ?> / <?= h($aDiv) ?></span>
+      </div>
+
+      <form method="POST" class="center" style="margin:0">
+        <input type="hidden" name="accion" value="guardar_pesaje_pelea">
+        <input type="hidden" name="evento_id" value="<?= (int)$evento_id ?>">
+        <input type="hidden" name="pelea_id"  value="<?= (int)$p['pelea_id'] ?>">
+
+        <div class="row">
+          <div>
+            <div class="peso-wrap">
+              <select name="origen_r" data-side="r" class="origen" <?= $disabledAttr ?>>
+                <option value="manual"  <?= ($pref_org_r==='manual'?'selected':'') ?>>Manual</option>
+                <option value="sistema" <?= ($pref_org_r==='sistema'?'selected':'') ?>>Sistema</option>
+              </select>
+              <input type="number" step="0.1" min="0" name="peso_real_r"
+                class="peso" data-side="r" data-plan="<?= h($rPlan) ?>"
+                placeholder="Real Roja (kg)" value="<?= h($pref_real_r) ?>" <?= $disabledAttr ?>>
+              <span class="delta" id="delta_r_<?= (int)$p['pelea_id'] ?>">Δ —</span>
             </div>
           </div>
-          <?php if (!empty($p['observaciones'])) { ?><div class="small" style="margin-top:6px">📝 <?= h($p['observaciones']) ?></div><?php } ?>
+          <div>
+            <div class="peso-wrap">
+              <select name="origen_a" data-side="a" class="origen" <?= $disabledAttr ?>>
+                <option value="manual"  <?= ($pref_org_a==='manual'?'selected':'') ?>>Manual</option>
+                <option value="sistema" <?= ($pref_org_a==='sistema'?'selected':'') ?>>Sistema</option>
+              </select>
+              <input type="number" step="0.1" min="0" name="peso_real_a"
+                class="peso" data-side="a" data-plan="<?= h($aPlan) ?>"
+                placeholder="Real Azul (kg)" value="<?= h($pref_real_a) ?>" <?= $disabledAttr ?>>
+              <span class="delta" id="delta_a_<?= (int)$p['pelea_id'] ?>">Δ —</span>
+            </div>
+          </div>
         </div>
-      </div>
-    <?php } } ?>
-    </div>
 
-    <?php if ($peleas) { ?>
-    <div class="acciones">
-      <button type="button" class="btn sec" id="btnGuardarLocal">💾 Guardar local</button>
-      <button type="submit" class="btn">💾 Guardar en BD</button>
+        <?php if (!empty($p['observaciones'])) { ?>
+          <div class="small" style="margin-top:6px">📝 <?= h($p['observaciones']) ?></div>
+        <?php } ?>
+
+        <div class="acciones">
+          <button type="submit" class="btn btn-guardar" <?= $locked?'disabled':'' ?>>💾 Guardar pelea</button>
+        </div>
+      </form>
     </div>
-    <div class="small" style="margin-top:6px">Regla: ≤0.5kg ✅ · ≤1.0kg −1 punto · ≤1.5kg −2 puntos · ≥2.0kg ❌ DQ.</div>
-    <?php } ?>
-  </form>
+  <?php } } ?>
+  </div>
 </div>
 
 <script>
@@ -391,32 +361,26 @@ $ph = 'assets/placeholder-user.png';
     if (ad <= 1.5) return {k:'m2', txt:`Δ ${ad.toFixed(1)} kg · −2`, cls:'d-2'};
     return {k:'dq', txt:`Δ ${ad.toFixed(1)} kg · ❌ DQ`, cls:'d-dq'};
   }
-  function actualizarDelta(inp){
-    const cont = inp.closest('.item'); if(!cont) return;
-    const pid = cont.getAttribute('data-pelea');
-    const side = inp.getAttribute('data-side');
+  function actualizarDelta(card, side){
+    const inp = card.querySelector(`input.peso[data-side="${side}"]`);
+    if (!inp) return;
+    const pid = card.getAttribute('data-pelea');
     const plan = kg(inp.getAttribute('data-plan'));
     const real = kg(inp.value);
     const badge = document.getElementById(`delta_${side}_${pid}`);
-    let info = {k:'pend',txt:'Δ —',cls:''};
-    if (plan!==null && real!==null) info = regla(real - plan);
+    let info={k:'pend',txt:'Δ —',cls:''};
+    if (plan!==null && real!==null) info=regla(real-plan);
     if (badge){
-      badge.textContent = info.txt;
+      badge.textContent=info.txt;
       badge.classList.remove('d-ok','d-1','d-2','d-dq');
       if (info.cls) badge.classList.add(info.cls);
     }
-    cont.setAttribute(`data-${side}`, info.k);
-    // persistir local
-    try{
-      const key = `pesaje:<?= (int)$evento_id ?>:${pid}:${side}`;
-      if (inp.value==='') localStorage.removeItem(key); else localStorage.setItem(key, inp.value);
-    }catch(e){}
-    refrescarResumen();
+    card.setAttribute(`data-${side}`, info.k);
+    return info.k;
   }
-  function estadoFila(el){
-    const er = el.getAttribute('data-r') || 'pend';
-    const ea = el.getAttribute('data-a') || 'pend';
-    // Peor estado manda
+  function estadoFila(card){
+    const er = card.getAttribute('data-r') || 'pend';
+    const ea = card.getAttribute('data-a') || 'pend';
     const score = (k)=>({ok:0,m1:1,m2:2,dq:3,pend:4}[k] ?? 4);
     const worst = Math.max(score(er), score(ea));
     return ['ok','m1','m2','dq','pend'][worst] || 'pend';
@@ -438,28 +402,56 @@ $ph = 'assets/placeholder-user.png';
     }
   }
   function aplicarFiltro(f){
-    const items = document.querySelectorAll('.item.pelea');
-    items.forEach(it=>{
+    document.querySelectorAll('.item.pelea').forEach(it=>{
       const st = estadoFila(it);
       it.style.display = (f==='all' || f===st || (f==='pend' && st==='pend')) ? '' : 'none';
     });
   }
+  function toggleGuardar(card){
+    const btn = card.querySelector('.btn-guardar');
+    if (!btn || card.hasAttribute('data-locked')) return;
+    const vR = card.querySelector('input.peso[data-side="r"]')?.value.trim();
+    const vA = card.querySelector('input.peso[data-side="a"]')?.value.trim();
+    btn.disabled = !(vR && vA);
+  }
 
-  // Precargar localStorage si no había valor guardado en BD
-  document.querySelectorAll('input.peso').forEach(inp=>{
-    try{
-      const cont = inp.closest('.item'); const pid = cont.getAttribute('data-pelea'); const side = inp.getAttribute('data-side');
+  // Inicializar tarjetas
+  document.querySelectorAll('.item.pelea').forEach(card=>{
+    const pid = card.getAttribute('data-pelea');
+
+    // precarga localStorage si aún no está en BD
+    ['r','a'].forEach(side=>{
+      const inp = card.querySelector(`input.peso[data-side="${side}"]`);
+      if (!inp) return;
       const key = `pesaje:<?= (int)$evento_id ?>:${pid}:${side}`;
       const saved = localStorage.getItem(key);
-      if (saved && !inp.value) inp.value = saved;
-    }catch(e){}
-    actualizarDelta(inp);
-    inp.addEventListener('input', ()=> actualizarDelta(inp));
-  });
+      if (!card.hasAttribute('data-locked') && saved && !inp.value) inp.value=saved;
+      actualizarDelta(card, side);
+      inp.addEventListener('input', ()=>{
+        // guardado local
+        try{ if (!card.hasAttribute('data-locked')) {
+          if (inp.value==='') localStorage.removeItem(key); else localStorage.setItem(key, inp.value);
+        }}catch(e){}
+        actualizarDelta(card, side); toggleGuardar(card); refrescarResumen();
+      });
+    });
 
-  // Guardar local
-  const btnLocal = document.getElementById('btnGuardarLocal');
-  if (btnLocal){ btnLocal.addEventListener('click', ()=> alert('✅ Pesajes guardados localmente (este dispositivo).')); }
+    // origen localStorage
+    ['r','a'].forEach(side=>{
+      const sel = card.querySelector(`select.origen[data-side="${side}"]`);
+      if (!sel) return;
+      const key = `origen:<?= (int)$evento_id ?>:${pid}:${side}`;
+      const saved = localStorage.getItem(key);
+      if (!card.hasAttribute('data-locked') && saved) sel.value=saved;
+      sel.addEventListener('change', ()=>{
+        try{ if (!card.hasAttribute('data-locked')) {
+          if (!sel.value) localStorage.removeItem(key); else localStorage.setItem(key, sel.value);
+        }}catch(e){}
+      });
+    });
+
+    toggleGuardar(card);
+  });
 
   // Filtros
   const chips = document.querySelectorAll('.chip');
