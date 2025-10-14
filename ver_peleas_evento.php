@@ -1,6 +1,6 @@
 <?php
 /* =========================
-   ver_peleas_evento.php — Lista de peleas con impresión/compartir optimizada + MOBILE FIRST
+   ver_peleas_evento.php — Lista de peleas con impresión/compartir optimizada + MOBILE FIRST + Agenda
    • Buscador por Apellido y Escuela/Academia (filtra rojo/azul)
    • Modalidad visible (prioriza pelea > texto > obs)
    • SIN columna “Técnica”
@@ -11,6 +11,7 @@
    • Link de “Vista para imprimir/compartir”: ?share=1
    • Auto-actualización en share (polling)
    • FULL RESPONSIVE (celulares/tablets) + botón Compartir
+   • Agenda: hora inicio, duración, intervalo; marca inicio real al tocar “Iniciar” y recalcula; resalta próximas 3
    ========================= */
 if (session_status() === PHP_SESSION_NONE) session_start();
 require_once __DIR__ . '/conexion.php';
@@ -57,11 +58,11 @@ $_SESSION['evento_id_actual'] = $evento_id;
 
 $SHARE = (isset($_GET['share']) && (string)$_GET['share'] === '1'); // vista limpia para imprimir/compartir
 
-/* === parámetros de búsqueda (nuevo) === */
+/* === parámetros de búsqueda === */
 $s_ape = trim((string)($_GET['ape'] ?? '')); // Apellido
 $s_esc = trim((string)($_GET['esc'] ?? '')); // Escuela/Academia
 
-/* ========= utilidades de firma/versión + endpoint poll ========= */
+/* ========= utilidades de firma/versión + endpoints AJAX ========= */
 function pick_col_from_list(array $colsMap, array $cands){
   foreach ($cands as $c){ $lc=strtolower($c); if (isset($colsMap[$lc])) return $colsMap[$lc]; }
   return null;
@@ -82,6 +83,7 @@ function compute_event_signature(mysqli $cx, int $evento_id, array $colsMap): st
   $res = $st->get_result(); $row = $res ? $res->fetch_assoc() : null; $st->close();
   return 'ev'.md5(json_encode($row ?: []) ?: 'x');
 }
+
 /* Endpoint poll JSON */
 if (isset($_GET['ajax']) && $_GET['ajax']==='poll') {
   while (ob_get_level()) { ob_end_clean(); }
@@ -92,6 +94,24 @@ if (isset($_GET['ajax']) && $_GET['ajax']==='poll') {
   if ($r = $conexion->query("SHOW COLUMNS FROM `peleas_evento`")) { while($c = $r->fetch_assoc()){ $colsMap[strtolower($c['Field'])] = $c['Field']; } $r->close(); }
   $ver = compute_event_signature($conexion, $evento_id_poll, $colsMap);
   echo json_encode(['ok'=>true,'ver'=>$ver], JSON_UNESCAPED_UNICODE);
+  exit;
+}
+
+/* Endpoint: marcar inicio real (en sesión para salir rápido) */
+if (isset($_GET['ajax']) && $_GET['ajax']==='markStart') {
+  while (ob_get_level()) { ob_end_clean(); }
+  header_remove('Set-Cookie');
+  header('Content-Type: application/json; charset=utf-8');
+  $ev = (int)($_GET['evento_id'] ?? 0);
+  $pid = (int)($_GET['pelea_id'] ?? 0);
+  $ts = (int)($_GET['ts'] ?? time());
+  if ($ev>0 && $pid>0){
+    $_SESSION['peleas_started'][$ev][$pid] = $ts;
+    echo json_encode(['ok'=>true,'pelea_id'=>$pid,'ts'=>$ts], JSON_UNESCAPED_UNICODE);
+  } else {
+    http_response_code(400);
+    echo json_encode(['ok'=>false,'err'=>'params'], JSON_UNESCAPED_UNICODE);
+  }
   exit;
 }
 
@@ -148,6 +168,9 @@ if (!$C_EVENTO || !$C_ROJO || !$C_AZUL) {
 
 /* ========= firma actual del evento ========= */
 $__evento_sig = compute_event_signature($conexion, $evento_id, $cols);
+
+/* ========= mapa de peleas iniciadas (sesión) ========= */
+$__started_map = $_SESSION['peleas_started'][$evento_id] ?? [];
 
 /* ========= catálogos ========= */
 $tablaModal = (($t=$conexion->query("SHOW TABLES LIKE 'modalidades_evento'")) && $t->num_rows>0) ? 'modalidades_evento' : null;
@@ -381,7 +404,26 @@ $st->close();
     .delta-ok{background:#e8f5e9} .delta-1{background:#fff3cd} .delta-2{background:#ffe0b2} .delta-dq{background:#ffebee}
     .real-text{display:none;margin-left:6px;font-weight:800}
 
-    /* ====== MOBILE/TABLET: convertir la tabla en tarjetas apiladas ====== */
+    /* ===== Agenda / horarios ===== */
+    .schedule-tools{
+      display:flex; flex-wrap:wrap; align-items:center; gap:8px;
+      background:#fff; border:1px solid var(--line); border-radius:10px; padding:8px 10px;
+    }
+    .schedule-tools label{ font-weight:800; font-size:12px; }
+    .schedule-tools input[type="time"],
+    .schedule-tools input[type="number"]{
+      height:36px; border:1px solid #94a3b8; border-radius:8px; padding:6px 8px; width:110px;
+    }
+    .badge-eta{
+      display:inline-block; padding:4px 8px; border-radius:999px;
+      border:1px solid #cbd5e1; font-weight:800; font-size:12px;
+    }
+    .row-card.upnext-1 td{ outline:2px solid #22c55e; }
+    .row-card.upnext-2 td{ outline:2px solid #a3e635; }
+    .row-card.upnext-3 td{ outline:2px solid #facc15; }
+    td.col-eta{ white-space:nowrap; font-weight:800; }
+
+    /* ====== MOBILE/TABLET: tarjetas ====== */
     @media (max-width: 980px) {
       .toolbar { gap: 6px; }
       .orden-tools { width: 100%; justify-content: flex-start; }
@@ -394,14 +436,10 @@ $st->close();
       tbody tr.row-card { margin-bottom: 12px; border-radius: 12px; overflow: hidden; }
       tbody tr.row-card td { border: 0; border-bottom: 1px solid var(--line); box-shadow: none; padding: 10px 12px; }
       tbody tr.row-card td:last-child { border-bottom: 0; }
-
-      /* Cabecera compacta: N° + Modalidad */
       td[data-label="N°"], td[data-label="Modalidad"] { display: inline-block; vertical-align: middle; }
       td[data-label="N°"] { width: auto; padding-right: 10px; font-size: 15px; }
       td[data-label="Modalidad"] { font-size: 14px; font-weight: 800; }
-
-      /* Cada esquina como bloque */
-      td[data-label="Roja · Foto"], td[data-label="Azul · Foto"] { display: none; } /* Oculto foto en cel si ya mostramos avatar en nombre */
+      td[data-label="Roja · Foto"], td[data-label="Azul · Foto"] { display: none; }
       td[data-label="Roja · Nombre"], td[data-label="Azul · Nombre"] {
         display: flex; align-items: center; gap: 10px; font-size: 15px; font-weight: 800;
       }
@@ -409,14 +447,11 @@ $st->close();
       td[data-label="Azul · Nombre"] .avatar { width:42px; height:42px; }
       td[data-label="Roja · Info"], td[data-label="Azul · Info"] { padding-top: 4px; }
       td[data-label="Roja · Escuela"], td[data-label="Azul · Escuela"] .muted { font-size: 13px; }
-
       td[data-label="VS"] { text-align: center; font-weight: 900; text-transform: uppercase; background: #f8fafc; }
-
       td[data-label="Rondas"], td[data-label="Obs."], td[data-label="Acciones"] { font-size: 13px; }
-
-      /* Inputs touch-friendly */
       .pesaje input.peso-real { width: 110px; height: 40px; font-size: 15px; }
       .delta-pill { display: inline-block; margin-top: 6px; }
+      td.col-eta{ padding-top:6px; }
     }
 
     @media (max-width: 640px) {
@@ -456,7 +491,6 @@ $st->close();
       margin-left: -14px; margin-right: -14px; padding-left: 14px; padding-right: 14px;
     }
     body.solo-vista .topbar-sticky{ position: static; box-shadow: none; border-bottom: 0; }
-    @media print{ .topbar-sticky{ position: static !important; box-shadow: none !important; border-bottom: 0 !important; } }
 
     /* form buscador */
     .search-grid{display:grid;grid-template-columns:1fr 1fr auto;gap:8px;align-items:end}
@@ -488,6 +522,17 @@ $st->close();
           <button class="btn btn-mini btn-secondary" type="button" onclick="window.print()">🖨️ Imprimir / PDF</button>
         <?php } ?>
         <a class="btn btn-mini btn-secondary" id="btnCompartir" href="ver_peleas_evento.php?evento_id=<?= (int)$evento_id ?>&share=1" target="_blank">🔗 Vista para imprimir/compartir</a>
+      </div>
+
+      <!-- ===== Agenda / horarios ===== -->
+      <div class="schedule-tools" id="scheduleTools">
+        <label>Inicio</label>
+        <input type="time" id="t0" inputmode="numeric" <?= $SHARE?'disabled':'' ?>>
+        <label>Duración</label>
+        <input type="number" id="dur" min="1" step="1" value="<?= (int)($_GET['dur'] ?? 8) ?>" <?= $SHARE?'disabled':'' ?>> <span class="muted">min</span>
+        <label>Intervalo</label>
+        <input type="number" id="gap" min="0" step="1" value="<?= (int)($_GET['gap'] ?? 2) ?>" <?= $SHARE?'disabled':'' ?>> <span class="muted">min</span>
+        <?php if(!$SHARE){ ?><button class="btn btn-mini btn-secondary" type="button" id="btnT0Now">⏱️ Ahora</button><?php } ?>
       </div>
     </div>
 
@@ -523,7 +568,7 @@ $st->close();
       <input type="hidden" name="evento_id" value="<?= (int)$evento_id ?>">
       <table>
         <colgroup>
-          <col class="num"><col class="modalidad">
+          <col class="eta"><col class="num"><col class="modalidad">
           <col class="foto"><col class="nombre"><col class="info"><col class="escuela">
           <col class="vs">
           <col class="foto"><col class="nombre"><col class="info"><col class="escuela">
@@ -531,6 +576,7 @@ $st->close();
         </colgroup>
         <thead>
           <tr>
+            <th style="width:90px">Hora</th>
             <th style="width:70px">N°</th>
             <th>Modalidad</th>
             <th colspan="4">Esquina Roja</th>
@@ -541,7 +587,7 @@ $st->close();
             <th class="acciones">Acciones</th>
           </tr>
           <tr>
-            <th></th><th></th>
+            <th></th><th></th><th></th>
             <th>Foto</th><th>Nombre</th><th>Info</th><th>Escuela</th>
             <th></th>
             <th>Foto</th><th>Nombre</th><th>Info</th><th>Escuela</th>
@@ -550,7 +596,7 @@ $st->close();
         </thead>
         <tbody>
         <?php if (!$peleas) { ?>
-          <tr class="row-card"><td colspan="14">No hay peleas programadas con esos filtros.</td></tr>
+          <tr class="row-card"><td colspan="15">No hay peleas programadas con esos filtros.</td></tr>
         <?php } else { foreach ($peleas as $p){
           $rFoto = trim((string)($p['r_foto'] ?? ''));
           $aFoto = trim((string)($p['a_foto'] ?? ''));
@@ -586,7 +632,15 @@ $st->close();
           $pref_r = $p['peso_real_r'] ?? ($_SESSION['pesajes'][$evento_id][$p['pelea_id']]['r'] ?? '');
           $pref_a = $p['peso_real_a'] ?? ($_SESSION['pesajes'][$evento_id][$p['pelea_id']]['a'] ?? '');
         ?>
-          <tr class="row-card">
+          <tr class="row-card"
+              data-pelea="<?= (int)$p['pelea_id'] ?>"
+              data-orden="<?= (int)$nroMostrar ?>"
+              data-rondas="<?= (int)$rondasVal ?>">
+            <!-- Hora -->
+            <td class="col-eta" data-label="Hora">
+              <span class="badge-eta" id="eta_<?= (int)$p['pelea_id'] ?>">—</span>
+            </td>
+
             <td class="num" data-label="N°">
               <?php if ($C_ORDEN) { ?>
                 <input class="orden-input" type="number" name="orden[<?= (int)$p['pelea_id'] ?>]" value="<?= h($p['orden_manual']) ?>" disabled>
@@ -792,49 +846,169 @@ $st->close();
     if (!SHARE) inp.addEventListener('input', ()=> actualizarFila(inp));
   });
 
-  /* ===== Compartir / Copiar link para móviles ===== */
+  /* ===== Agenda ===== */
+  const startedMap = <?= json_encode($__started_map ?? [], JSON_UNESCAPED_UNICODE) ?>; // {pelea_id: unix}
+  const qs = new URLSearchParams(location.search);
+  const t0Inp  = document.getElementById('t0');
+  const durInp = document.getElementById('dur');
+  const gapInp = document.getElementById('gap');
+  const btnNow = document.getElementById('btnT0Now');
+  const LSKEY = 'sched_'+(document.body.getAttribute('data-evento')||'ev');
+  const store = (obj)=> localStorage.setItem(LSKEY, JSON.stringify(obj));
+  const load  = ()=> { try{ return JSON.parse(localStorage.getItem(LSKEY)||'{}'); }catch(_){ return {}; } };
+  function hhmm(d){ return d.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}); }
+  function minutes(n){ return n*60*1000; }
+  function getConfig(){
+    let cfg = load();
+    const urlT0 = qs.get('t0');
+    const urlDur = qs.get('dur'); const urlGap = qs.get('gap');
+    if (urlT0 && !cfg.t0) cfg.t0 = urlT0;
+    if (urlDur && !cfg.dur) cfg.dur = parseInt(urlDur,10);
+    if (urlGap && !cfg.gap) cfg.gap = parseInt(urlGap,10);
+    return {
+      t0:  t0Inp?.value || cfg.t0 || '',
+      dur: parseInt(durInp?.value || cfg.dur || '8',10) || 8,
+      gap: parseInt(gapInp?.value || cfg.gap || '2',10) || 2
+    };
+  }
+  function setUIFromCfg(cfg){
+    if (t0Inp && !t0Inp.value && cfg.t0) t0Inp.value = cfg.t0;
+    if (durInp) durInp.value = cfg.dur;
+    if (gapInp) gapInp.value = cfg.gap;
+  }
+  function defaultT0IfEmpty(){
+    if (!t0Inp || t0Inp.value) return;
+    const n = new Date();
+    const m = n.getMinutes();
+    const up = m%5 ? (5-(m%5)) : 0;
+    n.setMinutes(m+up,0,0);
+    t0Inp.value = n.toTimeString().slice(0,5);
+  }
+  function calc(){
+    const cfg = getConfig();
+    setUIFromCfg(cfg);
+    store(cfg);
+    const url = new URL(location.href);
+    url.searchParams.set('dur', cfg.dur);
+    url.searchParams.set('gap', cfg.gap);
+    if (cfg.t0) url.searchParams.set('t0', cfg.t0);
+    history.replaceState(null, '', url);
+
+    const base = new Date();
+    if (cfg.t0 && /^\d{2}:\d{2}$/.test(cfg.t0)){
+      const [H,M] = cfg.t0.split(':').map(x=>parseInt(x,10));
+      base.setHours(H, M, 0, 0);
+    }
+    const rows = Array.from(document.querySelectorAll('tbody tr.row-card'));
+    rows.sort((a,b)=> (parseInt(a.dataset.orden||'0',10) - parseInt(b.dataset.orden||'0',10)));
+
+    let cursor = new Date(base);
+    const startedPairs = Object.entries(startedMap).map(([k,v])=>({id:parseInt(k,10), ts:parseInt(v,10)})).sort((a,b)=>a.ts-b.ts);
+    if (startedPairs.length){
+      const last = startedPairs[startedPairs.length-1];
+      cursor = new Date(last.ts*1000 + minutes(cfg.dur+cfg.gap));
+    }
+
+    const now = new Date();
+    const upcoming = [];
+    rows.forEach((tr)=>{
+      const pid = parseInt(tr.dataset.pelea||'0',10);
+      const etaEl = document.getElementById('eta_'+pid);
+      let eta;
+      if (startedMap[pid]) {
+        const st = new Date(startedMap[pid]*1000);
+        eta = `▶ ${hhmm(st)}`;
+      } else {
+        eta = hhmm(cursor);
+      }
+      if (etaEl) etaEl.textContent = eta;
+
+      tr.classList.remove('upnext-1','upnext-2','upnext-3');
+      if (!startedMap[pid]) upcoming.push(tr);
+      if (!startedMap[pid]) cursor = new Date(cursor.getTime() + minutes(cfg.dur+cfg.gap));
+    });
+
+    for (let i=0;i<3 && i<upcoming.length;i++){
+      upcoming[i].classList.add('upnext-'+(i+1));
+    }
+  }
+  function tickRel(){
+    const cfg = getConfig();
+    const now = new Date();
+    document.querySelectorAll('[id^="eta_"]').forEach(span=>{
+      const tr = span.closest('tr');
+      const pid = parseInt(tr?.dataset?.pelea||'0',10);
+      const text = span.textContent||'';
+      if (text.startsWith('▶')) { span.title = 'Iniciada'; return; }
+      const m = text.match(/(\d{2}):(\d{2})/);
+      if (!m) return;
+      const d = new Date();
+      d.setHours(parseInt(m[1],10), parseInt(m[2],10), 0, 0);
+      const diff = Math.round((d - now)/60000);
+      if (diff >= 0) span.title = `En ${diff} min`;
+      else span.title = `${-diff} min retraso`;
+    });
+  }
+  if (btnNow) btnNow.addEventListener('click', ()=>{ const n=new Date(); t0Inp.value = n.toTimeString().slice(0,5); calc(); });
+  [t0Inp,durInp,gapInp].forEach(el=> el && el.addEventListener('change', calc));
+  defaultT0IfEmpty();
+  calc(); tickRel();
+  setInterval(()=>{ calc(); tickRel(); }, 30000);
+
+  /* ===== Marcar inicio al presionar “Iniciar” ===== */
+  document.querySelectorAll('.row-actions a.btn.btn-xxs.btn-secondary[href*="combate_en_vivo.php"]').forEach(a=>{
+    a.addEventListener('click', async ()=>{
+      try{
+        const url = new URL(a.href, location.origin);
+        const pid = parseInt(url.searchParams.get('pelea_id')||'0',10);
+        const t = Math.floor(Date.now()/1000);
+        const u = new URL(location.origin + '/ver_peleas_evento.php');
+        u.searchParams.set('ajax','markStart');
+        u.searchParams.set('evento_id', String(<?= (int)$evento_id ?>));
+        u.searchParams.set('pelea_id', String(pid));
+        u.searchParams.set('ts', String(t));
+        const ctrl = new AbortController();
+        setTimeout(()=>ctrl.abort(), 3000);
+        await fetch(u.toString(), {cache:'no-store', signal:ctrl.signal});
+      }catch(_){}
+    });
+  });
+
+  /* ===== Compartir / Copiar link (con filtros + agenda) ===== */
   (function(){
     const btn = document.getElementById('btnCompartir');
     const snack = document.getElementById('snack');
     if (!btn) return;
-
     btn.addEventListener('click', async (e)=>{
-      // construimos link con filtros actuales
+      const cfg = (function(){
+        const j = localStorage.getItem('sched_'+(document.body.getAttribute('data-evento')||'ev'));
+        try{ return JSON.parse(j||'{}'); }catch(_){ return {}; }
+      })();
       const url = new URL(window.location.origin + '/ver_peleas_evento.php');
       url.searchParams.set('evento_id','<?= (int)$evento_id ?>');
       url.searchParams.set('share','1');
-      const ape = new URL(window.location.href).searchParams.get('ape') || '';
-      const esc = new URL(window.location.href).searchParams.get('esc') || '';
-      if (ape) url.searchParams.set('ape', ape);
-      if (esc) url.searchParams.set('esc', esc);
+      const cur = new URL(window.location.href);
+      ['ape','esc','t0','dur','gap'].forEach(k=>{
+        const v = cur.searchParams.get(k) || (k in cfg ? cfg[k] : null);
+        if (v) url.searchParams.set(k, v);
+      });
 
-      // si el botón es un <a>, evitamos abrir en nueva pestaña cuando hay Web Share
       if (navigator.share) { e.preventDefault(); }
-
       try{
         if (navigator.share) {
-          await navigator.share({
-            title: '<?= str_replace("'", "\\'", $evento_nombre) ?>',
-            text: 'Programación de peleas',
-            url: url.toString()
-          });
+          await navigator.share({ title: '<?= str_replace("'", "\\'", $evento_nombre) ?>', text: 'Programación de peleas', url: url.toString() });
         } else if (navigator.clipboard && window.isSecureContext) {
           e.preventDefault();
           await navigator.clipboard.writeText(url.toString());
-          snack.textContent = 'Link copiado';
-          snack.classList.add('show');
-          setTimeout(()=>snack.classList.remove('show'), 1800);
-        } // si no, deja que el <a> abra el link
-      }catch(err){
-        // fallback a copiar
+          snack.textContent = 'Link copiado'; snack.classList.add('show'); setTimeout(()=>snack.classList.remove('show'), 1800);
+        }
+      }catch(_){
         try{
           e.preventDefault();
           const ta = document.createElement('textarea');
           ta.value = url.toString(); document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove();
-          snack.textContent = 'Link copiado';
-          snack.classList.add('show');
-          setTimeout(()=>snack.classList.remove('show'), 1800);
-        }catch(_){}
+          snack.textContent = 'Link copiado'; snack.classList.add('show'); setTimeout(()=>snack.classList.remove('show'), 1800);
+        }catch(__){}
       }
     });
   })();
@@ -847,7 +1021,7 @@ $st->close();
     const ver0 = document.body.getAttribute('data-ver') || '';
     const baseUrl = new URL(window.location.href);
     function reloadSameQS(){
-      baseUrl.searchParams.set('_r', String(Date.now())); // cache-bust
+      baseUrl.searchParams.set('_r', String(Date.now()));
       window.location.replace(baseUrl.toString());
     }
     let lastVer = ver0, backoff = 10000, timer = null;
@@ -864,11 +1038,7 @@ $st->close();
       }catch(e){ backoff = Math.min(backoff + 5000, 30000); }
       finally{ timer = setTimeout(tick, backoff); }
     }
-    document.addEventListener('visibilitychange', ()=>{
-      if (document.visibilityState === 'visible'){
-        if (timer) clearTimeout(timer); backoff = 1000; tick();
-      }
-    });
+    document.addEventListener('visibilitychange', ()=>{ if (document.visibilityState === 'visible'){ if (timer) clearTimeout(timer); backoff = 1000; tick(); } });
     tick();
   })();
 
