@@ -1,6 +1,7 @@
 <?php
 /* =========================
    ver_peleas_evento.php — Lista de peleas con impresión/compartir optimizada + MOBILE FIRST + Agenda
+   • Reordenamiento REAL por número (arrastra filas al editar los números y guarda en BD)
    • Buscador por Apellido y Escuela/Academia (filtra rojo/azul)
    • Modalidad visible (prioriza pelea > texto > obs)
    • SIN columna “Técnica”
@@ -187,30 +188,51 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$SHARE) {
   $accion   = $_POST['accion'] ?? '';
   $pelea_id = isset($_POST['pelea_id']) && is_numeric($_POST['pelea_id']) ? (int)$_POST['pelea_id'] : 0;
 
-  if ($accion === 'guardar_orden' && $C_ORDEN) {
-    $ordenData = $_POST['orden'] ?? [];
-    $conexion->begin_transaction();
-    try{
-      $sqlUp = "UPDATE peleas_evento SET ".bt($C_ORDEN)."=? WHERE ".bt($C_EVENTO)."=? AND ".bt($C_ID ?: 'id')."=? LIMIT 1";
-      $st=$conexion->prepare($sqlUp);
-      if(!$st) throw new RuntimeException('Prep update orden: '.$conexion->error);
-      foreach($ordenData as $pid=>$val){
-        if (!is_numeric($pid)) continue;
-        $pid = (int)$pid;
-        $val = ($val==='') ? null : (int)$val;
-        if ($val===null) continue;
-        $st->bind_param('iii',$val,$evento_id,$pid);
-        $st->execute();
-      }
-      $st->close();
-      $conexion->commit();
-      $_SESSION['flash_ok'] = '✅ Numeración actualizada y preservada.';
-    } catch(Throwable $e){
-      $conexion->rollback();
-      $_SESSION['flash_error'] = 'Error guardando numeración: '.$e->getMessage();
-    }
-    header('Location: ver_peleas_evento.php?evento_id='.$evento_id.'&ape='.urlencode($s_ape).'&esc='.urlencode($s_esc)); exit;
+ if ($accion === 'guardar_orden' && $C_ORDEN) {
+  // Trae lo que llegó del form
+  $ordenData = $_POST['orden'] ?? [];
+
+  // Armo una lista (pelea_id, orden_val) y la resecuencio 1..N
+  $pairs = [];
+  foreach ($ordenData as $pid => $val) {
+    if (!is_numeric($pid)) continue;
+    $pid = (int)$pid;
+    $val = (string)$val;
+    $val = ($val === '' ? PHP_INT_MAX : (int)$val); // vacíos van al final
+    $pairs[] = ['id' => $pid, 'ord' => $val];
   }
+
+  // Si no llegó nada, no hago nada
+  if (!$pairs) {
+    header('Location: ver_peleas_evento.php?evento_id='.$evento_id.'&ape='.urlencode($s_ape).'&esc='.urlencode($s_esc)); 
+    exit;
+  }
+
+  // Ordeno por el número que escribió el usuario y resecuencia estricta
+  usort($pairs, fn($a,$b)=> $a['ord'] <=> $b['ord']);
+  $seq = 1;
+  foreach ($pairs as &$p) { $p['ord'] = $seq++; } unset($p);
+
+  // Persiste en transacción
+  $conexion->begin_transaction();
+  try {
+    $sqlUp = "UPDATE peleas_evento SET ".bt($C_ORDEN)."=? WHERE ".bt($C_EVENTO)."=? AND ".bt($C_ID ?: 'id')."=? LIMIT 1";
+    $st = $conexion->prepare($sqlUp);
+    if(!$st) throw new RuntimeException('Prep update orden: '.$conexion->error);
+    foreach($pairs as $p){
+      $st->bind_param('iii', $p['ord'], $evento_id, $p['id']);
+      $st->execute();
+    }
+    $st->close();
+    $conexion->commit();
+    $_SESSION['flash_ok'] = '✅ Orden reubicado y guardado.';
+  } catch(Throwable $e){
+    $conexion->rollback();
+    $_SESSION['flash_error'] = 'Error guardando numeración: '.$e->getMessage();
+  }
+  header('Location: ver_peleas_evento.php?evento_id='.$evento_id.'&ape='.urlencode($s_ape).'&esc='.urlencode($s_esc));
+  exit;
+}
 
   if ($accion === 'guardar_pesajes') {
     $pesosR = $_POST['peso_real_r'] ?? [];
@@ -373,9 +395,7 @@ $st->close();
     .table-wrap{width:100%;overflow-x:auto;margin-top:6px}
     table{width:100%;border-collapse:separate;border-spacing:0 10px;background:transparent}
     thead th{border:1px solid var(--line);background:var(--thead);color:var(--thead-text);font-size:13.4px;font-weight:800;padding:9px 10px}
-    tbody tr.row-card td{
-      background:#fff;border:2px solid var(--line);box-shadow:var(--row-shadow)
-    }
+    tbody tr.row-card td{background:#fff;border:2px solid var(--line);box-shadow:var(--row-shadow)}
     tbody tr.row-card td:first-child{border-top-left-radius:12px;border-bottom-left-radius:12px}
     tbody tr.row-card td:last-child {border-top-right-radius:12px;border-bottom-right-radius:12px}
     tbody tr.row-card:hover td{outline:2px solid #cbd5e1}
@@ -405,19 +425,10 @@ $st->close();
     .real-text{display:none;margin-left:6px;font-weight:800}
 
     /* ===== Agenda / horarios ===== */
-    .schedule-tools{
-      display:flex; flex-wrap:wrap; align-items:center; gap:8px;
-      background:#fff; border:1px solid var(--line); border-radius:10px; padding:8px 10px;
-    }
+    .schedule-tools{display:flex; flex-wrap:wrap; align-items:center; gap:8px; background:#fff; border:1px solid var(--line); border-radius:10px; padding:8px 10px;}
     .schedule-tools label{ font-weight:800; font-size:12px; }
-    .schedule-tools input[type="time"],
-    .schedule-tools input[type="number"]{
-      height:36px; border:1px solid #94a3b8; border-radius:8px; padding:6px 8px; width:110px;
-    }
-    .badge-eta{
-      display:inline-block; padding:4px 8px; border-radius:999px;
-      border:1px solid #cbd5e1; font-weight:800; font-size:12px;
-    }
+    .schedule-tools input[type="time"], .schedule-tools input[type="number"]{height:36px; border:1px solid #94a3b8; border-radius:8px; padding:6px 8px; width:110px;}
+    .badge-eta{display:inline-block; padding:4px 8px; border-radius:999px; border:1px solid #cbd5e1; font-weight:800; font-size:12px;}
     .row-card.upnext-1 td{ outline:2px solid #22c55e; }
     .row-card.upnext-2 td{ outline:2px solid #a3e635; }
     .row-card.upnext-3 td{ outline:2px solid #facc15; }
@@ -440,11 +451,8 @@ $st->close();
       td[data-label="N°"] { width: auto; padding-right: 10px; font-size: 15px; }
       td[data-label="Modalidad"] { font-size: 14px; font-weight: 800; }
       td[data-label="Roja · Foto"], td[data-label="Azul · Foto"] { display: none; }
-      td[data-label="Roja · Nombre"], td[data-label="Azul · Nombre"] {
-        display: flex; align-items: center; gap: 10px; font-size: 15px; font-weight: 800;
-      }
-      td[data-label="Roja · Nombre"] .avatar,
-      td[data-label="Azul · Nombre"] .avatar { width:42px; height:42px; }
+      td[data-label="Roja · Nombre"], td[data-label="Azul · Nombre"] { display: flex; align-items: center; gap: 10px; font-size: 15px; font-weight: 800; }
+      td[data-label="Roja · Nombre"] .avatar, td[data-label="Azul · Nombre"] .avatar { width:42px; height:42px; }
       td[data-label="Roja · Info"], td[data-label="Azul · Info"] { padding-top: 4px; }
       td[data-label="Roja · Escuela"], td[data-label="Azul · Escuela"] .muted { font-size: 13px; }
       td[data-label="VS"] { text-align: center; font-weight: 900; text-transform: uppercase; background: #f8fafc; }
@@ -485,11 +493,7 @@ $st->close();
     .flash.err{border:1px solid #ffcdd2;background:#ffebee;color:#b71c1c;padding:8px 10px;border-radius:8px;margin:8px 0;font-weight:700}
 
     /* ---- Encabezado sticky ---- */
-    .topbar-sticky{
-      position: sticky; top: 0; z-index: 1000; background: #fff;
-      border-bottom: 1px solid var(--line); box-shadow: 0 4px 12px rgba(0,0,0,.06);
-      margin-left: -14px; margin-right: -14px; padding-left: 14px; padding-right: 14px;
-    }
+    .topbar-sticky{ position: sticky; top: 0; z-index: 1000; background: #fff; border-bottom: 1px solid var(--line); box-shadow: 0 4px 12px rgba(0,0,0,.06); margin-left: -14px; margin-right: -14px; padding-left: 14px; padding-right: 14px; }
     body.solo-vista .topbar-sticky{ position: static; box-shadow: none; border-bottom: 0; }
 
     /* form buscador */
@@ -594,7 +598,7 @@ $st->close();
             <th></th><th class="obs"></th><th class="acciones"></th>
           </tr>
         </thead>
-        <tbody>
+        <tbody id="tbody-peleas">
         <?php if (!$peleas) { ?>
           <tr class="row-card"><td colspan="15">No hay peleas programadas con esos filtros.</td></tr>
         <?php } else { foreach ($peleas as $p){
@@ -643,7 +647,7 @@ $st->close();
 
             <td class="num" data-label="N°">
               <?php if ($C_ORDEN) { ?>
-                <input class="orden-input" type="number" name="orden[<?= (int)$p['pelea_id'] ?>]" value="<?= h($p['orden_manual']) ?>" disabled>
+                <input class="orden-input" type="number" min="1" name="orden[<?= (int)$p['pelea_id'] ?>]" value="<?= h($p['orden_manual']) ?>" disabled>
               <?php } else { ?><?= (int)$nroMostrar ?><?php } ?>
             </td>
             <td class="modalidad" data-label="Modalidad"><?= h($modalidadLbl) ?></td>
@@ -657,7 +661,8 @@ $st->close();
               <?php } ?>
             </td>
             <td style="font-weight:800" data-label="Roja · Nombre">
-              <?php if ($rFoto!=='') { ?><img src="<?= h($rFoto) ?>" class="avatar" alt="Roja" style="display:inline-block;margin-right:8px" onerror="this.onerror=null;this.remove()"><?php } else { ?><span class="ph-avatar" style="width:36px;height:36px;font-size:12px;margin-right:8px"><?= h($rIni) ?></span><?php } ?>
+              <?php if ($rFoto!=='') { ?><img src="<?= h($rFoto) ?>" class="avatar" alt="Roja" style="display:inline-block;margin-right:8px" onerror="this.onerror=null;this.remove()"><?php }
+            else { ?><span class="ph-avatar" style="width:36px;height:36px;font-size:12px;margin-right:8px"><?= h($rIni) ?></span><?php } ?>
               <?= h($rName !== '' ? $rName : '—') ?>
             </td>
             <td data-label="Roja · Info">
@@ -739,9 +744,8 @@ $st->close();
 
       <?php if (!$SHARE) { ?>
         <div class="form-actions" id="orden-actions" style="margin-top:10px; display:flex; gap:8px; align-items:center; flex-wrap:wrap">
-          <button class="btn btn-secondary" type="button" id="btnAutoSec">↻ Auto-secuenciar</button>
-          <button class="btn btn-primary" type="button" id="btnGuardarOrden">💾 Guardar edición de numeración</button>
-          <span class="muted" style="font-weight:700">Tip: activá “✏️ Editar numeración” para escribir a mano, o guardá directo.</span>
+          <button class="btn btn-primary" type="button" id="btnGuardarOrden">💾 Guardar orden</button>
+          <span class="muted" style="font-weight:700">Tip: activá “✏️ Editar numeración” y escribí el número destino. La fila se reubica.</span>
         </div>
 
         <div class="form-actions" style="margin-top:10px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px">
@@ -775,10 +779,14 @@ $st->close();
   const btnEditar = document.getElementById('btnEditarOrden');
   const formOrden = document.getElementById('form-orden');
   const inputsOrden = document.querySelectorAll('#form-orden .orden-input');
-  const btnAuto = document.getElementById('btnAutoSec');
   const accionInput = document.getElementById('accionInput');
   const btnGuardarOrden = document.getElementById('btnGuardarOrden');
   const btnGuardarPesajes = document.getElementById('btnGuardarPesajes');
+  const tbody = document.getElementById('tbody-peleas');
+  const t0Inp  = document.getElementById('t0');
+  const durInp = document.getElementById('dur');
+  const gapInp = document.getElementById('gap');
+  const btnNow = document.getElementById('btnT0Now');
 
   function setEditing(on){
     if(!formOrden) return;
@@ -787,20 +795,49 @@ $st->close();
     if(btnEditar){ btnEditar.textContent = on ? '🙈 Terminar edición' : '✏️ Editar numeración'; }
   }
   if(btnEditar){ btnEditar.addEventListener('click', ()=> setEditing(!formOrden.classList.contains('editing'))); }
-  if(btnAuto){
-    btnAuto.addEventListener('click', ()=>{
-      const inputs = document.querySelectorAll('#form-orden .orden-input');
-      let n=1; inputs.forEach(i=> i.value = n++);
+
+  // === REORDENAR FILAS EN VIVO según el número ingresado ===
+  function reorderRowsDom(){
+    const rows = Array.from(tbody.querySelectorAll('tr.row-card'));
+    rows.sort((a,b)=>{
+      const ia = a.querySelector('.orden-input');
+      const ib = b.querySelector('.orden-input');
+      const va = ia ? parseInt(ia.value||'0',10) : parseInt(a.dataset.orden||'0',10);
+      const vb = ib ? parseInt(ib.value||'0',10) : parseInt(b.dataset.orden||'0',10);
+      return (va||0)-(vb||0);
     });
+    rows.forEach(r=>tbody.appendChild(r));
   }
-  if (btnGuardarOrden) {
-    btnGuardarOrden.addEventListener('click', ()=>{
-      setEditing(true);
-      document.querySelectorAll('#form-orden .orden-input').forEach(i => i.disabled = false);
-      accionInput.value = 'guardar_orden';
-      formOrden.submit();
+
+  // Normalizar un valor numérico a mínimo 1
+  function norm1(v){ v = parseInt(String(v||'').trim(),10); return Number.isFinite(v) && v>0 ? v : 1; }
+
+  const ordenInputs = Array.from(document.querySelectorAll('#form-orden .orden-input'));
+  ordenInputs.forEach((inp) => {
+    inp.addEventListener('input', () => { if (inp.disabled) return; inp.value = String(norm1(inp.value)); reorderRowsDom(); });
+    inp.addEventListener('change', () => { if (inp.disabled) return; inp.value = String(norm1(inp.value)); reorderRowsDom(); });
+    inp.addEventListener('blur', () => { if (inp.disabled) return; inp.value = String(norm1(inp.value)); reorderRowsDom(); });
+  });
+
+if (btnGuardarOrden) {
+  btnGuardarOrden.addEventListener('click', ()=>{
+    // 1) Ordeno el DOM por el valor actual (ya lo hacés con reorderRowsDom)
+    reorderRowsDom();
+
+    // 2) Resecuencia visible 1..N según el orden actual
+    const filas = Array.from(document.querySelectorAll('#tbody-peleas tr.row-card'));
+    filas.forEach((tr, idx)=>{
+      const inp = tr.querySelector('.orden-input');
+      if (inp) inp.value = String(idx + 1);
     });
-  }
+
+    // 3) Habilito inputs y envío
+    document.querySelectorAll('#form-orden .orden-input').forEach(i=> i.disabled=false);
+    accionInput.value = 'guardar_orden';
+    formOrden.submit();
+  });
+}
+
   if (btnGuardarPesajes) {
     btnGuardarPesajes.addEventListener('click', ()=>{
       accionInput.value = 'guardar_pesajes';
@@ -809,6 +846,7 @@ $st->close();
   }
   setEditing(false);
 
+  // ===== Pesajes: calcular delta en vivo
   function parseKg(s){ const n = parseFloat((s||'').toString().replace(',', '.')); return isNaN(n)?null:n; }
   function regla(diffKg){
     if (diffKg === null) return {txt:'Δ —', cls:''};
@@ -849,10 +887,6 @@ $st->close();
   /* ===== Agenda ===== */
   const startedMap = <?= json_encode($__started_map ?? [], JSON_UNESCAPED_UNICODE) ?>; // {pelea_id: unix}
   const qs = new URLSearchParams(location.search);
-  const t0Inp  = document.getElementById('t0');
-  const durInp = document.getElementById('dur');
-  const gapInp = document.getElementById('gap');
-  const btnNow = document.getElementById('btnT0Now');
   const LSKEY = 'sched_'+(document.body.getAttribute('data-evento')||'ev');
   const store = (obj)=> localStorage.setItem(LSKEY, JSON.stringify(obj));
   const load  = ()=> { try{ return JSON.parse(localStorage.getItem(LSKEY)||'{}'); }catch(_){ return {}; } };
@@ -900,7 +934,13 @@ $st->close();
       base.setHours(H, M, 0, 0);
     }
     const rows = Array.from(document.querySelectorAll('tbody tr.row-card'));
-    rows.sort((a,b)=> (parseInt(a.dataset.orden||'0',10) - parseInt(b.dataset.orden||'0',10)));
+    rows.sort((a,b)=> {
+      const ia = a.querySelector('.orden-input');
+      const ib = b.querySelector('.orden-input');
+      const va = ia ? parseInt(ia.value||'0',10) : parseInt(a.dataset.orden||'0',10);
+      const vb = ib ? parseInt(ib.value||'0',10) : parseInt(b.dataset.orden||'0',10);
+      return (va||0)-(vb||0);
+    });
 
     let cursor = new Date(base);
     const startedPairs = Object.entries(startedMap).map(([k,v])=>({id:parseInt(k,10), ts:parseInt(v,10)})).sort((a,b)=>a.ts-b.ts);
@@ -909,7 +949,6 @@ $st->close();
       cursor = new Date(last.ts*1000 + minutes(cfg.dur+cfg.gap));
     }
 
-    const now = new Date();
     const upcoming = [];
     rows.forEach((tr)=>{
       const pid = parseInt(tr.dataset.pelea||'0',10);
@@ -933,11 +972,8 @@ $st->close();
     }
   }
   function tickRel(){
-    const cfg = getConfig();
     const now = new Date();
     document.querySelectorAll('[id^="eta_"]').forEach(span=>{
-      const tr = span.closest('tr');
-      const pid = parseInt(tr?.dataset?.pelea||'0',10);
       const text = span.textContent||'';
       if (text.startsWith('▶')) { span.title = 'Iniciada'; return; }
       const m = text.match(/(\d{2}):(\d{2})/);
@@ -945,8 +981,7 @@ $st->close();
       const d = new Date();
       d.setHours(parseInt(m[1],10), parseInt(m[2],10), 0, 0);
       const diff = Math.round((d - now)/60000);
-      if (diff >= 0) span.title = `En ${diff} min`;
-      else span.title = `${-diff} min retraso`;
+      span.title = diff >= 0 ? `En ${diff} min` : `${-diff} min retraso`;
     });
   }
   if (btnNow) btnNow.addEventListener('click', ()=>{ const n=new Date(); t0Inp.value = n.toTimeString().slice(0,5); calc(); });
