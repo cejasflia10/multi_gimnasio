@@ -1,7 +1,8 @@
 <?php
 /* =========================
    ver_peleas_evento.php — Lista de peleas con impresión/compartir optimizada + MOBILE FIRST + Agenda
-   • Reordenamiento REAL por número (arrastra filas al editar los números y guarda en BD)
+   • Reordenamiento REAL por número (editás el número y la fila se reubica; se guarda tal cual en BD)
+   • Numeración 100% MANUAL (no resecuencia 1..N) con guardado en DOS PASOS (NULL→set) para evitar colisiones
    • Buscador por Apellido y Escuela/Academia (filtra rojo/azul)
    • Modalidad visible (prioriza pelea > texto > obs)
    • SIN columna “Técnica”
@@ -9,7 +10,7 @@
    • PDF A4 vertical centrado; texto aprovecha ancho
    • Encabezado con NOMBRE DEL EVENTO BIEN GRANDE (eventos_deportivos.titulo si existe)
    • Pesajes (inputs + delta) — en share/print se ocultan inputs y se muestra texto
-   • Link de “Vista para imprimir/compartir”: ?share=1
+   • Link de “Vista para imprimir/compartir”: ?share=1 (incluye ape, esc, t0, dur, gap)
    • Auto-actualización en share (polling)
    • FULL RESPONSIVE (celulares/tablets) + botón Compartir
    • Agenda: hora inicio, duración, intervalo; marca inicio real al tocar “Iniciar” y recalcula; resalta próximas 3
@@ -60,8 +61,9 @@ $_SESSION['evento_id_actual'] = $evento_id;
 $SHARE = (isset($_GET['share']) && (string)$_GET['share'] === '1'); // vista limpia para imprimir/compartir
 
 /* === parámetros de búsqueda === */
-$s_ape = trim((string)($_GET['ape'] ?? '')); // Apellido
+$s_ape = trim((string)($_GET['ape'] ?? '')); // Apellido / Nombre
 $s_esc = trim((string)($_GET['esc'] ?? '')); // Escuela/Academia
+$redir_q = '&ape='.urlencode($s_ape).'&esc='.urlencode($s_esc);
 
 /* ========= utilidades de firma/versión + endpoints AJAX ========= */
 function pick_col_from_list(array $colsMap, array $cands){
@@ -188,50 +190,76 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$SHARE) {
   $accion   = $_POST['accion'] ?? '';
   $pelea_id = isset($_POST['pelea_id']) && is_numeric($_POST['pelea_id']) ? (int)$_POST['pelea_id'] : 0;
 
- if ($accion === 'guardar_orden' && $C_ORDEN) {
-  // Trae lo que llegó del form
+  /* ====== GUARDAR ORDEN — MANUAL (DOS PASOS: NULL→SET) ====== */
+  /* ====== GUARDAR ORDEN — MANUAL (DOS PASOS: NULL→SET con resolución de duplicados) ====== */
+if ($accion === 'guardar_orden' && $C_ORDEN) {
   $ordenData = $_POST['orden'] ?? [];
+  if (!$ordenData || !is_array($ordenData)) {
+    $_SESSION['flash_error'] = 'No llegó ninguna numeración.';
+    header('Location: ver_peleas_evento.php?evento_id='.$evento_id.$redir_q); exit;
+  }
 
-  // Armo una lista (pelea_id, orden_val) y la resecuencio 1..N
-  $pairs = [];
+  // 1) Normalizar: (pelea_id => int|NULL). '' o no numérico -> NULL
+  $normal = [];
   foreach ($ordenData as $pid => $val) {
     if (!is_numeric($pid)) continue;
     $pid = (int)$pid;
-    $val = (string)$val;
-    $val = ($val === '' ? PHP_INT_MAX : (int)$val); // vacíos van al final
-    $pairs[] = ['id' => $pid, 'ord' => $val];
+    $val = trim((string)$val);
+    $normal[$pid] = ($val === '' || !is_numeric($val)) ? null : (int)$val;
   }
 
-  // Si no llegó nada, no hago nada
-  if (!$pairs) {
-    header('Location: ver_peleas_evento.php?evento_id='.$evento_id.'&ape='.urlencode($s_ape).'&esc='.urlencode($s_esc)); 
-    exit;
+  // 2) Resolver duplicados antes de tocar la BD
+  //   - Tomamos solo los que tienen número (no-null)
+  //   - Ordenamos por (número, pelea_id) para comportamiento determinista
+  $conNumero = [];
+  foreach ($normal as $pid => $nro) {
+    if ($nro !== null) $conNumero[] = ['pid'=>$pid, 'ord'=>$nro];
   }
+  usort($conNumero, function($a,$b){
+    if ($a['ord'] === $b['ord']) return $a['pid'] <=> $b['pid'];
+    return $a['ord'] <=> $b['ord'];
+  });
 
-  // Ordeno por el número que escribió el usuario y resecuencia estricta
-  usort($pairs, fn($a,$b)=> $a['ord'] <=> $b['ord']);
-  $seq = 1;
-  foreach ($pairs as &$p) { $p['ord'] = $seq++; } unset($p);
+  // Asignar número único: si está ocupado, subir al siguiente libre
+  $usados = [];
+  $final  = $normal; // partimos de lo que mandaste
+  foreach ($conNumero as $it) {
+    $pid = $it['pid']; $ord = max(1, (int)$it['ord']); // mínimo 1
+    while (isset($usados[$ord])) { $ord++; }          // “bump” al próximo libre
+    $usados[$ord] = true;
+    $final[$pid] = $ord;
+  }
+  // Quienes iban en NULL quedan en NULL (no se tocan)
 
-  // Persiste en transacción
   $conexion->begin_transaction();
   try {
+    // 3) Dejar todas las órdenes del evento en NULL (evita colisiones UNIQUE)
+    $sqlNullAll = "UPDATE peleas_evento SET ".bt($C_ORDEN)."=NULL WHERE ".bt($C_EVENTO)."=?";
+    if (!($st1 = $conexion->prepare($sqlNullAll))) throw new RuntimeException('Prep NULL ALL: '.$conexion->error);
+    $st1->bind_param('i', $evento_id);
+    if (!$st1->execute()) throw new RuntimeException('Exec NULL ALL: '.$st1->error);
+    $st1->close();
+
+    // 4) Setear valores finales sin duplicados
     $sqlUp = "UPDATE peleas_evento SET ".bt($C_ORDEN)."=? WHERE ".bt($C_EVENTO)."=? AND ".bt($C_ID ?: 'id')."=? LIMIT 1";
-    $st = $conexion->prepare($sqlUp);
-    if(!$st) throw new RuntimeException('Prep update orden: '.$conexion->error);
-    foreach($pairs as $p){
-      $st->bind_param('iii', $p['ord'], $evento_id, $p['id']);
-      $st->execute();
+    if (!($st2 = $conexion->prepare($sqlUp))) throw new RuntimeException('Prep set orden: '.$conexion->error);
+
+    $tocados = 0; $vacios = 0;
+    foreach ($final as $pid => $ord) {
+      if ($ord === null) { $vacios++; continue; } // queda en NULL
+      $st2->bind_param('iii', $ord, $evento_id, $pid);
+      if (!$st2->execute()) throw new RuntimeException("Set orden pelea $pid: ".$st2->error);
+      $tocados += max(0, $st2->affected_rows);
     }
-    $st->close();
+    $st2->close();
+
     $conexion->commit();
-    $_SESSION['flash_ok'] = '✅ Orden reubicado y guardado.';
-  } catch(Throwable $e){
+    $_SESSION['flash_ok'] = "✅ Orden guardado ($tocados filas)".($vacios? " — $vacios en blanco":"");
+  } catch (Throwable $e) {
     $conexion->rollback();
     $_SESSION['flash_error'] = 'Error guardando numeración: '.$e->getMessage();
   }
-  header('Location: ver_peleas_evento.php?evento_id='.$evento_id.'&ape='.urlencode($s_ape).'&esc='.urlencode($s_esc));
-  exit;
+  header('Location: ver_peleas_evento.php?evento_id='.$evento_id.$redir_q); exit;
 }
 
   if ($accion === 'guardar_pesajes') {
@@ -274,21 +302,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$SHARE) {
       $conexion->rollback();
       $_SESSION['flash_error'] = 'Error guardando pesajes: '.$e->getMessage();
     }
-    header('Location: ver_peleas_evento.php?evento_id='.(int)$evento_id.'&ape='.urlencode($s_ape).'&esc='.urlencode($s_esc)); exit;
+    header('Location: ver_peleas_evento.php?evento_id='.(int)$evento_id.$redir_q); exit;
   }
 
   if ($accion === 'delete' && $pelea_id > 0) {
     $st=$conexion->prepare("DELETE FROM peleas_evento WHERE ".bt($C_EVENTO)."=? AND ".bt($C_ID ?: 'id')."=? LIMIT 1");
     if ($st) { $st->bind_param('ii',$evento_id,$pelea_id); $st->execute(); $st->close(); }
     $_SESSION['flash_ok'] = '🗑️ Pelea eliminada.';
-    header('Location: ver_peleas_evento.php?evento_id='.(int)$evento_id.'&ape='.urlencode($s_ape).'&esc='.urlencode($s_esc)); exit;
+    header('Location: ver_peleas_evento.php?evento_id='.(int)$evento_id.$redir_q); exit;
   }
 }
 
 /* ========= listado de peleas con filtros ========= */
 $orderPieces = [];
-if ($C_ORDEN) $orderPieces[] = 'p.'.bt($C_ORDEN).' IS NULL';
-if ($C_ORDEN) $orderPieces[] = 'p.'.bt($C_ORDEN);
+if ($C_ORDEN) {
+  $orderPieces[] = 'p.'.bt($C_ORDEN).' IS NULL';
+  $orderPieces[] = 'CAST(p.'.bt($C_ORDEN).' AS UNSIGNED)'; // numérico real
+}
 if ($C_FECHA) $orderPieces[] = 'p.'.bt($C_FECHA);
 $orderPieces[] = 'p.'.bt($C_ID ?: 'id');
 $orderBy = implode(', ', $orderPieces);
@@ -410,7 +440,7 @@ $st->close();
     .ph-logo{width:28px;height:28px;border-radius:4px;border:1px solid #cbd5e1;font-size:12px}
 
     .pill{display:inline-block;padding:3px 9px;border-radius:999px;background:var(--pill-bg);color:var(--pill-text);font-size:12px;font-weight:700}
-    .muted{color:var(--muted);font-size:12.5px}
+    .muted{color:#475569;font-size:12.5px}
     .acciones{text-align:center;white-space:nowrap}
     .vs{font-weight:900;text-transform:uppercase;text-align:center;color:#0b0f19}
     .modalidad{font-size:12.6px;color:#0b0f19;font-weight:800}
@@ -497,7 +527,7 @@ $st->close();
     body.solo-vista .topbar-sticky{ position: static; box-shadow: none; border-bottom: 0; }
 
     /* form buscador */
-    .search-grid{display:grid;grid-template-columns:1fr 1fr auto;gap:8px;align-items:end}
+    .search-grid{display:grid;grid-template-columns:1fr 1fr auto;gap:8px;align-items:end;margin-top:8px;margin-bottom:4px}
     .search-grid .field{display:flex;flex-direction:column;gap:4px}
     .search-grid input{height:40px;border:1px solid #94a3b8;border-radius:10px;padding:8px 10px;font-size:14px}
 
@@ -541,12 +571,12 @@ $st->close();
     </div>
 
     <!-- === BUSCADOR === -->
-    <form method="GET" class="search-grid" autocomplete="off" action="ver_peleas_evento.php" style="margin-top:8px;margin-bottom:4px">
+    <form method="GET" class="search-grid" autocomplete="off" action="ver_peleas_evento.php">
       <input type="hidden" name="evento_id" value="<?= (int)$evento_id ?>">
       <?php if ($SHARE) { ?><input type="hidden" name="share" value="1"><?php } ?>
       <div class="field">
-        <label style="font-weight:700">Apellido</label>
-        <input type="text" name="ape" value="<?= h($s_ape) ?>" placeholder="Ej: González">
+        <label style="font-weight:700">Apellido / Nombre</label>
+        <input type="text" name="ape" value="<?= h($s_ape) ?>" placeholder="Ej: González o Juan">
       </div>
       <div class="field">
         <label style="font-weight:700">Escuela / Academia</label>
@@ -647,8 +677,13 @@ $st->close();
 
             <td class="num" data-label="N°">
               <?php if ($C_ORDEN) { ?>
-                <input class="orden-input" type="number" min="1" name="orden[<?= (int)$p['pelea_id'] ?>]" value="<?= h($p['orden_manual']) ?>" disabled>
-              <?php } else { ?><?= (int)$nroMostrar ?><?php } ?>
+                <input class="orden-input" type="number" min="1"
+                       name="orden[<?= (int)$p['pelea_id'] ?>]"
+                       value="<?= h($p['orden_manual']) ?>"
+                       disabled>
+              <?php } else { ?>
+                <?= (int)$nroMostrar ?>
+              <?php } ?>
             </td>
             <td class="modalidad" data-label="Modalidad"><?= h($modalidadLbl) ?></td>
 
@@ -745,7 +780,7 @@ $st->close();
       <?php if (!$SHARE) { ?>
         <div class="form-actions" id="orden-actions" style="margin-top:10px; display:flex; gap:8px; align-items:center; flex-wrap:wrap">
           <button class="btn btn-primary" type="button" id="btnGuardarOrden">💾 Guardar orden</button>
-          <span class="muted" style="font-weight:700">Tip: activá “✏️ Editar numeración” y escribí el número destino. La fila se reubica.</span>
+          <span class="muted" style="font-weight:700">Tip: activá “✏️ Editar numeración”, escribí el número destino; al guardar se mueve la fila tal cual.</span>
         </div>
 
         <div class="form-actions" style="margin-top:10px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px">
@@ -796,7 +831,7 @@ $st->close();
   }
   if(btnEditar){ btnEditar.addEventListener('click', ()=> setEditing(!formOrden.classList.contains('editing'))); }
 
-  // === REORDENAR FILAS EN VIVO según el número ingresado ===
+  // === REORDENAR FILAS EN VIVO según el número ingresado (SIN resecuenciar)
   function reorderRowsDom(){
     const rows = Array.from(tbody.querySelectorAll('tr.row-card'));
     rows.sort((a,b)=>{
@@ -804,39 +839,38 @@ $st->close();
       const ib = b.querySelector('.orden-input');
       const va = ia ? parseInt(ia.value||'0',10) : parseInt(a.dataset.orden||'0',10);
       const vb = ib ? parseInt(ib.value||'0',10) : parseInt(b.dataset.orden||'0',10);
+      const aIsNum = Number.isFinite(va) && !isNaN(va);
+      const bIsNum = Number.isFinite(vb) && !isNaN(vb);
+      if (!aIsNum && !bIsNum) return 0;
+      if (!aIsNum) return 1;
+      if (!bIsNum) return -1;
       return (va||0)-(vb||0);
     });
     rows.forEach(r=>tbody.appendChild(r));
   }
 
-  // Normalizar un valor numérico a mínimo 1
-  function norm1(v){ v = parseInt(String(v||'').trim(),10); return Number.isFinite(v) && v>0 ? v : 1; }
+  // Permitir valores vacíos (NULL). Si quisieras forzar mínimo 1, descomentá norm1 y su uso.
+  // function norm1(v){ v = parseInt(String(v||'').trim(),10); return Number.isFinite(v) && v>0 ? v : 1; }
 
   const ordenInputs = Array.from(document.querySelectorAll('#form-orden .orden-input'));
   ordenInputs.forEach((inp) => {
-    inp.addEventListener('input', () => { if (inp.disabled) return; inp.value = String(norm1(inp.value)); reorderRowsDom(); });
-    inp.addEventListener('change', () => { if (inp.disabled) return; inp.value = String(norm1(inp.value)); reorderRowsDom(); });
-    inp.addEventListener('blur', () => { if (inp.disabled) return; inp.value = String(norm1(inp.value)); reorderRowsDom(); });
+    inp.addEventListener('input', () => { if (inp.disabled) return; /*inp.value = String(norm1(inp.value));*/ reorderRowsDom(); });
+    inp.addEventListener('change', () => { if (inp.disabled) return; /*inp.value = String(norm1(inp.value));*/ reorderRowsDom(); });
+    inp.addEventListener('blur', () => { if (inp.disabled) return; /*inp.value = String(norm1(inp.value));*/ reorderRowsDom(); });
   });
 
-if (btnGuardarOrden) {
-  btnGuardarOrden.addEventListener('click', ()=>{
-    // 1) Ordeno el DOM por el valor actual (ya lo hacés con reorderRowsDom)
-    reorderRowsDom();
+  if (btnGuardarOrden) {
+    btnGuardarOrden.addEventListener('click', ()=>{
+      // Ordenar visualmente según lo escrito
+      reorderRowsDom();
 
-    // 2) Resecuencia visible 1..N según el orden actual
-    const filas = Array.from(document.querySelectorAll('#tbody-peleas tr.row-card'));
-    filas.forEach((tr, idx)=>{
-      const inp = tr.querySelector('.orden-input');
-      if (inp) inp.value = String(idx + 1);
+      // Habilitar TODOS los inputs para que viajen en el POST
+      document.querySelectorAll('#form-orden .orden-input').forEach(i=> i.disabled=false);
+
+      accionInput.value = 'guardar_orden';
+      formOrden.submit();
     });
-
-    // 3) Habilito inputs y envío
-    document.querySelectorAll('#form-orden .orden-input').forEach(i=> i.disabled=false);
-    accionInput.value = 'guardar_orden';
-    formOrden.submit();
-  });
-}
+  }
 
   if (btnGuardarPesajes) {
     btnGuardarPesajes.addEventListener('click', ()=>{
@@ -939,6 +973,11 @@ if (btnGuardarOrden) {
       const ib = b.querySelector('.orden-input');
       const va = ia ? parseInt(ia.value||'0',10) : parseInt(a.dataset.orden||'0',10);
       const vb = ib ? parseInt(ib.value||'0',10) : parseInt(b.dataset.orden||'0',10);
+      const aIsNum = Number.isFinite(va) && !isNaN(va);
+      const bIsNum = Number.isFinite(vb) && !isNaN(vb);
+      if (!aIsNum && !bIsNum) return 0;
+      if (!aIsNum) return 1;
+      if (!bIsNum) return -1;
       return (va||0)-(vb||0);
     });
 
