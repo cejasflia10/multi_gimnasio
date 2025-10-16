@@ -1,12 +1,9 @@
 <?php
 /* ==========================================================
    transmision_en_vivo.php — Vista pública de transmisión
-   - URL: transmision_en_vivo.php?evento_id=#
-   - YouTube: lee evento_transmision (youtube_url, pelea_inicio_id)
-   - Pelea: usa peleas_evento (orden, competidor_rojo_id, competidor_azul_id, modalidad_id)
-   - Nombres/Escuelas/Pesos: competidores_evento (por id y evento_id)
-   - Modalidad: modalidades_evento | modalidades | fallback a competidores_evento.modalidad
-   - Modo TV limpio: ?share=1
+   - HUD estilo TV como banda inferior sobre el video
+   - Fullscreen del contenedor (HUD incluido), fs=0 en YouTube
+   - Poll a api_combate_estado_poll.php
    ========================================================== */
 if (session_status() === PHP_SESSION_NONE) session_start();
 require_once __DIR__ . '/conexion.php';
@@ -94,7 +91,6 @@ $idsMod = array_values(array_unique($idsMod));
 $mapComp = []; // id => ['nom','esc','peso','mod_text']
 if ($idsR || $idsA){
   $todos = implode(',', array_map('intval', array_values(array_unique(array_merge($idsR,$idsA)))));
-  // Traemos SOLO los de ESTE evento para evitar cruces
   $sqlCE = "
     SELECT id, nombre, apellido, escuela, escuela_nombre, escuela_logo, peso_kg,
            modalidad
@@ -149,7 +145,7 @@ if (!$pelea_sel){
 }
 if (!$pelea_sel && $peleas){ $pelea_sel = $peleas[0]; }
 
-/* ===== Etiquetas (sin duplicar nombres) ===== */
+/* ===== Etiquetas ===== */
 $orden_txt = $pelea_sel ? ($pelea_sel['orden'] ?? '') : '';
 $rojo_nom=''; $rojo_esc=''; $rojo_peso='';
 $azul_nom=''; $azul_esc=''; $azul_peso='';
@@ -166,17 +162,14 @@ if ($pelea_sel){
   $azul_esc  = $mapComp[$aid]['esc']  ?? '';
   $azul_peso = $mapComp[$aid]['peso'] ?? '';
 
-  // Modalidad: por id; si no hay, fallback al texto de competidores_evento
   $mid = (int)($pelea_sel['modalidad_id'] ?? 0);
   if ($mid>0 && isset($mapMod[$mid])) {
     $mod_txt = $mapMod[$mid];
   } else {
-    // Fallback: si alguno de los dos tiene modalidad textual, úsala
     $mod_txt = trim(($mapComp[$rid]['modtxt'] ?? '').' '.($mapComp[$aid]['modtxt'] ?? ''));
     $mod_txt = trim($mod_txt);
   }
 
-  // Píldora de pesos: X kg vs Y kg (si alguno existe)
   $pL = is_numeric($rojo_peso) ? (0+$rojo_peso).' kg' : '';
   $pR = is_numeric($azul_peso) ? (0+$azul_peso).' kg' : '';
   if ($pL && $pR)      $pills_peso_txt = "{$pL} vs {$pR}";
@@ -189,6 +182,7 @@ if ($pelea_sel){
   <meta charset="utf-8">
   <title><?=h($ev_titulo)?> — Transmisión en vivo</title>
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="robots" content="noindex,nofollow">
   <style>
     :root { --bg:#0b0b0b; --ink:#eee; --muted:#aaa; --brand:#ffd600; --card:#151515; --line:#262626; }
     html,body{background:var(--bg);color:var(--ink);font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Arial,sans-serif;margin:0}
@@ -201,12 +195,53 @@ if ($pelea_sel){
     /* Player responsivo 16:9 */
     .video{position:relative; border-radius:12px; overflow:hidden; background:#000; border:1px solid var(--line); }
     .video .ratio{ width:100%; aspect-ratio:16/9; }
-    .video iframe{ position:absolute; inset:0; width:100%; height:100%; border:0; }
+    .video iframe{ position:absolute; inset:0; width:100%; height:100%; border:0; z-index:1; }
+
+    /* === HUD BANDA INFERIOR === */
+    .liveHud{
+      position:absolute; left:0; right:0; bottom:0; z-index:2;
+      pointer-events:none;
+      padding:0 10px calc(10px + env(safe-area-inset-bottom)) 10px;
+    }
+    .liveHud .bar{
+      display:grid;
+      grid-template-columns: 1fr auto 1fr; /* izq - centro - der */
+      align-items:center;
+      gap:10px;
+      background:linear-gradient(180deg, rgba(0,0,0,0.0), rgba(0,0,0,.55) 30%, rgba(0,0,0,.65) 100%);
+      border-top:1px solid rgba(255,255,255,.08);
+      border-radius:12px;
+      padding:10px;
+      backdrop-filter: blur(2px);
+    }
+    .left, .center, .right { display:flex; align-items:center; justify-content:flex-start; gap:10px; }
+    .center{ justify-content:center; }
+    .right{ justify-content:flex-end; }
+
+    .pill{
+      pointer-events:auto;
+      display:inline-flex; align-items:center; gap:8px;
+      background:rgba(0,0,0,.55);
+      border:1px solid #2a2a2a; border-radius:999px;
+      padding:6px 10px; backdrop-filter: blur(2px);
+      font-size:clamp(11px, 1.6vw, 14px);
+      color:#fff; font-weight:700;
+    }
+    .dot{width:8px; height:8px; border-radius:50%; background:#ff4040; box-shadow:0 0 10px #ff4040;}
+    .timerBig{
+      font-size:clamp(22px, 4vw, 36px);
+      line-height:1; padding:6px 14px; border-radius:10px;
+      background:rgba(0,0,0,.65); border:1px solid #2a2a2a; backdrop-filter: blur(2px);
+      letter-spacing:1px; min-width:120px; text-align:center;
+      font-weight:900;
+    }
+    .badgeRest{ background:rgba(255,199,0,.18); border-color:#5a4900; }
+    .badgeRound{ background:rgba(0,0,0,.55); }
 
     .meta{font-size:13px;color:var(--muted)}
     .title{font-size:18px;font-weight:800;margin:6px 0}
     .pills{margin:6px 0 0}
-    .pill{display:inline-block;background:#222;border:1px solid var(--line);border-radius:999px;padding:4px 10px;font-size:12px;margin:4px 6px 0 0}
+    .pill.tag{display:inline-block;background:#222;border:1px solid var(--line);border-radius:999px;padding:4px 10px;font-size:12px;margin:4px 6px 0 0}
     .list{max-height:60vh;overflow:auto}
     .fight{border:1px solid var(--line);border-radius:10px;padding:10px;margin-bottom:8px}
     .fight a{color:var(--brand);text-decoration:none}
@@ -228,7 +263,7 @@ if ($pelea_sel){
     .card{border:none;border-radius:0}
     <?php endif; ?>
 
-    /* --- Overlay para pedir landscape cuando el dispositivo está en vertical --- */
+    /* --- Overlay orientación (vertical) --- */
     #orientHint{
       position:fixed; inset:0; display:none; align-items:center; justify-content:center; z-index:9999;
       background:rgba(0,0,0,.86); text-align:center; padding:24px; backdrop-filter:blur(2px);
@@ -273,31 +308,50 @@ if ($pelea_sel){
           <div class="ratio"></div>
           <iframe
             id="ytFrame"
-            src="https://www.youtube.com/embed/<?=h($youtube_id)?>?rel=0&modestbranding=1&playsinline=1"
+            src="https://www.youtube.com/embed/<?=h($youtube_id)?>?rel=0&modestbranding=1&playsinline=1&fs=0"
             title="YouTube Live"
-            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
             allowfullscreen
             referrerpolicy="strict-origin-when-cross-origin"></iframe>
+
+          <!-- HUD: BANDA INFERIOR -->
+          <div class="liveHud" id="liveHud" style="display:none">
+            <div class="bar">
+              <!-- IZQUIERDA -->
+              <div class="left">
+                <span class="pill"><span class="dot"></span> EN VIVO</span>
+                <span class="pill" id="hudFight">—</span>
+              </div>
+              <!-- CENTRO (TIMER) -->
+              <div class="center">
+                <span class="timerBig" id="hudTimer">0:00</span>
+              </div>
+              <!-- DERECHA -->
+              <div class="right">
+                <span class="pill badgeRound" id="hudRound">R1</span>
+                <span class="pill badgeRest" id="hudRest" style="display:none">DESCANSO</span>
+              </div>
+            </div>
+          </div>
         </div>
 
         <!-- Controles de visualización -->
         <div class="controls">
           <button id="btnFullscreen" class="btn">⛶ Pantalla completa</button>
           <button id="btnOpenApp" class="btn">▶️ Abrir en YouTube</button>
-          <span class="meta">Tip: desactivá el bloqueo de rotación del teléfono.</span>
+          <span class="meta">Tip: usá el botón ⛶ para ver el HUD en fullscreen.</span>
         </div>
       <?php endif; ?>
 
       <?php if ($pelea_sel): ?>
-        <!-- Título: solo #orden (no repetimos nombres aquí) -->
         <div class="title" style="margin-top:10px">
           <?= ($orden_txt!=='' ? h("#".$orden_txt) : "Pelea") ?>
         </div>
 
         <?php if($mod_txt || $pills_peso_txt): ?>
           <div class="pills">
-            <?php if($mod_txt):        ?><span class="pill">🏷️ <?=h($mod_txt)?></span><?php endif; ?>
-            <?php if($pills_peso_txt): ?><span class="pill">⚖️ <?=h($pills_peso_txt)?></span><?php endif; ?>
+            <?php if($mod_txt):        ?><span class="pill tag">🏷️ <?=h($mod_txt)?></span><?php endif; ?>
+            <?php if($pills_peso_txt): ?><span class="pill tag">⚖️ <?=h($pills_peso_txt)?></span><?php endif; ?>
           </div>
         <?php endif; ?>
 
@@ -386,16 +440,19 @@ if ($pelea_sel){
     const el = wrap || document.documentElement;
     try{
       if (!document.fullscreenElement && el.requestFullscreen){
-        await el.requestFullscreen();
+        await el.requestFullscreen(); // HUD incluido
       }
-      // En Android/Chrome puede funcionar el lock si hubo gesto del usuario
       if (screen.orientation && screen.orientation.lock){
         try{ await screen.orientation.lock('landscape'); }catch(e){}
       }
     }catch(e){}
   }
 
-  // Intento de abrir en la app de YouTube
+  // Doble click/tap en el video → fullscreen contenedor
+  wrap.addEventListener('dblclick', goFullscreenAndLock);
+  wrap.addEventListener('touchend', (e)=>{ if(e.touches?.length===0){ goFullscreenAndLock(); } }, {passive:true});
+
+  // Abrir en app de YouTube
   const src = frame ? (frame.getAttribute('src')||'') : '';
   const vidMatch = src.match(/\/embed\/([^?&/]+)/);
 
@@ -407,12 +464,11 @@ if ($pelea_sel){
         const videoId = vidMatch[1];
         window.location.href = `https://www.youtube.com/watch?v=${encodeURIComponent(videoId)}`;
       } else {
-        window.location.href = `https://www.youtube.com`; // fallback
+        window.location.href = `https://www.youtube.com`;
       }
     });
   }
 
-  // Primera interacción: si está en vertical, intento fullscreen+lock
   document.addEventListener('click', ()=>{
     if (isPortrait()) goFullscreenAndLock();
   }, { once:true });
@@ -420,6 +476,92 @@ if ($pelea_sel){
   window.addEventListener('resize', updateOrientUI);
   window.addEventListener('orientationchange', updateOrientUI);
   updateOrientUI();
+})();
+</script>
+
+<!-- === HUD: poll del estado de combate === -->
+<script>
+(function(){
+  const eventoId = <?= (int)$evento_id ?>;
+  const peleaIdActual = <?= $pelea_sel ? (int)$pelea_sel['id'] : 0 ?>;
+
+  const hud = document.getElementById('liveHud');
+  const lblFight = document.getElementById('hudFight');
+  const lblRound = document.getElementById('hudRound');
+  const lblTimer = document.getElementById('hudTimer');
+  const badgeRest = document.getElementById('hudRest');
+
+  function fmt(s){
+    s = Math.max(0, Math.floor(s||0));
+    const m = Math.floor(s/60), ss = String(s%60).padStart(2,'0');
+    return `${m}:${ss}`;
+  }
+
+  let phase = { inRest:false, startEpoch:0, dur:0, peleaId: peleaIdActual, activo:0 };
+  let tickInt = null;
+
+  function startTick(){
+    if (tickInt) return;
+    tickInt = setInterval(()=>{
+      if (!phase.startEpoch || !phase.dur || !phase.activo){ lblTimer.textContent = '0:00'; return; }
+      const now = Math.floor(Date.now()/1000);
+      const elapsed = Math.max(0, now - phase.startEpoch);
+      const remain = Math.max(0, phase.dur - elapsed);
+      lblTimer.textContent = fmt(remain);
+    }, 1000);
+  }
+
+  async function pollEstado(){
+    try{
+      const r = await fetch(`api_combate_estado_poll.php?evento_id=${encodeURIComponent(eventoId)}`, {cache:'no-store'});
+      const j = await r.json();
+      if(!j || !j.ok){ return; }
+      const d = j.data;
+      if(!d){
+        hud.style.display = 'none';
+        return;
+      }
+
+      const activo = parseInt(d.activo||0,10);
+      phase.activo = activo;
+      hud.style.display = activo ? 'block' : 'none';
+      if(!activo) return;
+
+      const mesaPeleaId = parseInt(d.pelea_actual_id||0,10);
+      if (mesaPeleaId && mesaPeleaId !== phase.peleaId){
+        const params = new URLSearchParams(window.location.search);
+        params.set('pelea_id', String(mesaPeleaId));
+        window.location.search = params.toString();
+        return;
+      }
+
+      const rN = parseInt(d.ronda_actual||1,10);
+      const inRest = (String(d.en_descanso||'0') === '1');
+      const epochInicio = parseInt(d.epoch_inicio||0,10);
+      const durRound = parseInt(d.dur_round||0,10) || 120;
+      const durRest = parseInt(d.dur_descanso||0,10) || 60;
+
+      lblRound.textContent = 'R' + (rN>0 ? rN : 1);
+      badgeRest.style.display = inRest ? '' : 'none';
+
+      phase.inRest = inRest;
+      phase.startEpoch = epochInicio || Math.floor(Date.now()/1000);
+      phase.dur = inRest ? durRest : durRound;
+
+      try{
+        const rojo = document.querySelector('.vs .corner:nth-child(1) h4')?.textContent?.replace(/^🟥\s*/,'') || 'Rojo';
+        const azul = document.querySelector('.vs .corner:nth-child(2) h4')?.textContent?.replace(/^🟦\s*/,'') || 'Azul';
+        lblFight.textContent = `${rojo} vs ${azul}`;
+      }catch(e){}
+
+      startTick();
+    }catch(e){
+      // silencioso
+    }
+  }
+
+  setInterval(pollEstado, 2000);
+  pollEstado();
 })();
 </script>
 </body>
