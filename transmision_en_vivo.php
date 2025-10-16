@@ -1,9 +1,10 @@
 <?php
 /* ==========================================================
    transmision_en_vivo.php — Vista pública de transmisión
-   - HUD estilo TV como banda inferior sobre el video
+   - HUD estilo TV (banda inferior) dentro del player
    - Fullscreen del contenedor (HUD incluido), fs=0 en YouTube
-   - Poll a api_combate_estado_poll.php
+   - Botón "📺 Transmitir a TV (beta)" con Google Cast Sender SDK
+   - Poll a api_combate_estado_poll.php para round/timer/descanso
    ========================================================== */
 if (session_status() === PHP_SESSION_NONE) session_start();
 require_once __DIR__ . '/conexion.php';
@@ -76,7 +77,7 @@ $r = $conexion->query("SELECT id, orden, competidor_rojo_id, competidor_azul_id,
 while($r && $row=$r->fetch_assoc()) $peleas[] = $row;
 if ($r instanceof mysqli_result) $r->free();
 
-/* ===== Colectar IDs de competidores y modalidades ===== */
+/* ===== Colectar IDs ===== */
 $idsR=[]; $idsA=[]; $idsMod=[];
 foreach($peleas as $p){
   if (!empty($p['competidor_rojo_id'])) $idsR[] = (int)$p['competidor_rojo_id'];
@@ -87,22 +88,20 @@ $idsR = array_values(array_unique($idsR));
 $idsA = array_values(array_unique($idsA));
 $idsMod = array_values(array_unique($idsMod));
 
-/* ===== Mapa competidores desde competidores_evento (por evento_id) ===== */
-$mapComp = []; // id => ['nom','esc','peso','mod_text']
+/* ===== Mapa competidores ===== */
+$mapComp = [];
 if ($idsR || $idsA){
   $todos = implode(',', array_map('intval', array_values(array_unique(array_merge($idsR,$idsA)))));
   $sqlCE = "
-    SELECT id, nombre, apellido, escuela, escuela_nombre, escuela_logo, peso_kg,
-           modalidad
+    SELECT id, nombre, apellido, escuela, escuela_nombre, escuela_logo, peso_kg, modalidad
     FROM competidores_evento
     WHERE evento_id={$evento_id} AND id IN ({$todos})
   ";
   $r = $conexion->query($sqlCE);
   while($r && $row=$r->fetch_assoc()){
-    $id = (int)$row['id'];
-    $nom = trim(($row['nombre']??'').' '.($row['apellido']??''));
-    if ($nom==='') $nom = $row['nombre'] ?? ("Competidor #{$id}");
-    $esc = trim(($row['escuela']??'') ?: ($row['escuela_nombre']??''));
+    $id   = (int)$row['id'];
+    $nom  = trim(($row['nombre']??'').' '.($row['apellido']??'')); if ($nom==='') $nom = $row['nombre'] ?? ("Competidor #{$id}");
+    $esc  = trim(($row['escuela']??'') ?: ($row['escuela_nombre']??''));
     $peso = $row['peso_kg']; $peso = ($peso!==null && $peso!=='') ? (0+$peso) : '';
     $modtxt = trim($row['modalidad'] ?? '');
     $mapComp[$id] = ['nom'=>$nom, 'esc'=>$esc, 'peso'=>$peso, 'modtxt'=>$modtxt];
@@ -110,8 +109,8 @@ if ($idsR || $idsA){
   if ($r instanceof mysqli_result) $r->free();
 }
 
-/* ===== Mapa de modalidades por id (opcional) ===== */
-$mapMod = []; // id => nombre
+/* ===== Mapa modalidades ===== */
+$mapMod = [];
 if ($idsMod){
   $nameFields = ['nombre','titulo','descripcion','detalle','modalidad'];
   $cands = [
@@ -124,17 +123,14 @@ if ($idsMod){
     $r = $conexion->query("SELECT * FROM {$c['t']} WHERE {$c['id']} IN ({$ids_sql})");
     while($r && $row=$r->fetch_assoc()){
       $id = (int)$row[$c['id']];
-      if (!isset($mapMod[$id])){
-        $nm = pick($row,$nameFields,"Modalidad #{$id}");
-        $mapMod[$id] = $nm;
-      }
+      if (!isset($mapMod[$id])) $mapMod[$id] = pick($row,$nameFields,"Modalidad #{$id}");
     }
     if ($r instanceof mysqli_result) $r->free();
     if (count($mapMod)===count($idsMod)) break;
   }
 }
 
-/* ===== Seleccionar pelea actual ===== */
+/* ===== Selección de pelea ===== */
 $pelea_sel = null;
 if ($pelea_id_req>0){
   foreach($peleas as $p){ if ((int)$p['id']===$pelea_id_req){ $pelea_sel=$p; break; } }
@@ -145,7 +141,7 @@ if (!$pelea_sel){
 }
 if (!$pelea_sel && $peleas){ $pelea_sel = $peleas[0]; }
 
-/* ===== Etiquetas ===== */
+/* ===== Etiquetas header pelea ===== */
 $orden_txt = $pelea_sel ? ($pelea_sel['orden'] ?? '') : '';
 $rojo_nom=''; $rojo_esc=''; $rojo_peso='';
 $azul_nom=''; $azul_esc=''; $azul_peso='';
@@ -163,12 +159,8 @@ if ($pelea_sel){
   $azul_peso = $mapComp[$aid]['peso'] ?? '';
 
   $mid = (int)($pelea_sel['modalidad_id'] ?? 0);
-  if ($mid>0 && isset($mapMod[$mid])) {
-    $mod_txt = $mapMod[$mid];
-  } else {
-    $mod_txt = trim(($mapComp[$rid]['modtxt'] ?? '').' '.($mapComp[$aid]['modtxt'] ?? ''));
-    $mod_txt = trim($mod_txt);
-  }
+  if ($mid>0 && isset($mapMod[$mid])) $mod_txt = $mapMod[$mid];
+  else $mod_txt = trim(($mapComp[$rid]['modtxt'] ?? '').' '.($mapComp[$aid]['modtxt'] ?? ''));
 
   $pL = is_numeric($rojo_peso) ? (0+$rojo_peso).' kg' : '';
   $pR = is_numeric($azul_peso) ? (0+$azul_peso).' kg' : '';
@@ -192,48 +184,34 @@ if ($pelea_sel){
     .grid{display:grid;grid-template-columns:2fr 1fr;gap:16px}
     .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px}
 
-    /* Player responsivo 16:9 */
+    /* Player 16:9 */
     .video{position:relative; border-radius:12px; overflow:hidden; background:#000; border:1px solid var(--line); }
     .video .ratio{ width:100%; aspect-ratio:16/9; }
     .video iframe{ position:absolute; inset:0; width:100%; height:100%; border:0; z-index:1; }
 
-    /* === HUD BANDA INFERIOR === */
-    .liveHud{
-      position:absolute; left:0; right:0; bottom:0; z-index:2;
-      pointer-events:none;
-      padding:0 10px calc(10px + env(safe-area-inset-bottom)) 10px;
-    }
+    /* HUD - Banda inferior */
+    .liveHud{ position:absolute; left:0; right:0; bottom:0; z-index:2; pointer-events:none; padding:0 10px calc(10px + env(safe-area-inset-bottom)) 10px; }
     .liveHud .bar{
-      display:grid;
-      grid-template-columns: 1fr auto 1fr; /* izq - centro - der */
-      align-items:center;
-      gap:10px;
+      display:grid; grid-template-columns: 1fr auto 1fr; align-items:center; gap:10px;
       background:linear-gradient(180deg, rgba(0,0,0,0.0), rgba(0,0,0,.55) 30%, rgba(0,0,0,.65) 100%);
-      border-top:1px solid rgba(255,255,255,.08);
-      border-radius:12px;
-      padding:10px;
-      backdrop-filter: blur(2px);
+      border-top:1px solid rgba(255,255,255,.08); border-radius:12px; padding:10px; backdrop-filter: blur(2px);
     }
-    .left, .center, .right { display:flex; align-items:center; justify-content:flex-start; gap:10px; }
+    .left, .center, .right { display:flex; align-items:center; gap:10px; }
     .center{ justify-content:center; }
+    .left{ justify-content:flex-start; }
     .right{ justify-content:flex-end; }
 
     .pill{
-      pointer-events:auto;
-      display:inline-flex; align-items:center; gap:8px;
-      background:rgba(0,0,0,.55);
-      border:1px solid #2a2a2a; border-radius:999px;
-      padding:6px 10px; backdrop-filter: blur(2px);
-      font-size:clamp(11px, 1.6vw, 14px);
+      pointer-events:auto; display:inline-flex; align-items:center; gap:8px;
+      background:rgba(0,0,0,.55); border:1px solid #2a2a2a; border-radius:999px;
+      padding:6px 10px; backdrop-filter: blur(2px); font-size:clamp(11px, 1.6vw, 14px);
       color:#fff; font-weight:700;
     }
     .dot{width:8px; height:8px; border-radius:50%; background:#ff4040; box-shadow:0 0 10px #ff4040;}
     .timerBig{
-      font-size:clamp(22px, 4vw, 36px);
-      line-height:1; padding:6px 14px; border-radius:10px;
+      font-size:clamp(22px, 4vw, 36px); line-height:1; padding:6px 14px; border-radius:10px;
       background:rgba(0,0,0,.65); border:1px solid #2a2a2a; backdrop-filter: blur(2px);
-      letter-spacing:1px; min-width:120px; text-align:center;
-      font-weight:900;
+      letter-spacing:1px; min-width:120px; text-align:center; font-weight:900;
     }
     .badgeRest{ background:rgba(255,199,0,.18); border-color:#5a4900; }
     .badgeRound{ background:rgba(0,0,0,.55); }
@@ -263,20 +241,13 @@ if ($pelea_sel){
     .card{border:none;border-radius:0}
     <?php endif; ?>
 
-    /* --- Overlay orientación (vertical) --- */
-    #orientHint{
-      position:fixed; inset:0; display:none; align-items:center; justify-content:center; z-index:9999;
-      background:rgba(0,0,0,.86); text-align:center; padding:24px; backdrop-filter:blur(2px);
-    }
-    #orientHint .box{
-      max-width:520px; background:#12161b; border:1px solid #2a3946; border-radius:16px; padding:22px;
-    }
+    /* Overlay orientación */
+    #orientHint{ position:fixed; inset:0; display:none; align-items:center; justify-content:center; z-index:9999;
+      background:rgba(0,0,0,.86); text-align:center; padding:24px; backdrop-filter:blur(2px); }
+    #orientHint .box{ max-width:520px; background:#12161b; border:1px solid #2a3946; border-radius:16px; padding:22px; }
     #orientHint h3{ margin:0 0 8px; }
     #orientHint p{ margin:0 0 12px; color:var(--muted); }
-
-    @media (orientation: portrait){
-      #orientHint{ display:flex; }
-    }
+    @media (orientation: portrait){ #orientHint{ display:flex; } }
   </style>
 </head>
 <body>
@@ -317,16 +288,13 @@ if ($pelea_sel){
           <!-- HUD: BANDA INFERIOR -->
           <div class="liveHud" id="liveHud" style="display:none">
             <div class="bar">
-              <!-- IZQUIERDA -->
               <div class="left">
                 <span class="pill"><span class="dot"></span> EN VIVO</span>
                 <span class="pill" id="hudFight">—</span>
               </div>
-              <!-- CENTRO (TIMER) -->
               <div class="center">
                 <span class="timerBig" id="hudTimer">0:00</span>
               </div>
-              <!-- DERECHA -->
               <div class="right">
                 <span class="pill badgeRound" id="hudRound">R1</span>
                 <span class="pill badgeRest" id="hudRest" style="display:none">DESCANSO</span>
@@ -335,11 +303,12 @@ if ($pelea_sel){
           </div>
         </div>
 
-        <!-- Controles de visualización -->
+        <!-- Controles -->
         <div class="controls">
           <button id="btnFullscreen" class="btn">⛶ Pantalla completa</button>
+          <button id="btnCastTV" class="btn" style="display:none">📺 Transmitir a TV (beta)</button>
           <button id="btnOpenApp" class="btn">▶️ Abrir en YouTube</button>
-          <span class="meta">Tip: usá el botón ⛶ para ver el HUD en fullscreen.</span>
+          <span class="meta">Tip: usá ⛶ o transmití la pestaña para que el HUD salga en el TV.</span>
         </div>
       <?php endif; ?>
 
@@ -421,6 +390,7 @@ if ($pelea_sel){
   </div>
 </div>
 
+<!-- Controles de orientación / fullscreen -->
 <script>
 (function(){
   const frame = document.getElementById('ytFrame');
@@ -448,11 +418,11 @@ if ($pelea_sel){
     }catch(e){}
   }
 
-  // Doble click/tap en el video → fullscreen contenedor
+  // Doble tap/click sobre el área de video → fullscreen del contenedor
   wrap.addEventListener('dblclick', goFullscreenAndLock);
   wrap.addEventListener('touchend', (e)=>{ if(e.touches?.length===0){ goFullscreenAndLock(); } }, {passive:true});
 
-  // Abrir en app de YouTube
+  // Abrir en app de YouTube (recomendado para Cast/AirPlay con YouTube)
   const src = frame ? (frame.getAttribute('src')||'') : '';
   const vidMatch = src.match(/\/embed\/([^?&/]+)/);
 
@@ -479,7 +449,52 @@ if ($pelea_sel){
 })();
 </script>
 
-<!-- === HUD: poll del estado de combate === -->
+<!-- Google Cast Sender SDK -->
+<script src="https://www.gstatic.com/cv/js/sender/v1/cast_sender.js?loadCastFramework"></script>
+<script>
+  // Mostrar el botón sólo si el SDK está disponible
+  window.__onGCastApiAvailable = function(isAvailable) {
+    if (isAvailable) initCast();
+  };
+
+  function initCast(){
+    try{
+      const context = cast.framework.CastContext.getInstance();
+      // Opción 1 (por defecto): Default Media Receiver (para streams HLS/DASH propios)
+      context.setOptions({
+        receiverApplicationId: chrome.cast.media.DEFAULT_MEDIA_RECEIVER_APP_ID,
+        autoJoinPolicy: chrome.cast.AutoJoinPolicy.TAB_AND_ORIGIN_SCOPED
+      });
+      const btn = document.getElementById('btnCastTV');
+      if (btn) btn.style.display = 'inline-block';
+      btn?.addEventListener('click', castThisTabOrShowHelp);
+    }catch(e){}
+  }
+
+  async function castThisTabOrShowHelp(){
+    try{
+      const context = cast.framework.CastContext.getInstance();
+      // Abre diálogo de Cast: en Chrome puede permitir "Transmitir esta pestaña".
+      const session = await context.requestSession();
+
+      // === Si en el futuro tenés tu PROPIO stream HLS/DASH, podés cargarlo acá: ===
+      // const mediaInfo = new chrome.cast.media.MediaInfo('https://tu-servidor/stream.m3u8', 'application/x-mpegurl');
+      // mediaInfo.metadata = new chrome.cast.media.GenericMediaMetadata();
+      // mediaInfo.metadata.title = 'Evento en vivo';
+      // const request = new chrome.cast.media.LoadRequest(mediaInfo);
+      // await session.loadMedia(request);
+      // ==========================================================================
+
+      // Con YouTube en iframe no podemos "enviar" el video directo desde acá.
+      // Tip al usuario:
+      alert('Si tu dispositivo no ofrece “Transmitir esta pestaña” automáticamente, tocá “Abrir en YouTube” y casteá desde la app (icono Cast). Es la forma más estable para YouTube.');
+    }catch(e){
+      alert('No se pudo iniciar Cast. Como alternativa, podés usar "Abrir en YouTube" y castear desde la app.');
+    }
+  }
+</script>
+
+<!-- HUD: poll del estado de combate -->
 <script>
 (function(){
   const eventoId = <?= (int)$evento_id ?>;
