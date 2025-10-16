@@ -95,9 +95,9 @@ $backUrl = safe_back_url();
         <li><a href="combate_en_vivo.php">📺 En Vivo</a></li>
         <li><a href="resultados_combates.php">🥇 Resultados</a></li>
         <li><a href="ranking_competidores.php">📊 score</a></li>
-        <li><a href="recibir_competidores.php">📊 Caga de competidores </a></li>
-          <li><a href="pesajes.php">⚖️ Pesaje</a></li>
-
+        <li><a href="pesajes.php">⚖️ Pesaje</a></li>
+        <li><a href="en_vivo.php">🎥 En Vivo evento</a></li>
+        <a href="/multi_gimnasio/youtube_live_set.php">🎛️ Configurar YouTube</a>
 
       </ul>
     </li>

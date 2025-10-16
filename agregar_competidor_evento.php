@@ -9,7 +9,6 @@ require_once __DIR__ . '/conexion.php';
 
 /* =========================================================
    Cloudinary (opcional)
-   - Puedes usar CLOUDINARY_URL o las constantes abajo.
    ========================================================= */
 const CLOUD_ENABLED    = true;
 const CLOUD_NAME       = 'ddfugds9b';
@@ -176,98 +175,54 @@ function insertar_competidor(mysqli $db, array $row): int {
     'wins'=>'i','losses'=>'i','draws'=>'i','no_contest'=>'i',
     'categoria_tecnica'=>'s','division'=>'s'
   ];
-  foreach($cands as $c=>$tp) {
-    if (has_col($db,$t,$c)) { $cols[] = "`$c`"; $vals[] = $row[$c] ?? null; $types .= $tp; }
-  }
+  foreach($cands as $c=>$tp) if (has_col($db,$t,$c)) { $cols[]="`$c`"; $vals[]=$row[$c]??null; $types.=$tp; }
   if (!$cols) { http_response_code(500); exit('❌ Tabla sin columnas esperadas.'); }
   $ph = rtrim(str_repeat('?,', count($cols)), ',');
   $sql = "INSERT INTO `$t`(".implode(',', $cols).") VALUES($ph)";
-  $st = $db->prepare($sql);
-  if (!$st) { http_response_code(500); exit('❌ SQL prepare error: '.$db->error); }
-
-  // bind_param necesita referencias
-  $refs = [];
-  $refs[] = &$types;
-  for ($i=0;$i<count($vals);$i++) {
-    $refs[] = &$vals[$i];
-  }
-  // call_user_func_array sobre bind_param
-  if (!call_user_func_array([$st, 'bind_param'], $refs)) {
-    $err = $st->error ?: 'bind_param fallo';
-    $st->close();
-    http_response_code(500);
-    exit('❌ bind_param error: '.$err);
-  }
-  if (!$st->execute()) {
-    $err = $st->error ?: 'execute fallo';
-    $st->close();
-    http_response_code(500);
-    exit('❌ Exec error: '.$err);
-  }
-  $last = (int)$db->insert_id;
-  $st->close();
-  return $last;
+  $st = $db->prepare($sql); if(!$st){ http_response_code(500); exit('❌ SQL: '.$db->error); }
+  $refs=[]; $refs[]=&$types; for($i=0;$i<count($vals);$i++) $refs[]=&$vals[$i];
+  if (!call_user_func_array([$st,'bind_param'],$refs)) { $err=$st->error?:'bind_param'; $st->close(); http_response_code(500); exit('❌ '.$err); }
+  if (!$st->execute()) { $err=$st->error?:'execute'; $st->close(); http_response_code(500); exit('❌ '.$err); }
+  $id=(int)$db->insert_id; $st->close(); return $id;
 }
 
 /* ========== Metadata del evento (NOMBRE, LOGO y FONDO) ========== */
 function get_evento_meta(mysqli $db, int $evento_id): array {
-  $row = [];
-  if ($evento_id > 0) {
-    if ($st = $db->prepare("SELECT * FROM `eventos_deportivos` WHERE id=? LIMIT 1")) {
-      $st->bind_param('i', $evento_id);
-      $st->execute();
-      $res = $st->get_result();
-      if ($res && $res->num_rows) $row = $res->fetch_assoc();
-      $st->close();
+  $row=[];
+  if ($evento_id>0){
+    if($st=$db->prepare("SELECT * FROM `eventos_deportivos` WHERE id=? LIMIT 1")){
+      $st->bind_param('i',$evento_id); $st->execute(); $res=$st->get_result();
+      if($res && $res->num_rows) $row=$res->fetch_assoc(); $st->close();
     }
   }
-  $nombre = 'Evento';
-  foreach (['nombre','titulo','title'] as $k) {
-    if (!empty($row[$k])) { $nombre = (string)$row[$k]; break; }
+  $nombre='Evento'; foreach(['nombre','titulo','title'] as $k) if(!empty($row[$k])){$nombre=(string)$row[$k]; break;}
+  $logo=null; foreach(['logo_cloud','logoUrlCloud','logo_cdn','logo','logo_url','imagen_logo','logoEvento'] as $k) if(!empty($row[$k])){$logo=(string)$row[$k]; break;}
+  $cands=['flyer_cloud','poster_cloud','flyer_cdn','flyer','flyer_url','poster','poster_url','flyer_evento','flyer_img','portada_cloud','banner_cloud','imagen_portada_cloud','bg_cdn','portada','banner','imagen_portada','imagen','bg_url','fondo','background','background_image'];
+  $bg=null; foreach($cands as $k) if(!empty($row[$k]) && is_image_path($row[$k])){$bg=(string)$row[$k]; break;}
+  if(!$bg && $logo && is_image_path($logo)) $bg=$logo;
+  if($bg && !preg_match('~^https?://~i',$bg) && strpos($bg,'data:image/')!==0){
+    $scheme=(!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS']!=='off')?'https':'http'; $host=$_SERVER['HTTP_HOST']??'localhost'; $bg=rtrim($scheme.'://'.$host,'/').'/'.ltrim($bg,'/');
   }
-  $logo = null;
-  foreach (['logo_cloud','logoUrlCloud','logo_cdn','logo','logo_url','imagen_logo','logoEvento'] as $k) {
-    if (!empty($row[$k])) { $logo = (string)$row[$k]; break; }
-  }
-  $candidatos_fondo = [
-    'flyer_cloud','poster_cloud','flyer_cdn','flyer','flyer_url','poster','poster_url','flyer_evento','flyer_img',
-    'portada_cloud','banner_cloud','imagen_portada_cloud','bg_cdn',
-    'portada','banner','imagen_portada','imagen','bg_url','fondo','background','background_image',
-  ];
-  $bg = null;
-  foreach ($candidatos_fondo as $k) {
-    if (!empty($row[$k]) && is_image_path($row[$k])) { $bg = (string)$row[$k]; break; }
-  }
-  if (!$bg && $logo && is_image_path($logo)) $bg = $logo;
-  if ($bg && !preg_match('~^https?://~i', $bg) && strpos($bg, 'data:image/') !== 0) {
-    $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
-    $host   = $_SERVER['HTTP_HOST'] ?? 'localhost';
-    $bg = rtrim($scheme.'://'.$host,'/').'/'.ltrim($bg,'/');
-  }
-  return ['nombre'=>$nombre, 'logo'=>$logo?:null, 'bg'=>$bg?:null, 'raw'=>$row];
+  return ['nombre'=>$nombre,'logo'=>$logo?:null,'bg'=>$bg?:null,'raw'=>$row];
 }
 
 /* =========================================================
-   evento_id contextual (POST -> GET -> REFERER -> SESSION)
+   evento_id contextual
    ========================================================= */
 $evento_id_post = isset($_POST['evento_id']) && ctype_digit((string)$_POST['evento_id']) ? (int)$_POST['evento_id'] : 0;
 $evento_id_get  = isset($_GET['evento_id'])  && ctype_digit((string)$_GET['evento_id'])  ? (int)$_GET['evento_id']  : 0;
 $evento_id_ref  = 0;
 if (!$evento_id_post && !$evento_id_get && !empty($_SERVER['HTTP_REFERER'])) {
-  $ref = parse_url($_SERVER['HTTP_REFERER']);
-  if (!empty($ref['query'])) {
-    parse_str($ref['query'], $qref);
-    if (!empty($qref['evento_id']) && ctype_digit((string)$qref['evento_id'])) $evento_id_ref = (int)$qref['evento_id'];
-  }
+  $ref = parse_url($_SERVER['HTTP_REFERER']); if(!empty($ref['query'])){ parse_str($ref['query'],$qref); if(!empty($qref['evento_id']) && ctype_digit((string)$qref['evento_id'])) $evento_id_ref=(int)$qref['evento_id']; }
 }
-if ($evento_id_post>0)      $_SESSION['evento_id_actual'] = $evento_id_post;
-elseif ($evento_id_get>0)   $_SESSION['evento_id_actual'] = $evento_id_get;
-elseif ($evento_id_ref>0)   $_SESSION['evento_id_actual'] = $evento_id_ref;
+if ($evento_id_post>0)      $_SESSION['evento_id_actual']=$evento_id_post;
+elseif ($evento_id_get>0)   $_SESSION['evento_id_actual']=$evento_id_get;
+elseif ($evento_id_ref>0)   $_SESSION['evento_id_actual']=$evento_id_ref;
 
 $evento_id_ctx  = (int)($_SESSION['evento_id_actual'] ?? 0);
 $evento_presente = $evento_id_ctx > 0;
 
-/* ===== Cargar meta del evento ===== */
+/* ===== Meta del evento ===== */
 $ev        = $evento_presente ? get_evento_meta($conexion,$evento_id_ctx) : ['nombre'=>null,'logo'=>null,'bg'=>null];
 $EV_NOMBRE = $ev['nombre'] ?: 'Evento';
 $EV_LOGO   = $ev['logo']   ?: null;
@@ -345,17 +300,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     header('Location: '.$path.'?evento_id='.$evento_id); exit;
   }
 
-  // Normalizar FKs (si no existen, toma primer id disponible)
+  // Normalizar FKs
   $modalidad_id         = fk_ensure_id($conexion,'modalidades_evento',$modalidad_id_in);
   $disciplina_id        = fk_ensure_id($conexion,'disciplinas_evento',$disciplina_id_in);
   $categoria_tecnica_id = fk_ensure_id($conexion,'categorias_tecnicas_evento',$categoria_tecnica_id_in);
   $division_id          = fk_ensure_id($conexion,'divisiones_evento',$division_id_in);
   $categoria_peso_id    = fk_ensure_id($conexion,'categorias_peso_evento',$categoria_peso_id_in);
 
-  // Subidas
-  $escuela_logo    = save_upload('escuela_logo', $evento_id);
-  $foto_competidor = save_upload('foto_competidor', $evento_id);
+  // Logo/Fotografía: usa archivo si subís; si no, conserva URL ingresada
+  $escuela_logo_url_in  = post('escuela_logo_url');
+  $foto_competidor_url_in = post('foto_competidor_url');
+
+  $escuela_logo_up    = save_upload('escuela_logo', $evento_id);
+  $foto_competidor_up = save_upload('foto_competidor', $evento_id);
   if ($habilitar_pago) { $comprobante_url = save_upload('comprobante_pago',$evento_id); }
+
+  $escuela_logo    = $escuela_logo_up    ?: ($escuela_logo_url_in    ?: null);
+  $foto_competidor = $foto_competidor_up ?: ($foto_competidor_url_in ?: null);
 
   // Strings auxiliares
   $cat_tec_str = cat_tecnica_por_total($total);
@@ -418,11 +379,11 @@ $idMuay = cat_id_by_nombre($conexion,'modalidades_evento','Muay Thai') ?? 7;
     *{box-sizing:border-box}
     body{margin:0;background:var(--bg);color:var(--fg);font-family:system-ui,Arial,Helvetica,sans-serif}
     .wrap{max-width:980px;margin:0 auto;padding:14px}
-    .card{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:12px;margin-top:10px}
+    .card{background:var(--card);border:1px solid #1a2733;border-radius:12px;padding:12px;margin-top:10px}
     .grid{display:grid;gap:10px;grid-template-columns:1fr}
     @media(min-width:520px){ .grid{grid-template-columns:repeat(2,1fr)} }
     label{font-size:12px;color:#cfe7ff}
-    input,select,textarea{width:100%;padding:10px;border-radius:8px;border:1px solid #222;background:#0f1b25;color:var(--fg)}
+    input,select,textarea{width:100%;padding:10px;border-radius:8px;border:1px solid #182532;background:#0f1b25;color:var(--fg)}
     .btn{display:inline-block;padding:10px 12px;border-radius:8px;background:var(--accent);color:#fff;border:none;cursor:pointer}
     .alert{padding:10px;border-radius:8px;margin:10px 0}
     .ok{background:#0f251b;border:1px solid #164b31;color:#b6f3d1}
@@ -431,6 +392,24 @@ $idMuay = cat_id_by_nombre($conexion,'modalidades_evento','Muay Thai') ?? 7;
     .hero{display:flex;align-items:center;gap:12px}
     .logo{width:64px;height:64px;border-radius:10px;object-fit:contain;background:#081016;display:flex;align-items:center;justify-content:center}
     .mut{opacity:.9;color:#9ecbff;font-size:.9rem}
+
+    /* === Autocomplete === */
+    .ac-wrap{position:relative}
+    .ac-list{
+      position:absolute; z-index:40; left:0; right:0; top:100%;
+      background:#0b1620; border:1px solid #213245; border-radius:10px; margin-top:4px;
+      max-height:260px; overflow:auto; box-shadow:0 10px 25px rgba(0,0,0,.35); display:none
+    }
+    .ac-item{padding:10px 12px; cursor:pointer; display:flex; gap:8px; align-items:center}
+    .ac-item:hover{background:#132235}
+    .ac-name{font-weight:700}
+    .ac-sub{font-size:12px; color:#9bbad8}
+    .ac-empty{padding:10px 12px; color:#9bbad8}
+
+    .preview{display:flex;gap:10px;align-items:center;margin-top:6px}
+    .preview img{width:72px;height:72px;border-radius:10px;object-fit:cover;background:#071019;border:1px solid #1a2a3a}
+    .mut-btn{font-size:12px;background:none;border:none;color:#7fb6ff;cursor:pointer;padding:0 4px}
+    .chip-lock{display:inline-flex; gap:6px; align-items:center; font-size:12px; padding:4px 8px; border-radius:999px; background:#152332; border:1px solid #22364b; color:#b7d2eb}
   </style>
   <?php if ($EV_BG): ?>
     <style>
@@ -496,8 +475,13 @@ $idMuay = cat_id_by_nombre($conexion,'modalidades_evento','Muay Thai') ?? 7;
       <div class="card">
         <h3>Datos personales</h3>
         <div class="grid">
-          <div><label>Apellido</label><input type="text" name="apellido" required></div>
-          <div><label>Nombre</label><input type="text" name="nombre" required></div>
+          <div class="ac-wrap">
+            <label>Apellido (buscar en ranking)</label>
+            <input type="text" name="apellido" id="apellido" required autocomplete="off" placeholder="Escribí el apellido">
+            <div id="ac_list" class="ac-list"></div>
+            <div id="lock_info" style="margin-top:6px;display:none" class="chip-lock">Campos bloqueados: Apellido, Nombre y Fecha de nacimiento</div>
+          </div>
+          <div><label>Nombre</label><input type="text" name="nombre" id="nombre" required></div>
           <div>
             <label>DNI</label>
             <input type="text" name="dni" id="dni" required inputmode="numeric" pattern="\d+" maxlength="12" placeholder="Sólo números">
@@ -516,22 +500,36 @@ $idMuay = cat_id_by_nombre($conexion,'modalidades_evento','Muay Thai') ?? 7;
             <input list="dl_localidades" name="localidad" id="localidad" placeholder="Escribí tu localidad"><datalist id="dl_localidades"></datalist>
             <input type="hidden" name="localidad_id" id="localidad_id">
           </div>
-          <div><label>Escuela / Gimnasio</label><input type="text" name="escuela_nombre"></div>
+          <div><label>Escuela / Gimnasio</label><input type="text" name="escuela_nombre" id="escuela_nombre"></div>
 
+          <!-- LOGO ESCUELA -->
           <div>
-            <label>Logo de la Escuela (IMG/PDF)</label>
-            <input type="file" name="escuela_logo" accept="image/*,application/pdf">
+            <label>Logo de la Escuela (subir archivo)</label>
+            <input type="file" name="escuela_logo" id="escuela_logo_file" accept="image/*,application/pdf">
             <?php if (!empty($upload_status['escuela_logo'])): ?>
               <div style="margin-top:6px;color:<?= $upload_status['escuela_logo']['status']==='ok' ? '#b6f3d1' : '#ffb4b4' ?>"><?= h($upload_status['escuela_logo']['status']) ?></div>
             <?php endif; ?>
+            <div class="preview">
+              <img id="escuela_logo_preview" src="" alt="logo preview" style="display:none">
+              <button type="button" class="mut-btn" onclick="clearLogo()">Borrar</button>
+            </div>
+            <label style="margin-top:8px">o URL del logo</label>
+            <input type="url" name="escuela_logo_url" id="escuela_logo_url" placeholder="https://...">
           </div>
 
+          <!-- FOTO COMPETIDOR -->
           <div>
-            <label>Foto del Competidor</label>
-            <input type="file" name="foto_competidor" accept="image/*">
+            <label>Foto del Competidor (subir archivo)</label>
+            <input type="file" name="foto_competidor" id="foto_competidor_file" accept="image/*">
             <?php if (!empty($upload_status['foto_competidor'])): ?>
               <div style="margin-top:6px;color:<?= $upload_status['foto_competidor']['status']==='ok' ? '#b6f3d1' : '#ffb4b4' ?>"><?= h($upload_status['foto_competidor']['status']) ?></div>
             <?php endif; ?>
+            <div class="preview">
+              <img id="foto_competidor_preview" src="" alt="foto preview" style="display:none">
+              <button type="button" class="mut-btn" onclick="clearFoto()">Borrar</button>
+            </div>
+            <label style="margin-top:8px">o URL de la foto</label>
+            <input type="url" name="foto_competidor_url" id="foto_competidor_url" placeholder="https://...">
           </div>
         </div>
       </div>
@@ -628,7 +626,8 @@ $idMuay = cat_id_by_nombre($conexion,'modalidades_evento','Muay Thai') ?? 7;
       if (m<0 || (m===0 && hoy.getDate()<nac.getDate())) e--;
       document.getElementById('edad').value = Math.max(0,e);
       let d = "3"; if(e<12) d="1"; else if(e<18) d="2"; else if(e<26) d="3"; else if(e<46) d="4"; else d="5";
-      document.getElementById('division_id_view').value = d; document.getElementById('division_id').value = d;
+      document.getElementById('division_id_view').selectedIndex = ({"1":0,"2":1,"3":2,"4":3,"5":4}[d]||2);
+      document.getElementById('division_id').value = d;
       cargarCategoriasPeso();
     }
     function cargarCategoriasPeso(){
@@ -646,7 +645,35 @@ $idMuay = cat_id_by_nombre($conexion,'modalidades_evento','Muay Thai') ?? 7;
     }
     ['wins','losses','draws','no_contest'].forEach(id=> document.getElementById(id)?.addEventListener('input', recalcRanking)); recalcRanking();
 
-    // DNI validation simple (ajax endpoint validar_dni_evento.php expected)
+    // ================== Previews de imágenes ==================
+    const elLogoFile=document.getElementById('escuela_logo_file');
+    const elLogoURL =document.getElementById('escuela_logo_url');
+    const elLogoPrev=document.getElementById('escuela_logo_preview');
+    const elFotoFile=document.getElementById('foto_competidor_file');
+    const elFotoURL =document.getElementById('foto_competidor_url');
+    const elFotoPrev=document.getElementById('foto_competidor_preview');
+
+    function setPreview(imgEl, src){
+      if (src){ imgEl.src=src; imgEl.style.display='block'; } else { imgEl.src=''; imgEl.style.display='none'; }
+    }
+    elLogoFile?.addEventListener('change', e=>{
+      const f=e.target.files?.[0]; if(!f){ setPreview(elLogoPrev,''); return; }
+      const reader=new FileReader(); reader.onload=()=> setPreview(elLogoPrev, reader.result); reader.readAsDataURL(f);
+      elLogoURL.value=''; // si subís archivo, limpiamos URL
+    });
+    elLogoURL?.addEventListener('input', e=>{ if(e.target.value) setPreview(elLogoPrev, e.target.value); });
+
+    elFotoFile?.addEventListener('change', e=>{
+      const f=e.target.files?.[0]; if(!f){ setPreview(elFotoPrev,''); return; }
+      const reader=new FileReader(); reader.onload=()=> setPreview(elFotoPrev, reader.result); reader.readAsDataURL(f);
+      elFotoURL.value='';
+    });
+    elFotoURL?.addEventListener('input', e=>{ if(e.target.value) setPreview(elFotoPrev, e.target.value); });
+
+    function clearLogo(){ elLogoFile.value=''; elLogoURL.value=''; setPreview(elLogoPrev,''); }
+    function clearFoto(){ elFotoFile.value=''; elFotoURL.value=''; setPreview(elFotoPrev,''); }
+
+    // DNI validation
     const dniInput = document.getElementById('dni'), dniMsg = document.getElementById('dni_msg'), btnSubmit = document.querySelector('button[type="submit"]');
     const eventoId = document.querySelector('input[name="evento_id"]')?.value || '';
     function setSubmitEnabled(x){ if(btnSubmit) btnSubmit.disabled = !x; }
@@ -662,6 +689,100 @@ $idMuay = cat_id_by_nombre($conexion,'modalidades_evento','Muay Thai') ?? 7;
     }
     dniInput?.addEventListener('input', e=> e.target.value = (e.target.value || '').replace(/\D+/g,''));
     dniInput?.addEventListener('blur', validarDNI);
+
+    /* ==============================
+       AUTOCOMPLETE desde api_ranking_buscar.php
+       ============================== */
+    const acList = document.getElementById('ac_list');
+    const apeIn  = document.getElementById('apellido');
+    const nomIn  = document.getElementById('nombre');
+    const fnIn   = document.getElementById('fecha_nacimiento');
+    const edadIn = document.getElementById('edad');
+    const sexoIn = document.getElementById('sexo');
+    const provIn = document.getElementById('provincia');
+    const provId = document.getElementById('provincia_id');
+    const locIn  = document.getElementById('localidad');
+    const escuelaIn = document.getElementById('escuela_nombre');
+    const lockInfo = document.getElementById('lock_info');
+
+    let acTimer=null;
+    apeIn.addEventListener('input', (e)=>{
+      unlockNameBirthIfNeeded(); // si el usuario vuelve a escribir, desbloquea
+      const q=(e.target.value||'').trim();
+      if (acTimer) clearTimeout(acTimer);
+      if (q.length<2){ acList.style.display='none'; return; }
+      acTimer=setTimeout(()=> doLookup(q), 220);
+    });
+    document.addEventListener('click', (ev)=>{ if(!acList.contains(ev.target) && ev.target!==apeIn){ acList.style.display='none'; }});
+
+    async function doLookup(q){
+      try{
+        const url='api_ranking_buscar.php?q='+encodeURIComponent(q);
+        const r = await fetch(url, {headers:{'Accept':'application/json'}});
+        const ok = r.ok;
+        const data = ok ? await r.json() : [];
+        renderAC(Array.isArray(data)?data:[]);
+      }catch(e){ renderAC([]); }
+    }
+    function renderAC(items){
+      if (!items.length){
+        acList.innerHTML='<div class="ac-empty">Sin coincidencias…</div>';
+        acList.style.display='block';
+        return;
+      }
+      acList.innerHTML = items.slice(0,30).map((c,i)=>(
+        `<div class="ac-item" data-i="${i}">
+          <div class="ac-name">${escapeHtml(c.apellido||'')} ${escapeHtml(c.nombre||'')}</div>
+          <div class="ac-sub">DNI: ${escapeHtml(c.dni||'—')} • Nac: ${escapeHtml(c.fecha_nacimiento||'—')} • ${escapeHtml(c.escuela_nombre||'')}</div>
+        </div>`
+      )).join('');
+      acList.style.display='block';
+      [...acList.querySelectorAll('.ac-item')].forEach((el,idx)=> el.addEventListener('click',()=> applyCompetidor(items[idx])));
+    }
+    function escapeHtml(s){ return (s||'').toString().replace(/[&<>"']/g, m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[m])); }
+
+    function applyCompetidor(c){
+      // Completar campos base
+      if (c.apellido) apeIn.value = c.apellido;
+      if (c.nombre)   nomIn.value = c.nombre;
+      if (c.dni)      dniInput.value = String(c.dni).replace(/\D+/g,'');
+      if (c.fecha_nacimiento){ fnIn.value = c.fecha_nacimiento; calcularEdad(); }
+      if (c.sexo){ sexoIn.value = (c.sexo||'').toLowerCase()==='femenino'?'femenino':((c.sexo||'').toLowerCase()==='masculino'?'masculino':''); }
+      if (c.provincia && PROV_IDX[c.provincia]){ provIn.value = c.provincia; provId.value = PROV_IDX[c.provincia]; }
+      if (c.localidad){ locIn.value = c.localidad; }
+      if (c.escuela_nombre){ escuelaIn.value = c.escuela_nombre; }
+
+      // Ranking si viene
+      if (c.wins!=null)   document.getElementById('wins').value = +c.wins||0;
+      if (c.losses!=null) document.getElementById('losses').value = +c.losses||0;
+      if (c.draws!=null)  document.getElementById('draws').value = +c.draws||0;
+      if (c.no_contest!=null) document.getElementById('no_contest').value = +c.no_contest||0;
+      recalcRanking();
+
+      // Foto/Logo por URL (si existen en el ranking)
+      if (c.escuela_logo_url){ document.getElementById('escuela_logo_url').value = c.escuela_logo_url; setPreview(elLogoPrev, c.escuela_logo_url); elLogoFile.value=''; }
+      if (c.foto_competidor_url){ document.getElementById('foto_competidor_url').value = c.foto_competidor_url; setPreview(elFotoPrev, c.foto_competidor_url); elFotoFile.value=''; }
+
+      // Bloquear lo solicitado
+      apeIn.readOnly = true;
+      nomIn.readOnly = true;
+      fnIn.readOnly  = true;
+      lockInfo.style.display='inline-flex';
+
+      acList.style.display='none';
+      validarDNI();
+      cargarCategoriasPeso();
+    }
+
+    function unlockNameBirthIfNeeded(){
+      if (apeIn.readOnly){
+        // Si el usuario vuelve a escribir, desbloquea por si quiere cargar uno nuevo
+        apeIn.readOnly = false;
+        nomIn.readOnly = false;
+        fnIn.readOnly  = false;
+        lockInfo.style.display='none';
+      }
+    }
   </script>
 </body>
 </html>

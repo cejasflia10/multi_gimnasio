@@ -5,7 +5,7 @@ require_once __DIR__ . '/menu_eventos.php';
 
 if (!isset($conexion) || !($conexion instanceof mysqli)) { http_response_code(500); exit('❌ Sin conexión a BD.'); }
 if (function_exists('mysqli_report')) { mysqli_report(MYSQLI_REPORT_OFF); }
-@$conexion->set_charset('utf8mb4');
+$conexion->set_charset('utf8mb4');
 
 /* ================= Utilidades ================= */
 function h($s){ return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); }
@@ -72,7 +72,6 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && ($_POST['accion'] ?? '')==='crear_pel
     if (min($r,$a,$l)<=0){ flash_err('Completá los 3 slots del Triangular.'); header('Location: organizar_pelea.php?evento_id='.$evento_id); exit; }
     if (count(array_unique([$r,$a,$l]))!==3){ flash_err('Los 3 competidores deben ser distintos.'); header('Location: organizar_pelea.php?evento_id='.$evento_id); exit; }
     $pairs[] = [$r,$a,' (Triangular - Semifinal)'];
-    // NOTA: la final se arma luego; el "libre" espera.
   } else { // super4
     $r1=(int)($_POST['sf1_rojo_id'] ?? 0); $a1=(int)($_POST['sf1_azul_id'] ?? 0);
     $r2=(int)($_POST['sf2_rojo_id'] ?? 0); $a2=(int)($_POST['sf2_azul_id'] ?? 0);
@@ -82,7 +81,6 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && ($_POST['accion'] ?? '')==='crear_pel
     $pairs[] = [$r2,$a2,' (Super 4 - SF2)'];
   }
 
-  // INSERT directo (sin validaciones extra)
   $conexion->begin_transaction();
   try{
     foreach($pairs as [$r,$a,$suf]){
@@ -116,14 +114,17 @@ $disciplinas = $conexion->query("SELECT id, nombre FROM disciplinas_evento ORDER
 $modalidades = $conexion->query("SELECT id, nombre FROM modalidades_evento ORDER BY nombre");
 $divisiones  = $conexion->query("SELECT id, nombre FROM divisiones_evento  ORDER BY nombre");
 
-/* ================= Listado de competidores (simple) ================= */
+/* ================= Listado de competidores con IDs crudos ================= */
 $sql = "
 SELECT
   ce.id, ce.apellido, ce.nombre, ce.dni, ce.edad,
   ce.foto_competidor, ce.escuela_logo, ce.escuela_nombre,
-  d.nombre  AS disciplina,
-  m.nombre  AS modalidad,
-  dv.nombre AS division,
+  ce.sexo,
+  ce.disciplina_id, d.nombre  AS disciplina,
+  ce.modalidad_id,  m.nombre  AS modalidad,
+  ce.division_id,   dv.nombre AS division,
+  ce.categoria_tecnica_id,
+  ce.categoria_peso_id,
   ce.peso_kg
 FROM competidores_evento ce
 LEFT JOIN disciplinas_evento d  ON d.id  = ce.disciplina_id
@@ -176,6 +177,8 @@ $placeholderLogo = 'assets/placeholder-logo.png';
     .slot-grid{display:grid;grid-template-columns:repeat(2,minmax(220px,1fr));gap:10px}
     .slot-grid .full{grid-column:1/-1}
     .small-note{font-size:12px;color:#6b7280;margin-top:6px}
+    .legend{display:flex;gap:10px;align-items:center;font-size:13px;color:#334155}
+    .chip{padding:2px 8px;border-radius:999px;border:1px solid #cbd5e1;background:#f1f5f9}
   </style>
 </head>
 <body>
@@ -184,6 +187,14 @@ $placeholderLogo = 'assets/placeholder-logo.png';
 
   <?php if (!empty($_SESSION['flash_error'])){ ?><div class="alert error"><?= h($_SESSION['flash_error']); unset($_SESSION['flash_error']); ?></div><?php } ?>
   <?php if (!empty($_SESSION['flash_ok']))   { ?><div class="alert ok"><?= $_SESSION['flash_ok']; unset($_SESSION['flash_ok']); ?></div><?php } ?>
+
+  <div class="legend" style="margin:8px 0 14px;">
+    <span class="chip">Marcador de similitud:</span>
+    <span>🟩 7–8 (muy alto)</span>
+    <span>🟩 claro 5–6 (alto)</span>
+    <span>🟨 3–4 (mínimo)</span>
+    <span class="muted">≤2 sin marca</span>
+  </div>
 
   <!-- CREACIÓN DE PELEA(S) -->
   <form method="POST" action="" id="form-bout">
@@ -270,7 +281,7 @@ $placeholderLogo = 'assets/placeholder-logo.png';
     </table>
   </div>
 
-  <!-- Opciones para selects (incluye Escuela, Peso declar., División y Modalidad SOLO a modo informativo en la etiqueta) -->
+  <!-- Opciones para selects -->
   <?php
     ob_start();
     echo '<option value=\"\">Seleccioná competidor…</option>';
@@ -281,6 +292,23 @@ $placeholderLogo = 'assets/placeholder-logo.png';
       echo '<option value="'.(int)$c['id'].'">'.h($label).'</option>';
     }
     $OPTIONS_HTML = ob_get_clean();
+
+    // JSON con los atributos necesarios para el scoring
+    $map = [];
+    foreach($competidores as $c){
+      $map[(int)$c['id']] = [
+        'id' => (int)$c['id'],
+        'sexo' => (string)($c['sexo'] ?? ''),
+        'disciplina_id' => (int)($c['disciplina_id'] ?? 0),
+        'modalidad_id'  => (int)($c['modalidad_id'] ?? 0),
+        'division_id'   => (int)($c['division_id'] ?? 0),
+        'categoria_tecnica_id' => (int)($c['categoria_tecnica_id'] ?? 0),
+        'categoria_peso_id'    => (int)($c['categoria_peso_id'] ?? 0),
+        'peso_kg' => is_null($c['peso_kg']) ? null : (float)$c['peso_kg'],
+        'escuela_nombre' => (string)($c['escuela_nombre'] ?? ''),
+      ];
+    }
+    $COMP_JSON = json_encode($map, JSON_UNESCAPED_UNICODE);
   ?>
 </div>
 
@@ -289,7 +317,80 @@ $placeholderLogo = 'assets/placeholder-logo.png';
   const slots = document.getElementById('slots-container');
   const btn = document.getElementById('btn-guardar');
   const optionsHTML = <?php echo json_encode($OPTIONS_HTML, JSON_UNESCAPED_UNICODE); ?>;
+  const COMP = <?php echo $COMP_JSON; ?>;
 
+  // ======== Scoring de similitud ========
+  function scoreMatch(a, b){
+    if(!a || !b) return 0;
+    let s = 0;
+
+    // 1) Mismo sexo
+    if (a.sexo && b.sexo && a.sexo.toLowerCase() === b.sexo.toLowerCase()) s += 1;
+
+    // 2) Misma categoría técnica
+    if (a.categoria_tecnica_id && a.categoria_tecnica_id === b.categoria_tecnica_id) s += 1;
+
+    // 3) Misma modalidad
+    if (a.modalidad_id && a.modalidad_id === b.modalidad_id) s += 1;
+
+    // 4) Misma disciplina
+    if (a.disciplina_id && a.disciplina_id === b.disciplina_id) s += 1;
+
+    // 5) Misma división
+    if (a.division_id && a.division_id === b.division_id) s += 1;
+
+    // 6) Misma categoría de peso
+    if (a.categoria_peso_id && a.categoria_peso_id === b.categoria_peso_id) s += 2; // más peso al match exacto de categoría
+
+    // 7) Mismo peso (±1.0 kg)
+    if (a.peso_kg!=null && b.peso_kg!=null){
+      const diff = Math.abs(a.peso_kg - b.peso_kg);
+      if (diff <= 1.0) s += 1;
+    }
+
+    // 8) De diferente escuela
+    if ((a.escuela_nombre||'').trim() && (b.escuela_nombre||'').trim()){
+      if (a.escuela_nombre.trim().toLowerCase() !== b.escuela_nombre.trim().toLowerCase()){
+        s += 1;
+      }
+    }
+
+    return s; // máximo posible: 8
+  }
+
+  function badgeForScore(s){
+    if (s >= 7) return '🟩 ';
+    if (s >= 5) return '🟩 claro ';
+    if (s >= 3) return '🟨 ';
+    return '';
+  }
+
+  // Dado un select "Azul" y el ID elegido en "Rojo", marca las opciones del Azul
+  function colorOpponents(azulSelect, rojoId){
+    if (!azulSelect) return;
+    // Restaurar etiquetas originales (guardadas en data-label al render)
+    Array.from(azulSelect.options).forEach(opt=>{
+      if (opt.dataset && opt.dataset.label){ opt.textContent = opt.dataset.label; }
+    });
+    const a = COMP[rojoId]; if (!a) return;
+
+    Array.from(azulSelect.options).forEach(opt=>{
+      if (!opt.value) return;
+      const id = parseInt(opt.value,10);
+      if (!id || id===rojoId) return; // no se puntúa contra sí mismo
+      const b = COMP[id]; if(!b) return;
+      const s = scoreMatch(a,b);
+      const badge = badgeForScore(s);
+      if (!opt.dataset.label) opt.dataset.label = opt.textContent;
+      if (badge){
+        opt.textContent = badge + opt.dataset.label;
+      } else {
+        opt.textContent = opt.dataset.label;
+      }
+    });
+  }
+
+  // ====== UI de slots ======
   function selectTpl(name, label){
     return `
       <div>
@@ -313,7 +414,7 @@ $placeholderLogo = 'assets/placeholder-logo.png';
         <div class="full" style="height:0;"></div>
         ${selectTpl('tri_libre_id','Triangular — Libre (espera la final)')}
       `;
-    } else {
+    } else { // super4
       html = `
         <div class="full" style="font-weight:600;">Semifinal 1</div>
         ${selectTpl('sf1_rojo_id','SF1 — Rojo')}
@@ -325,12 +426,13 @@ $placeholderLogo = 'assets/placeholder-logo.png';
       `;
     }
     slots.innerHTML = html;
-    attachUniqueLogic();
+    attachLogic();
     validar();
   }
 
-  function attachUniqueLogic(){
+  function attachLogic(){
     const selects = Array.from(document.querySelectorAll('.slot-select'));
+    // Evitar repetir el mismo competidor en dos slots del mismo formulario
     function refreshDisables(){
       const used = new Set(selects.map(s => s.value).filter(v => v));
       selects.forEach(sel => {
@@ -341,11 +443,39 @@ $placeholderLogo = 'assets/placeholder-logo.png';
         });
       });
     }
+
+    // Vinculaciones Rojo->Azul por formato
+    const fmt = formatoSel.value;
+    function pair(rojoName, azulName){
+      const rojo = document.querySelector(`[name="${rojoName}"]`);
+      const azul = document.querySelector(`[name="${azulName}"]`);
+      if (!rojo || !azul) return;
+      // Marcar al iniciar por si ya hay un valor
+      if (rojo.value) colorOpponents(azul, parseInt(rojo.value,10));
+      rojo.addEventListener('change', ()=>{
+        refreshDisables();
+        const rId = parseInt(rojo.value||'0',10);
+        colorOpponents(azul, rId);
+        validar();
+      });
+      azul.addEventListener('change', ()=>{ refreshDisables(); validar(); });
+    }
+
+    if (fmt === 'simple'){
+      pair('rojo_id','azul_id');
+    } else if (fmt === 'triangular'){
+      pair('tri_rojo_id','tri_azul_id');
+      // el “libre” no tiene pareja hasta la final — sin colorear
+    } else { // super4
+      pair('sf1_rojo_id','sf1_azul_id');
+      pair('sf2_rojo_id','sf2_azul_id');
+    }
+
     selects.forEach(sel => sel.addEventListener('change', () => { refreshDisables(); validar(); }));
     refreshDisables();
   }
 
-  // Validación mínima: sólo que estén completos y sean distintos
+  // Validación mínima: completos y distintos
   function validar(){
     if (!btn) return;
     const fmt = formatoSel.value;
