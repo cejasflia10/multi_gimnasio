@@ -251,12 +251,10 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'finalizar') {
     if (!empty($present['creado_en']))    { $cols[]='creado_en';     $phs[]='NOW()'; }
 
     if ($cols) {
-      // Construyo SQL con placeholders sólo donde corresponde
       $sql = "REPLACE INTO resultados_combates (".implode(',', $cols).") VALUES (".implode(',', $phs).")";
       if ($st=$conexion->prepare($sql)){
         $hasQ = false; foreach($phs as $p){ if($p==='?'){ $hasQ=true; break; } }
         if ($hasQ){
-          // bind dinámico
           $bind = [$types];
           foreach($params as $k=>&$v){ $bind[] =& $v; }
           $ref = new ReflectionClass('mysqli_stmt'); $method = $ref->getMethod('bind_param');
@@ -512,10 +510,10 @@ $__s_init = str_pad((string)($__t_init%60), 2, '0', STR_PAD_LEFT);
       <div id="timer" class="timer"><?= $__m_init . ':' . $__s_init ?></div>
 
       <div class="controls">
-        <button id="btnStart" class="btn btn-primary">▶️ Iniciar</button>
-        <button id="btnPause" class="btn btn-warn">⏸️ Pausar</button>
-        <button id="btnReset" class="btn btn-danger">⟲ Reiniciar</button>
-        <button id="btnNext"  class="btn btn-ghost">⏭️ Siguiente round</button>
+        <button id="btnStart" class="btn btn-primary" type="button">▶️ Iniciar</button>
+        <button id="btnPause" class="btn btn-warn" type="button">⏸️ Pausar</button>
+        <button id="btnReset" class="btn btn-danger" type="button">⟲ Reiniciar</button>
+        <button id="btnNext"  class="btn btn-ghost" type="button">⏭️ Siguiente round</button>
       </div>
       <div class="controls">
         <span class="sub">Duración (seg):</span>
@@ -562,7 +560,7 @@ $__s_init = str_pad((string)($__t_init%60), 2, '0', STR_PAD_LEFT);
 
       <div class="controls">
         <a class="btn btn-gray" href="<?= h($return_to) ?>">↩️ Volver</a>
-        <button id="btnFinish" class="btn btn-danger">🏁 Finalizar combate</button>
+        <button id="btnFinish" class="btn btn-danger" type="button">🏁 Finalizar combate</button>
       </div>
 
       <div id="banner" class="sub" style="margin-top:8px;opacity:.9"></div>
@@ -605,7 +603,8 @@ $__s_init = str_pad((string)($__t_init%60), 2, '0', STR_PAD_LEFT);
 
   // ======= PUBLICACIÓN DE TIMER AL VIVO =======
   const eventoId = <?= $evento_id ? (int)$evento_id : 0 ?>; // si no hay evento_id, no publica
-  const peleaId  = <?= (int)$pelea_id ?>;
+  const peleaId  = <?= (int)$pelea_id ?>;                    // <-- ÚNICA declaración
+
   let lastPublish = 0;
 
   async function publishTimer(force=false){
@@ -804,7 +803,6 @@ $__s_init = str_pad((string)($__t_init%60), 2, '0', STR_PAD_LEFT);
   const inRoundFin = document.getElementById('inRoundFin');
   const inTime = document.getElementById('inTime');
   const banner = document.getElementById('banner');
-  const peleaId = <?= (int)$pelea_id ?>;
 
   document.getElementById('btnFinish').onclick = async ()=>{
     // auto-add extra si está todo cargado y sigue empate
