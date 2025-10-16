@@ -182,15 +182,13 @@ if ($pelea_sel){
   if ($pL && $pR)      $pills_peso_txt = "{$pL} vs {$pR}";
   elseif ($pL || $pR)  $pills_peso_txt = $pL ?: $pR;
 }
-
-/* ===== HTML ===== */
 ?>
 <!doctype html>
 <html lang="es">
 <head>
   <meta charset="utf-8">
   <title><?=h($ev_titulo)?> — Transmisión en vivo</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <style>
     :root { --bg:#0b0b0b; --ink:#eee; --muted:#aaa; --brand:#ffd600; --card:#151515; --line:#262626; }
     html,body{background:var(--bg);color:var(--ink);font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Arial,sans-serif;margin:0}
@@ -199,8 +197,12 @@ if ($pelea_sel){
     .wrap{max-width:1200px;margin:0 auto;padding:16px}
     .grid{display:grid;grid-template-columns:2fr 1fr;gap:16px}
     .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px}
-    .video{position:relative;padding-top:56.25%;border-radius:12px;overflow:hidden}
-    .video iframe{position:absolute;left:0;top:0;width:100%;height:100%;border:0}
+
+    /* Player responsivo 16:9 */
+    .video{position:relative; border-radius:12px; overflow:hidden; background:#000; border:1px solid var(--line); }
+    .video .ratio{ width:100%; aspect-ratio:16/9; }
+    .video iframe{ position:absolute; inset:0; width:100%; height:100%; border:0; }
+
     .meta{font-size:13px;color:var(--muted)}
     .title{font-size:18px;font-weight:800;margin:6px 0}
     .pills{margin:6px 0 0}
@@ -214,14 +216,45 @@ if ($pelea_sel){
     .corner h4{margin:0 0 4px;font-size:16px}
     .corner .sub{font-size:12px;color:var(--muted)}
     .divider{height:1px;background:var(--line);margin:10px 0}
+
+    .controls{ display:flex; gap:10px; flex-wrap:wrap; align-items:center; justify-content:center; margin-top:10px; }
+    .btn{ padding:10px 14px; border-radius:10px; border:1px solid #304351; background:#1a2530; color:#e9f2fb; cursor:pointer; }
+    .btn:hover{ filter:brightness(1.06); }
+    .btn-primary{ background:#0e8dff; border-color:#0e8dff; color:#fff; }
+
     @media (max-width:920px){ .grid{grid-template-columns:1fr} }
     <?php if($share): ?>
     .wrap{padding:0}
     .card{border:none;border-radius:0}
     <?php endif; ?>
+
+    /* --- Overlay para pedir landscape cuando el dispositivo está en vertical --- */
+    #orientHint{
+      position:fixed; inset:0; display:none; align-items:center; justify-content:center; z-index:9999;
+      background:rgba(0,0,0,.86); text-align:center; padding:24px; backdrop-filter:blur(2px);
+    }
+    #orientHint .box{
+      max-width:520px; background:#12161b; border:1px solid #2a3946; border-radius:16px; padding:22px;
+    }
+    #orientHint h3{ margin:0 0 8px; }
+    #orientHint p{ margin:0 0 12px; color:var(--muted); }
+
+    @media (orientation: portrait){
+      #orientHint{ display:flex; }
+    }
   </style>
 </head>
 <body>
+
+<!-- Overlay orientación -->
+<div id="orientHint" aria-hidden="true">
+  <div class="box">
+    <h3>📱 Girá tu teléfono</h3>
+    <p>Para ver la transmisión mejor, usalo en <b>horizontal</b>. También podés entrar en pantalla completa.</p>
+    <button id="btnFSOverlay" class="btn btn-primary">⛶ Ver en pantalla completa</button>
+  </div>
+</div>
+
 <header>
   <h1>🎥 <?=h($ev_titulo)?></h1>
   <div class="wrap meta">
@@ -236,10 +269,22 @@ if ($pelea_sel){
       <?php if (!$youtube_id): ?>
         <div class="meta" style="padding:8px 0">⚠️ Este evento no tiene un enlace de YouTube configurado. Configuralo en <code>youtube_live_set.php</code>.</div>
       <?php else: ?>
-        <div class="video">
-          <iframe src="https://www.youtube.com/embed/<?=h($youtube_id)?>?rel=0&modestbranding=1"
-                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                  allowfullscreen></iframe>
+        <div class="video" id="playerWrap">
+          <div class="ratio"></div>
+          <iframe
+            id="ytFrame"
+            src="https://www.youtube.com/embed/<?=h($youtube_id)?>?rel=0&modestbranding=1&playsinline=1"
+            title="YouTube Live"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen"
+            allowfullscreen
+            referrerpolicy="strict-origin-when-cross-origin"></iframe>
+        </div>
+
+        <!-- Controles de visualización -->
+        <div class="controls">
+          <button id="btnFullscreen" class="btn">⛶ Pantalla completa</button>
+          <button id="btnOpenApp" class="btn">▶️ Abrir en YouTube</button>
+          <span class="meta">Tip: desactivá el bloqueo de rotación del teléfono.</span>
         </div>
       <?php endif; ?>
 
@@ -322,5 +367,60 @@ if ($pelea_sel){
   </div>
 </div>
 
+<script>
+(function(){
+  const frame = document.getElementById('ytFrame');
+  const wrap  = document.getElementById('playerWrap');
+  const btnFS = document.getElementById('btnFullscreen');
+  const btnFSOverlay = document.getElementById('btnFSOverlay');
+  const btnOpenApp = document.getElementById('btnOpenApp');
+
+  function isPortrait(){ return window.matchMedia('(orientation: portrait)').matches; }
+  function updateOrientUI(){
+    const hint = document.getElementById('orientHint');
+    if (!hint) return;
+    hint.style.display = isPortrait() ? 'flex' : 'none';
+  }
+
+  async function goFullscreenAndLock(){
+    const el = wrap || document.documentElement;
+    try{
+      if (!document.fullscreenElement && el.requestFullscreen){
+        await el.requestFullscreen();
+      }
+      // En Android/Chrome puede funcionar el lock si hubo gesto del usuario
+      if (screen.orientation && screen.orientation.lock){
+        try{ await screen.orientation.lock('landscape'); }catch(e){}
+      }
+    }catch(e){}
+  }
+
+  // Intento de abrir en la app de YouTube
+  const src = frame ? (frame.getAttribute('src')||'') : '';
+  const vidMatch = src.match(/\/embed\/([^?&/]+)/);
+
+  if (btnFS) btnFS.addEventListener('click', goFullscreenAndLock);
+  if (btnFSOverlay) btnFSOverlay.addEventListener('click', goFullscreenAndLock);
+  if (btnOpenApp){
+    btnOpenApp.addEventListener('click', ()=>{
+      if (vidMatch){
+        const videoId = vidMatch[1];
+        window.location.href = `https://www.youtube.com/watch?v=${encodeURIComponent(videoId)}`;
+      } else {
+        window.location.href = `https://www.youtube.com`; // fallback
+      }
+    });
+  }
+
+  // Primera interacción: si está en vertical, intento fullscreen+lock
+  document.addEventListener('click', ()=>{
+    if (isPortrait()) goFullscreenAndLock();
+  }, { once:true });
+
+  window.addEventListener('resize', updateOrientUI);
+  window.addEventListener('orientationchange', updateOrientUI);
+  updateOrientUI();
+})();
+</script>
 </body>
 </html>

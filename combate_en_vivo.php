@@ -843,7 +843,6 @@ $__s_init = str_pad((string)($__t_init%60), 2, '0', STR_PAD_LEFT);
     setTimeout(()=>{ window.location.href = j.redirect || '<?= h($RESULTADOS_RUTA) ?>?pelea_id='+peleaId; }, 800);
   };
 
-  // Publicación inicial
   publishTimer(true);
 })();
 </script>
