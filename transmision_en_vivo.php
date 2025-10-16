@@ -3,8 +3,9 @@
    transmision_en_vivo.php — Vista pública de transmisión
    - HUD estilo TV (banda inferior) dentro del player
    - Fullscreen del contenedor (HUD incluido), fs=0 en YouTube
-   - Botón "📺 Transmitir a TV (beta)" con Google Cast Sender SDK
+   - Botón "📺 Transmitir a TV (beta)" SIEMPRE visible (Cast si hay, guía si no)
    - Poll a api_combate_estado_poll.php para round/timer/descanso
+   - Lista de peleas SIEMPRE visible; en share=1: video arriba + lista abajo
    ========================================================== */
 if (session_status() === PHP_SESSION_NONE) session_start();
 require_once __DIR__ . '/conexion.php';
@@ -118,7 +119,7 @@ if ($idsMod){
     ['t'=>'modalidades','id'=>'id'],
   ];
   foreach($cands as $c){
-    if (!table_exists($conexion,$c['t']) || !col_exists($conexion,$c['t'],$c['id'])) continue;
+    if (!table_exists($conexion, $c['t']) || !col_exists($conexion, $c['t'], $c['id'])) continue;
     $ids_sql = implode(',', array_map('intval',$idsMod));
     $r = $conexion->query("SELECT * FROM {$c['t']} WHERE {$c['id']} IN ({$ids_sql})");
     while($r && $row=$r->fetch_assoc()){
@@ -182,7 +183,14 @@ if ($pelea_sel){
     header h1{margin:0;font-size:18px}
     .wrap{max-width:1200px;margin:0 auto;padding:16px}
     .grid{display:grid;grid-template-columns:2fr 1fr;gap:16px}
+    @media (max-width:920px){ .grid{grid-template-columns:1fr} }
     .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px}
+
+    /* cuando share=1: una columna (video arriba + lista abajo) */
+    <?php if($share): ?>
+    .grid{ grid-template-columns:1fr; }
+    .card--compact{ padding:10px 12px; }
+    <?php endif; ?>
 
     /* Player 16:9 */
     .video{position:relative; border-radius:12px; overflow:hidden; background:#000; border:1px solid var(--line); }
@@ -235,13 +243,7 @@ if ($pelea_sel){
     .btn:hover{ filter:brightness(1.06); }
     .btn-primary{ background:#0e8dff; border-color:#0e8dff; color:#fff; }
 
-    @media (max-width:920px){ .grid{grid-template-columns:1fr} }
-    <?php if($share): ?>
-    .wrap{padding:0}
-    .card{border:none;border-radius:0}
-    <?php endif; ?>
-
-    /* Overlay orientación */
+    /* Overlay orientación (vertical) */
     #orientHint{ position:fixed; inset:0; display:none; align-items:center; justify-content:center; z-index:9999;
       background:rgba(0,0,0,.86); text-align:center; padding:24px; backdrop-filter:blur(2px); }
     #orientHint .box{ max-width:520px; background:#12161b; border:1px solid #2a3946; border-radius:16px; padding:22px; }
@@ -270,7 +272,7 @@ if ($pelea_sel){
 </header>
 
 <div class="wrap">
-  <div class="<?= $share ? '' : 'grid' ?>">
+  <div class="grid">
     <div class="card">
       <?php if (!$youtube_id): ?>
         <div class="meta" style="padding:8px 0">⚠️ Este evento no tiene un enlace de YouTube configurado. Configuralo en <code>youtube_live_set.php</code>.</div>
@@ -306,9 +308,9 @@ if ($pelea_sel){
         <!-- Controles -->
         <div class="controls">
           <button id="btnFullscreen" class="btn">⛶ Pantalla completa</button>
-          <button id="btnCastTV" class="btn" style="display:none">📺 Transmitir a TV (beta)</button>
+          <button id="btnCastTV" class="btn">📺 Transmitir a TV (beta)</button>
           <button id="btnOpenApp" class="btn">▶️ Abrir en YouTube</button>
-          <span class="meta">Tip: usá ⛶ o transmití la pestaña para que el HUD salga en el TV.</span>
+          <span class="meta">Tip: usá ⛶ o “Transmitir pestaña” para que el HUD y la lista salgan en el TV.</span>
         </div>
       <?php endif; ?>
 
@@ -349,9 +351,11 @@ if ($pelea_sel){
       <?php endif; ?>
     </div>
 
-    <?php if(!$share): ?>
-    <div class="card">
-      <div class="title" style="margin:0 0 8px">Peleas del evento</div>
+    <!-- Lista de peleas: SIEMPRE visible (si share=1, queda debajo del video) -->
+    <div class="card <?= $share ? 'card--compact' : '' ?>">
+      <div class="title" style="margin:0 0 8px">
+        <?= $share ? 'Peleas del evento (vista TV)' : 'Peleas del evento' ?>
+      </div>
       <div class="list">
         <?php if(!$peleas): ?>
           <div class="meta">No hay peleas para listar.</div>
@@ -373,7 +377,7 @@ if ($pelea_sel){
             $spR = is_numeric($ap) ? (0+$ap).' kg' : '';
             $subs[] = '⚖️ '.trim($spL.($spL&&$spR?' vs ':'').$spR);
           }
-          $url = 'transmision_en_vivo.php?evento_id='.$evento_id.'&pelea_id='.(int)$p['id'];
+          $url = 'transmision_en_vivo.php?evento_id='.$evento_id.'&pelea_id='.(int)$p['id'].($share?'&share=1':'');
         ?>
           <div class="fight">
             <div><a href="<?=h($url)?>"><?=h($lab)?></a></div>
@@ -381,12 +385,14 @@ if ($pelea_sel){
           </div>
         <?php endforeach; endif; ?>
       </div>
-      <div class="divider"></div>
-      <div class="meta">
-        Vista limpia para TV: <a href="transmision_en_vivo.php?evento_id=<?=$evento_id?>&pelea_id=<?= $pelea_sel?(int)$pelea_sel['id']:0 ?>&share=1">abrir en modo pantalla</a>
-      </div>
+
+      <?php if(!$share): ?>
+        <div class="divider"></div>
+        <div class="meta">
+          Vista limpia para TV: <a href="transmision_en_vivo.php?evento_id=<?=$evento_id?>&pelea_id=<?= $pelea_sel?(int)$pelea_sel['id']:0 ?>&share=1">abrir en modo pantalla</a>
+        </div>
+      <?php endif; ?>
     </div>
-    <?php endif; ?>
   </div>
 </div>
 
@@ -419,10 +425,12 @@ if ($pelea_sel){
   }
 
   // Doble tap/click sobre el área de video → fullscreen del contenedor
-  wrap.addEventListener('dblclick', goFullscreenAndLock);
-  wrap.addEventListener('touchend', (e)=>{ if(e.touches?.length===0){ goFullscreenAndLock(); } }, {passive:true});
+  if (wrap){
+    wrap.addEventListener('dblclick', goFullscreenAndLock);
+    wrap.addEventListener('touchend', (e)=>{ if(e.touches?.length===0){ goFullscreenAndLock(); } }, {passive:true});
+  }
 
-  // Abrir en app de YouTube (recomendado para Cast/AirPlay con YouTube)
+  // Abrir en app de YouTube (alternativa para Cast/AirPlay)
   const src = frame ? (frame.getAttribute('src')||'') : '';
   const vidMatch = src.match(/\/embed\/([^?&/]+)/);
 
@@ -452,45 +460,60 @@ if ($pelea_sel){
 <!-- Google Cast Sender SDK -->
 <script src="https://www.gstatic.com/cv/js/sender/v1/cast_sender.js?loadCastFramework"></script>
 <script>
-  // Mostrar el botón sólo si el SDK está disponible
-  window.__onGCastApiAvailable = function(isAvailable) {
-    if (isAvailable) initCast();
-  };
+  const btnCast = document.getElementById('btnCastTV');
 
-  function initCast(){
-    try{
+  function isSecureOrigin() {
+    return location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1';
+  }
+
+  // Siempre dejamos el botón visible. Si hay Cast, lo usamos; si no, mostramos guía.
+  window.__onGCastApiAvailable = function(isAvailable) {
+    if (!isAvailable) {
+      attachGuideHandler();
+      return;
+    }
+    try {
       const context = cast.framework.CastContext.getInstance();
-      // Opción 1 (por defecto): Default Media Receiver (para streams HLS/DASH propios)
       context.setOptions({
         receiverApplicationId: chrome.cast.media.DEFAULT_MEDIA_RECEIVER_APP_ID,
         autoJoinPolicy: chrome.cast.AutoJoinPolicy.TAB_AND_ORIGIN_SCOPED
       });
-      const btn = document.getElementById('btnCastTV');
-      if (btn) btn.style.display = 'inline-block';
-      btn?.addEventListener('click', castThisTabOrShowHelp);
-    }catch(e){}
-  }
+      btnCast?.addEventListener('click', openCastOrGuide, { once:false });
+    } catch (e) {
+      attachGuideHandler();
+    }
+  };
 
-  async function castThisTabOrShowHelp(){
-    try{
+  async function openCastOrGuide() {
+    if (!isSecureOrigin()) return showGuide('Para usar Cast directo desde la web, abrí esta página en HTTPS o en http://localhost. Igual podés transmitir la pestaña desde el menú del navegador.');
+    try {
       const context = cast.framework.CastContext.getInstance();
-      // Abre diálogo de Cast: en Chrome puede permitir "Transmitir esta pestaña".
-      const session = await context.requestSession();
+      await context.requestSession(); // abre diálogo Cast (si el navegador lo soporta)
 
-      // === Si en el futuro tenés tu PROPIO stream HLS/DASH, podés cargarlo acá: ===
-      // const mediaInfo = new chrome.cast.media.MediaInfo('https://tu-servidor/stream.m3u8', 'application/x-mpegurl');
+      // Si en el futuro usás un stream propio HLS/DASH (no YouTube), podés enviar media así:
+      // const mediaInfo = new chrome.cast.media.MediaInfo('https://tu-servidor/stream.m3u8','application/x-mpegurl');
       // mediaInfo.metadata = new chrome.cast.media.GenericMediaMetadata();
       // mediaInfo.metadata.title = 'Evento en vivo';
-      // const request = new chrome.cast.media.LoadRequest(mediaInfo);
-      // await session.loadMedia(request);
-      // ==========================================================================
-
-      // Con YouTube en iframe no podemos "enviar" el video directo desde acá.
-      // Tip al usuario:
-      alert('Si tu dispositivo no ofrece “Transmitir esta pestaña” automáticamente, tocá “Abrir en YouTube” y casteá desde la app (icono Cast). Es la forma más estable para YouTube.');
-    }catch(e){
-      alert('No se pudo iniciar Cast. Como alternativa, podés usar "Abrir en YouTube" y castear desde la app.');
+      // const req = new chrome.cast.media.LoadRequest(mediaInfo);
+      // await session.loadMedia(req);
+    } catch (e) {
+      showGuide('No se pudo iniciar Cast desde el botón. Podés usar "Transmitir esta pestaña" del navegador.');
     }
+  }
+
+  function attachGuideHandler() {
+    btnCast?.addEventListener('click', () => { showGuide(); }, { once:false });
+  }
+
+  function showGuide(extraMsg) {
+    const msg = (extraMsg ? (extraMsg + '\n\n') : '') +
+`Transmitir esta pestaña:
+• En Chrome (PC/Mac): Menú ⋮ → "Transmitir…" → "Esta pestaña".
+• En Android: Panel rápido → "Transmitir" → elegí tu TV/Chromecast.
+• En iPhone/iPad/Mac: Duplicar pantalla / AirPlay al TV.
+
+Sugerencia: activá "⛶ Pantalla completa" en la página antes de transmitir para que se vea video + HUD + lista.`;
+    alert(msg);
   }
 </script>
 
@@ -546,6 +569,7 @@ if ($pelea_sel){
       if (mesaPeleaId && mesaPeleaId !== phase.peleaId){
         const params = new URLSearchParams(window.location.search);
         params.set('pelea_id', String(mesaPeleaId));
+        if (<?= $share ? 'true' : 'false' ?>) params.set('share','1');
         window.location.search = params.toString();
         return;
       }
