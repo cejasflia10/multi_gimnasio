@@ -1,5 +1,5 @@
 <?php
-// tienda_indumentaria.php — Tienda/venta de indumentaria (lee de ind_productos + ind_talles)
+// tienda_indumentaria.php — Tienda/venta de indumentaria con galería (ind_productos + ind_talles + ind_fotos opcional)
 if (session_status() === PHP_SESSION_NONE) session_start();
 require_once __DIR__ . '/conexion.php';
 
@@ -18,6 +18,13 @@ function db_has_table(mysqli $db, string $t): bool {
   $res = $db->query("SHOW TABLES LIKE '{$t}'");
   return ($res && $res->num_rows > 0);
 }
+/* Mejorar tamaño si es Cloudinary */
+function cloud_big($url){
+  if (!$url) return $url;
+  $pos = strpos($url, '/upload/');
+  if ($pos === false) return $url;
+  return substr($url, 0, $pos+8) . 'w_1600,q_auto,f_auto/' . substr($url, $pos+8);
+}
 
 /* ===== Estado / CSRF / Cart ===== */
 if (empty($_SESSION['csrf_token'])) $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
@@ -27,6 +34,7 @@ if (!isset($_SESSION['cart']) || !is_array($_SESSION['cart'])) $_SESSION['cart']
 /* ===== Verificar tablas reales del admin ===== */
 $have_prod  = db_has_table($conexion, 'ind_productos');
 $have_talle = db_has_table($conexion, 'ind_talles');
+$have_fotos = db_has_table($conexion, 'ind_fotos'); // opcional
 
 /* ===== Parámetros ===== */
 $search = trim((string)($_GET['q'] ?? ''));
@@ -38,20 +46,17 @@ $offset = ($page-1)*$perp;
 $productos = [];
 $categorias = [];
 $total_rows = 0;
+$galerias = []; // pid => [urls]
 
-/* ===== DATA desde ind_productos / ind_talles ===== */
+/* ===== DATA ===== */
 if ($have_prod) {
   // Categorías
-  $whereCat = " WHERE gimnasio_id=? AND activo=1";
-  $bindCatT = 'i';
-  $bindCat  = [$gimnasio_id];
-
   $sqlCat = "SELECT DISTINCT categoria AS cat
              FROM ind_productos
-             {$whereCat}
+             WHERE gimnasio_id=? AND activo=1
              ORDER BY cat ASC";
   if ($stC = @$conexion->prepare($sqlCat)) {
-    $stC->bind_param($bindCatT, ...$bindCat);
+    $stC->bind_param('i', $gimnasio_id);
     if ($stC->execute()) {
       $r = $stC->get_result();
       while($row=$r->fetch_assoc()){
@@ -80,7 +85,7 @@ if ($have_prod) {
   }
   $where_sql = "WHERE ".implode(" AND ", $where);
 
-  // Conteo (sin JOIN, más rápido)
+  // Conteo
   $sqlCnt = "SELECT COUNT(*) AS n FROM ind_productos p {$where_sql}";
   if ($stN = @$conexion->prepare($sqlCnt)) {
     $stN->bind_param($types, ...$bind);
@@ -91,8 +96,7 @@ if ($have_prod) {
     $stN->close();
   }
 
-  // Select con stock total (LEFT JOIN a talles)
-  // Nota: si no existe ind_talles, stock_total = 0 via COALESCE
+  // Página + stock total
   $sql = "SELECT 
             p.id,
             p.titulo       AS nombre,
@@ -123,8 +127,6 @@ if ($have_prod) {
           'stock'    => (int)$r['stock_total'],
           'img'      => (string)($r['img'] ?? ''),
           'desc'     => (string)($r['desctxt'] ?? ''),
-          'talla'    => '', // se maneja por variante en el carrito si lo necesitás
-          'color'    => '',
           'categoria'=> (string)($r['categoria'] ?? ''),
           'variantes'=> (int)$r['variantes'],
         ];
@@ -132,14 +134,32 @@ if ($have_prod) {
     }
     $st->close();
   }
+
+  // Galerías si existe ind_fotos
+  if ($have_fotos && $productos){
+    $ids = array_map(fn($p)=>(int)$p['id'], $productos);
+    $in  = implode(',', array_fill(0, count($ids), '?'));
+    $tIn = str_repeat('i', count($ids));
+    $sqlG = "SELECT producto_id, url FROM ind_fotos WHERE producto_id IN ($in) ORDER BY orden, id";
+    if ($stG = @$conexion->prepare($sqlG)) {
+      $stG->bind_param($tIn, ...$ids);
+      if ($stG->execute()){
+        $rg = $stG->get_result();
+        while($row=$rg->fetch_assoc()){
+          $galerias[(int)$row['producto_id']][] = (string)$row['url'];
+        }
+      }
+      $stG->close();
+    }
+  }
 } else {
-  // Fallback demo si aún no creaste ind_productos
+  // Fallback demo
   $total_rows = 4;
   $productos = [
-    ['id'=>101, 'nombre'=>'Remera Dry-Fit', 'precio'=>11999, 'stock'=>20, 'img'=>'', 'desc'=>'Secado rápido, entrenamiento', 'talla'=>'', 'color'=>'', 'categoria'=>'Ropa', 'variantes'=>0],
-    ['id'=>102, 'nombre'=>'Guantes Box 12oz', 'precio'=>45999, 'stock'=>12, 'img'=>'', 'desc'=>'Cuero sintético, velcro', 'talla'=>'', 'color'=>'', 'categoria'=>'Combate', 'variantes'=>0],
-    ['id'=>103, 'nombre'=>'Short Muay Thai', 'precio'=>29999, 'stock'=>8,  'img'=>'', 'desc'=>'Corte clásico, liviano', 'talla'=>'', 'color'=>'', 'categoria'=>'Combate', 'variantes'=>0],
-    ['id'=>104, 'nombre'=>'Zapatillas Training', 'precio'=>69999, 'stock'=>5, 'img'=>'', 'desc'=>'Suela antideslizante', 'talla'=>'', 'color'=>'', 'categoria'=>'Calzado', 'variantes'=>0],
+    ['id'=>101, 'nombre'=>'Remera Dry-Fit', 'precio'=>11999, 'stock'=>20, 'img'=>'', 'desc'=>'Secado rápido, entrenamiento', 'categoria'=>'Ropa', 'variantes'=>0],
+    ['id'=>102, 'nombre'=>'Guantes Box 12oz', 'precio'=>45999, 'stock'=>12, 'img'=>'', 'desc'=>'Cuero sintético, velcro', 'categoria'=>'Combate', 'variantes'=>0],
+    ['id'=>103, 'nombre'=>'Short Muay Thai', 'precio'=>29999, 'stock'=>8,  'img'=>'', 'desc'=>'Corte clásico, liviano', 'categoria'=>'Combate', 'variantes'=>0],
+    ['id'=>104, 'nombre'=>'Zapatillas Training', 'precio'=>69999, 'stock'=>5, 'img'=>'', 'desc'=>'Suela antideslizante', 'categoria'=>'Calzado', 'variantes'=>0],
   ];
 }
 
@@ -157,14 +177,10 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
     $nom   = trim((string)($_POST['nom'] ?? ''));
     $precio= (float)($_POST['precio'] ?? 0);
     $img   = trim((string)($_POST['img'] ?? ''));
-    // Para una 2da versión podemos pedir talle/color antes de agregar:
-    $talla = trim((string)($_POST['talla'] ?? ''));
-    $color = trim((string)($_POST['color'] ?? ''));
     $q     = max(1, (int)($_POST['q'] ?? 1));
-
     if ($pid>0) {
       if (!isset($_SESSION['cart'][$pid])) {
-        $_SESSION['cart'][$pid] = ['q'=>0,'precio'=>$precio,'nombre'=>$nom,'img'=>$img,'talla'=>$talla,'color'=>$color];
+        $_SESSION['cart'][$pid] = ['q'=>0,'precio'=>$precio,'nombre'=>$nom,'img'=>$img,'talla'=>'','color'=>''];
       }
       $_SESSION['cart'][$pid]['q'] += $q;
     }
@@ -211,8 +227,8 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
         if ($stI = @$conexion->prepare($sqlI)) {
           foreach($_SESSION['cart'] as $pid=>$it){
             $q=(int)($it['q'] ?? 0); if ($q<=0) continue;
-            $nom=$it['nombre'] ?? ''; $p=(float)($it['precio'] ?? 0); $talla=$it['talla'] ?? ''; $color=$it['color'] ?? '';
-            $stI->bind_param("iisidss", $venta_id, $pid, $nom, $q, $p, $talla, $color);
+            $nom=$it['nombre'] ?? ''; $p=(float)($it['precio'] ?? 0);
+            $stI->bind_param("iisidss", $venta_id, $pid, $nom, $q, $p, $t='', $c='');
             @$stI->execute();
           }
           $stI->close();
@@ -244,32 +260,15 @@ foreach ($cart as $it) {
   <style>
     :root{
       --mnu-bg-bar: rgba(15,19,32,.78);
-      --mnu-bg-drawer: rgba(10,12,20,.94);
-      --mnu-fg: #fff; --mnu-fg-dim: #cbd5e1; --mnu-accent: #ffd600;
-      --mnu-border: rgba(255,255,255,.16); --mnu-shadow: 0 10px 30px rgba(0,0,0,.45);
+      --mnu-fg: #fff; --mnu-accent: #ffd600;
+      --mnu-border: rgba(255,255,255,.16);
       --bg:#0b0b0b; --surface:#0f1115; --card:#12141a; --fg:#f1f5f9; --muted:#a0a7b4; --acc:#f5c542; --border:rgba(255,255,255,.12);
     }
-    .mnu-bar{ position:sticky; top:0; z-index:1000; display:flex; align-items:center; gap:12px; padding:10px 14px; background:var(--mnu-bg-bar); -webkit-backdrop-filter: blur(10px) saturate(1.05); backdrop-filter: blur(10px) saturate(1.05); border-bottom:1px solid var(--mnu-border); }
+    .mnu-bar{ position:sticky; top:0; z-index:1000; display:flex; align-items:center; gap:12px; padding:10px 14px; background:var(--mnu-bg-bar); border-bottom:1px solid var(--mnu-border); }
     .mnu-title{ font-weight:800; color:var(--mnu-accent); }
     .mnu-spacer{ flex:1; }
     .mnu-btn{ display:inline-flex; align-items:center; gap:8px; padding:10px 14px; border-radius:999px; cursor:pointer; background:var(--mnu-accent); color:#111; border:none; font-weight:700; text-decoration:none; }
     .mnu-btn--ghost{ background:transparent; border:1px solid var(--mnu-border); color:#fff }
-    .mnu-inline{ display:flex; gap:10px; flex-wrap:wrap; padding:10px 14px; background:transparent; border-bottom:1px solid var(--mnu-border); }
-    .mnu-tab{ padding:10px 14px; border-radius:14px; border:1px solid var(--mnu-border); color:#fff; text-decoration:none; }
-    .mnu-tab:hover{ background:rgba(255,255,255,.06); }
-    @media (max-width:920px){ .mnu-inline{ display:none !important; } }
-    .mnu-backdrop{ position:fixed; inset:0; background:rgba(0,0,0,.55); z-index:10005; display:none; }
-    .mnu-drawer{ position:fixed; top:0; bottom:0; left:0; width:86vw; max-width:360px; background:var(--mnu-bg-drawer); border-right:1px solid var(--mnu-border); box-shadow:var(--mnu-shadow); transform:translateX(-100%); transition:transform .25s ease; z-index:10010; padding:14px; display:flex; flex-direction:column; gap:12px; }
-    .mnu-drawer.open{ transform:translateX(0); }
-    .mnu-backdrop.show{ display:block; }
-    .mnu-head{ display:flex; align-items:center; gap:10px; margin-bottom:6px; }
-    .mnu-close{ width:44px; height:44px; border-radius:50%; display:grid; place-items:center; cursor:pointer; background:var(--mnu-accent); color:#111; font-weight:900; border:none; }
-    .mnu-list{ display:flex; flex-direction:column; gap:12px; margin:0; padding:0; list-style:none; }
-    .mnu-item{ display:flex; align-items:center; gap:12px; padding:14px; border-radius:14px; border:1px solid var(--mnu-border); color:#fff; text-decoration:none; background:transparent; }
-    .mnu-item:hover{ background:rgba(255,255,255,.10); border-color:rgba(255,255,255,.30); }
-    .mnu-item__icon{ width:24px; display:inline-grid; place-items:center; color:#fff; }
-    .mnu-item__text{ font-size:18px; }
-    .mnu-bar *, .mnu-drawer *, .mnu-inline *, .mnu-item, .mnu-item *{ color:#fff !important; -webkit-text-fill-color:#fff !important; }
 
     *{box-sizing:border-box}
     html,body{height:100%}
@@ -291,7 +290,7 @@ foreach ($cart as $it) {
     @media (min-width:620px){ .products{ grid-template-columns: repeat(2, minmax(0,1fr)); } }
     @media (min-width:980px){ .products{ grid-template-columns: repeat(3, minmax(0,1fr)); } }
     .p-card{ display:flex; flex-direction:column; gap:10px; border:1px solid var(--border); border-radius:16px; padding:12px; background:#12141a; }
-    .p-img{ width:100%; aspect-ratio: 4/3; background:#0f1115; border-radius:12px; display:grid; place-items:center; overflow:hidden }
+    .p-img{ width:100%; aspect-ratio: 4/3; background:#0f1115; border-radius:12px; display:grid; place-items:center; overflow:hidden; cursor:pointer }
     .p-img img{ width:100%; height:100%; object-fit:cover }
     .p-name{ font-weight:800; }
     .p-meta{ display:flex; gap:8px; flex-wrap:wrap; font-size:13px; color:#cbd5e1 }
@@ -302,6 +301,13 @@ foreach ($cart as $it) {
     .btn-ghost{ background:transparent; border:1px solid var(--border); color:#fff }
     .badge{ border:1px solid var(--border); padding:4px 8px; border-radius:999px; font-size:12px; }
 
+    /* Miniaturas */
+    .p-thumbs{ display:flex; flex-direction:column; gap:8px; margin-top:2px }
+    .thumbs-row{ display:flex; gap:8px; flex-wrap:wrap }
+    .thumbs-row .thumb{ width:52px; height:52px; border-radius:8px; object-fit:cover; border:1px solid var(--border); cursor:pointer }
+    .thumbs-row .more{ display:inline-flex; align-items:center; justify-content:center; width:52px; height:52px; border-radius:8px; border:1px dashed var(--border); color:#cbd5e1; font-size:12px; cursor:pointer }
+
+    /* Carrito */
     .cart{ position:sticky; top:74px; align-self:start }
     .cart h3{ margin:0 0 6px }
     .cart-list{ display:flex; flex-direction:column; gap:10px; }
@@ -322,7 +328,6 @@ foreach ($cart as $it) {
 </head>
 <body>
 
-  <!-- Menú simple (si querés, reusa tu menú unificado completo) -->
   <header>
     <div class="mnu-bar">
       <div class="mnu-title">Panel Cliente</div>
@@ -363,14 +368,38 @@ foreach ($cart as $it) {
         <?php else: ?>
           <div class="products">
             <?php foreach ($productos as $p): ?>
-              <article class="p-card">
+              <?php
+                $gal = $galerias[$p['id']] ?? [];
+                // Armar galería final: portada + extras (sin duplicar)
+                $gal_final = [];
+                if (!empty($p['img'])) $gal_final[] = $p['img'];
+                foreach ($gal as $u) { if ($u && $u!==$p['img']) $gal_final[] = $u; }
+              ?>
+              <article class="p-card" data-images='<?= h(json_encode($gal_final, JSON_UNESCAPED_SLASHES)) ?>'>
                 <div class="p-img">
                   <?php if (!empty($p['img'])): ?>
                     <img src="<?= h($p['img']) ?>" alt="<?= h($p['nombre']) ?>">
+                  <?php elseif(!empty($gal_final)): ?>
+                    <img src="<?= h($gal_final[0]) ?>" alt="<?= h($p['nombre']) ?>">
                   <?php else: ?>
                     <span class="muted">Sin imagen</span>
                   <?php endif; ?>
                 </div>
+
+                <?php if (!empty($gal_final)): ?>
+                  <div class="p-thumbs">
+                    <div class="thumbs-row">
+                      <?php foreach (array_slice($gal_final,0,4) as $u): ?>
+                        <img class="thumb" src="<?= h($u) ?>" alt="">
+                      <?php endforeach; ?>
+                      <?php if (count($gal_final)>4): ?>
+                        <span class="more">+<?= count($gal_final)-4 ?></span>
+                      <?php endif; ?>
+                    </div>
+                    <button class="btn btn-ghost btn-view">Ver fotos</button>
+                  </div>
+                <?php endif; ?>
+
                 <div class="p-name"><?= h($p['nombre']) ?></div>
                 <div class="p-meta">
                   <?php if ($p['categoria']): ?><span class="badge">#<?= h($p['categoria']) ?></span><?php endif; ?>
@@ -379,13 +408,14 @@ foreach ($cart as $it) {
                 </div>
                 <?php if ($p['desc']): ?><div class="muted" style="min-height:38px"><?= h($p['desc']) ?></div><?php endif; ?>
                 <div class="price">$ <?= money($p['precio']) ?></div>
+
                 <form class="p-actions" method="POST" action="tienda_indumentaria.php#carrito" autocomplete="off">
                   <input type="hidden" name="csrf" value="<?= h($csrf) ?>">
                   <input type="hidden" name="act" value="add">
                   <input type="hidden" name="pid" value="<?= (int)$p['id'] ?>">
                   <input type="hidden" name="nom" value="<?= h($p['nombre']) ?>">
                   <input type="hidden" name="precio" value="<?= (float)$p['precio'] ?>">
-                  <input type="hidden" name="img" value="<?= h($p['img']) ?>">
+                  <input type="hidden" name="img" value="<?= h($p['img'] ?: ($gal_final[0] ?? '')) ?>">
                   <input type="number" name="q" value="1" min="1" step="1" />
                   <button class="btn" type="submit">Agregar</button>
                 </form>
@@ -431,8 +461,6 @@ foreach ($cart as $it) {
                 <div>
                   <div class="c-name"><?= h($it['nombre']) ?></div>
                   <div class="c-meta">
-                    <?php if (!empty($it['talla'])): ?>Talle: <?= h($it['talla']) ?> · <?php endif; ?>
-                    <?php if (!empty($it['color'])): ?>Color: <?= h($it['color']) ?> · <?php endif; ?>
                     $ <?= money($it['precio']) ?> c/u
                   </div>
                 </div>
@@ -472,5 +500,124 @@ foreach ($cart as $it) {
       </aside>
     </div>
   </div>
+
+  <!-- Lightbox / Galería -->
+  <div id="lb-backdrop" style="position:fixed;inset:0;background:rgba(0,0,0,.85);display:none;z-index:3000;"></div>
+  <div id="lb" style="position:fixed;inset:0;display:none;z-index:3001;place-items:center;">
+    <div id="lb-wrap" style="max-width:92vw;max-height:92vh;position:relative;display:flex;flex-direction:column;gap:10px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
+        <button id="lb-prev" class="btn btn-ghost" aria-label="Anterior">◀</button>
+        <button id="lb-close" class="btn btn-ghost" aria-label="Cerrar">✕</button>
+        <button id="lb-next" class="btn btn-ghost" aria-label="Siguiente">▶</button>
+      </div>
+      <div id="lb-canvas" style="background:#0b0b0b;border:1px solid var(--border);border-radius:12px;display:grid;place-items:center;overflow:hidden;max-height:80vh;">
+        <img id="lb-img" src="" alt="" style="max-width:92vw;max-height:80vh;transition:transform .2s ease; cursor: zoom-in;">
+      </div>
+      <div id="lb-thumbs" style="display:flex;gap:8px;flex-wrap:wrap;max-width:92vw;overflow:auto;"></div>
+    </div>
+  </div>
+
+  <script>
+  (function(){
+    const $  = s=>document.querySelector(s);
+    const $$ = s=>document.querySelectorAll(s);
+    const backdrop = $('#lb-backdrop');
+    const modal    = $('#lb');
+    const img      = $('#lb-img');
+    const thumbs   = $('#lb-thumbs');
+    const btnPrev  = $('#lb-prev');
+    const btnNext  = $('#lb-next');
+    const btnClose = $('#lb-close');
+
+    let images = [];
+    let index  = 0;
+    let zoomed = false;
+
+    function mapBig(u){
+      // si es Cloudinary, traer tamaño grande (coincide con PHP)
+      try{
+        const marker = '/upload/';
+        const k = u.indexOf(marker);
+        if (k>-1) return u.slice(0,k+marker.length)+'w_1600,q_auto,f_auto/'+u.slice(k+marker.length);
+      }catch(e){}
+      return u;
+    }
+
+    function open(gal, start=0){
+      images = (gal || []).map(mapBig);
+      index  = Math.max(0, Math.min(start, images.length-1));
+      render();
+      backdrop.style.display = 'block';
+      modal.style.display    = 'grid';
+      document.documentElement.style.overflow = 'hidden';
+    }
+    function close(){
+      backdrop.style.display = 'none';
+      modal.style.display    = 'none';
+      document.documentElement.style.overflow = '';
+      zoomed = false;
+      img.style.transform = 'none';
+      img.style.cursor = 'zoom-in';
+    }
+    function render(){
+      if (!images.length) return close();
+      img.src = images[index];
+      thumbs.innerHTML = '';
+      images.forEach((u,i)=>{
+        const t = document.createElement('img');
+        t.src = u; t.alt='';
+        t.style.width='64px'; t.style.height='64px';
+        t.style.objectFit='cover'; t.style.borderRadius='8px';
+        t.style.border = '2px solid ' + (i===index ? '#ffd600' : 'rgba(255,255,255,.2)');
+        t.addEventListener('click', ()=>{ index=i; zoomed=false; img.style.transform='none'; render(); });
+        thumbs.appendChild(t);
+      });
+    }
+    function prev(){ index = (index - 1 + images.length) % images.length; render(); }
+    function next(){ index = (index + 1) % images.length; render(); }
+
+    // Zoom al click
+    img.addEventListener('click', ()=>{
+      zoomed = !zoomed;
+      img.style.transform = zoomed ? 'scale(1.8)' : 'none';
+      img.style.cursor = zoomed ? 'zoom-out' : 'zoom-in';
+    });
+
+    // Controles
+    btnPrev.addEventListener('click', prev);
+    btnNext.addEventListener('click', next);
+    btnClose.addEventListener('click', close);
+    backdrop.addEventListener('click', close);
+    window.addEventListener('keydown', (e)=>{
+      if (modal.style.display !== 'grid') return;
+      if (e.key==='Escape') close();
+      if (e.key==='ArrowLeft') prev();
+      if (e.key==='ArrowRight') next();
+    });
+
+    // Activadores desde tarjetas
+    $$('.p-card').forEach(card=>{
+      const galData = card.getAttribute('data-images') || '[]';
+      let gal = [];
+      try{ gal = JSON.parse(galData); }catch(e){}
+      const btn = card.querySelector('.btn-view');
+      const imgMain = card.querySelector('.p-img');
+      const thumbsRow = card.querySelector('.thumbs-row');
+
+      function openIfAny(){ if (gal && gal.length) open(gal, 0); }
+
+      btn && btn.addEventListener('click', openIfAny);
+      imgMain && imgMain.addEventListener('click', openIfAny);
+      thumbsRow && thumbsRow.addEventListener('click', (ev)=>{
+        const t = ev.target.closest('img.thumb');
+        if (!t) return;
+        const idx = Array.from(thumbsRow.querySelectorAll('img.thumb')).indexOf(t);
+        if (idx>-1) open(gal, idx);
+      });
+      const more = card.querySelector('.thumbs-row .more');
+      more && more.addEventListener('click', openIfAny);
+    });
+  })();
+  </script>
 </body>
 </html>
