@@ -1,5 +1,5 @@
 <?php
-// tienda_indumentaria.php — Tienda/venta de indumentaria con MENÚ UNIFICADO (cliente)
+// tienda_indumentaria.php — Tienda/venta de indumentaria (lee de ind_productos + ind_talles)
 if (session_status() === PHP_SESSION_NONE) session_start();
 require_once __DIR__ . '/conexion.php';
 
@@ -10,139 +10,140 @@ if ($cliente_id === 0 || $gimnasio_id === 0) { echo "<div style='color:red;text-
 if (function_exists('mysqli_report')) { mysqli_report(MYSQLI_REPORT_OFF); }
 @$conexion->set_charset('utf8mb4');
 
-// ===== Helpers =====
+/* ===== Helpers ===== */
 function h($s){ return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); }
+function money($n){ return number_format((float)$n, 2, ',', '.'); }
 function db_has_table(mysqli $db, string $t): bool {
   $t = $db->real_escape_string($t);
   $res = $db->query("SHOW TABLES LIKE '{$t}'");
   return ($res && $res->num_rows > 0);
 }
-function table_cols(mysqli $db, string $t): array {
-  $cols = [];
-  $t = $db->real_escape_string($t);
-  if ($r = $db->query("SHOW COLUMNS FROM `{$t}`")) {
-    while ($c = $r->fetch_assoc()) $cols[] = $c['Field'];
-  }
-  return $cols;
-}
-function pick_col(array $cands, array $cols){
-  foreach($cands as $c){ if (in_array($c, $cols, true)) return $c; }
-  return null;
-}
-function money($n){ return number_format((float)$n, 2, ',', '.'); }
 
-// ===== Estado / CSRF / Cart =====
+/* ===== Estado / CSRF / Cart ===== */
 if (empty($_SESSION['csrf_token'])) $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
 $csrf = $_SESSION['csrf_token'];
-if (!isset($_SESSION['cart']) || !is_array($_SESSION['cart'])) $_SESSION['cart'] = []; // [producto_id => ['q'=>int,'precio'=>float,'nombre'=>str,'img'=>str,'talla'=>?, 'color'=>?]]
+if (!isset($_SESSION['cart']) || !is_array($_SESSION['cart'])) $_SESSION['cart'] = [];
 
-// ===== Productos: origen BD si existe =====
-$tabla_prod = 'productos_indumentaria'; // ajustable
-$productos = [];
-$categorias = [];
-$colmap = [
-  'id'          => ['id','producto_id','id_producto'],
-  'nombre'      => ['nombre','titulo','producto','nombre_producto'],
-  'precio'      => ['precio','precio_unit','precio_venta'],
-  'stock'       => ['stock','cantidad','existencia'],
-  'img'         => ['imagen_url','foto_url','img','imagen'],
-  'desc'        => ['descripcion','detalle','resumen'],
-  'talla'       => ['talla','talle','size'],
-  'color'       => ['color'],
-  'categoria'   => ['categoria','rubro','tipo']
-];
+/* ===== Verificar tablas reales del admin ===== */
+$have_prod  = db_has_table($conexion, 'ind_productos');
+$have_talle = db_has_table($conexion, 'ind_talles');
 
+/* ===== Parámetros ===== */
 $search = trim((string)($_GET['q'] ?? ''));
 $catfil = trim((string)($_GET['cat'] ?? ''));
 $page   = max(1, (int)($_GET['p'] ?? 1));
 $perp   = 12;
 $offset = ($page-1)*$perp;
 
+$productos = [];
+$categorias = [];
 $total_rows = 0;
 
-if (db_has_table($conexion, $tabla_prod)) {
-  $cols = table_cols($conexion, $tabla_prod);
-  $c = [];
-  foreach ($colmap as $k=>$cands) $c[$k] = pick_col($cands, $cols);
+/* ===== DATA desde ind_productos / ind_talles ===== */
+if ($have_prod) {
+  // Categorías
+  $whereCat = " WHERE gimnasio_id=? AND activo=1";
+  $bindCatT = 'i';
+  $bindCat  = [$gimnasio_id];
 
-  // Categorías (distintas) si hay columna
-  if ($c['categoria']) {
-    $sqlCat = "SELECT DISTINCT `{$c['categoria']}` AS cat FROM `$tabla_prod` WHERE gimnasio_id=? ORDER BY cat ASC";
-    if ($stC = @$conexion->prepare($sqlCat)) {
-      $stC->bind_param("i",$gimnasio_id);
-      if ($stC->execute()) {
-        $r=$stC->get_result();
-        while($row=$r->fetch_assoc()){
-          $catv = trim((string)$row['cat']);
-          if ($catv!=='') $categorias[]=$catv;
-        }
+  $sqlCat = "SELECT DISTINCT categoria AS cat
+             FROM ind_productos
+             {$whereCat}
+             ORDER BY cat ASC";
+  if ($stC = @$conexion->prepare($sqlCat)) {
+    $stC->bind_param($bindCatT, ...$bindCat);
+    if ($stC->execute()) {
+      $r = $stC->get_result();
+      while($row=$r->fetch_assoc()){
+        $catv = trim((string)$row['cat']);
+        if ($catv!=='') $categorias[]=$catv;
       }
-      $stC->close();
     }
+    $stC->close();
   }
 
-  // Conteo total
-  $where = " WHERE gimnasio_id=?";
-  $bind = [$gimnasio_id];
-  $bt   = "i";
-  if ($search!=='') { 
-    $where .= " AND (".($c['nombre']?"`{$c['nombre']}` LIKE ?":"1=1")." OR ".($c['desc']?"`{$c['desc']}` LIKE ?":"1=1").")"; 
-    $s = "%{$search}%"; 
-    $bind[]=$s; $bind[]=$s; 
-    $bt.="ss"; 
-  }
-  if ($catfil!=='' && $c['categoria']) { $where.=" AND `{$c['categoria']}`=?"; $bind[]=$catfil; $bt.="s"; }
+  // WHERE principal
+  $where = ["p.gimnasio_id=?","p.activo=1"];
+  $types = "i";
+  $bind  = [$gimnasio_id];
 
-  $sqlCnt = "SELECT COUNT(*) AS n FROM `$tabla_prod` $where";
+  if ($search!=='') {
+    $where[] = "(p.titulo LIKE ? OR p.descripcion LIKE ?)";
+    $s = "%{$search}%";
+    $bind[] = $s; $bind[] = $s;
+    $types .= "ss";
+  }
+  if ($catfil!=='') {
+    $where[] = "p.categoria = ?";
+    $bind[] = $catfil;
+    $types .= "s";
+  }
+  $where_sql = "WHERE ".implode(" AND ", $where);
+
+  // Conteo (sin JOIN, más rápido)
+  $sqlCnt = "SELECT COUNT(*) AS n FROM ind_productos p {$where_sql}";
   if ($stN = @$conexion->prepare($sqlCnt)) {
-    $stN->bind_param($bt, ...$bind);
-    if ($stN->execute()) { $rr = $stN->get_result()->fetch_assoc(); $total_rows = (int)($rr['n'] ?? 0); }
+    $stN->bind_param($types, ...$bind);
+    if ($stN->execute()) {
+      $rr = $stN->get_result()->fetch_assoc();
+      $total_rows = (int)($rr['n'] ?? 0);
+    }
     $stN->close();
   }
 
-  // Query página
-  $sel = [];
-  foreach (['id','nombre','precio','stock','img','desc','talla','color','categoria'] as $k) {
-    if ($c[$k]) $sel[] = "`{$c[$k]}` AS `$k`";
-  }
-  if (!$sel) $sel = ["*"];
-  $sql = "SELECT ".implode(",", $sel)." FROM `$tabla_prod` $where ORDER BY ".($c['nombre']?"`{$c['nombre']}`":"1")." LIMIT $perp OFFSET $offset";
+  // Select con stock total (LEFT JOIN a talles)
+  // Nota: si no existe ind_talles, stock_total = 0 via COALESCE
+  $sql = "SELECT 
+            p.id,
+            p.titulo       AS nombre,
+            p.precio       AS precio,
+            p.descripcion  AS desctxt,
+            p.foto_url     AS img,
+            p.categoria    AS categoria,
+            COALESCE(SUM(t.stock),0) AS stock_total,
+            COUNT(t.id)              AS variantes
+          FROM ind_productos p
+          LEFT JOIN ind_talles t ON t.producto_id = p.id
+          {$where_sql}
+          GROUP BY p.id
+          ORDER BY p.titulo
+          LIMIT ? OFFSET ?";
+  $typesPage = $types . "ii";
+  $bindPage  = $bind; $bindPage[] = $perp; $bindPage[] = $offset;
 
   if ($st = @$conexion->prepare($sql)) {
-    $st->bind_param($bt, ...$bind);
+    $st->bind_param($typesPage, ...$bindPage);
     if ($st->execute()) {
       $res = $st->get_result();
       while ($r = $res->fetch_assoc()) {
-        // saneo y defaults
-        $pid = (int)($r['id'] ?? 0);
-        if ($pid<=0) continue;
         $productos[] = [
-          'id'     => $pid,
-          'nombre' => (string)($r['nombre'] ?? 'Producto'),
-          'precio' => (float)($r['precio'] ?? 0),
-          'stock'  => (int)($r['stock'] ?? 0),
-          'img'    => (string)($r['img'] ?? ''),
-          'desc'   => (string)($r['desc'] ?? ''),
-          'talla'  => (string)($r['talla'] ?? ''),
-          'color'  => (string)($r['color'] ?? ''),
-          'categoria' => (string)($r['categoria'] ?? '')
+          'id'       => (int)$r['id'],
+          'nombre'   => (string)$r['nombre'],
+          'precio'   => (float)$r['precio'],
+          'stock'    => (int)$r['stock_total'],
+          'img'      => (string)($r['img'] ?? ''),
+          'desc'     => (string)($r['desctxt'] ?? ''),
+          'talla'    => '', // se maneja por variante en el carrito si lo necesitás
+          'color'    => '',
+          'categoria'=> (string)($r['categoria'] ?? ''),
+          'variantes'=> (int)$r['variantes'],
         ];
       }
     }
     $st->close();
   }
 } else {
-  // Fallback sin tabla: catálogo de muestra (no rompe)
+  // Fallback demo si aún no creaste ind_productos
   $total_rows = 4;
   $productos = [
-    ['id'=>101, 'nombre'=>'Remera Dry-Fit', 'precio'=>11999, 'stock'=>20, 'img'=>'', 'desc'=>'Secado rápido, entrenamiento', 'talla'=>'M', 'color'=>'Negro', 'categoria'=>'Ropa'],
-    ['id'=>102, 'nombre'=>'Guantes Box 12oz', 'precio'=>45999, 'stock'=>12, 'img'=>'', 'desc'=>'Cuero sintético, velcro', 'talla'=>'12oz', 'color'=>'Rojo', 'categoria'=>'Combate'],
-    ['id'=>103, 'nombre'=>'Short Muay Thai', 'precio'=>29999, 'stock'=>8,  'img'=>'', 'desc'=>'Corte clásico, liviano', 'talla'=>'L', 'color'=>'Azul', 'categoria'=>'Combate'],
-    ['id'=>104, 'nombre'=>'Zapatillas Training', 'precio'=>69999, 'stock'=>5, 'img'=>'', 'desc'=>'Suela antideslizante', 'talla'=>'42', 'color'=>'Negro', 'categoria'=>'Calzado'],
+    ['id'=>101, 'nombre'=>'Remera Dry-Fit', 'precio'=>11999, 'stock'=>20, 'img'=>'', 'desc'=>'Secado rápido, entrenamiento', 'talla'=>'', 'color'=>'', 'categoria'=>'Ropa', 'variantes'=>0],
+    ['id'=>102, 'nombre'=>'Guantes Box 12oz', 'precio'=>45999, 'stock'=>12, 'img'=>'', 'desc'=>'Cuero sintético, velcro', 'talla'=>'', 'color'=>'', 'categoria'=>'Combate', 'variantes'=>0],
+    ['id'=>103, 'nombre'=>'Short Muay Thai', 'precio'=>29999, 'stock'=>8,  'img'=>'', 'desc'=>'Corte clásico, liviano', 'talla'=>'', 'color'=>'', 'categoria'=>'Combate', 'variantes'=>0],
+    ['id'=>104, 'nombre'=>'Zapatillas Training', 'precio'=>69999, 'stock'=>5, 'img'=>'', 'desc'=>'Suela antideslizante', 'talla'=>'', 'color'=>'', 'categoria'=>'Calzado', 'variantes'=>0],
   ];
 }
 
-// ===== Acciones carrito (POST) =====
+/* ===== Acciones carrito ===== */
 function require_csrf(){
   if (!isset($_POST['csrf']) || !hash_equals($_SESSION['csrf_token'] ?? '', $_POST['csrf'])) {
     http_response_code(400); echo "CSRF inválido"; exit;
@@ -156,6 +157,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
     $nom   = trim((string)($_POST['nom'] ?? ''));
     $precio= (float)($_POST['precio'] ?? 0);
     $img   = trim((string)($_POST['img'] ?? ''));
+    // Para una 2da versión podemos pedir talle/color antes de agregar:
     $talla = trim((string)($_POST['talla'] ?? ''));
     $color = trim((string)($_POST['color'] ?? ''));
     $q     = max(1, (int)($_POST['q'] ?? 1));
@@ -190,8 +192,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
   }
   if ($act==='checkout') {
     require_csrf();
-    // Guardar venta si existen tablas: ventas_indumentaria (id, cliente_id, gimnasio_id, fecha, total)
-    // y ventas_indumentaria_items (venta_id, producto_id, nombre, cantidad, precio_unit, talla, color)
+
     $venta_id = 0;
     $ok_bd = db_has_table($conexion,'ventas_indumentaria') && db_has_table($conexion,'ventas_indumentaria_items');
 
@@ -199,14 +200,12 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
     foreach($_SESSION['cart'] as $pid=>$it) $total += ((float)($it['precio'] ?? 0)) * ((int)($it['q'] ?? 0));
 
     if ($ok_bd && $total>0) {
-      // Insert encabezado
       $sqlV = "INSERT INTO ventas_indumentaria (cliente_id, gimnasio_id, fecha, total) VALUES (?,?,NOW(),?)";
       if ($stV = @$conexion->prepare($sqlV)) {
         $stV->bind_param("iid", $cliente_id, $gimnasio_id, $total);
         if ($stV->execute()) $venta_id = (int)$stV->insert_id;
         $stV->close();
       }
-      // Detalle
       if ($venta_id>0) {
         $sqlI = "INSERT INTO ventas_indumentaria_items (venta_id, producto_id, nombre, cantidad, precio_unit, talla, color) VALUES (?,?,?,?,?,?,?)";
         if ($stI = @$conexion->prepare($sqlI)) {
@@ -220,13 +219,12 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
         }
       }
     }
-    // Vaciar carrito
     $_SESSION['cart'] = [];
     header("Location: tienda_indumentaria.php?venta_ok=1".($venta_id?("&vid=".$venta_id):"")."#carrito"); exit;
   }
 }
 
-// ===== Totales carrito (FIX del parse error) =====
+/* ===== Totales carrito ===== */
 $cart = $_SESSION['cart'];
 $cart_qty = 0;
 $cart_total = 0.0;
@@ -236,7 +234,6 @@ foreach ($cart as $it) {
   $cart_qty  += $q;
   $cart_total += $p * $q;
 }
-
 ?>
 <!doctype html>
 <html lang="es">
@@ -245,17 +242,11 @@ foreach ($cart as $it) {
   <title>🛍️ Indumentaria</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
-    /* ================== MENÚ UNIFICADO (idéntico al panel) ================== */
     :root{
       --mnu-bg-bar: rgba(15,19,32,.78);
       --mnu-bg-drawer: rgba(10,12,20,.94);
-      --mnu-fg: #fff;
-      --mnu-fg-dim: #cbd5e1;
-      --mnu-accent: #ffd600;
-      --mnu-border: rgba(255,255,255,.16);
-      --mnu-shadow: 0 10px 30px rgba(0,0,0,.45);
-
-      /* Base panel */
+      --mnu-fg: #fff; --mnu-fg-dim: #cbd5e1; --mnu-accent: #ffd600;
+      --mnu-border: rgba(255,255,255,.16); --mnu-shadow: 0 10px 30px rgba(0,0,0,.45);
       --bg:#0b0b0b; --surface:#0f1115; --card:#12141a; --fg:#f1f5f9; --muted:#a0a7b4; --acc:#f5c542; --border:rgba(255,255,255,.12);
     }
     .mnu-bar{ position:sticky; top:0; z-index:1000; display:flex; align-items:center; gap:12px; padding:10px 14px; background:var(--mnu-bg-bar); -webkit-backdrop-filter: blur(10px) saturate(1.05); backdrop-filter: blur(10px) saturate(1.05); border-bottom:1px solid var(--mnu-border); }
@@ -278,9 +269,8 @@ foreach ($cart as $it) {
     .mnu-item:hover{ background:rgba(255,255,255,.10); border-color:rgba(255,255,255,.30); }
     .mnu-item__icon{ width:24px; display:inline-grid; place-items:center; color:#fff; }
     .mnu-item__text{ font-size:18px; }
-    .mnu-bar *, .mnu-drawer *, .mnu-inline *, .mnu-item, .mnu-item *{ color:#fff !important; -webkit-text-fill-color:#fff !important; text-shadow:none !important; background-clip:initial !important; -webkit-background-clip:initial !IMPORTANT; }
+    .mnu-bar *, .mnu-drawer *, .mnu-inline *, .mnu-item, .mnu-item *{ color:#fff !important; -webkit-text-fill-color:#fff !important; }
 
-    /* ================== BASE / GLASS ================== */
     *{box-sizing:border-box}
     html,body{height:100%}
     body{ margin:0; background: radial-gradient(1000px 600px at 20% -10%, #1c1f28 0%, #0b0b0b 60%), var(--bg); color:var(--fg); font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; }
@@ -292,7 +282,6 @@ foreach ($cart as $it) {
     h2{ text-align:center; margin:10px 0 18px; }
     .muted{ color:var(--muted); }
 
-    /* ====== Filtros / listado ====== */
     .filters{ display:grid; grid-template-columns: 1fr 160px; gap:10px; margin-bottom:12px }
     @media (max-width:520px){ .filters{ grid-template-columns: 1fr; } }
     .filters input, .filters select{
@@ -313,7 +302,6 @@ foreach ($cart as $it) {
     .btn-ghost{ background:transparent; border:1px solid var(--border); color:#fff }
     .badge{ border:1px solid var(--border); padding:4px 8px; border-radius:999px; font-size:12px; }
 
-    /* ====== Carrito ====== */
     .cart{ position:sticky; top:74px; align-self:start }
     .cart h3{ margin:0 0 6px }
     .cart-list{ display:flex; flex-direction:column; gap:10px; }
@@ -334,50 +322,13 @@ foreach ($cart as $it) {
 </head>
 <body>
 
-  <!-- ===== Menú Unificado ===== -->
+  <!-- Menú simple (si querés, reusa tu menú unificado completo) -->
   <header>
     <div class="mnu-bar">
-      <button class="mnu-btn mnu-open">☰ Menú</button>
       <div class="mnu-title">Panel Cliente</div>
       <div class="mnu-spacer"></div>
       <a class="mnu-btn mnu-btn--ghost" href="cliente_acceso.php?logout=1">Salir</a>
     </div>
-
-    <!-- Tabs inline (PC) -->
-    <nav class="mnu-inline">
-      <a class="mnu-tab" href="panel_cliente.php">🏠 Inicio</a>
-      <a class="mnu-tab" href="ver_turnos_cliente.php">📅 Ver Turnos</a>
-      <a class="mnu-tab" href="ver_mis_pagos.php">💳 Mis Pagos</a>
-      <a class="mnu-tab" href="pago_online.php">⚡ Pago Online</a>
-      <a class="mnu-tab" href="form_progreso.php">📈 Ver Progreso</a>
-      <a class="mnu-tab" href="evolucion_cliente.php">📊 Evolución</a>
-      <a class="mnu-tab" href="tienda_indumentaria.php">🛍️ Indumentaria</a>
-      <a class="mnu-tab" href="asistente_ia.php">🤖 Asistente IA</a>
-      <a class="mnu-tab" href="cena_fin_anio.php">🍽️ Cena Fin de Año</a>
-      <a class="mnu-tab" href="cliente_qr_maquinas.php">🧰 QR de Máquinas</a>
-    </nav>
-
-    <!-- Drawer (móvil) -->
-    <div class="mnu-backdrop" id="mnu-backdrop"></div>
-    <aside class="mnu-drawer" id="mnu-drawer">
-      <div class="mnu-head">
-        <button class="mnu-close" id="mnu-close">✕</button>
-        <div class="mnu-title">Menú</div>
-      </div>
-      <ul class="mnu-list">
-        <li><a class="mnu-item" href="panel_cliente.php"><span class="mnu-item__icon">🏠</span><span class="mnu-item__text">Inicio</span></a></li>
-        <li><a class="mnu-item" href="ver_turnos_cliente.php"><span class="mnu-item__icon">📅</span><span class="mnu-item__text">Ver Turnos</span></a></li>
-        <li><a class="mnu-item" href="ver_mis_pagos.php"><span class="mnu-item__icon">💳</span><span class="mnu-item__text">Mis Pagos</span></a></li>
-        <li><a class="mnu-item" href="pago_online.php"><span class="mnu-item__icon">⚡</span><span class="mnu-item__text">Pago Online</span></a></li>
-        <li><a class="mnu-item" href="form_progreso.php"><span class="mnu-item__icon">📈</span><span class="mnu-item__text">Ver Progreso</span></a></li>
-        <li><a class="mnu-item" href="evolucion_cliente.php"><span class="mnu-item__icon">📊</span><span class="mnu-item__text">Evolución</span></a></li>
-        <li><a class="mnu-item" href="tienda_indumentaria.php"><span class="mnu-item__icon">🛍️</span><span class="mnu-item__text">Indumentaria</span></a></li>
-        <li><a class="mnu-item" href="asistente_ia.php"><span class="mnu-item__icon">🤖</span><span class="mnu-item__text">Asistente IA</span></a></li>
-        <li><a class="mnu-item" href="cena_fin_anio.php"><span class="mnu-item__icon">🍽️</span><span class="mnu-item__text">Cena Fin de Año</span></a></li>
-        <li><a class="mnu-item" href="cliente_qr_maquinas.php"><span class="mnu-item__icon">🧰</span><span class="mnu-item__text">QR de Máquinas</span></a></li>
-        <li><a class="mnu-item" href="cliente_acceso.php?logout=1"><span class="mnu-item__icon">🚪</span><span class="mnu-item__text">Salir</span></a></li>
-      </ul>
-    </aside>
   </header>
 
   <div class="container">
@@ -391,7 +342,7 @@ foreach ($cart as $it) {
     <?php endif; ?>
 
     <div class="grid">
-      <!-- ===== CATÁLOGO ===== -->
+      <!-- CATÁLOGO -->
       <section class="glass card">
         <form class="filters" method="GET" action="tienda_indumentaria.php">
           <input type="text" name="q" value="<?= h($search) ?>" placeholder="Buscar producto..." />
@@ -414,7 +365,7 @@ foreach ($cart as $it) {
             <?php foreach ($productos as $p): ?>
               <article class="p-card">
                 <div class="p-img">
-                  <?php if ($p['img']): ?>
+                  <?php if (!empty($p['img'])): ?>
                     <img src="<?= h($p['img']) ?>" alt="<?= h($p['nombre']) ?>">
                   <?php else: ?>
                     <span class="muted">Sin imagen</span>
@@ -423,9 +374,8 @@ foreach ($cart as $it) {
                 <div class="p-name"><?= h($p['nombre']) ?></div>
                 <div class="p-meta">
                   <?php if ($p['categoria']): ?><span class="badge">#<?= h($p['categoria']) ?></span><?php endif; ?>
-                  <?php if ($p['talla']): ?><span class="badge">Talla: <?= h($p['talla']) ?></span><?php endif; ?>
-                  <?php if ($p['color']): ?><span class="badge">Color: <?= h($p['color']) ?></span><?php endif; ?>
                   <span class="badge">Stock: <?= (int)$p['stock'] ?></span>
+                  <?php if ($p['variantes']>0): ?><span class="badge">Talles: <?= (int)$p['variantes'] ?></span><?php endif; ?>
                 </div>
                 <?php if ($p['desc']): ?><div class="muted" style="min-height:38px"><?= h($p['desc']) ?></div><?php endif; ?>
                 <div class="price">$ <?= money($p['precio']) ?></div>
@@ -436,8 +386,6 @@ foreach ($cart as $it) {
                   <input type="hidden" name="nom" value="<?= h($p['nombre']) ?>">
                   <input type="hidden" name="precio" value="<?= (float)$p['precio'] ?>">
                   <input type="hidden" name="img" value="<?= h($p['img']) ?>">
-                  <input type="hidden" name="talla" value="<?= h($p['talla']) ?>">
-                  <input type="hidden" name="color" value="<?= h($p['color']) ?>">
                   <input type="number" name="q" value="1" min="1" step="1" />
                   <button class="btn" type="submit">Agregar</button>
                 </form>
@@ -464,7 +412,7 @@ foreach ($cart as $it) {
         <?php endif; ?>
       </section>
 
-      <!-- ===== CARRITO ===== -->
+      <!-- CARRITO -->
       <aside class="glass card cart" id="carrito">
         <h3>🧺 Carrito <span class="muted">(<?= (int)$cart_qty ?> ítems)</span></h3>
         <?php if (!$cart): ?>
@@ -483,7 +431,7 @@ foreach ($cart as $it) {
                 <div>
                   <div class="c-name"><?= h($it['nombre']) ?></div>
                   <div class="c-meta">
-                    <?php if (!empty($it['talla'])): ?>Talla: <?= h($it['talla']) ?> · <?php endif; ?>
+                    <?php if (!empty($it['talla'])): ?>Talle: <?= h($it['talla']) ?> · <?php endif; ?>
                     <?php if (!empty($it['color'])): ?>Color: <?= h($it['color']) ?> · <?php endif; ?>
                     $ <?= money($it['precio']) ?> c/u
                   </div>
@@ -524,22 +472,5 @@ foreach ($cart as $it) {
       </aside>
     </div>
   </div>
-
-  <script>
-  // ===== Menú (abrir/cerrar + bloquear scroll) =====
-  (function(){
-    const drawer   = document.getElementById('mnu-drawer');
-    const backdrop = document.getElementById('mnu-backdrop');
-    const openBtn  = document.querySelector('.mnu-open');
-    const closeBtn = document.getElementById('mnu-close');
-    const lock = (on)=>{ document.documentElement.style.overflow = document.body.style.overflow = on?'hidden':''; }
-    function open(){ drawer.classList.add('open'); backdrop.classList.add('show'); lock(true); }
-    function close(){ drawer.classList.remove('open'); backdrop.classList.remove('show'); lock(false); }
-    openBtn?.addEventListener('click', open);
-    closeBtn?.addEventListener('click', close);
-    backdrop?.addEventListener('click', close);
-    window.addEventListener('keydown', e=>{ if(e.key==='Escape') close(); });
-  })();
-  </script>
 </body>
 </html>

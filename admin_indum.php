@@ -3,14 +3,14 @@ if (session_status() === PHP_SESSION_NONE) session_start();
 require_once __DIR__.'/conexion.php';
 require_once __DIR__ . '/menu_horizontal.php';
 
-/* ===== CLAVES CLOUDINARY (tal cual me las diste) ===== */
+/* ===== CLAVES CLOUDINARY ===== */
 if (!defined('CLOUD_ENABLED'))      define('CLOUD_ENABLED', true);
 if (!defined('CLOUD_NAME'))         define('CLOUD_NAME', 'ddfugds9b');
 if (!defined('CLOUD_API_KEY'))      define('CLOUD_API_KEY', '657814174747186');
 if (!defined('CLOUD_API_SECRET'))   define('CLOUD_API_SECRET', 'TKo5BRiKCEjxSLFzn2DLbz_ji4c');
 if (!defined('CLOUD_FOLDER_ROOT'))  define('CLOUD_FOLDER_ROOT', 'ROOT');
 
-/* ===== Inicializador de Cloudinary (no modificado) ===== */
+/* ===== Inicializador Cloudinary ===== */
 require_once __DIR__.'/cloudy_boot_constants.php';
 
 if (!isset($conexion) || !($conexion instanceof mysqli)) { http_response_code(500); exit('❌ Sin conexión a BD'); }
@@ -40,7 +40,7 @@ $cloud_hint  = $CLOUDY['hint']  ?? null;
 /* Si falta el SDK, habilitamos el FALLBACK cURL sin tocar tu init */
 $use_fallback = false;
 if (!$cloud_ok && $cloud_reason === 'sdk_missing') {
-  require_once __DIR__.'/cloudy_uploader_fallback.php'; // ← archivo fallback sin Composer
+  require_once __DIR__.'/cloudy_uploader_fallback.php';
   $use_fallback = true;
   $cloud_ok   = true;
   $cloud_mode = 'curl_fallback';
@@ -102,7 +102,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && isset($_POST['__form'])) {
     // Reemplazar foto si suben una nueva
     if (!empty($_FILES['foto']['name']) && $_FILES['foto']['error']===UPLOAD_ERR_OK && $cloud_ok) {
       [$foto_url,$foto_pid] = subir_imagen_cloud($_FILES['foto']['tmp_name'], "indumentaria/productos/gym_$gimnasio_id");
-      // Nota: no borramos la anterior en Cloudinary para no romper pedidos antiguos.
+      // no borramos la anterior en Cloudinary para no romper pedidos antiguos
     }
 
     $sql = "UPDATE ind_productos
@@ -120,6 +120,9 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && isset($_POST['__form'])) {
     $pid = (int)($_POST['producto_id']??0);
     // Borramos talles (si no hay FK con cascade)
     $st = must_prepare($conexion, "DELETE FROM ind_talles WHERE producto_id=?");
+    $st->bind_param('i',$pid); $st->execute(); $st->close();
+    // Borramos fotos
+    $st = must_prepare($conexion, "DELETE FROM ind_fotos WHERE producto_id=?");
     $st->bind_param('i',$pid); $st->execute(); $st->close();
     // Borramos producto
     $st = must_prepare($conexion, "DELETE FROM ind_productos WHERE id=? AND gimnasio_id=?");
@@ -207,6 +210,95 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && isset($_POST['__form'])) {
 
     header('Location: admin_indum.php?ok=1'); exit;
   }
+
+  /* === Alta de fotos múltiples a galería === */
+  if ($f==='add_fotos') {
+    $producto_id = (int)($_POST['producto_id']??0);
+    if ($producto_id<=0) { header('Location: admin_indum.php?err=pid'); exit; }
+
+    // orden base
+    $st = must_prepare($conexion, "SELECT COALESCE(MAX(orden),0) AS maxo FROM ind_fotos WHERE producto_id=?");
+    $st->bind_param('i',$producto_id); $st->execute();
+    $maxo = (int)($st->get_result()->fetch_assoc()['maxo'] ?? 0); $st->close();
+
+    if (!empty($_FILES['galeria']['name']) && is_array($_FILES['galeria']['name'])) {
+      $files = $_FILES['galeria'];
+      $n = count($files['name']);
+      for ($i=0; $i<$n; $i++){
+        if ($files['error'][$i]===UPLOAD_ERR_OK && $cloud_ok){
+          $tmp = $files['tmp_name'][$i];
+          [$url,$pid] = subir_imagen_cloud($tmp, "indumentaria/galeria/gym_$gimnasio_id/prod_$producto_id");
+          $maxo++;
+          $st = must_prepare($conexion, "INSERT INTO ind_fotos (producto_id,url,public_id,orden) VALUES (?,?,?,?)");
+          $st->bind_param('issi', $producto_id,$url,$pid,$maxo);
+          $st->execute(); $st->close();
+        }
+      }
+    }
+    header('Location: admin_indum.php?ok=1&pid='.$producto_id.'#galeria'); exit;
+  }
+
+  /* === Eliminar una foto de galería === */
+  if ($f==='del_foto') {
+    $fid = (int)($_POST['foto_id']??0);
+    $st = must_prepare($conexion, "SELECT producto_id FROM ind_fotos WHERE id=?");
+    $st->bind_param('i',$fid); $st->execute();
+    $row = $st->get_result()->fetch_assoc(); $st->close();
+    $pid_back = (int)($row['producto_id']??0);
+    $st = must_prepare($conexion, "DELETE FROM ind_fotos WHERE id=?");
+    $st->bind_param('i',$fid); $st->execute(); $st->close();
+    header('Location: admin_indum.php?ok=1&pid='.$pid_back.'#galeria'); exit;
+  }
+
+  /* === Establecer como portada (actualiza ind_productos.foto_url) === */
+  if ($f==='set_portada') {
+    $fid = (int)($_POST['foto_id']??0);
+    $st = must_prepare($conexion, "SELECT f.producto_id, f.url, f.public_id FROM ind_fotos f WHERE f.id=?");
+    $st->bind_param('i',$fid); $st->execute();
+    $row = $st->get_result()->fetch_assoc(); $st->close();
+    if ($row){
+      $pid = (int)$row['producto_id'];
+      $url = $row['url']; $pub = $row['public_id'];
+      $st = must_prepare($conexion, "UPDATE ind_productos SET foto_url=?, foto_public_id=? WHERE id=? AND gimnasio_id=?");
+      $st->bind_param('ssii',$url,$pub,$pid,$gimnasio_id);
+      $st->execute(); $st->close();
+      header('Location: admin_indum.php?ok=1&pid='.$pid.'#galeria'); exit;
+    }
+    header('Location: admin_indum.php?err=notfound'); exit;
+  }
+
+  /* === Reordenar (subir/bajar) === */
+  if ($f==='foto_move') {
+    $fid = (int)($_POST['foto_id']??0);
+    $dir = $_POST['dir'] ?? ''; // 'up' o 'down'
+    // Traer foto actual
+    $st = must_prepare($conexion, "SELECT id, producto_id, orden FROM ind_fotos WHERE id=?");
+    $st->bind_param('i',$fid); $st->execute();
+    $cur = $st->get_result()->fetch_assoc(); $st->close();
+    if ($cur){
+      $pid = (int)$cur['producto_id'];
+      $o   = (int)$cur['orden'];
+      if ($dir==='up'){
+        $st = must_prepare($conexion, "SELECT id, orden FROM ind_fotos WHERE producto_id=? AND orden<? ORDER BY orden DESC, id DESC LIMIT 1");
+        $st->bind_param('ii',$pid,$o); $st->execute();
+        $adj = $st->get_result()->fetch_assoc(); $st->close();
+      } else {
+        $st = must_prepare($conexion, "SELECT id, orden FROM ind_fotos WHERE producto_id=? AND orden>? ORDER BY orden ASC, id ASC LIMIT 1");
+        $st->bind_param('ii',$pid,$o); $st->execute();
+        $adj = $st->get_result()->fetch_assoc(); $st->close();
+      }
+      if ($adj){
+        $fid2=(int)$adj['id']; $o2=(int)$adj['orden'];
+        // swap
+        $st = must_prepare($conexion, "UPDATE ind_fotos SET orden=? WHERE id=?");
+        $st->bind_param('ii',$o2,$fid); $st->execute(); $st->close();
+        $st = must_prepare($conexion, "UPDATE ind_fotos SET orden=? WHERE id=?");
+        $st->bind_param('ii',$o,$fid2); $st->execute(); $st->close();
+      }
+      header('Location: admin_indum.php?ok=1&pid='.$pid.'#galeria'); exit;
+    }
+    header('Location: admin_indum.php?err=notfound'); exit;
+  }
 }
 
 /* ===== DATA ===== */
@@ -217,12 +309,21 @@ $prods=$st->get_result()->fetch_all(MYSQLI_ASSOC); $st->close();
 
 $pid_sel=(int)($_GET['pid']??0);
 $edit_id=(int)($_GET['edit']??0);
+
 $talles=[];
 if ($pid_sel>0){
   $st = must_prepare($conexion, "SELECT * FROM ind_talles WHERE producto_id=? ORDER BY talle");
   $st->bind_param('i',$pid_sel); $st->execute();
   $talles=$st->get_result()->fetch_all(MYSQLI_ASSOC); $st->close();
 }
+
+$fotos=[];
+if ($pid_sel>0){
+  $st = must_prepare($conexion, "SELECT * FROM ind_fotos WHERE producto_id=? ORDER BY orden, id");
+  $st->bind_param('i',$pid_sel); $st->execute();
+  $fotos=$st->get_result()->fetch_all(MYSQLI_ASSOC); $st->close();
+}
+
 $prod_edit=null;
 if ($edit_id>0){
   $st = must_prepare($conexion, "SELECT * FROM ind_productos WHERE id=? AND gimnasio_id=? LIMIT 1");
@@ -254,7 +355,6 @@ if ($edit_id>0){
  .note{background:#0b1220;border-left:4px solid var(--brand);padding:10px 12px;border-radius:10px;margin-top:8px}
  .ok{color:#34d399}.bad{color:#fca5a5}
  .actions{display:flex;gap:8px;flex-wrap:wrap}
- /* Responsive */
  @media (max-width: 720px){
    .wrap{padding:12px}
    .row > * { flex:1 1 100% }
@@ -274,7 +374,12 @@ function confDel(msg){ return confirm(msg||'¿Eliminar? Esta acción no se puede
   <!-- Estado de Cloudinary -->
   <div class="note">
     <?php if($cloud_ok): ?>
-      <span class="ok">Cloudinary habilitado <?=($cloud_mode==='curl_fallback'?'(modo: cURL sin SDK)':'(modo: '.$cloud_mode.')')?></span>
+<span class="ok">
+  Cloudinary habilitado
+  <?= ($cloud_mode === 'curl_fallback')
+        ? '(modo: cURL sin SDK)'
+        : '(modo: ' . h($cloud_mode) . ')' ?>
+</span>
     <?php else: ?>
       <span class="bad">Cloudinary NO habilitado</span>
       <?= $cloud_reason ? ' — Motivo: '.h($cloud_reason) : '' ?>
@@ -299,8 +404,7 @@ function confDel(msg){ return confirm(msg||'¿Eliminar? Esta acción no se puede
             $catv = $prod_edit['categoria'] ?? 'remera';
             $cats = ['remera'=>'Remera/Musculosa','short'=>'Short/Pantalón','otro'=>'Otro'];
             foreach($cats as $val=>$txt){
-              $sel = ($val===$catv)?'selected':'';
-              echo "<option value=\"$val\" $sel>$txt</option>";
+              $sel = ($val===$catv)?'selected':''; echo "<option value=\"$val\" $sel>$txt</option>";
             }
           ?>
         </select>
@@ -320,9 +424,7 @@ function confDel(msg){ return confirm(msg||'¿Eliminar? Esta acción no se puede
       </label>
       <div class="actions">
         <button class="btn"><?= $prod_edit ? 'Guardar cambios' : 'Guardar producto' ?></button>
-        <?php if($prod_edit): ?>
-          <a class="btn out" href="admin_indum.php">Cancelar</a>
-        <?php endif; ?>
+        <?php if($prod_edit): ?><a class="btn out" href="admin_indum.php">Cancelar</a><?php endif; ?>
       </div>
     </form>
   </div>
@@ -347,13 +449,14 @@ function confDel(msg){ return confirm(msg||'¿Eliminar? Esta acción no se puede
               <td class="actions">
                 <a class="btn out" href="?edit=<?=$p['id']?>">Editar</a>
                 <a class="btn out" href="?pid=<?=$p['id']?>#talles">Talles</a>
-                <form method="post" onsubmit="return confDel('¿Eliminar este producto? También se eliminarán sus talles.');">
+                <a class="btn out" href="?pid=<?=$p['id']?>#galeria">Galería</a>
+                <form method="post" onsubmit="return confDel('¿Eliminar este producto? También se eliminarán sus talles y fotos.');" style="display:inline-block">
                   <input type="hidden" name="csrf" value="<?=$csrf?>">
                   <input type="hidden" name="__form" value="del_producto">
                   <input type="hidden" name="producto_id" value="<?=$p['id']?>">
                   <button class="btn warn">Eliminar</button>
                 </form>
-                <form method="post">
+                <form method="post" style="display:inline-block">
                   <input type="hidden" name="csrf" value="<?=$csrf?>">
                   <input type="hidden" name="__form" value="toggle_activo">
                   <input type="hidden" name="producto_id" value="<?=$p['id']?>">
@@ -417,6 +520,72 @@ function confDel(msg){ return confirm(msg||'¿Eliminar? Esta acción no se puede
                   <input type="hidden" name="csrf" value="<?=$csrf?>">
                   <input type="hidden" name="__form" value="del_talle">
                   <input type="hidden" name="talle_id" value="<?=$t['id']?>">
+                  <button class="btn warn">Eliminar</button>
+                </form>
+              </td>
+            </tr>
+          <?php endforeach; endif; ?>
+        </tbody>
+      </table>
+    </div>
+  </div>
+  <?php endif; ?>
+
+  <!-- Galería -->
+  <?php if($pid_sel>0): ?>
+  <div class="card" id="galeria">
+    <h2>Galería — Producto #<?=$pid_sel?></h2>
+    <form method="post" enctype="multipart/form-data" class="row" style="align-items:end">
+      <input type="hidden" name="csrf" value="<?=$csrf?>">
+      <input type="hidden" name="__form" value="add_fotos">
+      <input type="hidden" name="producto_id" value="<?=$pid_sel?>">
+      <div style="flex:2">
+        <label>Subir fotos (múltiples)</label>
+        <input type="file" name="galeria[]" accept="image/*" multiple required>
+        <div class="mini">Se guardan en Cloudinary con orden al final. Luego podés reordenar.</div>
+      </div>
+      <div><button class="btn">Subir</button></div>
+    </form>
+
+    <div class="table-wrap" style="margin-top:12px">
+      <table>
+        <thead><tr><th>#</th><th>Vista</th><th>Orden</th><th>Portada</th><th>Eliminar</th></tr></thead>
+        <tbody>
+          <?php if(empty($fotos)): ?>
+            <tr><td colspan="5" class="mini">Aún sin fotos</td></tr>
+          <?php else: foreach($fotos as $f): ?>
+            <tr>
+              <td><?=$f['id']?></td>
+              <td><?php if($f['url']): ?><img class="thumb" src="<?=h($f['url'])?>"><?php endif; ?></td>
+              <td class="actions">
+                <form method="post" style="display:inline">
+                  <input type="hidden" name="csrf" value="<?=$csrf?>">
+                  <input type="hidden" name="__form" value="foto_move">
+                  <input type="hidden" name="foto_id" value="<?=$f['id']?>">
+                  <input type="hidden" name="dir" value="up">
+                  <button class="btn out" title="Subir">↑</button>
+                </form>
+                <form method="post" style="display:inline">
+                  <input type="hidden" name="csrf" value="<?=$csrf?>">
+                  <input type="hidden" name="__form" value="foto_move">
+                  <input type="hidden" name="foto_id" value="<?=$f['id']?>">
+                  <input type="hidden" name="dir" value="down">
+                  <button class="btn out" title="Bajar">↓</button>
+                </form>
+              </td>
+              <td>
+                <form method="post">
+                  <input type="hidden" name="csrf" value="<?=$csrf?>">
+                  <input type="hidden" name="__form" value="set_portada">
+                  <input type="hidden" name="foto_id" value="<?=$f['id']?>">
+                  <button class="btn">Usar como portada</button>
+                </form>
+              </td>
+              <td>
+                <form method="post" onsubmit="return confDel('¿Eliminar esta foto?');">
+                  <input type="hidden" name="csrf" value="<?=$csrf?>">
+                  <input type="hidden" name="__form" value="del_foto">
+                  <input type="hidden" name="foto_id" value="<?=$f['id']?>">
                   <button class="btn warn">Eliminar</button>
                 </form>
               </td>
