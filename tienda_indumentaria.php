@@ -1,623 +1,605 @@
 <?php
-// tienda_indumentaria.php — Tienda/venta de indumentaria con galería (ind_productos + ind_talles + ind_fotos opcional)
+// ========================================
+// tienda_indumentaria.php (DB pagos por producto)
+// Catálogo + Talles por PLANTILLAS con pestañas + medidas manuales
+// Carrito + pagos (efectivo, tarjeta, transferencia con comprobante)
+// Muestra Alias/CBU/Banco/Tipo/Nº/Titular/CUIT/Nota/QR cargados por PRODUCTO
+// ========================================
 if (session_status() === PHP_SESSION_NONE) session_start();
-require_once __DIR__ . '/conexion.php';
+require_once __DIR__.'/conexion.php';
 
 $cliente_id  = (int)($_SESSION['cliente_id'] ?? 0);
 $gimnasio_id = (int)($_SESSION['gimnasio_id'] ?? 0);
-if ($cliente_id === 0 || $gimnasio_id === 0) { echo "<div style='color:red;text-align:center;'>❌ Acceso denegado</div>"; exit; }
+if ($cliente_id === 0 || $gimnasio_id === 0) { echo "<div style='color:#f66;text-align:center;'>❌ Acceso denegado</div>"; exit; }
 
 if (function_exists('mysqli_report')) { mysqli_report(MYSQLI_REPORT_OFF); }
 @$conexion->set_charset('utf8mb4');
 
-/* ===== Helpers ===== */
 function h($s){ return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); }
 function money($n){ return number_format((float)$n, 2, ',', '.'); }
+if (empty($_SESSION['csrf_token'])) $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+$csrf = $_SESSION['csrf_token'];
+if (!isset($_SESSION['cart']) || !is_array($_SESSION['cart'])) $_SESSION['cart'] = [];
+
 function db_has_table(mysqli $db, string $t): bool {
   $t = $db->real_escape_string($t);
   $res = $db->query("SHOW TABLES LIKE '{$t}'");
   return ($res && $res->num_rows > 0);
 }
-/* Mejorar tamaño si es Cloudinary */
-function cloud_big($url){
-  if (!$url) return $url;
-  $pos = strpos($url, '/upload/');
-  if ($pos === false) return $url;
-  return substr($url, 0, $pos+8) . 'w_1600,q_auto,f_auto/' . substr($url, $pos+8);
+
+/*** DEFAULT (solo backup si no hay datos por producto) ***/
+$DEFAULT_PAGOS = [
+  'alias'  => 'GIMNASIO.ALIAS.PAGO',
+  'cbu'    => '0000003100087654321098',
+  'banco'  => 'Banco Nación',
+  'cuenta_tipo' => 'Caja de Ahorro',
+  'cuenta_numero'=> '123-456789/0',
+  'titular'=> 'Nombre Apellido',
+  'cuit'   => '20-00000000-0',
+  'nota'   => 'Podés enviar el comprobante por WhatsApp.',
+  'mp_link'=> '',
+  'qr_url' => '',
+];
+
+/* ===== Compatibilidad PHP 7 ===== */
+if (!function_exists('str_contains_safe')) {
+  function str_contains_safe($haystack,$needle){ if($needle==='')return true; return mb_stripos((string)$haystack,(string)$needle,0,'UTF-8')!==false; }
 }
 
-/* ===== Estado / CSRF / Cart ===== */
-if (empty($_SESSION['csrf_token'])) $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
-$csrf = $_SESSION['csrf_token'];
-if (!isset($_SESSION['cart']) || !is_array($_SESSION['cart'])) $_SESSION['cart'] = [];
+/* ===== PLANTILLAS: SETS (pestañas) por categoría ===== */
+function plantillas_por_categoria(string $categoria): array {
+  $c = mb_strtolower($categoria,'UTF-8');
+  $is_remera = str_contains_safe($c,'remera') || str_contains_safe($c,'musculosa') || str_contains_safe($c,'camiseta');
+  $is_mujer  = str_contains_safe($c,'mujer')  || str_contains_safe($c,'dama') || str_contains_safe($c,'lady');
+  $is_muay   = str_contains_safe($c,'muay')   || str_contains_safe($c,'thai');
+  $is_pant   = str_contains_safe($c,'pantal') || str_contains_safe($c,'short') || str_contains_safe($c,'jogger') || str_contains_safe($c,'pantalón');
+  $is_hoodie = str_contains_safe($c,'hoodie') || str_contains_safe($c,'buzo');
 
-/* ===== Verificar tablas reales del admin ===== */
-$have_prod  = db_has_table($conexion, 'ind_productos');
-$have_talle = db_has_table($conexion, 'ind_talles');
-$have_fotos = db_has_table($conexion, 'ind_fotos'); // opcional
+  $remera_unisex = [
+    ['talle'=>'XS','ancho'=>48,'largo'=>67],
+    ['talle'=>'S', 'ancho'=>50,'largo'=>70],
+    ['talle'=>'M', 'ancho'=>53,'largo'=>73],
+    ['talle'=>'L', 'ancho'=>55,'largo'=>77],
+    ['talle'=>'XL','ancho'=>57,'largo'=>79],
+    ['talle'=>'2XL','ancho'=>63,'largo'=>82],
+    ['talle'=>'3XL','ancho'=>66,'largo'=>84],
+  ];
+  $remera_mujer = [
+    ['talle'=>'XS','ancho'=>37,'largo'=>60],
+    ['talle'=>'S', 'ancho'=>39,'largo'=>62],
+    ['talle'=>'M', 'ancho'=>41,'largo'=>64],
+    ['talle'=>'L', 'ancho'=>43,'largo'=>66],
+    ['talle'=>'XL','ancho'=>45,'largo'=>68],
+    ['talle'=>'2XL','ancho'=>47,'largo'=>70],
+    ['talle'=>'3XL','ancho'=>49,'largo'=>72],
+  ];
+  $muay = [
+    ['talle'=>'XS','cintura'=>'77-81','largo'=>29,'ancho_pierna'=>29],
+    ['talle'=>'S', 'cintura'=>'82-86','largo'=>30,'ancho_pierna'=>29],
+    ['talle'=>'M', 'cintura'=>'87-91','largo'=>32,'ancho_pierna'=>30],
+    ['talle'=>'L', 'cintura'=>'92-96','largo'=>34,'ancho_pierna'=>31],
+    ['talle'=>'XL','cintura'=>'97-101','largo'=>35,'ancho_pierna'=>33],
+    ['talle'=>'2XL','cintura'=>'102-110','largo'=>37,'ancho_pierna'=>36],
+  ];
+  $hoodie_buzo = [
+    ['talle'=>'S','ancho'=>52,'largo'=>64],
+    ['talle'=>'M','ancho'=>54,'largo'=>64],
+    ['talle'=>'L','ancho'=>57,'largo'=>64],
+    ['talle'=>'XL','ancho'=>59,'largo'=>68],
+    ['talle'=>'XXL','ancho'=>61,'largo'=>70],
+  ];
+  $hoodie_pant = [
+    ['talle'=>'S','cintura'=>38,'largo'=>96],
+    ['talle'=>'M','cintura'=>44,'largo'=>97],
+    ['talle'=>'L','cintura'=>45,'largo'=>99],
+    ['talle'=>'XL','cintura'=>47,'largo'=>100],
+    ['talle'=>'XXL','cintura'=>48,'largo'=>101],
+  ];
 
-/* ===== Parámetros ===== */
-$search = trim((string)($_GET['q'] ?? ''));
-$catfil = trim((string)($_GET['cat'] ?? ''));
-$page   = max(1, (int)($_GET['p'] ?? 1));
-$perp   = 12;
-$offset = ($page-1)*$perp;
+  if ($is_muay) return ['Muay Thai'=>$muay];
+  if ($is_hoodie && $is_pant) return ['Pantalón/Jogger'=>$hoodie_pant, 'Buzo'=>$hoodie_buzo];
+  if ($is_hoodie) return ['Buzo'=>$hoodie_buzo, 'Pantalón/Jogger'=>$hoodie_pant];
+  if ($is_remera) return $is_mujer ? ['Mujer'=>$remera_mujer, 'Unisex'=>$remera_unisex]
+                                   : ['Unisex'=>$remera_unisex, 'Mujer'=>$remera_mujer];
 
+  return ['Genérico'=>[
+    ['talle'=>'S','ancho'=>50,'largo'=>70],
+    ['talle'=>'M','ancho'=>53,'largo'=>73],
+    ['talle'=>'L','ancho'=>55,'largo'=>77],
+    ['talle'=>'XL','ancho'=>57,'largo'=>79],
+  ]];
+}
+
+/* ===== Productos activos ===== */
 $productos = [];
-$categorias = [];
-$total_rows = 0;
-$galerias = []; // pid => [urls]
+if (db_has_table($conexion,'ind_productos')) {
+  $st=$conexion->prepare("SELECT id,titulo AS nombre,descripcion,precio,foto_url AS img,categoria 
+                          FROM ind_productos WHERE gimnasio_id=? AND activo=1 ORDER BY id DESC");
+  $st->bind_param('i',$gimnasio_id);
+  $st->execute();
+  $productos=$st->get_result()->fetch_all(MYSQLI_ASSOC);
+  $st->close();
+}
 
-/* ===== DATA ===== */
-if ($have_prod) {
-  // Categorías
-  $sqlCat = "SELECT DISTINCT categoria AS cat
-             FROM ind_productos
-             WHERE gimnasio_id=? AND activo=1
-             ORDER BY cat ASC";
-  if ($stC = @$conexion->prepare($sqlCat)) {
-    $stC->bind_param('i', $gimnasio_id);
-    if ($stC->execute()) {
-      $r = $stC->get_result();
-      while($row=$r->fetch_assoc()){
-        $catv = trim((string)$row['cat']);
-        if ($catv!=='') $categorias[]=$catv;
-      }
-    }
-    $stC->close();
+/* ===== Cargar pagos por producto (para el checkout) ===== */
+function pagos_de_producto(mysqli $db, int $producto_id): array {
+  if(!db_has_table($db,'ind_producto_pagos')) return [];
+  $st = $db->prepare("SELECT mp_link, alias_cbu, alias, cbu, banco, cuenta_tipo, cuenta_numero, titular, cuit, nota, qr_url 
+                      FROM ind_producto_pagos WHERE producto_id=? LIMIT 1");
+  $st->bind_param('i',$producto_id);
+  $st->execute();
+  $row = $st->get_result()->fetch_assoc() ?: [];
+  $st->close();
+  // Compatibilidad: si solo alias_cbu tenía algo y alias/cbu están vacíos, repartimos
+  if (!empty($row['alias_cbu'])) {
+    if (empty($row['alias']) && strpos($row['alias_cbu'],'.')!==false) $row['alias']=$row['alias_cbu'];
+    if (empty($row['cbu']) && preg_match('/\d{18,22}/',$row['alias_cbu'])) $row['cbu']=$row['alias_cbu'];
   }
+  return $row;
+}
 
-  // WHERE principal
-  $where = ["p.gimnasio_id=?","p.activo=1"];
-  $types = "i";
-  $bind  = [$gimnasio_id];
+function pagos_para_checkout(mysqli $db, array $cart, array $default): array {
+  // Tomamos el primer producto del carrito para mostrar sus datos (si existen)
+  $firstPid = null;
+  foreach($cart as $it){ $firstPid = (int)($it['pid']??0); if($firstPid) break; }
+  if(!$firstPid) return $default;
 
-  if ($search!=='') {
-    $where[] = "(p.titulo LIKE ? OR p.descripcion LIKE ?)";
-    $s = "%{$search}%";
-    $bind[] = $s; $bind[] = $s;
-    $types .= "ss";
-  }
-  if ($catfil!=='') {
-    $where[] = "p.categoria = ?";
-    $bind[] = $catfil;
-    $types .= "s";
-  }
-  $where_sql = "WHERE ".implode(" AND ", $where);
+  $p = pagos_de_producto($db,$firstPid);
+  if(!$p) return $default;
 
-  // Conteo
-  $sqlCnt = "SELECT COUNT(*) AS n FROM ind_productos p {$where_sql}";
-  if ($stN = @$conexion->prepare($sqlCnt)) {
-    $stN->bind_param($types, ...$bind);
-    if ($stN->execute()) {
-      $rr = $stN->get_result()->fetch_assoc();
-      $total_rows = (int)($rr['n'] ?? 0);
-    }
-    $stN->close();
-  }
-
-  // Página + stock total
-  $sql = "SELECT 
-            p.id,
-            p.titulo       AS nombre,
-            p.precio       AS precio,
-            p.descripcion  AS desctxt,
-            p.foto_url     AS img,
-            p.categoria    AS categoria,
-            COALESCE(SUM(t.stock),0) AS stock_total,
-            COUNT(t.id)              AS variantes
-          FROM ind_productos p
-          LEFT JOIN ind_talles t ON t.producto_id = p.id
-          {$where_sql}
-          GROUP BY p.id
-          ORDER BY p.titulo
-          LIMIT ? OFFSET ?";
-  $typesPage = $types . "ii";
-  $bindPage  = $bind; $bindPage[] = $perp; $bindPage[] = $offset;
-
-  if ($st = @$conexion->prepare($sql)) {
-    $st->bind_param($typesPage, ...$bindPage);
-    if ($st->execute()) {
-      $res = $st->get_result();
-      while ($r = $res->fetch_assoc()) {
-        $productos[] = [
-          'id'       => (int)$r['id'],
-          'nombre'   => (string)$r['nombre'],
-          'precio'   => (float)$r['precio'],
-          'stock'    => (int)$r['stock_total'],
-          'img'      => (string)($r['img'] ?? ''),
-          'desc'     => (string)($r['desctxt'] ?? ''),
-          'categoria'=> (string)($r['categoria'] ?? ''),
-          'variantes'=> (int)$r['variantes'],
-        ];
-      }
-    }
-    $st->close();
-  }
-
-  // Galerías si existe ind_fotos
-  if ($have_fotos && $productos){
-    $ids = array_map(fn($p)=>(int)$p['id'], $productos);
-    $in  = implode(',', array_fill(0, count($ids), '?'));
-    $tIn = str_repeat('i', count($ids));
-    $sqlG = "SELECT producto_id, url FROM ind_fotos WHERE producto_id IN ($in) ORDER BY orden, id";
-    if ($stG = @$conexion->prepare($sqlG)) {
-      $stG->bind_param($tIn, ...$ids);
-      if ($stG->execute()){
-        $rg = $stG->get_result();
-        while($row=$rg->fetch_assoc()){
-          $galerias[(int)$row['producto_id']][] = (string)$row['url'];
-        }
-      }
-      $stG->close();
-    }
-  }
-} else {
-  // Fallback demo
-  $total_rows = 4;
-  $productos = [
-    ['id'=>101, 'nombre'=>'Remera Dry-Fit', 'precio'=>11999, 'stock'=>20, 'img'=>'', 'desc'=>'Secado rápido, entrenamiento', 'categoria'=>'Ropa', 'variantes'=>0],
-    ['id'=>102, 'nombre'=>'Guantes Box 12oz', 'precio'=>45999, 'stock'=>12, 'img'=>'', 'desc'=>'Cuero sintético, velcro', 'categoria'=>'Combate', 'variantes'=>0],
-    ['id'=>103, 'nombre'=>'Short Muay Thai', 'precio'=>29999, 'stock'=>8,  'img'=>'', 'desc'=>'Corte clásico, liviano', 'categoria'=>'Combate', 'variantes'=>0],
-    ['id'=>104, 'nombre'=>'Zapatillas Training', 'precio'=>69999, 'stock'=>5, 'img'=>'', 'desc'=>'Suela antideslizante', 'categoria'=>'Calzado', 'variantes'=>0],
+  return [
+    'alias'  => $p['alias'] ?? $default['alias'],
+    'cbu'    => $p['cbu'] ?? $default['cbu'],
+    'banco'  => $p['banco'] ?? $default['banco'],
+    'cuenta_tipo' => $p['cuenta_tipo'] ?? $default['cuenta_tipo'],
+    'cuenta_numero'=> $p['cuenta_numero'] ?? $default['cuenta_numero'],
+    'titular'=> $p['titular'] ?? $default['titular'],
+    'cuit'   => $p['cuit'] ?? $default['cuit'],
+    'nota'   => $p['nota'] ?? $default['nota'],
+    'mp_link'=> $p['mp_link'] ?? $default['mp_link'],
+    'qr_url' => $p['qr_url'] ?? $default['qr_url'],
+    '_origen'=> 'producto_'.$firstPid
   ];
 }
 
-/* ===== Acciones carrito ===== */
-function require_csrf(){
-  if (!isset($_POST['csrf']) || !hash_equals($_SESSION['csrf_token'] ?? '', $_POST['csrf'])) {
-    http_response_code(400); echo "CSRF inválido"; exit;
-  }
-}
-if ($_SERVER['REQUEST_METHOD']==='POST') {
-  $act = $_POST['act'] ?? '';
-  if ($act==='add') {
+/* ===== Carrito ===== */
+function require_csrf(){ if(!isset($_POST['csrf'])||!hash_equals($_SESSION['csrf_token'],$_POST['csrf'])){ http_response_code(400); exit('CSRF'); } }
+$flash_ok = $flash_err = '';
+if($_SERVER['REQUEST_METHOD']==='POST'){
+  $act=$_POST['act']??'';
+  if($act==='add'){
     require_csrf();
-    $pid   = (int)($_POST['pid'] ?? 0);
-    $nom   = trim((string)($_POST['nom'] ?? ''));
-    $precio= (float)($_POST['precio'] ?? 0);
-    $img   = trim((string)($_POST['img'] ?? ''));
-    $q     = max(1, (int)($_POST['q'] ?? 1));
-    if ($pid>0) {
-      if (!isset($_SESSION['cart'][$pid])) {
-        $_SESSION['cart'][$pid] = ['q'=>0,'precio'=>$precio,'nombre'=>$nom,'img'=>$img,'talla'=>'','color'=>''];
-      }
-      $_SESSION['cart'][$pid]['q'] += $q;
+    $pid=(int)$_POST['pid'];
+    $nom=trim($_POST['nom']??'');
+    $precio=(float)($_POST['precio']??0);
+    $img=trim($_POST['img']??'');
+    $talla=trim($_POST['talla']??'');     // chip (opcional)
+    $medidas=trim($_POST['medidas']??''); // manual o del chip (opcional)
+    if($talla==='' && $medidas===''){ header("Location: tienda_indumentaria.php?err=talle#carrito");exit; }
+    $key=$pid.'|'.($talla?:'manual');
+    if(!isset($_SESSION['cart'][$key])) $_SESSION['cart'][$key]=['q'=>0,'precio'=>$precio,'nombre'=>$nom,'img'=>$img,'talla'=>$talla,'medidas'=>$medidas,'pid'=>$pid];
+    $_SESSION['cart'][$key]['q']+=1;
+    header("Location: tienda_indumentaria.php?ok=1#carrito");exit;
+  }
+  if($act==='chg'){ require_csrf(); $key=$_POST['key']??''; $q=max(0,(int)($_POST['q']??0)); if($key!==''&&isset($_SESSION['cart'][$key])){ if($q===0)unset($_SESSION['cart'][$key]); else $_SESSION['cart'][$key]['q']=$q; } header("Location: tienda_indumentaria.php#carrito");exit; }
+  if($act==='del'){ require_csrf(); $key=$_POST['key']??''; if($key!==''&&isset($_SESSION['cart'][$key])) unset($_SESSION['cart'][$key]); header("Location: tienda_indumentaria.php#carrito");exit; }
+  if($act==='clear'){ require_csrf(); $_SESSION['cart']=[]; header("Location: tienda_indumentaria.php#carrito");exit; }
+
+  // ===== Checkout =====
+  if($act==='checkout'){
+    require_csrf();
+    if(empty($_SESSION['cart'])){ $flash_err='El carrito está vacío.'; }
+    $pago = $_POST['pago'] ?? '';
+    if(!$flash_err && !in_array($pago,['efectivo','tarjeta','transferencia'],true)){
+      $flash_err='Elegí una forma de pago.';
     }
-    header("Location: tienda_indumentaria.php?ok=1#carrito"); exit;
-  }
-  if ($act==='chg') {
-    require_csrf();
-    $pid = (int)($_POST['pid'] ?? 0);
-    $q   = max(0, (int)($_POST['q'] ?? 0));
-    if ($pid>0 && isset($_SESSION['cart'][$pid])) {
-      if ($q===0) unset($_SESSION['cart'][$pid]); else $_SESSION['cart'][$pid]['q']=$q;
-    }
-    header("Location: tienda_indumentaria.php#carrito"); exit;
-  }
-  if ($act==='del') {
-    require_csrf();
-    $pid = (int)($_POST['pid'] ?? 0);
-    if ($pid>0) unset($_SESSION['cart'][$pid]);
-    header("Location: tienda_indumentaria.php#carrito"); exit;
-  }
-  if ($act==='clear') {
-    require_csrf();
-    $_SESSION['cart'] = [];
-    header("Location: tienda_indumentaria.php#carrito"); exit;
-  }
-  if ($act==='checkout') {
-    require_csrf();
 
-    $venta_id = 0;
-    $ok_bd = db_has_table($conexion,'ventas_indumentaria') && db_has_table($conexion,'ventas_indumentaria_items');
-
-    $total = 0.0;
-    foreach($_SESSION['cart'] as $pid=>$it) $total += ((float)($it['precio'] ?? 0)) * ((int)($it['q'] ?? 0));
-
-    if ($ok_bd && $total>0) {
-      $sqlV = "INSERT INTO ventas_indumentaria (cliente_id, gimnasio_id, fecha, total) VALUES (?,?,NOW(),?)";
-      if ($stV = @$conexion->prepare($sqlV)) {
-        $stV->bind_param("iid", $cliente_id, $gimnasio_id, $total);
-        if ($stV->execute()) $venta_id = (int)$stV->insert_id;
-        $stV->close();
-      }
-      if ($venta_id>0) {
-        $sqlI = "INSERT INTO ventas_indumentaria_items (venta_id, producto_id, nombre, cantidad, precio_unit, talla, color) VALUES (?,?,?,?,?,?,?)";
-        if ($stI = @$conexion->prepare($sqlI)) {
-          foreach($_SESSION['cart'] as $pid=>$it){
-            $q=(int)($it['q'] ?? 0); if ($q<=0) continue;
-            $nom=$it['nombre'] ?? ''; $p=(float)($it['precio'] ?? 0);
-            $stI->bind_param("iisidss", $venta_id, $pid, $nom, $q, $p, $t='', $c='');
-            @$stI->execute();
+    $comp_url = '';
+    if(!$flash_err && $pago==='transferencia'){
+      if(empty($_FILES['comprobante']['name']) || $_FILES['comprobante']['error']!==UPLOAD_ERR_OK){
+        $flash_err='Debés adjuntar el comprobante de transferencia.';
+      } else {
+        $allowed = ['image/jpeg','image/png','application/pdf'];
+        $mime = mime_content_type($_FILES['comprobante']['tmp_name']);
+        $size = (int)$_FILES['comprobante']['size'];
+        if(!in_array($mime,$allowed,true)){
+          $flash_err='Formato no permitido. Usá JPG, PNG o PDF.';
+        } elseif($size > 5*1024*1024){
+          $flash_err='El archivo supera 5 MB.';
+        } else {
+          $dir = __DIR__.'/uploads/comprobantes/';
+          if(!is_dir($dir)) mkdir($dir,0777,true);
+          $ext = ($mime==='application/pdf')?'.pdf':(($mime==='image/png')?'.png':'.jpg');
+          $fname = 'comp_'.date('Ymd_His').'_'.bin2hex(random_bytes(4)).$ext;
+          $dest = $dir.$fname;
+          if(!move_uploaded_file($_FILES['comprobante']['tmp_name'],$dest)){
+            $flash_err='No se pudo guardar el comprobante.';
+          }else{
+            $comp_url = 'uploads/comprobantes/'.$fname;
           }
-          $stI->close();
         }
       }
     }
-    $_SESSION['cart'] = [];
-    header("Location: tienda_indumentaria.php?venta_ok=1".($venta_id?("&vid=".$venta_id):"")."#carrito"); exit;
+
+    if(!$flash_err){
+      $_SESSION['cart'] = [];
+      $ticket = strtoupper(bin2hex(random_bytes(3)));
+      $params = ['confirm'=>'1','modo'=>$pago,'ticket'=>$ticket];
+      if($comp_url) $params['comp']=$comp_url;
+      $q = http_build_query($params);
+      header("Location: tienda_indumentaria.php?$q#carrito"); exit;
+    }
   }
 }
-
-/* ===== Totales carrito ===== */
 $cart = $_SESSION['cart'];
-$cart_qty = 0;
-$cart_total = 0.0;
-foreach ($cart as $it) {
-  $q = (int)($it['q'] ?? 0);
-  $p = (float)($it['precio'] ?? 0);
-  $cart_qty  += $q;
-  $cart_total += $p * $q;
-}
+$cart_qty=0;$cart_total=0; foreach($cart as $it){$cart_qty+=(int)$it['q'];$cart_total+=(int)$it['q']*(float)$it['precio'];}
+
+/* ===== Pagos a mostrar en checkout (desde DB por producto si hay) ===== */
+$PAGOS_UI = pagos_para_checkout($conexion, $cart, $DEFAULT_PAGOS);
+
+// ¿Carrito con más de un producto distinto?
+$cart_product_ids = [];
+foreach($cart as $it){ $cart_product_ids[(int)$it['pid']] = true; }
+$multi_products = count($cart_product_ids) > 1;
+
 ?>
 <!doctype html>
 <html lang="es">
 <head>
-  <meta charset="utf-8" />
-  <title>🛍️ Indumentaria</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <style>
-    :root{
-      --mnu-bg-bar: rgba(15,19,32,.78);
-      --mnu-fg: #fff; --mnu-accent: #ffd600;
-      --mnu-border: rgba(255,255,255,.16);
-      --bg:#0b0b0b; --surface:#0f1115; --card:#12141a; --fg:#f1f5f9; --muted:#a0a7b4; --acc:#f5c542; --border:rgba(255,255,255,.12);
-    }
-    .mnu-bar{ position:sticky; top:0; z-index:1000; display:flex; align-items:center; gap:12px; padding:10px 14px; background:var(--mnu-bg-bar); border-bottom:1px solid var(--mnu-border); }
-    .mnu-title{ font-weight:800; color:var(--mnu-accent); }
-    .mnu-spacer{ flex:1; }
-    .mnu-btn{ display:inline-flex; align-items:center; gap:8px; padding:10px 14px; border-radius:999px; cursor:pointer; background:var(--mnu-accent); color:#111; border:none; font-weight:700; text-decoration:none; }
-    .mnu-btn--ghost{ background:transparent; border:1px solid var(--mnu-border); color:#fff }
-
-    *{box-sizing:border-box}
-    html,body{height:100%}
-    body{ margin:0; background: radial-gradient(1000px 600px at 20% -10%, #1c1f28 0%, #0b0b0b 60%), var(--bg); color:var(--fg); font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; }
-    .container{ max-width:1200px; margin:0 auto; padding:16px 16px 48px; }
-    .glass{ background: rgba(255,255,255,.05); border:1px solid var(--border); border-radius:20px; backdrop-filter: blur(10px); box-shadow: 0 8px 30px rgba(0,0,0,.35); }
-    .grid{ display:grid; gap:16px; grid-template-columns: 1fr; }
-    @media (min-width:980px){ .grid{ grid-template-columns: 3fr 1.2fr; } }
-    .card{ padding:18px }
-    h2{ text-align:center; margin:10px 0 18px; }
-    .muted{ color:var(--muted); }
-
-    .filters{ display:grid; grid-template-columns: 1fr 160px; gap:10px; margin-bottom:12px }
-    @media (max-width:520px){ .filters{ grid-template-columns: 1fr; } }
-    .filters input, .filters select{
-      width:100%; padding:12px; border:1px solid #333; border-radius:12px; background:#0f1115; color:#fff; font-size:16px;
-    }
-    .products{ display:grid; grid-template-columns: repeat(1,minmax(0,1fr)); gap:12px; }
-    @media (min-width:620px){ .products{ grid-template-columns: repeat(2, minmax(0,1fr)); } }
-    @media (min-width:980px){ .products{ grid-template-columns: repeat(3, minmax(0,1fr)); } }
-    .p-card{ display:flex; flex-direction:column; gap:10px; border:1px solid var(--border); border-radius:16px; padding:12px; background:#12141a; }
-    .p-img{ width:100%; aspect-ratio: 4/3; background:#0f1115; border-radius:12px; display:grid; place-items:center; overflow:hidden; cursor:pointer }
-    .p-img img{ width:100%; height:100%; object-fit:cover }
-    .p-name{ font-weight:800; }
-    .p-meta{ display:flex; gap:8px; flex-wrap:wrap; font-size:13px; color:#cbd5e1 }
-    .price{ font-size:18px; font-weight:900; color:#ffd600 }
-    .p-actions{ display:flex; gap:8px; align-items:center }
-    .p-actions input{ width:76px; padding:10px; border-radius:10px; background:#0f1115; border:1px solid #333; color:#fff; text-align:center }
-    .btn{ padding:10px 12px; border:none; border-radius:12px; background:var(--acc); color:#111; font-weight:800; cursor:pointer; }
-    .btn-ghost{ background:transparent; border:1px solid var(--border); color:#fff }
-    .badge{ border:1px solid var(--border); padding:4px 8px; border-radius:999px; font-size:12px; }
-
-    /* Miniaturas */
-    .p-thumbs{ display:flex; flex-direction:column; gap:8px; margin-top:2px }
-    .thumbs-row{ display:flex; gap:8px; flex-wrap:wrap }
-    .thumbs-row .thumb{ width:52px; height:52px; border-radius:8px; object-fit:cover; border:1px solid var(--border); cursor:pointer }
-    .thumbs-row .more{ display:inline-flex; align-items:center; justify-content:center; width:52px; height:52px; border-radius:8px; border:1px dashed var(--border); color:#cbd5e1; font-size:12px; cursor:pointer }
-
-    /* Carrito */
-    .cart{ position:sticky; top:74px; align-self:start }
-    .cart h3{ margin:0 0 6px }
-    .cart-list{ display:flex; flex-direction:column; gap:10px; }
-    .c-item{ display:grid; grid-template-columns: 56px 1fr auto; gap:10px; border:1px solid var(--border); border-radius:12px; padding:8px; background:#12141a; }
-    .c-img{ width:56px; height:56px; border-radius:10px; overflow:hidden; background:#0f1115; display:grid; place-items:center }
-    .c-img img{ width:100%; height:100%; object-fit:cover }
-    .c-name{ font-weight:700; }
-    .c-meta{ font-size:12px; color:#cbd5e1 }
-    .c-qty{ display:flex; gap:6px; align-items:center; justify-content:flex-end }
-    .c-qty input{ width:64px; padding:8px; border-radius:10px; background:#0f1115; border:1px solid #333; color:#fff; text-align:center }
-    .tot{ display:flex; justify-content:space-between; font-weight:900; margin-top:10px; padding-top:10px; border-top:1px dashed rgba(255,255,255,.2) }
-    .alert{ background:#112b1a; border:1px solid #1f6f3d; color:#a7f3d0; padding:10px 12px; border-radius:10px; margin:8px 0 18px; }
-    .note{ font-size:13px; color:#cbd5e1 }
-    .pager{ display:flex; gap:8px; justify-content:center; margin-top:12px }
-    .pager a{ color:#fff; text-decoration:none; border:1px solid var(--border); border-radius:10px; padding:8px 12px }
-    .pager .cur{ background:#1a1d24; }
-  </style>
+<meta charset="utf-8">
+<title>🛍️ Indumentaria</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+body{font-family:system-ui,Segoe UI,Roboto,Arial;background:#0b0b0b;color:#fff;margin:0}
+.container{max-width:1200px;margin:auto;padding:16px}
+.grid{display:grid;gap:16px}
+@media(min-width:980px){.grid{grid-template-columns:3fr 1.2fr}}
+.card{background:#12141a;border:1px solid #333;border-radius:14px;padding:16px}
+.products{display:grid;gap:12px;grid-template-columns:repeat(auto-fill,minmax(300px,1fr))}
+.p-card{border:1px solid #333;border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:10px}
+.p-img{width:100%;aspect-ratio:4/3;overflow:hidden;border-radius:10px;background:#0f1115;cursor:pointer}
+.p-img img{width:100%;height:100%;object-fit:cover;transition:transform .2s}
+.p-img img:hover{transform:scale(1.08)}
+.price{color:#ffd600;font-weight:800}
+.btn{background:#ffd600;color:#111;padding:8px 12px;border-radius:10px;border:0;cursor:pointer;font-weight:700}
+.btn-ghost{background:transparent;border:1px solid #555;color:#fff}
+.cart{position:sticky;top:70px;align-self:start}
+.alert{background:#113820;border:1px solid #1d7a3d;padding:8px;border-radius:10px;margin-bottom:10px;color:#a7f3d0}
+.alert-err{background:#3a1010;border:1px solid #7a2d2d;color:#f2bcbc;padding:8px;border-radius:10px;margin-bottom:10px}
+.alert-ok{background:#10371f;border:1px solid #2e7d32;color:#b6f0c9;padding:8px;border-radius:10px;margin-bottom:10px}
+img.guia{width:100%;max-width:300px;border:1px solid #333;border-radius:10px;margin-top:8px}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chips button{padding:6px 10px;border-radius:999px;border:1px solid #444;background:#0f1115;color:#fff;cursor:pointer}
+.chips button.active{border-color:#ffd600}
+.mini{color:#b4b4b4;font-size:12px}
+.sep{height:1px;background:#222;margin:8px 0}
+.tabs{display:flex;gap:6px;flex-wrap:wrap;margin:6px 0}
+.tabs button{padding:6px 10px;border-radius:8px;border:1px solid #444;background:#0f1115;color:#fff;cursor:pointer}
+.tabs button.on{border-color:#ffd600}
+.payrow{display:flex;gap:10px;align-items:center;margin:6px 0}
+.badge{display:inline-block;padding:2px 8px;border-radius:999px;border:1px solid #444;font-size:11px;color:#ddd}
+.kv{display:grid;grid-template-columns:120px 1fr;gap:4px 10px}
+.kv b{color:#ddd}
+</style>
 </head>
 <body>
-
-  <header>
-    <div class="mnu-bar">
-      <div class="mnu-title">Panel Cliente</div>
-      <div class="mnu-spacer"></div>
-      <a class="mnu-btn mnu-btn--ghost" href="cliente_acceso.php?logout=1">Salir</a>
+<div class="container">
+  <h2>🛍️ Indumentaria del Gimnasio</h2>
+  <?php if(isset($_GET['ok'])):?><div class="alert">✅ Producto agregado al carrito.</div><?php endif;?>
+  <?php if(isset($_GET['err'])&&$_GET['err']==='talle'):?><div class="alert-err">⚠️ Elegí un talle o ingresá medidas.</div><?php endif;?>
+  <?php if(!empty($flash_err)):?><div class="alert-err">⚠️ <?=h($flash_err)?></div><?php endif;?>
+  <?php if(isset($_GET['confirm'])): ?>
+    <div class="alert-ok">
+      ✅ Pedido confirmado (ticket <b><?=h($_GET['ticket']??'-')?></b>).
+      <?php if(($_GET['modo']??'')==='efectivo'): ?> Pagás en el local en efectivo.<?php endif; ?>
+      <?php if(($_GET['modo']??'')==='tarjeta'): ?> Pagás en el local con tarjeta (3 a 6 cuotas).<?php endif; ?>
+      <?php if(($_GET['modo']??'')==='transferencia'): ?> Recibimos tu comprobante de transferencia. ¡Gracias!<?php endif; ?>
+      <?php if(!empty($_GET['comp'])): ?><div class="mini">Comprobante: <a href="<?=h($_GET['comp'])?>" target="_blank" style="color:#ffd600">ver archivo</a></div><?php endif; ?>
     </div>
-  </header>
+  <?php endif; ?>
 
-  <div class="container">
-    <h2>🛍️ Indumentaria del Gimnasio</h2>
-
-    <?php if (isset($_GET['ok'])): ?>
-      <div class="alert glass">✅ Producto agregado al carrito.</div>
-    <?php endif; ?>
-    <?php if (isset($_GET['venta_ok'])): ?>
-      <div class="alert glass">🎉 ¡Gracias! Compra registrada<?= isset($_GET['vid']) ? ' (#'.h($_GET['vid']).')' : '' ?>. Te contactaremos para la entrega.</div>
-    <?php endif; ?>
-
-    <div class="grid">
-      <!-- CATÁLOGO -->
-      <section class="glass card">
-        <form class="filters" method="GET" action="tienda_indumentaria.php">
-          <input type="text" name="q" value="<?= h($search) ?>" placeholder="Buscar producto..." />
-          <select name="cat">
-            <option value="">Todas las categorías</option>
-            <?php foreach ($categorias as $c): ?>
-              <option value="<?= h($c) ?>" <?= $c===$catfil?'selected':'' ?>><?= h($c) ?></option>
-            <?php endforeach; ?>
-          </select>
-          <div style="grid-column: 1 / -1; display:flex; gap:8px;">
-            <button class="btn" type="submit">Filtrar</button>
-            <a class="btn btn-ghost" href="tienda_indumentaria.php">Limpiar</a>
-          </div>
-        </form>
-
-        <?php if (!$productos): ?>
-          <p class="muted">No hay productos para mostrar.</p>
-        <?php else: ?>
-          <div class="products">
-            <?php foreach ($productos as $p): ?>
-              <?php
-                $gal = $galerias[$p['id']] ?? [];
-                // Armar galería final: portada + extras (sin duplicar)
-                $gal_final = [];
-                if (!empty($p['img'])) $gal_final[] = $p['img'];
-                foreach ($gal as $u) { if ($u && $u!==$p['img']) $gal_final[] = $u; }
-              ?>
-              <article class="p-card" data-images='<?= h(json_encode($gal_final, JSON_UNESCAPED_SLASHES)) ?>'>
-                <div class="p-img">
-                  <?php if (!empty($p['img'])): ?>
-                    <img src="<?= h($p['img']) ?>" alt="<?= h($p['nombre']) ?>">
-                  <?php elseif(!empty($gal_final)): ?>
-                    <img src="<?= h($gal_final[0]) ?>" alt="<?= h($p['nombre']) ?>">
-                  <?php else: ?>
-                    <span class="muted">Sin imagen</span>
-                  <?php endif; ?>
-                </div>
-
-                <?php if (!empty($gal_final)): ?>
-                  <div class="p-thumbs">
-                    <div class="thumbs-row">
-                      <?php foreach (array_slice($gal_final,0,4) as $u): ?>
-                        <img class="thumb" src="<?= h($u) ?>" alt="">
-                      <?php endforeach; ?>
-                      <?php if (count($gal_final)>4): ?>
-                        <span class="more">+<?= count($gal_final)-4 ?></span>
-                      <?php endif; ?>
-                    </div>
-                    <button class="btn btn-ghost btn-view">Ver fotos</button>
-                  </div>
-                <?php endif; ?>
-
-                <div class="p-name"><?= h($p['nombre']) ?></div>
-                <div class="p-meta">
-                  <?php if ($p['categoria']): ?><span class="badge">#<?= h($p['categoria']) ?></span><?php endif; ?>
-                  <span class="badge">Stock: <?= (int)$p['stock'] ?></span>
-                  <?php if ($p['variantes']>0): ?><span class="badge">Talles: <?= (int)$p['variantes'] ?></span><?php endif; ?>
-                </div>
-                <?php if ($p['desc']): ?><div class="muted" style="min-height:38px"><?= h($p['desc']) ?></div><?php endif; ?>
-                <div class="price">$ <?= money($p['precio']) ?></div>
-
-                <form class="p-actions" method="POST" action="tienda_indumentaria.php#carrito" autocomplete="off">
-                  <input type="hidden" name="csrf" value="<?= h($csrf) ?>">
-                  <input type="hidden" name="act" value="add">
-                  <input type="hidden" name="pid" value="<?= (int)$p['id'] ?>">
-                  <input type="hidden" name="nom" value="<?= h($p['nombre']) ?>">
-                  <input type="hidden" name="precio" value="<?= (float)$p['precio'] ?>">
-                  <input type="hidden" name="img" value="<?= h($p['img'] ?: ($gal_final[0] ?? '')) ?>">
-                  <input type="number" name="q" value="1" min="1" step="1" />
-                  <button class="btn" type="submit">Agregar</button>
-                </form>
-              </article>
-            <?php endforeach; ?>
+  <div class="grid">
+    <!-- CATALOGO -->
+    <section class="card">
+      <div class="products">
+        <?php if(empty($productos)): ?>
+          <div class="mini">No hay productos cargados.</div>
+        <?php else: foreach($productos as $p):
+          $pid   = (int)$p['id'];
+          $sets  = plantillas_por_categoria($p['categoria']);
+          // Guías por producto (opcional)
+          $guias = [];
+          if (db_has_table($conexion,'ind_producto_guias')) {
+            $st=$conexion->prepare("SELECT `orden`,img_url FROM ind_producto_guias WHERE producto_id=? ORDER BY `orden`");
+            $st->bind_param('i',$pid); $st->execute(); $res=$st->get_result();
+            while($x=$res->fetch_assoc()){ $guias[(int)$x['orden']]=$x['img_url']; } $st->close();
+          }
+        ?>
+        <article class="p-card" id="prod-<?=$pid?>">
+          <div class="p-img" onclick="verImagen('<?=h($p['img'])?>')">
+            <?php if($p['img']):?><img src="<?=h($p['img'])?>" alt="<?=h($p['nombre'])?>"><?php else:?><span class="mini" style="padding:8px">Sin imagen</span><?php endif;?>
           </div>
 
-          <?php
-            $total_pages = max(1, (int)ceil($total_rows / $perp));
-            if ($total_pages>1):
-          ?>
-            <div class="pager">
-              <?php for($i=1;$i<=$total_pages;$i++):
-                $qs = http_build_query(['q'=>$search,'cat'=>$catfil,'p'=>$i]); ?>
-                <?php if ($i===$page): ?>
-                  <span class="cur" style="padding:8px 12px;border:1px solid var(--border);border-radius:10px;"><?= $i ?></span>
-                <?php else: ?>
-                  <a href="tienda_indumentaria.php?<?= $qs ?>#top"><?= $i ?></a>
-                <?php endif; ?>
-              <?php endfor; ?>
+          <div>
+            <b><?=h($p['nombre'])?></b><br>
+            <small class="mini"><?=h($p['descripcion'])?></small>
+          </div>
+          <div class="price">$ <?=money($p['precio'])?></div>
+
+          <div class="mini" style="color:#ffd600">Guía de talles predeterminada.</div>
+          <div class="tabs" id="tabs-<?=$pid?>"></div>
+          <div class="chips" id="chips-<?=$pid?>"></div>
+          <div id="info-<?=$pid?>" class="mini" style="margin-top:6px;display:none"></div>
+
+          <!-- Medidas manuales -->
+          <label class="mini" style="display:flex;gap:8px;align-items:center;margin-top:8px">
+            <input type="checkbox" id="man-<?=$pid?>"> Cargar medidas manuales
+          </label>
+          <div id="form-man-<?=$pid?>" style="display:none;margin-top:6px">
+            <div class="chips" style="gap:8px">
+              <input type="number" step="0.01" id="m-ancho-<?=$pid?>" placeholder="Ancho (cm)" style="background:#0f1115;color:#fff;border:1px solid #333;border-radius:8px;padding:6px">
+              <input type="number" step="0.01" id="m-largo-<?=$pid?>" placeholder="Largo (cm)" style="background:#0f1115;color:#fff;border:1px solid #333;border-radius:8px;padding:6px">
+              <input type="number" step="0.01" id="m-cint-<?=$pid?>" placeholder="Cintura (cm)" style="background:#0f1115;color:#fff;border:1px solid #333;border-radius:8px;padding:6px">
+              <input type="number" step="0.01" id="m-lpier-<?=$pid?>" placeholder="Largo pierna (cm)" style="background:#0f1115;color:#fff;border:1px solid #333;border-radius:8px;padding:6px">
+              <input type="number" step="0.01" id="m-apier-<?=$pid?>" placeholder="Ancho pierna (cm)" style="background:#0f1115;color:#fff;border:1px solid #333;border-radius:8px;padding:6px">
+            </div>
+          </div>
+
+          <!-- Form agregar -->
+          <form method="post" action="#carrito" onsubmit="return prepSubmit(<?=$pid?>)">
+            <input type="hidden" name="csrf" value="<?=$csrf?>">
+            <input type="hidden" name="act" value="add">
+            <input type="hidden" name="pid" value="<?=$pid?>">
+            <input type="hidden" name="nom" value="<?=h($p['nombre'])?>">
+            <input type="hidden" name="precio" value="<?=h($p['precio'])?>">
+            <input type="hidden" name="img" value="<?=h($p['img'])?>">
+            <input type="hidden" name="talla" id="hid-talla-<?=$pid?>">
+            <input type="hidden" name="medidas" id="hid-medidas-<?=$pid?>">
+            <button class="btn" type="submit" style="margin-top:6px">Agregar al carrito</button>
+          </form>
+
+          <!-- Guías -->
+          <?php if($guias): ?>
+            <div class="sep"></div>
+            <div class="mini">📏 Guías de talles</div>
+            <div class="chips" style="gap:10px">
+              <?php for($i=1;$i<=3;$i++): if(!empty($guias[$i])): ?>
+                <img src="<?=h($guias[$i])?>" class="guia" onclick="verImagen('<?=h($guias[$i])?>')" alt="Guía <?=$i?>"><span class="badge">Guía <?=$i?></span>
+              <?php endif; endfor; ?>
             </div>
           <?php endif; ?>
 
-        <?php endif; ?>
-      </section>
-
-      <!-- CARRITO -->
-      <aside class="glass card cart" id="carrito">
-        <h3>🧺 Carrito <span class="muted">(<?= (int)$cart_qty ?> ítems)</span></h3>
-        <?php if (!$cart): ?>
-          <p class="muted">Tu carrito está vacío.</p>
-        <?php else: ?>
-          <div class="cart-list">
-            <?php foreach($cart as $pid=>$it): ?>
-              <div class="c-item">
-                <div class="c-img">
-                  <?php if (!empty($it['img'])): ?>
-                    <img src="<?= h($it['img']) ?>" alt="">
-                  <?php else: ?>
-                    <span class="muted">Img</span>
-                  <?php endif; ?>
-                </div>
-                <div>
-                  <div class="c-name"><?= h($it['nombre']) ?></div>
-                  <div class="c-meta">
-                    $ <?= money($it['precio']) ?> c/u
-                  </div>
-                </div>
-                <div class="c-qty">
-                  <form method="POST" action="tienda_indumentaria.php#carrito" style="display:flex; gap:6px; align-items:center">
-                    <input type="hidden" name="csrf" value="<?= h($csrf) ?>">
-                    <input type="hidden" name="act" value="chg">
-                    <input type="hidden" name="pid" value="<?= (int)$pid ?>">
-                    <input type="number" name="q" value="<?= (int)($it['q'] ?? 1) ?>" min="0" step="1" />
-                    <button class="btn" type="submit">Actualizar</button>
-                  </form>
-                  <form method="POST" action="tienda_indumentaria.php#carrito">
-                    <input type="hidden" name="csrf" value="<?= h($csrf) ?>">
-                    <input type="hidden" name="act" value="del">
-                    <input type="hidden" name="pid" value="<?= (int)$pid ?>">
-                    <button class="btn btn-ghost" type="submit" title="Quitar">✕</button>
-                  </form>
-                </div>
-              </div>
-            <?php endforeach; ?>
-          </div>
-          <div class="tot"><div>Total</div><div>$ <?= money($cart_total) ?></div></div>
-          <div style="display:flex; gap:8px; margin-top:10px">
-            <form method="POST" action="tienda_indumentaria.php#carrito">
-              <input type="hidden" name="csrf" value="<?= h($csrf) ?>">
-              <input type="hidden" name="act" value="checkout">
-              <button class="btn" type="submit">Finalizar compra</button>
-            </form>
-            <form method="POST" action="tienda_indumentaria.php#carrito">
-              <input type="hidden" name="csrf" value="<?= h($csrf) ?>">
-              <input type="hidden" name="act" value="clear">
-              <button class="btn btn-ghost" type="submit">Vaciar</button>
-            </form>
-          </div>
-          <p class="note">Al finalizar la compra te contactamos por WhatsApp para coordinar entrega/pago.</p>
-        <?php endif; ?>
-      </aside>
-    </div>
-  </div>
-
-  <!-- Lightbox / Galería -->
-  <div id="lb-backdrop" style="position:fixed;inset:0;background:rgba(0,0,0,.85);display:none;z-index:3000;"></div>
-  <div id="lb" style="position:fixed;inset:0;display:none;z-index:3001;place-items:center;">
-    <div id="lb-wrap" style="max-width:92vw;max-height:92vh;position:relative;display:flex;flex-direction:column;gap:10px;">
-      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
-        <button id="lb-prev" class="btn btn-ghost" aria-label="Anterior">◀</button>
-        <button id="lb-close" class="btn btn-ghost" aria-label="Cerrar">✕</button>
-        <button id="lb-next" class="btn btn-ghost" aria-label="Siguiente">▶</button>
+          <!-- JSON EMBEBIDO de talles -->
+          <?php $json_sets = json_encode($sets, JSON_UNESCAPED_UNICODE|JSON_HEX_TAG|JSON_HEX_AMP|JSON_HEX_APOS|JSON_HEX_QUOT); ?>
+          <script type="application/json" id="sizes-json-<?=$pid?>"><?=$json_sets?></script>
+        </article>
+        <?php endforeach; endif; ?>
       </div>
-      <div id="lb-canvas" style="background:#0b0b0b;border:1px solid var(--border);border-radius:12px;display:grid;place-items:center;overflow:hidden;max-height:80vh;">
-        <img id="lb-img" src="" alt="" style="max-width:92vw;max-height:80vh;transition:transform .2s ease; cursor: zoom-in;">
-      </div>
-      <div id="lb-thumbs" style="display:flex;gap:8px;flex-wrap:wrap;max-width:92vw;overflow:auto;"></div>
-    </div>
+    </section>
+
+    <!-- CARRITO + CHECKOUT -->
+    <aside class="card cart" id="carrito">
+      <h3>🧺 Carrito (<?= (int)$cart_qty ?> ítems)</h3>
+      <?php if(!$cart): ?>
+        <p style="color:#888">Tu carrito está vacío.</p>
+      <?php else: foreach($cart as $key=>$it): ?>
+        <div style="border:1px solid #333;border-radius:10px;padding:8px;margin-bottom:8px;display:flex;gap:8px;align-items:center">
+          <div style="width:60px;height:60px;border-radius:8px;overflow:hidden;background:#0f1115;display:grid;place-items:center">
+            <?php if($it['img']):?><img src="<?=h($it['img'])?>" style="width:100%;height:100%;object-fit:cover"><?php else:?><span style="color:#666">Img</span><?php endif;?>
+          </div>
+          <div style="flex:1">
+            <b><?=h($it['nombre'])?></b><br>
+            <?php if($it['talla']):?><small class="mini">Talle: <?=h($it['talla'])?> · </small><?php endif; ?>
+            <?php if($it['medidas']):?><small class="mini">Medidas: <?=h($it['medidas'])?> · </small><?php endif; ?>
+            <small>$ <?=money($it['precio'])?></small>
+          </div>
+          <form method="post" style="display:flex;gap:6px">
+            <input type="hidden" name="csrf" value="<?=$csrf?>"><input type="hidden" name="act" value="chg">
+            <input type="hidden" name="key" value="<?=h($key)?>">
+            <input type="number" name="q" value="<?= (int)$it['q']?>" min="0" step="1" style="width:64px;background:#0f1115;color:#fff;border:1px solid #333;border-radius:6px;text-align:center">
+            <button class="btn" type="submit">↻</button>
+          </form>
+          <form method="post">
+            <input type="hidden" name="csrf" value="<?=$csrf?>"><input type="hidden" name="act" value="del">
+            <input type="hidden" name="key" value="<?=h($key)?>"><button class="btn-ghost" type="submit">✕</button>
+          </form>
+        </div>
+      <?php endforeach; ?>
+      <div style="display:flex;justify-content:space-between;font-weight:800;margin-top:10px"><div>Total</div><div>$ <?=money($cart_total)?></div></div>
+      <form method="post" style="margin-top:10px"><input type="hidden" name="csrf" value="<?=$csrf?>"><input type="hidden" name="act" value="clear"><button class="btn-ghost" type="submit">Vaciar carrito</button></form>
+
+      <!-- === CHECKOUT === -->
+      <div class="sep"></div>
+      <h4>💳 Formas de pago</h4>
+
+      <?php if($multi_products): ?>
+        <p class="mini" style="margin:6px 0 10px">⚠️ Tenés <b>varios productos</b> en el carrito. Mostramos los datos bancarios del <b>primer producto</b>. Si querés que combinemos o elijamos por producto, avisame y lo ajusto.</p>
+      <?php endif; ?>
+
+      <form method="post" enctype="multipart/form-data">
+        <input type="hidden" name="csrf" value="<?=$csrf?>">
+        <input type="hidden" name="act" value="checkout">
+
+        <label class="payrow">
+          <input type="radio" name="pago" value="efectivo" checked>
+          <span>Efectivo (en el local)</span>
+        </label>
+        <div class="mini" style="margin:-2px 0 6px 26px;">Pagás cuando retirás en recepción.</div>
+
+        <label class="payrow" style="margin-top:6px">
+          <input type="radio" name="pago" value="tarjeta">
+          <span>Tarjeta de crédito (en el local)</span>
+        </label>
+        <div class="mini" style="margin:-2px 0 6px 26px;">3 a 6 cuotas sin interés en el local.</div>
+
+        <label class="payrow" style="margin-top:6px">
+          <input type="radio" name="pago" value="transferencia" id="rb-transf">
+          <span>Transferencia bancaria</span>
+        </label>
+
+        <div id="pane-transf" style="display:none;margin:6px 0 0 26px;border:1px dashed #444;border-radius:10px;padding:10px">
+          <div class="kv">
+            <b>Alias:</b>         <div><?=h($PAGOS_UI['alias'])?></div>
+            <b>CBU:</b>           <div><?=h($PAGOS_UI['cbu'])?></div>
+            <b>Banco:</b>         <div><?=h($PAGOS_UI['banco'])?></div>
+            <b>Cuenta:</b>        <div><?=h($PAGOS_UI['cuenta_tipo'])?> <?=h($PAGOS_UI['cuenta_numero'])?></div>
+            <b>Titular:</b>       <div><?=h($PAGOS_UI['titular'])?></div>
+            <b>CUIT/CUIL:</b>     <div><?=h($PAGOS_UI['cuit'])?></div>
+            <?php if(!empty($PAGOS_UI['mp_link'])): ?>
+              <b>MP Link:</b>     <div><a href="<?=h($PAGOS_UI['mp_link'])?>" target="_blank" style="color:#ffd600">Pagar con Mercado Pago</a></div>
+            <?php endif; ?>
+          </div>
+          <?php if(!empty($PAGOS_UI['nota'])): ?>
+            <div class="mini" style="margin-top:6px"><?=h($PAGOS_UI['nota'])?></div>
+          <?php endif; ?>
+          <?php if(!empty($PAGOS_UI['qr_url'])): ?>
+            <div style="margin-top:10px;display:flex;gap:10px;align-items:center">
+              <img src="<?=h($PAGOS_UI['qr_url'])?>" alt="QR" style="width:110px;height:110px;border-radius:10px;border:1px solid #333;background:#0f1115;cursor:pointer" onclick="verImagen('<?=h($PAGOS_UI['qr_url'])?>')">
+              <span class="mini">Escaneá el QR para pagar.</span>
+            </div>
+          <?php endif; ?>
+
+          <div class="mini" style="margin-top:10px">Adjuntá el comprobante (JPG/PNG/PDF · máx 5 MB):</div>
+          <input type="file" name="comprobante" accept=".jpg,.jpeg,.png,.pdf" style="margin-top:6px;color:#ccc">
+        </div>
+
+        <button class="btn" type="submit" style="margin-top:12px;width:100%">Confirmar pedido</button>
+      </form>
+      <?php endif; ?>
+      <p class="mini" style="margin-top:10px">💡 Si pagás por transferencia, el equipo validará el comprobante antes de preparar tu pedido.</p>
+    </aside>
   </div>
+</div>
 
-  <script>
-  (function(){
-    const $  = s=>document.querySelector(s);
-    const $$ = s=>document.querySelectorAll(s);
-    const backdrop = $('#lb-backdrop');
-    const modal    = $('#lb');
-    const img      = $('#lb-img');
-    const thumbs   = $('#lb-thumbs');
-    const btnPrev  = $('#lb-prev');
-    const btnNext  = $('#lb-next');
-    const btnClose = $('#lb-close');
+<!-- Lightbox simple -->
+<div id="lightbox" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.8);z-index:9999;justify-content:center;align-items:center">
+  <img id="lightimg" src="" style="max-width:90%;max-height:90%;border:4px solid #fff;border-radius:10px">
+</div>
+<script>
+function verImagen(url){ if(!url)return; const lb=document.getElementById('lightbox'); const img=document.getElementById('lightimg'); img.src=url; lb.style.display='flex'; lb.onclick=()=>lb.style.display='none'; }
 
-    let images = [];
-    let index  = 0;
-    let zoomed = false;
+// Mostrar/ocultar panel de transferencia (con guardas si no hay checkout)
+(function(){
+  const pane   = document.getElementById('pane-transf');
+  const radios = document.querySelectorAll('input[name="pago"]');
+  if (!pane || !radios.length) return; // carrito vacío o sin checkout visible
+  function syncPane(){
+    let v=''; radios.forEach(r=>{ if(r.checked) v=r.value; });
+    pane.style.display = (v==='transferencia') ? 'block' : 'none';
+  }
+  radios.forEach(r=>r.addEventListener('change', syncPane));
+  syncPane();
+})();
 
-    function mapBig(u){
-      // si es Cloudinary, traer tamaño grande (coincide con PHP)
-      try{
-        const marker = '/upload/';
-        const k = u.indexOf(marker);
-        if (k>-1) return u.slice(0,k+marker.length)+'w_1600,q_auto,f_auto/'+u.slice(k+marker.length);
-      }catch(e){}
-      return u;
-    }
+// ====== UI Talles: pestañas + chips + medidas manuales ======
+document.querySelectorAll('[id^="prod-"]').forEach(card=>{
+  const pid   = card.id.split('-')[1];
+  const tabsEl = card.querySelector('#tabs-'+pid);
+  const chipsEl= card.querySelector('#chips-'+pid);
+  const infoEl = card.querySelector('#info-'+pid);
+  const hidTalle   = card.querySelector('#hid-talla-'+pid);
+  const hidMedidas = card.querySelector('#hid-medidas-'+pid);
 
-    function open(gal, start=0){
-      images = (gal || []).map(mapBig);
-      index  = Math.max(0, Math.min(start, images.length-1));
-      render();
-      backdrop.style.display = 'block';
-      modal.style.display    = 'grid';
-      document.documentElement.style.overflow = 'hidden';
-    }
-    function close(){
-      backdrop.style.display = 'none';
-      modal.style.display    = 'none';
-      document.documentElement.style.overflow = '';
-      zoomed = false;
-      img.style.transform = 'none';
-      img.style.cursor = 'zoom-in';
-    }
-    function render(){
-      if (!images.length) return close();
-      img.src = images[index];
-      thumbs.innerHTML = '';
-      images.forEach((u,i)=>{
-        const t = document.createElement('img');
-        t.src = u; t.alt='';
-        t.style.width='64px'; t.style.height='64px';
-        t.style.objectFit='cover'; t.style.borderRadius='8px';
-        t.style.border = '2px solid ' + (i===index ? '#ffd600' : 'rgba(255,255,255,.2)');
-        t.addEventListener('click', ()=>{ index=i; zoomed=false; img.style.transform='none'; render(); });
-        thumbs.appendChild(t);
+  const jsonEl = card.querySelector('#sizes-json-'+pid);
+  let sets = {};
+  if (jsonEl) {
+    try { sets = JSON.parse(jsonEl.textContent); } catch(e){ sets = {}; }
+  }
+  const setNames = Object.keys(sets);
+
+  function medidasTxtFrom(btn){
+    const a=btn.dataset.ancho, l=btn.dataset.largo, c=btn.dataset.cintura, lp=btn.dataset.lpierna, ap=btn.dataset.apierna;
+    const p=[]; if(a)p.push('Ancho '+a+' cm'); if(l)p.push('Largo '+l+' cm'); if(c)p.push('Cintura '+c+' cm'); if(lp)p.push('Largo pierna '+lp+' cm'); if(ap)p.push('Ancho pierna '+ap+' cm');
+    return p.join(', ');
+  }
+
+  function renderTabs(active){
+    tabsEl.innerHTML='';
+    setNames.forEach(name=>{
+      const b=document.createElement('button');
+      b.type='button'; b.textContent=name; if(name===active) b.classList.add('on');
+      b.addEventListener('click',()=>{ renderTabs(name); renderChips(name); infoEl.style.display='none'; });
+      tabsEl.appendChild(b);
+    });
+  }
+
+  function renderChips(active){
+    chipsEl.innerHTML='';
+    (sets[active]||[]).forEach(t=>{
+      const b=document.createElement('button');
+      b.type='button'; b.textContent=t.talle || '';
+      b.dataset.talle = t.talle || '';
+      b.dataset.ancho = (t.ancho ?? '');
+      b.dataset.largo = (t.largo ?? '');
+      b.dataset.cintura = (t.cintura ?? '');
+      b.dataset.lpierna = (t.largo_pierna ?? '');
+      b.dataset.apierna = (t.ancho_pierna ?? '');
+      b.addEventListener('click',()=>{
+        chipsEl.querySelectorAll('button').forEach(x=>x.classList.remove('active'));
+        b.classList.add('active');
+        const m = medidasTxtFrom(b);
+        if(m){ infoEl.style.display='block'; infoEl.textContent='Talle '+(b.dataset.talle||'')+' · '+m; } else { infoEl.style.display='none'; }
+        hidTalle.value   = b.dataset.talle || '';
+        if(!document.getElementById('man-'+pid)?.checked){
+          hidMedidas.value = m || '';
+        }
       });
+      chipsEl.appendChild(b);
+    });
+  }
+
+  if (setNames.length){
+    const first = setNames[0];
+    renderTabs(first);
+    renderChips(first);
+  } else {
+    tabsEl.innerHTML = '<span class="mini" style="color:#fbbf24">No hay guías disponibles.</span>';
+  }
+
+  // Medidas manuales
+  const chkMan = card.querySelector('#man-'+pid);
+  const formM  = card.querySelector('#form-man-'+pid);
+  chkMan?.addEventListener('change', ()=>{
+    const on = chkMan.checked;
+    formM.style.display = on ? 'block' : 'none';
+    if (!on){
+      const act = chipsEl.querySelector('button.active');
+      if(act){ hidMedidas.value = medidasTxtFrom(act); }
+      else { hidMedidas.value=''; }
     }
-    function prev(){ index = (index - 1 + images.length) % images.length; render(); }
-    function next(){ index = (index + 1) % images.length; render(); }
+  });
 
-    // Zoom al click
-    img.addEventListener('click', ()=>{
-      zoomed = !zoomed;
-      img.style.transform = zoomed ? 'scale(1.8)' : 'none';
-      img.style.cursor = zoomed ? 'zoom-out' : 'zoom-in';
-    });
-
-    // Controles
-    btnPrev.addEventListener('click', prev);
-    btnNext.addEventListener('click', next);
-    btnClose.addEventListener('click', close);
-    backdrop.addEventListener('click', close);
-    window.addEventListener('keydown', (e)=>{
-      if (modal.style.display !== 'grid') return;
-      if (e.key==='Escape') close();
-      if (e.key==='ArrowLeft') prev();
-      if (e.key==='ArrowRight') next();
-    });
-
-    // Activadores desde tarjetas
-    $$('.p-card').forEach(card=>{
-      const galData = card.getAttribute('data-images') || '[]';
-      let gal = [];
-      try{ gal = JSON.parse(galData); }catch(e){}
-      const btn = card.querySelector('.btn-view');
-      const imgMain = card.querySelector('.p-img');
-      const thumbsRow = card.querySelector('.thumbs-row');
-
-      function openIfAny(){ if (gal && gal.length) open(gal, 0); }
-
-      btn && btn.addEventListener('click', openIfAny);
-      imgMain && imgMain.addEventListener('click', openIfAny);
-      thumbsRow && thumbsRow.addEventListener('click', (ev)=>{
-        const t = ev.target.closest('img.thumb');
-        if (!t) return;
-        const idx = Array.from(thumbsRow.querySelectorAll('img.thumb')).indexOf(t);
-        if (idx>-1) open(gal, idx);
+  const map = {
+    ['m-ancho-'+pid] : 'Ancho',
+    ['m-largo-'+pid] : 'Largo',
+    ['m-cint-'+pid]  : 'Cintura',
+    ['m-lpier-'+pid] : 'Largo pierna',
+    ['m-apier-'+pid] : 'Ancho pierna'
+  };
+  Object.keys(map).forEach(id=>{
+    const el = card.querySelector('#'+id);
+    el?.addEventListener('input', ()=>{
+      if (!chkMan || !chkMan.checked) return;
+      const parts=[];
+      Object.keys(map).forEach(k=>{
+        const e=card.querySelector('#'+k);
+        if(e && e.value) parts.push(map[k]+' '+e.value+' cm');
       });
-      const more = card.querySelector('.thumbs-row .more');
-      more && more.addEventListener('click', openIfAny);
+      hidMedidas.value = parts.join(', ');
     });
-  })();
-  </script>
+  });
+});
+
+// Validación antes de enviar item
+function prepSubmit(pid){
+  const t = document.getElementById('hid-talla-'+pid)?.value.trim() || '';
+  const m = document.getElementById('hid-medidas-'+pid)?.value.trim() || '';
+  if(!t && !m){
+    alert('Elegí un talle o cargá medidas.');
+    return false;
+  }
+  return true;
+}
+</script>
 </body>
 </html>
