@@ -20,7 +20,9 @@ function table_exists(mysqli $db, string $t): bool {
   return ($q && $q->num_rows > 0);
 }
 function bind_params_dynamic(mysqli_stmt $stmt, string $types, array $values): bool {
-  $refs = []; $refs[] = $types;
+  // ✅ FIX: el primer argumento (types) también debe ser por referencia en PHP 8
+  $refs = [];
+  $refs[] = &$types;
   foreach ($values as $k => $v) { $refs[] = &$values[$k]; }
   return call_user_func_array([$stmt, 'bind_param'], $refs);
 }
@@ -73,22 +75,28 @@ $adicionales_ids = isset($_POST['adicionales']) && is_array($_POST['adicionales'
 
 $fecha_actual = date('Y-m-d H:i:s');
 
+if ($cliente_id <= 0) { http_response_code(400); die("Cliente inválido"); }
+if ($plan_id    <= 0) { http_response_code(400); die("Plan inválido"); }
+
+/* Fallbacks desde planes (1 solo SELECT) */
+$stp = prep($conexion, "SELECT precio, clases_disponibles, duracion_meses FROM planes WHERE id=? AND gimnasio_id=? LIMIT 1", "planes.select");
+$stp->bind_param("ii", $plan_id, $gimnasio_id);
+$stp->execute();
+$stp->bind_result($p_precio, $p_clases, $p_dur);
+if ($stp->fetch()) {
+  if ($precio_plan <= 0)           $precio_plan = n($p_precio);
+  if ($clases_disponibles <= 0)    $clases_disponibles = (int)$p_clases;
+  if ($duracion_meses <= 0)        $duracion_meses = (int)$p_dur;
+}
+$stp->close();
+
+if ($descuento_pct < 0)   $descuento_pct = 0;
+if ($descuento_pct > 100) $descuento_pct = 100;
+
 if ($fecha_vencimiento === '' || $fecha_vencimiento === null) {
   $ts = strtotime($fecha_inicio ?: date('Y-m-d'));
   $fecha_vencimiento = date('Y-m-d', strtotime("+{$duracion_meses} month", $ts));
 }
-
-/* Fallback precio plan */
-if ($precio_plan <= 0 && $plan_id > 0) {
-  $stp = prep($conexion, "SELECT precio FROM planes WHERE id=? AND gimnasio_id=? LIMIT 1", "plan.select");
-  $stp->bind_param("ii", $plan_id, $gimnasio_id);
-  $stp->execute();
-  $stp->bind_result($pplan);
-  if ($stp->fetch()) { $precio_plan = n($pplan); }
-  $stp->close();
-}
-if ($descuento_pct < 0)   $descuento_pct = 0;
-if ($descuento_pct > 100) $descuento_pct = 100;
 
 /* Adicionales -> precios desde BD */
 $precio_adicionales = 0.0;
@@ -163,7 +171,7 @@ try {
   $membresia_id = (int)$stmt->insert_id;
   $stmt->close();
 
-  /* 2) Adicionales de la nueva */
+  /* 2) Adicionales de la nueva (si existe esa tabla/cols) */
   if (!empty($adicionales_detalle) && table_exists($conexion, 'membresias_adicionales') && hcol($conexion,'membresias_adicionales','membresia_id')) {
     $colsAd = ['membresia_id']; $typesAd='i';
     $optCols = [];
@@ -195,7 +203,7 @@ try {
     $stA->close();
   }
 
-  /* 3) Pagos (dinámico) */
+  /* 3) Pagos (tabla/cols dinámicas) */
   $table_pagos = null;
   if (table_exists($conexion, 'pagos'))                $table_pagos = 'pagos';
   elseif (table_exists($conexion, 'pagos_membresia'))  $table_pagos = 'pagos_membresia';
@@ -305,7 +313,6 @@ try {
   }
 
   /* 7) PURGE: eliminar TODAS las membresías anteriores del mismo cliente/gimnasio */
-  // Obtener IDs antiguos
   $stOld = prep($conexion,
     "SELECT id FROM membresias WHERE cliente_id = ? AND gimnasio_id = ? AND id <> ?",
     "membresias.select_old"
@@ -320,7 +327,6 @@ try {
   if (!empty($oldIds)) {
     $in = implode(',', array_map('intval', $oldIds));
 
-    // Borrar dependencias conocidas si existen
     if (table_exists($conexion, 'membresias_adicionales') && hcol($conexion,'membresias_adicionales','membresia_id')) {
       $conexion->query("DELETE FROM membresias_adicionales WHERE membresia_id IN ($in)");
     }
@@ -331,11 +337,9 @@ try {
         $conexion->query("DELETE FROM cc_movimientos WHERE venta_id IN ($in)");
       }
     }
-    // Asistencias (si tu esquema las referencia a membresia_id)
     if (table_exists($conexion, 'asistencias') && hcol($conexion,'asistencias','membresia_id')) {
       $conexion->query("DELETE FROM asistencias WHERE membresia_id IN ($in)");
     }
-    // Intento en pagos por metadata/concepto (opcional, no siempre aplica)
     if (table_exists($conexion, 'pagos')) {
       if (hcol($conexion,'pagos','metadata_json')) {
         $likeConds = [];
@@ -350,13 +354,10 @@ try {
         $conexion->query("DELETE FROM pagos WHERE concepto IN (".implode(',', $concepts).")$extra");
       }
     }
-    if (table_exists($conexion, 'pagos_membresia')) {
-      if (hcol($conexion,'pagos_membresia','membresia_id')) {
+    if (table_exists($conexion, 'pagos_membresia') && hcol($conexion,'pagos_membresia','membresia_id')) {
         $conexion->query("DELETE FROM pagos_membresia WHERE membresia_id IN ($in)");
-      }
     }
 
-    // Finalmente borrar las membresías viejas
     $conexion->query("DELETE FROM membresias WHERE id IN ($in)");
   }
 

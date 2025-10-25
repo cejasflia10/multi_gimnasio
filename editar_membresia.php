@@ -1,83 +1,155 @@
 <?php
+// guardar_edicion_membresia.php — Edita clases y vencimiento de una membresía
 if (session_status() === PHP_SESSION_NONE) session_start();
 require __DIR__ . '/conexion.php';
-require __DIR__ . '/menu_horizontal.php';
 
-$id = (int)($_GET['id'] ?? 0);
-$gimnasio_id = (int)($_SESSION['gimnasio_id'] ?? 0);
-if ($id <= 0 || $gimnasio_id <= 0) { http_response_code(400); die('Datos inválidos'); }
+if (!isset($conexion) || !($conexion instanceof mysqli)) { http_response_code(500); exit('❌ Sin conexión a BD'); }
+if (function_exists('mysqli_report')) { mysqli_report(MYSQLI_REPORT_OFF); }
+@$conexion->set_charset('utf8mb4');
 
-$sql = "
-  SELECT m.*, c.apellido, c.nombre, c.dni, p.nombre AS plan_nombre
-  FROM membresias m
-  JOIN clientes c ON c.id = m.cliente_id
-  JOIN planes   p ON p.id = m.plan_id
-  WHERE m.id = {$id} AND m.gimnasio_id = {$gimnasio_id}
-  LIMIT 1
-";
-$membresia = $conexion->query($sql)->fetch_assoc();
-if (!$membresia) { die('Membresía no encontrada'); }
-?>
-<!DOCTYPE html>
-<html lang="es">
-<head>
-  <meta charset="UTF-8">
-  <title>Editar Membresía</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <link rel="stylesheet" href="estilo_unificado.css">
-  <style>
-    body{background:#000;color:gold;font-family:system-ui,Arial,sans-serif}
-    .contenedor{max-width:700px;margin:0 auto;padding:16px}
-    .bloque{background:#111;border:1px solid #444;border-radius:10px;padding:14px;margin-bottom:14px}
-    label{display:block;margin:10px 0 6px}
-    input,select{width:100%;padding:10px;border-radius:8px;border:1px solid #555;background:#0c0c0c;color:#ddd}
-    .solo-lectura{opacity:.7}
-    .ayuda{font-size:12px;color:#9aa}
-    .acciones{display:flex;gap:10px;margin-top:14px}
-    .btn{padding:10px 14px;border:none;border-radius:8px;font-weight:700;cursor:pointer}
-    .btn-guardar{background:#16a34a;color:#fff}
-    .btn-volver{background:#334155;color:#fff;text-decoration:none;display:inline-block}
-  </style>
-</head>
-<body>
-<div class="contenedor">
-  <h2>✏️ Editar Membresía</h2>
+/* Helpers */
+function h($s){ return htmlspecialchars((string)$s, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'); }
+function hcol(mysqli $db, string $table, string $col): bool {
+  $table = $db->real_escape_string($table);
+  $col   = $db->real_escape_string($col);
+  $res = $db->query("SHOW COLUMNS FROM `$table` LIKE '$col'");
+  return ($res && $res->num_rows > 0);
+}
+function valid_date($s): bool {
+  if (!$s) return false;
+  $d = DateTime::createFromFormat('Y-m-d', $s);
+  return $d && $d->format('Y-m-d') === $s;
+}
 
-  <form action="guardar_edicion_membresia.php" method="POST">
-    <input type="hidden" name="id" value="<?= (int)$membresia['id'] ?>">
-    <input type="hidden" name="gimnasio_id" value="<?= (int)$gimnasio_id ?>">
+/* Método */
+if ($_SERVER['REQUEST_METHOD'] !== 'POST') { http_response_code(405); exit('Método no permitido'); }
 
-    <div class="bloque">
-      <label>Cliente</label>
-      <input class="solo-lectura" type="text" value="<?= htmlspecialchars($membresia['apellido'].', '.$membresia['nombre'].' ('.$membresia['dni'].')') ?>" readonly>
+/* Entrada */
+$id          = (int)($_POST['id'] ?? 0);
+$gimnasio_id = (int)($_POST['gimnasio_id'] ?? ($_SESSION['gimnasio_id'] ?? 0));
+$nuevas_clases = (int)($_POST['clases_disponibles'] ?? 0); // el form manda este name
+$nuevo_vto     = (string)($_POST['fecha_vencimiento'] ?? '');
 
-      <label>Plan</label>
-      <input class="solo-lectura" type="text" value="<?= htmlspecialchars($membresia['plan_nombre']) ?>" readonly>
+if ($id <= 0 || $gimnasio_id <= 0) { http_response_code(400); exit('Datos inválidos'); }
+if ($nuevas_clases < 0) $nuevas_clases = 0;
+if (!valid_date($nuevo_vto)) { http_response_code(400); exit('Fecha de vencimiento inválida'); }
 
-      <label>Fecha de inicio</label>
-      <input class="solo-lectura" type="date" value="<?= htmlspecialchars($membresia['fecha_inicio']) ?>" readonly>
+try {
+  $conexion->begin_transaction();
 
-      <label>Precio total</label>
-      <input class="solo-lectura" type="text" value="$<?= number_format((float)$membresia['total'],2,',','.') ?>" readonly>
+  // Traer membresía (lock)
+  $stmt = $conexion->prepare("
+    SELECT id, cliente_id, plan_id, fecha_inicio, fecha_vencimiento,
+           clases_disponibles, IFNULL(clases_restantes, NULL) AS clases_restantes
+    FROM membresias
+    WHERE id = ? AND gimnasio_id = ?
+    FOR UPDATE
+  ");
+  if (!$stmt) throw new Exception("Prepare select: ".$conexion->error);
+  $stmt->bind_param("ii", $id, $gimnasio_id);
+  $stmt->execute();
+  $res = $stmt->get_result();
+  $mem = $res->fetch_assoc();
+  $stmt->close();
 
-      <div class="ayuda">Estos campos son informativos y no pueden editarse aquí.</div>
-    </div>
+  if (!$mem) { throw new Exception("Membresía no encontrada"); }
 
-    <div class="bloque">
-      <label>Clases disponibles (editable)</label>
-      <input type="number" name="clases_disponibles" min="0"
-             value="<?= (int)($membresia['clases_disponibles'] ?? $membresia['clases_restantes'] ?? 0) ?>" required>
+  $old_vto    = (string)$mem['fecha_vencimiento'];
+  $old_cd     = is_null($mem['clases_disponibles']) ? null : (int)$mem['clases_disponibles'];
+  $old_cr     = is_null($mem['clases_restantes'])   ? null : (int)$mem['clases_restantes'];
 
-      <label>Fecha de vencimiento (editable)</label>
-      <input type="date" name="fecha_vencimiento" value="<?= htmlspecialchars($membresia['fecha_vencimiento']) ?>" required>
-      <div class="ayuda">Solo podés modificar estos dos campos.</div>
-    </div>
+  // Validación: no permitir vencimiento anterior a inicio
+  if (valid_date($mem['fecha_inicio']) && $nuevo_vto < $mem['fecha_inicio']) {
+    throw new Exception("La fecha de vencimiento no puede ser anterior a la fecha de inicio");
+  }
 
-    <div class="acciones">
-      <button type="submit" class="btn btn-guardar">💾 Guardar cambios</button>
-      <a class="btn btn-volver" href="ver_membresias.php">⬅ Volver</a>
-    </div>
-  </form>
-</div>
-</body>
-</html>
+  // Detectar columnas presentes
+  $has_cd = hcol($conexion, 'membresias', 'clases_disponibles');
+  $has_cr = hcol($conexion, 'membresias', 'clases_restantes');
+
+  // Armar SET dinámico
+  $sets = [];
+  $types = '';
+  $vals  = [];
+
+  // Siempre se actualiza el vencimiento
+  $sets[] = "fecha_vencimiento = ?";
+  $types .= 's';
+  $vals[]  = $nuevo_vto;
+
+  // Si existen ambas, las dejamos consistentes con el valor ingresado
+  if ($has_cd) { $sets[] = "clases_disponibles = ?"; $types .= 'i'; $vals[] = $nuevas_clases; }
+  if ($has_cr) { $sets[] = "clases_restantes   = ?"; $types .= 'i'; $vals[] = $nuevas_clases; }
+
+  if (!$sets) { throw new Exception("No hay columnas editables en la tabla membresias"); }
+
+  $sql = "UPDATE membresias SET ".implode(', ', $sets)." WHERE id = ? AND gimnasio_id = ?";
+  $stmtU = $conexion->prepare($sql);
+  if (!$stmtU) throw new Exception("Prepare update: ".$conexion->error);
+
+  $types .= 'ii';
+  $vals[] = $id;
+  $vals[] = $gimnasio_id;
+
+  // bind dinámico
+  $refs = []; $refs[] = &$types;
+  foreach ($vals as $k => $v) { $refs[] = &$vals[$k]; }
+  if (!call_user_func_array([$stmtU, 'bind_param'], $refs)) {
+    throw new Exception("bind_param update falló");
+  }
+  if (!$stmtU->execute()) { throw new Exception("Exec update: ".$stmtU->error); }
+  $stmtU->close();
+
+  // Auditar cambios si existe historial
+  if (hcol($conexion, 'membresias_historial', 'membresia_id')) {
+    $stmtH = $conexion->prepare("
+      INSERT INTO membresias_historial
+        (membresia_id, gimnasio_id, fecha, cambio, old_vencimiento, new_vencimiento, old_clases, new_clases, user_id)
+      VALUES (?, ?, NOW(), ?, ?, ?, ?, ?, ?)
+    ");
+    if ($stmtH) {
+      $cambio = 'edicion';
+      $old_cls = ($has_cr ? $old_cr : $old_cd);
+      $user_id = (int)($_SESSION['usuario_id'] ?? 0);
+      $stmtH->bind_param(
+        "iisssiii",
+        $id, $gimnasio_id, $cambio,
+        $old_vto, $nuevo_vto,
+        $old_cls, $nuevas_clases, $user_id
+      );
+      $stmtH->execute();
+      $stmtH->close();
+    }
+  }
+
+  // Si tenés turnos fijos y querés extender el rango automáticamente cuando se extiende el vto:
+  // (opcional, solo si existen columnas/tabla)
+  if ($nuevo_vto > $old_vto) {
+    foreach (['clientes_fijos','turnos_personalizados'] as $tf) {
+      $q = $conexion->query("SHOW TABLES LIKE '".$conexion->real_escape_string($tf)."'");
+      if ($q && $q->num_rows > 0) {
+        $has_mem = hcol($conexion, $tf, 'membresia_id');
+        $has_cli = hcol($conexion, $tf, 'cliente_id');
+        $has_gim = hcol($conexion, $tf, 'gimnasio_id');
+        $has_hst = hcol($conexion, $tf, 'hasta');
+        if ($has_hst && ($has_mem || $has_cli)) {
+          $cond = [];
+          if ($has_gim) $cond[] = "gimnasio_id = ".(int)$gimnasio_id;
+          if ($has_mem) $cond[] = "membresia_id = ".(int)$id;
+          else          $cond[] = "cliente_id = ".(int)$mem['cliente_id'];
+          $where = implode(' AND ', $cond);
+          $conexion->query("UPDATE `$tf` SET `hasta` = '".$conexion->real_escape_string($nuevo_vto)."' WHERE $where");
+        }
+      }
+    }
+  }
+
+  $conexion->commit();
+  header("Location: ver_membresias.php?edit_ok=1", true, 303);
+  exit;
+
+} catch (Throwable $e) {
+  $conexion->rollback();
+  http_response_code(500);
+  echo "Error al editar la membresía: ".h($e->getMessage());
+}

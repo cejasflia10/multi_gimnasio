@@ -1,7 +1,10 @@
 <?php
-// guardar_membresia.php — registra deuda/saldo en cc_movimientos (DEBE/HABER)
+// guardar_membresia.php — registra deuda/saldo en cc_movimientos (DEBE/HABER) + turnos fijos
 if (session_status() === PHP_SESSION_NONE) session_start();
 require __DIR__ . '/conexion.php';
+
+if (function_exists('mysqli_report')) { mysqli_report(MYSQLI_REPORT_OFF); }
+@$conexion->set_charset('utf8mb4');
 
 $gimnasio_id = (int)($_SESSION['gimnasio_id'] ?? 0);
 if ($gimnasio_id <= 0) { http_response_code(403); die("Acceso denegado."); }
@@ -9,6 +12,26 @@ if ($gimnasio_id <= 0) { http_response_code(403); die("Acceso denegado."); }
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
   http_response_code(405); die("Acceso no permitido.");
 }
+
+/* ===== Helpers ===== */
+function table_exists(mysqli $db, string $table): bool {
+  $stmt = $db->prepare("SELECT 1 FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = ? LIMIT 1");
+  if (!$stmt) return false;
+  $stmt->bind_param('s', $table);
+  $ok = $stmt->execute();
+  $stmt->close();
+  return (bool)$ok && $db->affected_rows >= 0; // si ejecuta, ya luego probaremos insert
+}
+function pick_fixed_table(mysqli $db): ?string {
+  // Preferimos clientes_fijos; si no existe, probamos turnos_personalizados
+  $cands = ['clientes_fijos','turnos_personalizados'];
+  foreach ($cands as $t) {
+    $q = $db->query("SHOW TABLES LIKE '".$db->real_escape_string($t)."'");
+    if ($q && $q->num_rows > 0) return $t;
+  }
+  return null;
+}
+function h($s){ return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); }
 
 /* ===== 1) Entradas ===== */
 $cliente_id         = (int)($_POST['cliente_id'] ?? 0);
@@ -27,6 +50,11 @@ $pago_credito       = (float)($_POST['pago_credito'] ?? 0);
 
 // parte que el recepcionista manda explícitamente a Cuenta Corriente (DEBE)
 $pago_cc_manual     = (float)($_POST['pago_cuenta_corriente'] ?? 0);
+
+// turnos personalizados (JSON)
+$turnos_json_raw    = $_POST['turnos_json'] ?? '[]';
+$turnos_arr         = json_decode($turnos_json_raw, true);
+if (!is_array($turnos_arr)) $turnos_arr = [];
 
 if ($cliente_id <= 0) die("Cliente inválido.");
 if ($plan_id    <= 0) die("Plan inválido.");
@@ -48,8 +76,10 @@ $clases_plan = (int)$plan['clases_disponibles'];
 $duracion    = (int)$plan['duracion_meses'];
 
 /* Fecha de vencimiento (si no vino del form, calcular en backend) */
+$fi_ts = strtotime($fecha_inicio ?: date('Y-m-d'));
+if ($fi_ts === false) $fi_ts = time();
 $fecha_vencimiento = ($fecha_venc_post === '' || $fecha_venc_post === null)
-  ? date('Y-m-d', strtotime("+{$duracion} month", strtotime($fecha_inicio)))
+  ? date('Y-m-d', strtotime("+{$duracion} month", $fi_ts))
   : $fecha_venc_post;
 
 /* ===== 3) Adicionales (desde DB) ===== */
@@ -57,8 +87,9 @@ $total_adicionales = 0.0;
 $adicionales_ids   = [];
 if (!empty($adicionales) && is_array($adicionales)) {
   $adicionales_ids = array_map('intval', $adicionales);
-  $ids_list = implode(',', $adicionales_ids);
-  if ($ids_list !== '') {
+  $adicionales_ids = array_values(array_filter($adicionales_ids, fn($x)=>$x>0));
+  if ($adicionales_ids) {
+    $ids_list = implode(',', $adicionales_ids);
     $sqlAd = "SELECT id, precio FROM planes_adicionales WHERE id IN ($ids_list) AND gimnasio_id = ?";
     $resAd = $conexion->prepare($sqlAd);
     $resAd->bind_param('i', $gimnasio_id);
@@ -186,16 +217,55 @@ try {
   // 7.4) Actualizar saldo_cc en membresías como (DEBE - HABER)
   $saldo_cc = round($debe_total - $haber_total, 2); // >0 deuda, <0 a favor
   $stmtUpd = $conexion->prepare("UPDATE membresias SET saldo_cc = ? WHERE id = ? AND gimnasio_id = ?");
+  if (!$stmtUpd) { throw new Exception("Prepare update saldo_cc: ".$conexion->error); }
   $stmtUpd->bind_param("dii", $saldo_cc, $membresia_id, $gimnasio_id);
-  $stmtUpd->execute();
+  if (!$stmtUpd->execute()) { throw new Exception("Exec update saldo_cc: ".$stmtUpd->error); }
   $stmtUpd->close();
 
+  /* ===== 7.5) Insertar TURNOS FIJOS (si vinieron) =====
+     Estructura esperada por ítem: {dia, dow(0..6), hora(HH:MM), desde(YYYY-MM-DD), hasta(YYYY-MM-DD)}
+     Tabla preferida: clientes_fijos. Alternativa: turnos_personalizados.
+     Campos: gimnasio_id, cliente_id, membresia_id, dow, hora, desde, hasta, creado_at
+  */
+  if (!empty($turnos_arr)) {
+    $fixed_table = pick_fixed_table($conexion);
+    if ($fixed_table) {
+      // Usamos TIME/DATE como strings "HH:MM" / "YYYY-MM-DD". El motor castea a TIME/DATE si corresponde.
+      $sqlFix = "
+        INSERT INTO `$fixed_table` (gimnasio_id, cliente_id, membresia_id, dow, hora, desde, hasta, creado_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, NOW())
+      ";
+      $stmtFix = $conexion->prepare($sqlFix);
+      if (!$stmtFix) { throw new Exception("Prepare $fixed_table: ".$conexion->error); }
+
+      foreach ($turnos_arr as $t) {
+        $dow   = isset($t['dow']) ? (int)$t['dow'] : -1;
+        $hora  = isset($t['hora']) ? preg_replace('/[^0-9:]/','', (string)$t['hora']) : '';
+        $desde = isset($t['desde']) ? preg_replace('/[^0-9\-]/','', (string)$t['desde']) : '';
+        $hasta = isset($t['hasta']) ? preg_replace('/[^0-9\-]/','', (string)$t['hasta']) : '';
+
+        if ($dow < 0 || $dow > 6 || !$hora || !$desde || !$hasta) continue;
+
+        $stmtFix->bind_param("iiiisss",
+          $gimnasio_id, $cliente_id, $membresia_id, $dow, $hora, $desde, $hasta
+        );
+        if (!$stmtFix->execute()) {
+          // Si hay índice único por duplicado exacto, seguimos; si es otro error, lanzamos
+          if ((int)$stmtFix->errno === 1062) { continue; }
+          throw new Exception("Exec $fixed_table: ".$stmtFix->error);
+        }
+      }
+      $stmtFix->close();
+    }
+    // Si no existe ninguna tabla, simplemente se omite sin romper guardado.
+  }
+
   $conexion->commit();
-  header("Location: ver_membresias.php?exito=1");
+  header("Location: nueva_membresia.php?exito=1");
   exit;
 
 } catch (Throwable $e) {
   $conexion->rollback();
   http_response_code(500);
-  echo "Error al guardar la membresía: ".htmlspecialchars($e->getMessage());
+  echo "Error al guardar la membresía: ".h($e->getMessage());
 }
