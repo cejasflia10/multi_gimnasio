@@ -1,0 +1,78 @@
+{
+    "pageSize": {
+        "w": 612,
+        "h": 792
+    },
+    "fields": [
+        {
+            "id": "general_modalidad",
+            "x": 130,
+            "y": 70,
+            "w": 260,
+            "h": 28,
+            "fs": 16,
+            "name": "general_modalidad",
+            "placeholder": "GENERAL MODALIDAD"
+        },
+        {
+            "id": "rojo_nombre",
+            "x": 70,
+            "y": 250,
+            "w": 320,
+            "h": 28,
+            "fs": 16,
+            "name": "rojo_nombre",
+            "placeholder": "ROJO NOMBRE"
+        },
+        {
+            "id": "rojo_dni",
+            "x": 70,
+            "y": 290,
+            "w": 180,
+            "h": 26,
+            "fs": 14,
+            "name": "rojo_dni",
+            "placeholder": "ROJO DNI"
+        },
+        {
+            "id": "rojo_sexo",
+            "x": 270,
+            "y": 290,
+            "w": 90,
+            "h": 26,
+            "fs": 14,
+            "name": "rojo_sexo",
+            "placeholder": "ROJO SEXO"
+        },
+        {
+            "id": "azul_nombre",
+            "x": 475,
+            "y": 250,
+            "w": 320,
+            "h": 28,
+            "fs": 16,
+            "name": "azul_nombre",
+            "placeholder": "AZUL NOMBRE"
+        },
+        {
+            "id": "azul_dni",
+            "x": 475,
+            "y": 290,
+            "w": 180,
+            "h": 26,
+            "fs": 14,
+            "name": "azul_dni",
+            "placeholder": "AZUL DNI"
+        },
+        {
+            "id": "azul_sexo",
+            "x": 675,
+            "y": 290,
+            "w": 90,
+            "h": 26,
+            "fs": 14,
+            "name": "azul_sexo",
+            "placeholder": "AZUL SEXO"
+        }
+    ]
+}

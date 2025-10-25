@@ -162,6 +162,11 @@ $C_FECHA    = $pick(['fecha','creado_en','created_at','created','fh_creacion']);
 $C_ORDEN    = $pick(['orden','orden_manual','nro','nro_orden','posicion','position','sequence','rank','numero','nro_pelea','sort']);
 $C_PESO_REAL_R = $pick(['peso_real_rojo','rojo_peso_real','peso_real_r']);
 $C_PESO_REAL_A = $pick(['peso_real_azul','azul_peso_real','peso_real_a']);
+
+/* NUEVO: columnas de ORIGEN del pesaje oficial (si existen) */
+$C_ORIGEN_R = $pick(['origen_pesaje_rojo','origen_rojo','origen_r','pesaje_origen_r']);
+$C_ORIGEN_A = $pick(['origen_pesaje_azul','origen_azul','origen_a','pesaje_origen_a']);
+
 $C_MODAL_P_ID  = $pick(['modalidad_id','id_modalidad','modalidad_evento_id']);
 $C_MODAL_P_TXT = $pick(['modalidad','modo','reglamento']);
 
@@ -190,78 +195,69 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$SHARE) {
   $accion   = $_POST['accion'] ?? '';
   $pelea_id = isset($_POST['pelea_id']) && is_numeric($_POST['pelea_id']) ? (int)$_POST['pelea_id'] : 0;
 
-  /* ====== GUARDAR ORDEN — MANUAL (DOS PASOS: NULL→SET) ====== */
   /* ====== GUARDAR ORDEN — MANUAL (DOS PASOS: NULL→SET con resolución de duplicados) ====== */
-if ($accion === 'guardar_orden' && $C_ORDEN) {
-  $ordenData = $_POST['orden'] ?? [];
-  if (!$ordenData || !is_array($ordenData)) {
-    $_SESSION['flash_error'] = 'No llegó ninguna numeración.';
+  if ($accion === 'guardar_orden' && $C_ORDEN) {
+    $ordenData = $_POST['orden'] ?? [];
+    if (!$ordenData || !is_array($ordenData)) {
+      $_SESSION['flash_error'] = 'No llegó ninguna numeración.';
+      header('Location: ver_peleas_evento.php?evento_id='.$evento_id.$redir_q); exit;
+    }
+
+    // 1) Normalizar
+    $normal = [];
+    foreach ($ordenData as $pid => $val) {
+      if (!is_numeric($pid)) continue;
+      $pid = (int)$pid;
+      $val = trim((string)$val);
+      $normal[$pid] = ($val === '' || !is_numeric($val)) ? null : (int)$val;
+    }
+
+    // 2) Resolver duplicados
+    $conNumero = [];
+    foreach ($normal as $pid => $nro) {
+      if ($nro !== null) $conNumero[] = ['pid'=>$pid, 'ord'=>$nro];
+    }
+    usort($conNumero, function($a,$b){
+      if ($a['ord'] === $b['ord']) return $a['pid'] <=> $b['pid'];
+      return $a['ord'] <=> $b['ord'];
+    });
+    $usados = []; $final  = $normal;
+    foreach ($conNumero as $it) {
+      $pid = $it['pid']; $ord = max(1, (int)$it['ord']);
+      while (isset($usados[$ord])) { $ord++; }
+      $usados[$ord] = true; $final[$pid] = $ord;
+    }
+
+    $conexion->begin_transaction();
+    try {
+      $sqlNullAll = "UPDATE peleas_evento SET ".bt($C_ORDEN)."=NULL WHERE ".bt($C_EVENTO)."=?";
+      if (!($st1 = $conexion->prepare($sqlNullAll))) throw new RuntimeException('Prep NULL ALL: '.$conexion->error);
+      $st1->bind_param('i', $evento_id);
+      if (!$st1->execute()) throw new RuntimeException('Exec NULL ALL: '.$st1->error);
+      $st1->close();
+
+      $sqlUp = "UPDATE peleas_evento SET ".bt($C_ORDEN)."=? WHERE ".bt($C_EVENTO)."=? AND ".bt($C_ID ?: 'id')."=? LIMIT 1";
+      if (!($st2 = $conexion->prepare($sqlUp))) throw new RuntimeException('Prep set orden: '.$conexion->error);
+
+      $tocados = 0; $vacios = 0;
+      foreach ($final as $pid => $ord) {
+        if ($ord === null) { $vacios++; continue; }
+        $st2->bind_param('iii', $ord, $evento_id, $pid);
+        if (!$st2->execute()) throw new RuntimeException("Set orden pelea $pid: ".$st2->error);
+        $tocados += max(0, $st2->affected_rows);
+      }
+      $st2->close();
+
+      $conexion->commit();
+      $_SESSION['flash_ok'] = "✅ Orden guardado ($tocados filas)".($vacios? " — $vacios en blanco":"");
+    } catch (Throwable $e) {
+      $conexion->rollback();
+      $_SESSION['flash_error'] = 'Error guardando numeración: '.$e->getMessage();
+    }
     header('Location: ver_peleas_evento.php?evento_id='.$evento_id.$redir_q); exit;
   }
 
-  // 1) Normalizar: (pelea_id => int|NULL). '' o no numérico -> NULL
-  $normal = [];
-  foreach ($ordenData as $pid => $val) {
-    if (!is_numeric($pid)) continue;
-    $pid = (int)$pid;
-    $val = trim((string)$val);
-    $normal[$pid] = ($val === '' || !is_numeric($val)) ? null : (int)$val;
-  }
-
-  // 2) Resolver duplicados antes de tocar la BD
-  //   - Tomamos solo los que tienen número (no-null)
-  //   - Ordenamos por (número, pelea_id) para comportamiento determinista
-  $conNumero = [];
-  foreach ($normal as $pid => $nro) {
-    if ($nro !== null) $conNumero[] = ['pid'=>$pid, 'ord'=>$nro];
-  }
-  usort($conNumero, function($a,$b){
-    if ($a['ord'] === $b['ord']) return $a['pid'] <=> $b['pid'];
-    return $a['ord'] <=> $b['ord'];
-  });
-
-  // Asignar número único: si está ocupado, subir al siguiente libre
-  $usados = [];
-  $final  = $normal; // partimos de lo que mandaste
-  foreach ($conNumero as $it) {
-    $pid = $it['pid']; $ord = max(1, (int)$it['ord']); // mínimo 1
-    while (isset($usados[$ord])) { $ord++; }          // “bump” al próximo libre
-    $usados[$ord] = true;
-    $final[$pid] = $ord;
-  }
-  // Quienes iban en NULL quedan en NULL (no se tocan)
-
-  $conexion->begin_transaction();
-  try {
-    // 3) Dejar todas las órdenes del evento en NULL (evita colisiones UNIQUE)
-    $sqlNullAll = "UPDATE peleas_evento SET ".bt($C_ORDEN)."=NULL WHERE ".bt($C_EVENTO)."=?";
-    if (!($st1 = $conexion->prepare($sqlNullAll))) throw new RuntimeException('Prep NULL ALL: '.$conexion->error);
-    $st1->bind_param('i', $evento_id);
-    if (!$st1->execute()) throw new RuntimeException('Exec NULL ALL: '.$st1->error);
-    $st1->close();
-
-    // 4) Setear valores finales sin duplicados
-    $sqlUp = "UPDATE peleas_evento SET ".bt($C_ORDEN)."=? WHERE ".bt($C_EVENTO)."=? AND ".bt($C_ID ?: 'id')."=? LIMIT 1";
-    if (!($st2 = $conexion->prepare($sqlUp))) throw new RuntimeException('Prep set orden: '.$conexion->error);
-
-    $tocados = 0; $vacios = 0;
-    foreach ($final as $pid => $ord) {
-      if ($ord === null) { $vacios++; continue; } // queda en NULL
-      $st2->bind_param('iii', $ord, $evento_id, $pid);
-      if (!$st2->execute()) throw new RuntimeException("Set orden pelea $pid: ".$st2->error);
-      $tocados += max(0, $st2->affected_rows);
-    }
-    $st2->close();
-
-    $conexion->commit();
-    $_SESSION['flash_ok'] = "✅ Orden guardado ($tocados filas)".($vacios? " — $vacios en blanco":"");
-  } catch (Throwable $e) {
-    $conexion->rollback();
-    $_SESSION['flash_error'] = 'Error guardando numeración: '.$e->getMessage();
-  }
-  header('Location: ver_peleas_evento.php?evento_id='.$evento_id.$redir_q); exit;
-}
-
+  /* ====== GUARDAR PESAJE DESDE ESTA VISTA (opcional) ====== */
   if ($accion === 'guardar_pesajes') {
     $pesosR = $_POST['peso_real_r'] ?? [];
     $pesosA = $_POST['peso_real_a'] ?? [];
@@ -317,7 +313,7 @@ if ($accion === 'guardar_orden' && $C_ORDEN) {
 $orderPieces = [];
 if ($C_ORDEN) {
   $orderPieces[] = 'p.'.bt($C_ORDEN).' IS NULL';
-  $orderPieces[] = 'CAST(p.'.bt($C_ORDEN).' AS UNSIGNED)'; // numérico real
+  $orderPieces[] = 'CAST(p.'.bt($C_ORDEN).' AS UNSIGNED)';
 }
 if ($C_FECHA) $orderPieces[] = 'p.'.bt($C_FECHA);
 $orderPieces[] = 'p.'.bt($C_ID ?: 'id');
@@ -330,6 +326,11 @@ $selectParts[] = $C_RONDAS ? 'p.'.bt($C_RONDAS).' AS rondas' : 'NULL AS rondas';
 $selectParts[] = $C_OBS    ? 'p.'.bt($C_OBS).' AS observaciones' : 'NULL AS observaciones';
 $selectParts[] = $C_PESO_REAL_R ? 'p.'.bt($C_PESO_REAL_R).' AS peso_real_r' : "NULL AS peso_real_r";
 $selectParts[] = $C_PESO_REAL_A ? 'p.'.bt($C_PESO_REAL_A).' AS peso_real_a' : "NULL AS peso_real_a";
+
+/* NUEVO: incluir origen del pesaje oficial en el SELECT si existen columnas */
+$selectParts[] = $C_ORIGEN_R ? 'p.'.bt($C_ORIGEN_R).' AS origen_r' : "NULL AS origen_r";
+$selectParts[] = $C_ORIGEN_A ? 'p.'.bt($C_ORIGEN_A).' AS origen_a' : "NULL AS origen_a";
+
 $selectParts[] = $C_MODAL_P_TXT ? 'p.'.bt($C_MODAL_P_TXT).' AS modalidad_pelea_txt' : "NULL AS modalidad_pelea_txt";
 if ($tablaModal && $C_MODAL_P_ID) { $joins[] = "LEFT JOIN $tablaModal mp ON mp.id = p.".bt($C_MODAL_P_ID); $selectParts[] = 'mp.'.bt($MOD_LABEL_COL).' AS modalidad_pelea'; }
 else { $selectParts[] = "NULL AS modalidad_pelea"; }
@@ -665,8 +666,15 @@ $st->close();
 
           $pref_r = $p['peso_real_r'] ?? ($_SESSION['pesajes'][$evento_id][$p['pelea_id']]['r'] ?? '');
           $pref_a = $p['peso_real_a'] ?? ($_SESSION['pesajes'][$evento_id][$p['pelea_id']]['a'] ?? '');
+
+          /* NUEVO: origen de pesaje oficial (texto amigable) */
+          $orig_r = strtolower(trim((string)($p['origen_r'] ?? '')));
+          $orig_a = strtolower(trim((string)($p['origen_a'] ?? '')));
+          $orig_r_lbl = $orig_r === 'sistema' ? 'Sistema' : ($orig_r === 'manual' ? 'Manual' : ($orig_r!==''?$orig_r:''));
+          $orig_a_lbl = $orig_a === 'sistema' ? 'Sistema' : ($orig_a === 'manual' ? 'Manual' : ($orig_a!==''?$orig_a:''));
         ?>
           <tr class="row-card"
+              id="p<?= (int)$p['pelea_id'] ?>"
               data-pelea="<?= (int)$p['pelea_id'] ?>"
               data-orden="<?= (int)$nroMostrar ?>"
               data-rondas="<?= (int)$rondasVal ?>">
@@ -708,8 +716,14 @@ $st->close();
                   name="peso_real_r[<?= (int)$p['pelea_id'] ?>]"
                   class="peso-real" data-side="r" data-pelea="<?= (int)$p['pelea_id'] ?>"
                   placeholder="kg" value="<?= h($pref_r) ?>" <?= $SHARE ? 'disabled' : '' ?>>
-                <span class="real-text" id="real_r_<?= (int)$p['pelea_id'] ?>"><?= ($pref_r!=='' && $pref_r!==null) ? h(fmt_num($pref_r)).' kg' : '—' ?></span>
+                <span class="real-text" id="real_r_<?= (int)$p['pelea_id'] ?>">
+                  <?= ($pref_r!=='' && $pref_r!==null) ? h(fmt_num($pref_r)).' kg' : '—' ?>
+                  <?php if ($orig_r_lbl!=='') { ?> · <span class="pill" title="Origen del pesaje oficial: <?= h($orig_r_lbl) ?>"><?= h($orig_r_lbl) ?></span><?php } ?>
+                </span>
                 <span class="delta-pill" id="delta_r_<?= (int)$p['pelea_id'] ?>">Δ —</span>
+                <?php if (!$SHARE && $orig_r_lbl!=='') { ?>
+                  <span class="muted" style="margin-left:6px" title="Origen del pesaje oficial">[<?= h($orig_r_lbl) ?>]</span>
+                <?php } ?>
               </div>
             </td>
             <td class="muted" data-label="Roja · Escuela">
@@ -745,8 +759,14 @@ $st->close();
                   name="peso_real_a[<?= (int)$p['pelea_id'] ?>]"
                   class="peso-real" data-side="a" data-pelea="<?= (int)$p['pelea_id'] ?>"
                   placeholder="kg" value="<?= h($pref_a) ?>" <?= $SHARE ? 'disabled' : '' ?>>
-                <span class="real-text" id="real_a_<?= (int)$p['pelea_id'] ?>"><?= ($pref_a!=='' && $pref_a!==null) ? h(fmt_num($pref_a)).' kg' : '—' ?></span>
+                <span class="real-text" id="real_a_<?= (int)$p['pelea_id'] ?>">
+                  <?= ($pref_a!=='' && $pref_a!==null) ? h(fmt_num($pref_a)).' kg' : '—' ?>
+                  <?php if ($orig_a_lbl!=='') { ?> · <span class="pill" title="Origen del pesaje oficial: <?= h($orig_a_lbl) ?>"><?= h($orig_a_lbl) ?></span><?php } ?>
+                </span>
                 <span class="delta-pill" id="delta_a_<?= (int)$p['pelea_id'] ?>">Δ —</span>
+                <?php if (!$SHARE && $orig_a_lbl!=='') { ?>
+                  <span class="muted" style="margin-left:6px" title="Origen del pesaje oficial">[<?= h($orig_a_lbl) ?>]</span>
+                <?php } ?>
               </div>
             </td>
             <td class="muted" data-label="Azul · Escuela">
@@ -831,7 +851,7 @@ $st->close();
   }
   if(btnEditar){ btnEditar.addEventListener('click', ()=> setEditing(!formOrden.classList.contains('editing'))); }
 
-  // === REORDENAR FILAS EN VIVO según el número ingresado (SIN resecuenciar)
+  // === REORDENAR FILAS EN VIVO
   function reorderRowsDom(){
     const rows = Array.from(tbody.querySelectorAll('tr.row-card'));
     rows.sort((a,b)=>{
@@ -849,24 +869,17 @@ $st->close();
     rows.forEach(r=>tbody.appendChild(r));
   }
 
-  // Permitir valores vacíos (NULL). Si quisieras forzar mínimo 1, descomentá norm1 y su uso.
-  // function norm1(v){ v = parseInt(String(v||'').trim(),10); return Number.isFinite(v) && v>0 ? v : 1; }
-
   const ordenInputs = Array.from(document.querySelectorAll('#form-orden .orden-input'));
   ordenInputs.forEach((inp) => {
-    inp.addEventListener('input', () => { if (inp.disabled) return; /*inp.value = String(norm1(inp.value));*/ reorderRowsDom(); });
-    inp.addEventListener('change', () => { if (inp.disabled) return; /*inp.value = String(norm1(inp.value));*/ reorderRowsDom(); });
-    inp.addEventListener('blur', () => { if (inp.disabled) return; /*inp.value = String(norm1(inp.value));*/ reorderRowsDom(); });
+    inp.addEventListener('input', () => { if (inp.disabled) return; reorderRowsDom(); });
+    inp.addEventListener('change', () => { if (inp.disabled) return; reorderRowsDom(); });
+    inp.addEventListener('blur', () => { if (inp.disabled) return; reorderRowsDom(); });
   });
 
   if (btnGuardarOrden) {
     btnGuardarOrden.addEventListener('click', ()=>{
-      // Ordenar visualmente según lo escrito
       reorderRowsDom();
-
-      // Habilitar TODOS los inputs para que viajen en el POST
       document.querySelectorAll('#form-orden .orden-input').forEach(i=> i.disabled=false);
-
       accionInput.value = 'guardar_orden';
       formOrden.submit();
     });
@@ -880,7 +893,7 @@ $st->close();
   }
   setEditing(false);
 
-  // ===== Pesajes: calcular delta en vivo
+  // ===== Pesajes: delta en vivo (planilla vs real)
   function parseKg(s){ const n = parseFloat((s||'').toString().replace(',', '.')); return isNaN(n)?null:n; }
   function regla(diffKg){
     if (diffKg === null) return {txt:'Δ —', cls:''};
@@ -1048,7 +1061,7 @@ $st->close();
     });
   });
 
-  /* ===== Compartir / Copiar link (con filtros + agenda) ===== */
+  /* ===== Compartir / Copiar link ===== */
   (function(){
     const btn = document.getElementById('btnCompartir');
     const snack = document.getElementById('snack');

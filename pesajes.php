@@ -44,12 +44,7 @@ $C_PESO_REAL_A= $pick(['peso_real_azul','azul_peso_real','peso_real_a']);
 $C_ORIGEN_R   = $pick(['origen_pesaje_rojo','origen_rojo','origen_r','pesaje_origen_r']);
 $C_ORIGEN_A   = $pick(['origen_pesaje_azul','origen_azul','origen_a','pesaje_origen_a']);
 
-if (!$C_EVENTO || !$C_ROJO || !$C_AZUL) {
-  echo '<div style="max-width:980px;margin:16px auto;padding:12px;border:1px solid #fdecea;background:#ffebee;color:#b71c1c;border-radius:8px;">La tabla <b>peleas_evento</b> existe pero faltan columnas obligatorias (evento/rojo/azul).</div>';
-  exit;
-}
-
-/* ===== Columnas competidores_evento (planilla) ===== */
+/* ===== Columnas competidores_evento ===== */
 $colsC = [];
 $resC = $conexion->query("SHOW COLUMNS FROM competidores_evento");
 if ($resC) { while($r = $resC->fetch_assoc()){ $colsC[strtolower($r['Field'])] = $r['Field']; } }
@@ -59,7 +54,7 @@ $CE_ID   = $pickC(['id','competidor_id']);
 $CE_APE  = $pickC(['apellido','apellidos','last_name']);
 $CE_NOM  = $pickC(['nombre','nombres','first_name']);
 $CE_ESC  = $pickC(['escuela_nombre','escuela','gimnasio','gym']);
-$CE_PESO = $pickC(['peso_kg','peso','kg','weight_kg']);   // Planilla
+$CE_PESO = $pickC(['peso_kg','peso','kg','weight_kg']);   // peso de planilla (cargado por el competidor)
 $CE_DIV  = $pickC(['division_id','id_division','division_evento_id']);
 $CE_DNI  = $pickC(['dni','documento','doc','num_doc']);
 
@@ -75,25 +70,26 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && ($_POST['accion'] ?? '')==='guardar_p
   $origen   = trim((string)($_POST['origen'] ?? 'manual'));
 
   if ($pelea_id<=0 || $evento_id<=0){ $_SESSION['flash_error']='Parámetros inválidos.'; header('Location: pesajes.php?evento_id='.$evento_id.'#p'.$pelea_id); exit; }
-  if ($peso===null){ $_SESSION['flash_error']='Ingresá un peso real para guardar.'; header('Location: pesajes.php?evento_id='.$evento_id.'#p'.$pelea_id); exit; }
+  if ($peso===null && $origen!=='sistema'){ $_SESSION['flash_error']='Ingresá un peso real (o elegí “sistema”).'; header('Location: pesajes.php?evento_id='.$evento_id.'#p'.$pelea_id); exit; }
 
-  // Ver si ya estaba guardado ese lado
   $col_peso  = ($side==='r') ? $C_PESO_REAL_R : $C_PESO_REAL_A;
   $col_origen= ($side==='r') ? $C_ORIGEN_R    : $C_ORIGEN_A;
+
+  // ¿ya guardado ese lado?
   $sqlChk = "SELECT ".($col_peso?bt($col_peso):'NULL')." AS pr
              FROM peleas_evento WHERE ".bt($C_EVENTO)."=? AND ".bt($C_ID?:'id')."=? LIMIT 1";
   $st = $conexion->prepare($sqlChk);
   if(!$st){ $_SESSION['flash_error']='Error preparando consulta: '.$conexion->error; header('Location: pesajes.php?evento_id='.$evento_id.'#p'.$pelea_id); exit; }
   $st->bind_param('ii',$evento_id,$pelea_id); $st->execute();
   $row = $st->get_result()->fetch_assoc(); $st->close();
-  $lado_guardado = ($row && $row['pr']!==null && $row['pr']!=='');
+  $lado_guardado = ($row && $row['pr']!==null && $row['pr']!==''); // bloquea si ya hubo oficial
 
   if ($lado_guardado){
     $_SESSION['flash_warn']='Ese lado ya estaba guardado. No se modificó (bloqueado).';
-    header('Location: pesajes.php?evento_id='.$evento_id.'#p'.$pelea_id); exit;
+    header('Location: ver_peleas_evento.php?evento_id='.$evento_id.'#p'.$pelea_id); exit;
   }
 
-  // Guardar SOLO ese lado (o a sesión si no hay columnas)
+  // Guardar
   if ($col_peso || $col_origen) {
     $set=[]; $types=''; $vals=[];
     if ($col_peso){   $set[] = bt($col_peso).'=?';   $types.='s'; $vals[]=$peso; } else { $_SESSION['pesajes'][$evento_id][$pelea_id][$side]=$peso; }
@@ -110,8 +106,9 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && ($_POST['accion'] ?? '')==='guardar_p
     $_SESSION['origen'][$evento_id][$pelea_id][$side]=$origen;
   }
 
-  $_SESSION['flash_ok'] = '✅ Guardado el peso del lado '.($side==='r'?'ROJO':'AZUL').' para la pelea #'.$pelea_id.'.';
-  header('Location: pesajes.php?evento_id='.$evento_id.'#p'.$pelea_id); exit;
+  $_SESSION['flash_ok'] = '✅ Guardado el peso oficial del lado '.($side==='r'?'ROJO':'AZUL').'. Visible para profesores.';
+  // Redirigimos a la vista pública para que lo vean los profes
+  header('Location: ver_peleas_evento.php?evento_id='.$evento_id.'#p'.$pelea_id); exit;
 }
 
 /* ===== Filtros de búsqueda ===== */
@@ -125,22 +122,52 @@ $select[] = 'p.'.bt($C_ID ?: 'id').' AS pelea_id';
 $select[] = $C_ORDEN ? 'p.'.bt($C_ORDEN).' AS orden_manual' : 'NULL AS orden_manual';
 $select[] = $C_OBS   ? 'p.'.bt($C_OBS).' AS observaciones'  : 'NULL AS observaciones';
 
-/* Pesos reales + origen */
+/* Pesos reales + origen (día del evento) */
 $select[] = $C_PESO_REAL_R ? 'p.'.bt($C_PESO_REAL_R).' AS peso_real_r' : 'NULL AS peso_real_r';
 $select[] = $C_PESO_REAL_A ? 'p.'.bt($C_PESO_REAL_A).' AS peso_real_a' : 'NULL AS peso_real_a';
 $select[] = $C_ORIGEN_R ? 'p.'.bt($C_ORIGEN_R).' AS origen_r' : "NULL AS origen_r";
 $select[] = $C_ORIGEN_A ? 'p.'.bt($C_ORIGEN_A).' AS origen_a' : "NULL AS origen_a";
 
-/* Competidores (planilla = base) */
+/* Competidores (planilla) */
 $select[] = 'cr.'.bt($CE_APE ?: 'apellido').' AS r_apellido';
 $select[] = 'cr.'.bt($CE_NOM ?: 'nombre').' AS r_nombre';
 $select[] = $CE_ESC ? 'cr.'.bt($CE_ESC).' AS r_escuela' : "NULL AS r_escuela";
-$select[] = $CE_PESO ? 'cr.'.bt($CE_PESO).' AS r_peso_plan'   : "NULL AS r_peso_plan";
+$select[] = $CE_PESO ? 'cr.'.bt($CE_PESO).' AS r_peso_plan' : "NULL AS r_peso_plan";
 
 $select[] = 'ca.'.bt($CE_APE ?: 'apellido').' AS a_apellido';
 $select[] = 'ca.'.bt($CE_NOM ?: 'nombre').' AS a_nombre';
 $select[] = $CE_ESC ? 'ca.'.bt($CE_ESC).' AS a_escuela' : "NULL AS a_escuela";
-$select[] = $CE_PESO ? 'ca.'.bt($CE_PESO).' AS a_peso_plan'   : "NULL AS a_peso_plan";
+$select[] = $CE_PESO ? 'ca.'.bt($CE_PESO).' AS a_peso_plan' : "NULL AS a_peso_plan";
+
+/* Categoría sugerida por peso de planilla (Sistema) */
+if ($CE_PESO) {
+  $colPesoR = 'cr.'.bt($CE_PESO);
+  $colPesoA = 'ca.'.bt($CE_PESO);
+
+  $joins[] = "LEFT JOIN categorias_evento crcat_sug
+              ON $colPesoR IS NOT NULL
+             AND crcat_sug.peso_min <= $colPesoR
+             AND crcat_sug.peso_max >= $colPesoR";
+
+  $joins[] = "LEFT JOIN categorias_evento cacat_sug
+              ON $colPesoA IS NOT NULL
+             AND cacat_sug.peso_min <= $colPesoA
+             AND cacat_sug.peso_max >= $colPesoA";
+
+  $select[] = "crcat_sug.nombre   AS r_cat_sug_nombre";
+  $select[] = "crcat_sug.peso_min AS r_cat_sug_min";
+  $select[] = "crcat_sug.peso_max AS r_cat_sug_max";
+  $select[] = "cacat_sug.nombre   AS a_cat_sug_nombre";
+  $select[] = "cacat_sug.peso_min AS a_cat_sug_min";
+  $select[] = "cacat_sug.peso_max AS a_cat_sug_max";
+} else {
+  $select[] = "NULL AS r_cat_sug_nombre";
+  $select[] = "NULL AS r_cat_sug_min";
+  $select[] = "NULL AS r_cat_sug_max";
+  $select[] = "NULL AS a_cat_sug_nombre";
+  $select[] = "NULL AS a_cat_sug_min";
+  $select[] = "NULL AS a_cat_sug_max";
+}
 
 /* División (label) */
 if ($tablaDiv && $CE_DIV) {
@@ -186,6 +213,15 @@ $st->bind_param($types, ...$params);
 $st->execute();
 $peleas = $st->get_result()->fetch_all(MYSQLI_ASSOC);
 $st->close();
+
+/* ===== Autocompletar buscador (apellidos simples) ===== */
+$ac = [];
+if (!empty($peleas)) {
+  foreach ($peleas as $p) {
+    if (!empty($p['r_apellido'])) $ac[$p['r_apellido']] = true;
+    if (!empty($p['a_apellido'])) $ac[$p['a_apellido']] = true;
+  }
+}
 ?>
 <!DOCTYPE html>
 <html lang="es">
@@ -217,7 +253,7 @@ $st->close();
     .item{border:1px solid var(--line);border-radius:12px;padding:14px;background:#fff}
     .tit{font-weight:800;font-size:16px;margin-bottom:8px;text-align:center}
     .small{font-size:12px;color:#111;text-align:center}
-    .pill{display:inline-block;padding:2px 8px;border-radius:999px;background:var(--pill);color:#000;font-size:12px}
+    .pill{display:inline-block;padding:2px 8px;border-radius:999px;background:#e2e8f0;color:#000;font-size:12px}
     .row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
     .peso-wrap{display:flex;align-items:center;gap:8px;justify-content:center;flex-wrap:wrap;margin-top:8px}
     .peso-wrap input{width:140px;height:40px}
@@ -259,8 +295,8 @@ $st->close();
 
   <div class="card">
     <div class="small center" style="font-weight:700;margin-bottom:8px">
-      Se compara el <u>peso de planilla</u> con el <u>peso real del día</u>.<br>
-      Regla: ≤0.5 kg ✅ · ≤1.0 kg −1 punto · ≤1.5 kg −2 puntos · ≥2.0 kg ❌ DQ.
+      Se toma la <u>categoría sugerida</u> por el <u>peso de planilla</u> (rango en <code>categorias_evento</code>).<br>
+      <b>Tolerancia Amateur</b>: +0.5 kg. Luego, <b>−1 punto por cada 1 kg</b> extra (ceil). Con exceso ≥ 2.0 kg ⇒ ❌ DQ.
     </div>
 
     <!-- Buscador -->
@@ -268,7 +304,14 @@ $st->close();
     <form method="GET" class="center" autocomplete="off" style="display:grid;grid-template-columns:1fr 1fr 120px;gap:8px;max-width:720px;margin:0 auto">
       <input type="hidden" name="evento_id" value="<?= (int)$evento_id ?>">
       <div class="field"><input type="number" name="pid" value="<?= h($pid ?? '') ?>" placeholder="N° pelea (opcional)"></div>
-      <div class="field"><input type="text" name="q" value="<?= $qv ?>" placeholder="DNI o Apellido"></div>
+      <div class="field">
+        <input list="ac_comp" type="text" name="q" value="<?= $qv ?>" placeholder="DNI o Apellido">
+        <datalist id="ac_comp">
+          <?php foreach(array_keys($ac) as $opt): ?>
+            <option value="<?= h($opt) ?>"></option>
+          <?php endforeach; ?>
+        </datalist>
+      </div>
       <div class="field"><button class="btn" type="submit" style="width:100%">🔎 Buscar</button></div>
     </form>
 
@@ -289,25 +332,40 @@ $st->close();
   <?php } else {
     foreach ($peleas as $p) {
       $nro = $p['orden_manual']!==null ? (int)$p['orden_manual'] : (int)$p['pelea_id'];
+
       $rPlan = ($p['r_peso_plan']!==null && $p['r_peso_plan']!=='') ? fmt_num($p['r_peso_plan']) : '';
       $aPlan = ($p['a_peso_plan']!==null && $p['a_peso_plan']!=='') ? fmt_num($p['a_peso_plan']) : '';
+
       $rDiv = $p['r_division'] ?? '-';
       $aDiv = $p['a_division'] ?? '-';
 
+      // Categorías sugeridas por planilla
+      $rCatNom = $p['r_cat_sug_nombre'] ?: '—';
+      $aCatNom = $p['a_cat_sug_nombre'] ?: '—';
+      $rCatMin = $p['r_cat_sug_min']!==null ? fmt_num($p['r_cat_sug_min']) : '';
+      $rCatMax = $p['r_cat_sug_max']!==null ? fmt_num($p['r_cat_sug_max']) : '';
+      $aCatMin = $p['a_cat_sug_min']!==null ? fmt_num($p['a_cat_sug_min']) : '';
+      $aCatMax = $p['a_cat_sug_max']!==null ? fmt_num($p['a_cat_sug_max']) : '';
+
       $pref_real_r = $p['peso_real_r'] ?? ($_SESSION['pesajes'][$evento_id][$p['pelea_id']]['r'] ?? '');
       $pref_real_a = $p['peso_real_a'] ?? ($_SESSION['pesajes'][$evento_id][$p['pelea_id']]['a'] ?? '');
-      $pref_org_r  = $p['origen_r'] ?? ($_SESSION['origen'][$evento_id][$p['pelea_id']]['r'] ?? 'manual');
-      $pref_org_a  = $p['origen_a'] ?? ($_SESSION['origen'][$evento_id][$p['pelea_id']]['a'] ?? 'manual');
+      $pref_org_r  = $p['origen_r']     ?? ($_SESSION['origen'][$evento_id][$p['pelea_id']]['r'] ?? 'manual');
+      $pref_org_a  = $p['origen_a']     ?? ($_SESSION['origen'][$evento_id][$p['pelea_id']]['a'] ?? 'manual');
 
-      // Bloqueos individuales por lado
       $lockedR = ($p['peso_real_r']!==null && $p['peso_real_r']!=='');
       $lockedA = ($p['peso_real_a']!==null && $p['peso_real_a']!=='');
   ?>
-    <div class="item pelea" id="p<?= (int)$p['pelea_id'] ?>" data-pelea="<?= (int)$p['pelea_id'] ?>">
+    <div class="item pelea" id="p<?= (int)$p['pelea_id'] ?>" data-pelea="<?= (int)$p['pelea_id'] ?>"
+         data-catmax-r="<?= h($rCatMax) ?>" data-catmax-a="<?= h($aCatMax) ?>">
       <div class="tit">#<?= (int)$nro ?> · <?= h($p['r_apellido'].' '.$p['r_nombre']) ?> <span class="small">vs</span> <?= h(trim(($p['a_apellido']??'').' '.($p['a_nombre']??'')) ?: '—') ?></div>
+
       <div class="small" style="margin-bottom:6px">
-        🔴 Roja — <span class="pill"><?= $rPlan!==''? h($rPlan.' kg') : '—' ?> / <?= h($rDiv) ?></span> &nbsp;&nbsp;|&nbsp;&nbsp;
-        🔵 Azul — <span class="pill"><?= $aPlan!==''? h($aPlan.' kg') : '—' ?> / <?= h($aDiv) ?></span>
+        🔴 Roja — <span class="pill"><?= h($rCatNom) ?><?= ($rCatMin!==''&&$rCatMax!=='')?' • '.h($rCatMin.'–'.$rCatMax.' kg'):'' ?></span>
+        &nbsp;&nbsp;|&nbsp;&nbsp;
+        🔵 Azul — <span class="pill"><?= h($aCatNom) ?><?= ($aCatMin!==''&&$aCatMax!=='')?' • '.h($aCatMin.'–'.$aCatMax.' kg'):'' ?></span>
+      </div>
+      <div class="small" style="margin-bottom:6px;opacity:.8">
+        (Planilla: 🔴 <?= $rPlan!==''? h($rPlan.' kg') : '—' ?> / <?= h($rDiv) ?> · 🔵 <?= $aPlan!==''? h($aPlan.' kg') : '—' ?> / <?= h($aDiv) ?>)
       </div>
 
       <div class="row">
@@ -325,8 +383,8 @@ $st->close();
                 <option value="sistema" <?= ($pref_org_r==='sistema'?'selected':'') ?>>Sistema</option>
               </select>
               <input type="number" step="0.1" min="0" name="peso_real"
-                class="peso" data-side="r" data-plan="<?= h($rPlan) ?>"
-                placeholder="Real Roja (kg)" value="<?= h($pref_real_r) ?>" <?= $lockedR?'disabled':'' ?>>
+                class="peso" data-side="r" placeholder="Real Roja (kg)"
+                value="<?= h($pref_real_r) ?>" <?= $lockedR?'disabled':'' ?>>
               <span class="delta" id="delta_r_<?= (int)$p['pelea_id'] ?>">Δ —</span>
             </div>
             <div class="acciones">
@@ -350,8 +408,8 @@ $st->close();
                 <option value="sistema" <?= ($pref_org_a==='sistema'?'selected':'') ?>>Sistema</option>
               </select>
               <input type="number" step="0.1" min="0" name="peso_real"
-                class="peso" data-side="a" data-plan="<?= h($aPlan) ?>"
-                placeholder="Real Azul (kg)" value="<?= h($pref_real_a) ?>" <?= $lockedA?'disabled':'' ?>>
+                class="peso" data-side="a" placeholder="Real Azul (kg)"
+                value="<?= h($pref_real_a) ?>" <?= $lockedA?'disabled':'' ?>>
               <span class="delta" id="delta_a_<?= (int)$p['pelea_id'] ?>">Δ —</span>
             </div>
             <div class="acciones">
@@ -372,32 +430,45 @@ $st->close();
 
 <script>
 (function(){
+  // === Reglas (Amateurs por defecto) ===
+  const TOL = 0.5; // +0.5 kg
   function kg(x){ if(x===null||x===undefined||x==='') return null; const n=parseFloat(String(x).replace(',','.')); return isNaN(n)?null:n; }
-  function regla(d){
-    if (d===null) return {k:'pend', txt:'Δ —', cls:''};
-    const ad = Math.abs(d);
-    if (ad <= 0.5) return {k:'ok',  txt:`Δ ${ad.toFixed(1)} kg · ✅`, cls:'d-ok'};
-    if (ad <= 1.0) return {k:'m1', txt:`Δ ${ad.toFixed(1)} kg · −1`, cls:'d-1'};
-    if (ad <= 1.5) return {k:'m2', txt:`Δ ${ad.toFixed(1)} kg · −2`, cls:'d-2'};
-    return {k:'dq', txt:`Δ ${ad.toFixed(1)} kg · ❌ DQ`, cls:'d-dq'};
+
+  // Evalúa contra el peso máximo de la categoría SUGERIDA (por planilla).
+  // Solo penaliza cuando se pasa el máximo + tolerancia.
+  function evaluar(realOf, catMax){
+    if (realOf===null || catMax===null) return {k:'pend', txt:'Δ —', cls:''};
+    const exceso = realOf - catMax;
+    if (exceso <= TOL) return {k:'ok', txt:'OK', cls:'d-ok'};
+
+    const postTol = exceso - TOL;          // cuánto se pasó sobre la tolerancia
+    if (postTol >= 2.0) return {k:'dq', txt:`❌ DQ (${postTol.toFixed(1)} kg)`, cls:'d-dq'};
+    const puntos = Math.ceil(postTol / 1.0);
+    if (puntos === 1) return {k:'m1', txt:`−1 punto (${postTol.toFixed(1)} kg)`, cls:'d-1'};
+    return {k:'m2', txt:`−2 puntos (${postTol.toFixed(1)} kg)`, cls:'d-2'};
   }
+
   function actualizarDelta(card, side){
-    const inp = card.querySelector(`input.peso[data-side="${side}"]`);
-    if (!inp) return;
-    const pid = card.getAttribute('data-pelea');
-    const plan = kg(inp.getAttribute('data-plan'));
-    const real = kg(inp.value);
+    const inp      = card.querySelector(`input.peso[data-side="${side}"]`);
+    const selOrg   = card.querySelector(`select.origen[data-side="${side}"]`);
+    const catMax   = kg(card.getAttribute(`data-catmax-${side}`));
+    const real     = kg(inp ? inp.value : null);
+    const org      = selOrg ? selOrg.value : 'manual';
+    const realOf   = (org === 'sistema') ? catMax : real;  // “sistema” usa el máximo de la cat sugerida
+
+    const pid   = card.getAttribute('data-pelea');
     const badge = document.getElementById(`delta_${side}_${pid}`);
-    let info={k:'pend',txt:'Δ —',cls:''};
-    if (plan!==null && real!==null) info=regla(real-plan);
+
+    const info = evaluar(realOf, catMax);
     if (badge){
-      badge.textContent=info.txt;
+      badge.textContent = info.txt;
       badge.classList.remove('d-ok','d-1','d-2','d-dq');
       if (info.cls) badge.classList.add(info.cls);
     }
     card.setAttribute(`data-${side}`, info.k);
     refrescarResumen();
   }
+
   function estadoFila(card){
     const er = card.getAttribute('data-r') || 'pend';
     const ea = card.getAttribute('data-a') || 'pend';
@@ -405,6 +476,7 @@ $st->close();
     const worst = Math.max(score(er), score(ea));
     return ['ok','m1','m2','dq','pend'][worst] || 'pend';
   }
+
   function refrescarResumen(){
     const items = Array.from(document.querySelectorAll('.item.pelea'));
     const cnt = {all:items.length, pend:0, ok:0, m1:0, m2:0, dq:0};
@@ -421,6 +493,7 @@ $st->close();
       `;
     }
   }
+
   function aplicarFiltro(f){
     document.querySelectorAll('.item.pelea').forEach(it=>{
       const st = estadoFila(it);
@@ -428,39 +501,39 @@ $st->close();
     });
   }
 
-  // Inicializar tarjetas
-  document.querySelectorAll('.item.pelea').forEach(card=>{
-    ['r','a'].forEach(side=>{
-      const inp = card.querySelector(`input.peso[data-side="${side}"]`);
-      if (!inp) return;
-      // Guardado local: solo para comodidad antes de enviar
-      const pid = card.getAttribute('data-pelea');
-      const key = `pesaje:<?= (int)$evento_id ?>:${pid}:${side}`;
-      const locked = inp.hasAttribute('disabled');
+  // Inicializar
+  document.addEventListener('DOMContentLoaded', ()=>{
+    document.querySelectorAll('.item.pelea').forEach(card=>{
+      ['r','a'].forEach(side=>{
+        const inp  = card.querySelector(`input.peso[data-side="${side}"]`);
+        const selO = card.querySelector(`select.origen[data-side="${side}"]`);
+        const pid  = card.getAttribute('data-pelea');
 
-      if (!locked){
-        const saved = localStorage.getItem(key);
-        if (saved && !inp.value) inp.value = saved;
-        inp.addEventListener('input', ()=>{
-          try{
-            if (inp.value==='') localStorage.removeItem(key);
-            else localStorage.setItem(key, inp.value);
-          }catch(e){}
-          actualizarDelta(card, side);
-        });
-      }
-      actualizarDelta(card, side);
+        const locked = (inp && inp.hasAttribute('disabled'));
+        const key = `pesaje:<?= (int)$evento_id ?>:${pid}:${side}`;
+
+        if (inp && !locked){
+          const saved = localStorage.getItem(key);
+          if (saved && !inp.value) inp.value = saved;
+          inp.addEventListener('input', ()=>{
+            try{ inp.value===''?localStorage.removeItem(key):localStorage.setItem(key, inp.value);}catch(e){}
+            actualizarDelta(card, side);
+          });
+        }
+        if (selO && !locked){ selO.addEventListener('change', ()=> actualizarDelta(card, side)); }
+        actualizarDelta(card, side);
+      });
     });
+
+    // Filtros
+    const chips = document.querySelectorAll('.chip');
+    chips.forEach(c=> c.addEventListener('click', ()=>{
+      chips.forEach(x=>x.classList.remove('active')); c.classList.add('active');
+      aplicarFiltro(c.getAttribute('data-f')||'all');
+    }));
+
+    refrescarResumen();
   });
-
-  // Filtros
-  const chips = document.querySelectorAll('.chip');
-  chips.forEach(c=> c.addEventListener('click', ()=>{
-    chips.forEach(x=>x.classList.remove('active')); c.classList.add('active');
-    aplicarFiltro(c.getAttribute('data-f')||'all');
-  }));
-
-  refrescarResumen();
 })();
 </script>
 </body>

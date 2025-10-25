@@ -1,7 +1,8 @@
 <?php
-/* registrar_asistencia.php — Fondo Cloudinary + estado Clody + keepalive
-   — Botones “Ver/Quitar” reubicados en panel de opciones
-   — Listados de ingresos ocultos por defecto con toggle
+/* registrar_asistencia.php — Fondo Cloudinary + estado Cloud + keepalive
+   • Valida turno personalizado (gym_clientes_plan) antes de descontar clases
+   • Tolerancia ±15 minutos configurable
+   • Evita doble descuento si ya registró asistencia hoy
 */
 if (session_status() === PHP_SESSION_NONE) session_start();
 header('Cache-Control: no-store, no-cache, must-revalidate');
@@ -11,6 +12,9 @@ require_once __DIR__ . '/conexion.php';
 date_default_timezone_set('America/Argentina/San_Luis');
 $hoy         = date('Y-m-d');
 $hora_actual = date('H:i:s');
+
+/* ===== Config ===== */
+const TOLERANCIA_MIN = 15; // ± minutos permitidos respecto a la hora pactada del fijo
 
 /* ====== PING keepalive ====== */
 if (isset($_GET['ping'])) {
@@ -23,11 +27,29 @@ if (isset($_GET['ping'])) {
 /* ===== Sesión ===== */
 $gimnasio_id = (int)($_SESSION['gimnasio_id'] ?? 0);
 
+/* ===== Helpers ===== */
+function h($s){ return htmlspecialchars((string)$s, ENT_QUOTES|ENT_SUBSTITUTE, 'UTF-8'); }
+function nombreDiaEsFecha(string $fechaYmd): string {
+  $map = ['Sunday'=>'Domingo','Monday'=>'Lunes','Tuesday'=>'Martes','Wednesday'=>'Miércoles','Thursday'=>'Jueves','Friday'=>'Viernes','Saturday'=>'Sábado'];
+  $en = date('l', strtotime($fechaYmd));
+  return $map[$en] ?? 'Lunes';
+}
+function hm(string $t): string { return substr($t,0,5); }
+function diffMin(string $hhmm, string $hhmmNow): int {
+  [$H,$M] = array_map('intval', explode(':', $hhmm));
+  [$h,$m] = array_map('intval', explode(':', $hhmmNow));
+  return (int)abs(($H*60+$M) - ($h*60+$m));
+}
+function json_decode_safe($s){
+  $j = json_decode((string)$s, true);
+  return is_array($j) ? $j : [];
+}
+
 /* ===== CSRF ===== */
 if (empty($_SESSION['csrf_token'])) $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
 $csrf = $_SESSION['csrf_token'];
 
-/* ===== Datos del gimnasio ===== */
+/* ===== Datos del gimnasio (nombre/logo) ===== */
 $nombre_gimnasio = 'Gimnasio';
 $logo_gimnasio   = 'logo.png';
 if ($gimnasio_id > 0) {
@@ -157,11 +179,54 @@ $URL_AJAX_SELF   = $basePath . '/' . basename(__FILE__) . '?ajax=1';
 $URL_AJAX_PROF   = $basePath . '/ajax_ingresos_profesores.php';
 $URL_AJAX_CLIENT = $basePath . '/ajax_ingresos_clientes.php';
 
-/* ===== Lógica principal de registros ===== */
+/* ===========================================================
+   VALIDACIÓN DE TURNO PERSONALIZADO + REGISTRO DE ASISTENCIA
+   =========================================================== */
+function turno_personalizado_ok(mysqli $db, int $gymId, int $cliente_id, string $fechaYmd, string $horaNowHHMM): array {
+  // Devuelve: [ok(bool), info(array)] — info incluye dias, hora_fija(HH:MM), profesor_id (o null)
+  $diaEsp = nombreDiaEsFecha($fechaYmd); // e.g., "Lunes"
+  $sql = "SELECT dias_json, hora, profesor_id, desde, hasta
+            FROM gym_clientes_plan
+           WHERE gimnasio_id=? AND cliente_id=? AND desde<=? AND hasta>=?";
+  $st = $db->prepare($sql);
+  $st->bind_param("iiss", $gymId, $cliente_id, $fechaYmd, $fechaYmd);
+  $st->execute();
+  $rs = $st->get_result();
+  $mejor = null; $ok = false;
+
+  while ($r = $rs->fetch_assoc()){
+    $dias = json_decode_safe($r['dias_json'] ?? '[]');
+    if (!in_array($diaEsp, $dias, true)) continue;
+    $hora_fija = hm($r['hora'] ?? '00:00');
+    $d = diffMin($hora_fija, $horaNowHHMM);
+    if ($mejor === null || $d < $mejor['diff']) {
+      $mejor = [
+        'dias' => $dias,
+        'hora_fija' => $hora_fija,
+        'profesor_id' => isset($r['profesor_id']) ? ($r['profesor_id']===null? null : (int)$r['profesor_id']) : null,
+        'diff' => $d
+      ];
+    }
+  }
+  $st->close();
+
+  if ($mejor !== null && $mejor['diff'] <= TOLERANCIA_MIN) $ok = true;
+  return [$ok, $mejor ?: ['dias'=>[], 'hora_fija'=>null, 'profesor_id'=>null, 'diff'=>PHP_INT_MAX]];
+}
+
+function ya_tiene_asistencia_hoy(mysqli $db, int $gymId, int $cliente_id, string $fechaYmd): bool {
+  $q = $db->prepare("SELECT 1 FROM asistencias WHERE cliente_id=? AND gimnasio_id=? AND fecha=? LIMIT 1");
+  $q->bind_param("iis", $cliente_id, $gymId, $fechaYmd);
+  $q->execute();
+  $ok = (bool)$q->get_result()->fetch_assoc();
+  $q->close();
+  return $ok;
+}
+
 function procesar_codigo(mysqli $db, int $gymId, string $codigo, string $hoy, string $hora_actual): array {
   $mensaje = ""; $tipo = "ok";
 
-  // Profesor por DNI
+  // ===== Profesor por DNI =====
   $prof_stmt = $db->prepare("SELECT id, apellido, nombre FROM profesores WHERE dni = ? AND gimnasio_id = ?");
   $prof_stmt->bind_param("si", $codigo, $gymId);
   $prof_stmt->execute();
@@ -186,22 +251,22 @@ function procesar_codigo(mysqli $db, int $gymId, string $codigo, string $hoy, st
         $db->query("UPDATE asistencias_profesores
                     SET hora_salida = '{$db->real_escape_string($hora_actual)}'
                     WHERE id = {$r['id']} LIMIT 1");
-        $mensaje = "✅ Salida registrada para {$nombre_prof} a las {$hora_actual}.";
+        $mensaje = "✅ Salida registrada para {$nombre_prof} a las ".hm($hora_actual).".";
       } else {
         $db->query("INSERT INTO asistencias_profesores (profesor_id, fecha, hora_entrada, gimnasio_id, hora)
                     VALUES ({$prof_id}, '{$db->real_escape_string($hoy)}', '{$db->real_escape_string($hora_actual)}', {$gymId}, '{$db->real_escape_string($hora_actual)}')");
-        $mensaje = "✅ Nuevo ingreso registrado para {$nombre_prof} a las {$hora_actual}.";
+        $mensaje = "✅ Nuevo ingreso registrado para {$nombre_prof} a las ".hm($hora_actual).".";
       }
     } else {
       $db->query("INSERT INTO asistencias_profesores (profesor_id, fecha, hora_entrada, gimnasio_id, hora)
                   VALUES ({$prof_id}, '{$db->real_escape_string($hoy)}', '{$db->real_escape_string($hora_actual)}', {$gymId}, '{$db->real_escape_string($hora_actual)}')");
-      $mensaje = "✅ Ingreso registrado para {$nombre_prof} a las {$hora_actual}.";
+      $mensaje = "✅ Ingreso registrado para {$nombre_prof} a las ".hm($hora_actual).".";
     }
     return [$mensaje, $tipo];
   }
 
-  // Cliente por DNI
-  $stmt = $db->prepare("SELECT id FROM clientes WHERE dni = ? AND gimnasio_id = ?");
+  // ===== Cliente por DNI =====
+  $stmt = $db->prepare("SELECT id, apellido, nombre FROM clientes WHERE dni = ? AND gimnasio_id = ?");
   $stmt->bind_param("si", $codigo, $gymId);
   $stmt->execute();
   $cliente = $stmt->get_result()->fetch_assoc();
@@ -209,7 +274,9 @@ function procesar_codigo(mysqli $db, int $gymId, string $codigo, string $hoy, st
 
   if ($cliente) {
     $id_cliente = (int)$cliente['id'];
+    $nombre_cli = trim(($cliente['apellido'] ?? '').' '.($cliente['nombre'] ?? ''));
 
+    // 1) Membresía vigente con clases
     $stmt2 = $db->prepare("SELECT clases_disponibles, fecha_vencimiento
                            FROM membresias
                            WHERE cliente_id = ? AND gimnasio_id = ?
@@ -220,34 +287,46 @@ function procesar_codigo(mysqli $db, int $gymId, string $codigo, string $hoy, st
     $membresia = $stmt2->get_result()->fetch_assoc();
     $stmt2->close();
 
-    if ($membresia) {
-      $clases      = (int)$membresia['clases_disponibles'];
-      $vencimiento = $membresia['fecha_vencimiento'];
-
-      if ($clases > 0 && $vencimiento >= $hoy) {
-        $db->query("INSERT INTO asistencias (cliente_id, fecha, hora, gimnasio_id)
-                    VALUES ({$id_cliente}, '{$db->real_escape_string($hoy)}', '{$db->real_escape_string($hora_actual)}', {$gymId})");
-        $db->query("UPDATE membresias
-                    SET clases_disponibles = clases_disponibles - 1
-                    WHERE cliente_id = {$id_cliente}
-                      AND fecha_vencimiento = '{$db->real_escape_string($vencimiento)}'
-                      AND gimnasio_id = {$gymId}
-                    LIMIT 1");
-        $mensaje = "✅ Asistencia registrada para cliente a las {$hora_actual}.";
-        $tipo    = "ok";
-      } else {
-        $mensaje = "❌ ¡Membresía vencida o sin clases disponibles!";
-        $tipo    = "alerta";
-      }
-    } else {
-      $mensaje = "❌ ¡El cliente no tiene membresía registrada!";
-      $tipo    = "alerta";
+    if (!$membresia) {
+      return ["❌ {$nombre_cli}: no tiene membresía registrada.", "alerta"];
     }
-  } else {
-    $mensaje = "❌ ¡Cliente/Profesor no encontrado!";
-    $tipo    = "alerta";
+
+    $clases      = (int)$membresia['clases_disponibles'];
+    $vencimiento = (string)$membresia['fecha_vencimiento'];
+
+    if ($clases <= 0 || $vencimiento < $hoy) {
+      return ["❌ {$nombre_cli}: membresía vencida o sin clases disponibles.", "alerta"];
+    }
+
+    // 2) Validar turno personalizado contra gym_clientes_plan
+    [$okTurno, $info] = turno_personalizado_ok($db, $gymId, $id_cliente, $hoy, hm($hora_actual));
+    if (!$okTurno) {
+      $diasTxt = $info['dias'] ? implode(', ', $info['dias']) : '—';
+      $horaTxt = $info['hora_fija'] ? $info['hora_fija'] : '—';
+      $tolTxt  = TOLERANCIA_MIN;
+      return ["❌ {$nombre_cli}: no corresponde a su turno personalizado. Turno pactado: {$diasTxt} a las {$horaTxt} (tolerancia ±{$tolTxt} min).", "alerta"];
+    }
+
+    // 3) Evitar doble descuento si ya registró hoy
+    if (ya_tiene_asistencia_hoy($db, $gymId, $id_cliente, $hoy)) {
+      return ["ℹ️ {$nombre_cli}: ya tiene asistencia registrada hoy. No se descuenta nuevamente.", "alerta"];
+    }
+
+    // 4) Registrar asistencia y descontar 1 clase
+    $db->query("INSERT INTO asistencias (cliente_id, fecha, hora, gimnasio_id)
+                VALUES ({$id_cliente}, '{$db->real_escape_string($hoy)}', '{$db->real_escape_string($hora_actual)}', {$gymId})");
+    $db->query("UPDATE membresias
+                SET clases_disponibles = clases_disponibles - 1
+                WHERE cliente_id = {$id_cliente}
+                  AND fecha_vencimiento = '{$db->real_escape_string($vencimiento)}'
+                  AND gimnasio_id = {$gymId}
+                LIMIT 1");
+
+    return ["✅ Asistencia registrada para {$nombre_cli} a las ".hm($hora_actual).". Se descontó 1 clase.", "ok"];
   }
-  return [$mensaje, $tipo];
+
+  // Nadie coincide
+  return ["❌ Cliente/Profesor no encontrado.", "alerta"];
 }
 
 /* ===== Respuesta AJAX ===== */
@@ -270,10 +349,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_GET['ajax'])) {
 
   [$advertencia, $tipo_resultado] = procesar_codigo($conexion, $gimnasio_id, $codigo, $hoy, $hora_actual);
   echo json_encode([
-    'ok'      => true,
+    'ok'      => ($tipo_resultado === 'ok'),
     'mensaje' => $advertencia,
     'tipo'    => $tipo_resultado,
-    'sonido'  => ($tipo_resultado === 'alerta'),
+    'sonido'  => ($tipo_resultado !== 'ok'),
   ], JSON_UNESCAPED_UNICODE);
   exit;
 }
@@ -301,13 +380,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['codigo']) && !isset($
   <style>
     :root{ --mut:#9fb0d3; --veil: .45; }
 
-    /* Fondo Cloudinary + velo */
     body::before{
       content:"";
       position:fixed; inset:0;
       background:
         linear-gradient(180deg, rgba(0,0,0,var(--veil)), rgba(0,0,0, calc(var(--veil) + .20))),
-        url('<?= htmlspecialchars($scan_bg ?: '') ?>') center/cover no-repeat;
+        url('<?= h($scan_bg ?: '') ?>') center/cover no-repeat;
       z-index:-1;
       opacity: <?= $scan_bg ? '1' : '0' ?>;
       transition: opacity .25s, background .2s;
@@ -348,9 +426,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['codigo']) && !isset($
     .toolbar{
       display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-top:10px;
     }
-    .bg-compact{
-      display:flex; gap:8px; align-items:center; flex-wrap:wrap;
-    }
+    .bg-compact{ display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
     details.tools{
       display:inline-block; border:1px solid var(--stroke); border-radius:10px; padding:6px 10px; background:#0d0f14;
     }
@@ -394,7 +470,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['codigo']) && !isset($
 
     @media (max-width: 599px){ #logoGym{ height:56px; } }
 
-    /* Oculto por defecto */
     #listados[hidden]{ display:none; }
   </style>
   <script>
@@ -439,7 +514,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['codigo']) && !isset($
 
     function actualizarListados() {
       const listados = document.getElementById('listados');
-      if (listados && listados.hasAttribute('hidden')) return; // si está oculto, no gastamos
+      if (listados && listados.hasAttribute('hidden')) return;
       fetch(URL_AJAX_PROF, {cache:'no-store'})
         .then(res => res.text())
         .then(html => { const t = document.getElementById('tabla_profesores'); if (t) t.innerHTML = html; })
@@ -516,7 +591,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['codigo']) && !isset($
       tickClock(); setInterval(tickClock, 1000);
       focusInput();
 
-      // Estado recordado de los listados
       try{
         const saved = localStorage.getItem('mostrar_listados');
         if (saved === '1') {
@@ -546,12 +620,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['codigo']) && !isset($
   <div class="wrap">
     <div class="page-card">
       <div class="encabezado">
-        <img id="logoGym" src="<?= htmlspecialchars($logo_gimnasio) ?>" alt="logo">
+        <img id="logoGym" src="<?= h($logo_gimnasio) ?>" alt="logo">
         <div>
-          <h1><?= strtoupper(htmlspecialchars($nombre_gimnasio)) ?></h1>
+          <h1><?= strtoupper(h($nombre_gimnasio)) ?></h1>
           <div class="clock">Hora: <span id="clock"></span></div>
 
-          <!-- Estado Cloudinary + Toolbar -->
           <div class="toolbar">
             <?php if ($cloud_active): ?>
               <span class="cloud-status cloud-ok">☁️ Cloudinary: Activo</span>
@@ -560,19 +633,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['codigo']) && !isset($
               <span class="hint">Tip: habilitá cURL y completá credenciales.</span>
             <?php endif; ?>
 
-            <!-- Subir fondo (visible) -->
             <?php if ($gimnasio_id > 0): ?>
               <form class="bg-compact" method="post" enctype="multipart/form-data">
-                <input type="hidden" name="csrf" value="<?= htmlspecialchars($csrf) ?>">
+                <input type="hidden" name="csrf" value="<?= h($csrf) ?>">
                 <input type="file" name="scan_bg_file" accept="image/*">
                 <button class="btn" type="submit" name="act" value="bg_upload" <?= $cloud_active ? '' : 'disabled' ?>>🖼️ Subir fondo</button>
-
-                <!-- Opciones avanzadas reubicadas: Ver / Quitar -->
                 <details class="tools">
                   <summary>⋯ Opciones fondo</summary>
                   <div class="bg-admin-row">
                     <?php if (!empty($scan_bg)): ?>
-                      <a class="btn gray" href="<?= htmlspecialchars($scan_bg) ?>" target="_blank">Ver</a>
+                      <a class="btn gray" href="<?= h($scan_bg) ?>" target="_blank">Ver</a>
                       <button class="btn danger" type="submit" name="act" value="bg_delete">Quitar</button>
                     <?php else: ?>
                       <span class="hint">No hay fondo cargado.</span>
@@ -582,7 +652,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['codigo']) && !isset($
               </form>
             <?php endif; ?>
 
-            <!-- Toggle de listados -->
             <button id="btnToggleListados" class="btn outline" type="button" onclick="toggleListados()">👀 Mostrar listados</button>
           </div>
         </div>
@@ -590,20 +659,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['codigo']) && !isset($
 
       <form id="form-scan" class="scan" method="POST" action="">
         <input id="codigo" name="codigo" type="text" inputmode="numeric" autocomplete="off" placeholder="Ingresar DNI..." autofocus>
-        <input type="hidden" name="csrf" value="<?= htmlspecialchars($csrf) ?>">
+        <input type="hidden" name="csrf" value="<?= h($csrf) ?>">
       </form>
 
       <?php if (!empty($advertencia)): ?>
-        <div id="adv" class="advertencia <?= ($tipo_resultado === 'alerta') ? 'err' : 'ok' ?>"><?= htmlspecialchars($advertencia) ?></div>
+        <div id="adv" class="advertencia <?= ($tipo_resultado === 'alerta') ? 'err' : 'ok' ?>"><?= h($advertencia) ?></div>
       <?php else: ?>
         <div id="adv" class="advertencia" style="min-height: 24px;"></div>
       <?php endif; ?>
 
-      <!-- Sonidos -->
       <audio id="snd-ok" preload="auto"><source src="ok.mp3" type="audio/mpeg"></audio>
       <audio id="snd-alerta" preload="auto"><source src="alerta.mp3" type="audio/mpeg"></audio>
 
-      <!-- LISTADOS (OCULTOS POR DEFECTO) -->
       <div id="listados" hidden>
         <div class="row">
           <section>
@@ -627,7 +694,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['codigo']) && !isset($
           </section>
         </div>
       </div>
-      <!-- fin listados -->
     </div>
   </div>
 </body>

@@ -1,11 +1,12 @@
 <?php
 /* ==========================================================
    transmision_en_vivo.php — Vista pública de transmisión
-   - HUD estilo TV (banda inferior) dentro del player
-   - Fullscreen del contenedor (HUD incluido), fs=0 en YouTube
-   - Botón "📺 Transmitir a TV (beta)" SIEMPRE visible (Cast si hay, guía si no)
-   - Poll a api_combate_estado_poll.php para round/timer/descanso
-   - Lista de peleas SIEMPRE visible; en share=1: video arriba + lista abajo
+   - Player YouTube + HUD (banda inferior) sincronizable
+   - ?debug=1 → muestra JSON de la API en vivo (diagnóstico)
+   - ?force=1 → fuerza mostrar HUD aunque activo=0 (pruebas)
+   - ?lag=6  → retrasa la APLICACIÓN del estado X segundos
+   - Botones: Pantalla completa, Cast, Abrir YouTube, Rotar, Espejo
+   - Lista de peleas siempre visible; en share=1: video arriba + lista abajo
    ========================================================== */
 if (session_status() === PHP_SESSION_NONE) session_start();
 require_once __DIR__ . '/conexion.php';
@@ -15,6 +16,7 @@ if (function_exists('mysqli_report')) { mysqli_report(MYSQLI_REPORT_OFF); }
 @$conexion->set_charset('utf8mb4');
 header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
 header('Pragma: no-cache');
+if (function_exists('opcache_invalidate')) { @opcache_invalidate(__FILE__, true); }
 
 /* ===== Helpers ===== */
 function h($s){ return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); }
@@ -42,7 +44,7 @@ function yt_id_from_url($url){
   $url = trim((string)$url);
   if ($url==='') return null;
   if (preg_match('~youtu\.be/([A-Za-z0-9_-]{6,})~', $url, $m)) return $m[1];
-  if (preg_match('~v=([A-Za-z0-9_-]{6,})~', $url, $m)) return $m[1];
+  if (preg_match('~[?&]v=([A-Za-z0-9_-]{6,})~', $url, $m)) return $m[1];
   if (preg_match('~/(live|embed)/([A-Za-z0-9_-]{6,})~', $url, $m)) return $m[2];
   return null;
 }
@@ -131,7 +133,7 @@ if ($idsMod){
   }
 }
 
-/* ===== Selección de pelea ===== */
+/* ===== Selección de pelea actual ===== */
 $pelea_sel = null;
 if ($pelea_id_req>0){
   foreach($peleas as $p){ if ((int)$p['id']===$pelea_id_req){ $pelea_sel=$p; break; } }
@@ -142,7 +144,7 @@ if (!$pelea_sel){
 }
 if (!$pelea_sel && $peleas){ $pelea_sel = $peleas[0]; }
 
-/* ===== Etiquetas header pelea ===== */
+/* ===== Etiquetas pelea ===== */
 $orden_txt = $pelea_sel ? ($pelea_sel['orden'] ?? '') : '';
 $rojo_nom=''; $rojo_esc=''; $rojo_peso='';
 $azul_nom=''; $azul_esc=''; $azul_peso='';
@@ -161,8 +163,8 @@ if ($pelea_sel){
 
   $mid = (int)($pelea_sel['modalidad_id'] ?? 0);
   if ($mid>0 && isset($mapMod[$mid])) $mod_txt = $mapMod[$mid];
-  else $mod_txt = trim(($mapComp[$rid]['modtxt'] ?? '').' '.($mapComp[$aid]['modtxt'] ?? ''));
-
+  else $mod_txt = trim(($mapComp[$rid]['modtxt'] ?? '').' '.($mapComp[$aid]['modtxt'] ?? '')); // ✅ fix 'modtxt'
+  
   $pL = is_numeric($rojo_peso) ? (0+$rojo_peso).' kg' : '';
   $pR = is_numeric($azul_peso) ? (0+$azul_peso).' kg' : '';
   if ($pL && $pR)      $pills_peso_txt = "{$pL} vs {$pR}";
@@ -186,14 +188,14 @@ if ($pelea_sel){
     @media (max-width:920px){ .grid{grid-template-columns:1fr} }
     .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px}
 
-    /* cuando share=1: una columna (video arriba + lista abajo) */
+    /* share=1: video arriba + lista abajo */
     <?php if($share): ?>
     .grid{ grid-template-columns:1fr; }
     .card--compact{ padding:10px 12px; }
     <?php endif; ?>
 
     /* Player 16:9 */
-    .video{position:relative; border-radius:12px; overflow:hidden; background:#000; border:1px solid var(--line); }
+    .video{position:relative; border-radius:12px; overflow:hidden; background:#000; border:1px solid var(--line); transition:transform .2s ease;}
     .video .ratio{ width:100%; aspect-ratio:16/9; }
     .video iframe{ position:absolute; inset:0; width:100%; height:100%; border:0; z-index:1; }
 
@@ -242,6 +244,14 @@ if ($pelea_sel){
     .btn{ padding:10px 14px; border-radius:10px; border:1px solid #304351; background:#1a2530; color:#e9f2fb; cursor:pointer; }
     .btn:hover{ filter:brightness(1.06); }
     .btn-primary{ background:#0e8dff; border-color:#0e8dff; color:#fff; }
+
+    /* Rotaciones/Espejo aplicadas al contenedor del player (video + HUD) */
+    .video.rot-90  { transform: rotate(90deg);  transform-origin: center center; }
+    .video.rot-180 { transform: rotate(180deg); transform-origin: center center; }
+    .video.rot-270 { transform: rotate(270deg); transform-origin: center center; }
+    .video.mirrorH { transform: scaleX(-1);    transform-origin: center center; }
+    .video.rot-90 .ratio,
+    .video.rot-270 .ratio { aspect-ratio: 9/16; }
 
     /* Overlay orientación (vertical) */
     #orientHint{ position:fixed; inset:0; display:none; align-items:center; justify-content:center; z-index:9999;
@@ -305,12 +315,19 @@ if ($pelea_sel){
           </div>
         </div>
 
-        <!-- Controles -->
+        <!-- Controles principales -->
         <div class="controls">
           <button id="btnFullscreen" class="btn">⛶ Pantalla completa</button>
           <button id="btnCastTV" class="btn">📺 Transmitir a TV (beta)</button>
           <button id="btnOpenApp" class="btn">▶️ Abrir en YouTube</button>
-          <span class="meta">Tip: usá ⛶ o “Transmitir pestaña” para que el HUD y la lista salgan en el TV.</span>
+          <span class="meta">Tip: usá ⛶ o “Transmitir pestaña” para ver video + HUD + lista en el TV.</span>
+        </div>
+
+        <!-- Controles de rotación/espejo -->
+        <div class="controls">
+          <button id="btnRotateCycle" class="btn">⤴️ Rotar 0°</button>
+          <button id="btnRotate180" class="btn">↕️ Voltear 180°</button>
+          <button id="btnMirrorH"  class="btn">🪞 Espejo H</button>
         </div>
       <?php endif; ?>
 
@@ -351,7 +368,7 @@ if ($pelea_sel){
       <?php endif; ?>
     </div>
 
-    <!-- Lista de peleas: SIEMPRE visible (si share=1, queda debajo del video) -->
+    <!-- Lista de peleas -->
     <div class="card <?= $share ? 'card--compact' : '' ?>">
       <div class="title" style="margin:0 0 8px">
         <?= $share ? 'Peleas del evento (vista TV)' : 'Peleas del evento' ?>
@@ -424,13 +441,11 @@ if ($pelea_sel){
     }catch(e){}
   }
 
-  // Doble tap/click sobre el área de video → fullscreen del contenedor
   if (wrap){
     wrap.addEventListener('dblclick', goFullscreenAndLock);
     wrap.addEventListener('touchend', (e)=>{ if(e.touches?.length===0){ goFullscreenAndLock(); } }, {passive:true});
   }
 
-  // Abrir en app de YouTube (alternativa para Cast/AirPlay)
   const src = frame ? (frame.getAttribute('src')||'') : '';
   const vidMatch = src.match(/\/embed\/([^?&/]+)/);
 
@@ -466,7 +481,6 @@ if ($pelea_sel){
     return location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1';
   }
 
-  // Siempre dejamos el botón visible. Si hay Cast, lo usamos; si no, mostramos guía.
   window.__onGCastApiAvailable = function(isAvailable) {
     if (!isAvailable) {
       attachGuideHandler();
@@ -488,14 +502,7 @@ if ($pelea_sel){
     if (!isSecureOrigin()) return showGuide('Para usar Cast directo desde la web, abrí esta página en HTTPS o en http://localhost. Igual podés transmitir la pestaña desde el menú del navegador.');
     try {
       const context = cast.framework.CastContext.getInstance();
-      await context.requestSession(); // abre diálogo Cast (si el navegador lo soporta)
-
-      // Si en el futuro usás un stream propio HLS/DASH (no YouTube), podés enviar media así:
-      // const mediaInfo = new chrome.cast.media.MediaInfo('https://tu-servidor/stream.m3u8','application/x-mpegurl');
-      // mediaInfo.metadata = new chrome.cast.media.GenericMediaMetadata();
-      // mediaInfo.metadata.title = 'Evento en vivo';
-      // const req = new chrome.cast.media.LoadRequest(mediaInfo);
-      // await session.loadMedia(req);
+      await context.requestSession();
     } catch (e) {
       showGuide('No se pudo iniciar Cast desde el botón. Podés usar "Transmitir esta pestaña" del navegador.');
     }
@@ -517,17 +524,34 @@ Sugerencia: activá "⛶ Pantalla completa" en la página antes de transmitir pa
   }
 </script>
 
-<!-- HUD: poll del estado de combate -->
+<!-- HUD: poll del estado de combate (con DEBUG/FORCE/LAG) + Rotación/Espejo -->
 <script>
 (function(){
   const eventoId = <?= (int)$evento_id ?>;
   const peleaIdActual = <?= $pelea_sel ? (int)$pelea_sel['id'] : 0 ?>;
+
+  // Flags por querystring
+  const qs = new URLSearchParams(location.search);
+  const DEBUG = qs.get('debug') === '1';
+  const FORCE = qs.get('force') === '1';
+  const LAG   = parseInt(qs.get('lag') || '0', 10) || 0;
 
   const hud = document.getElementById('liveHud');
   const lblFight = document.getElementById('hudFight');
   const lblRound = document.getElementById('hudRound');
   const lblTimer = document.getElementById('hudTimer');
   const badgeRest = document.getElementById('hudRest');
+
+  // Cajita DEBUG
+  const dbgFlag = document.createElement('div');
+  if (DEBUG){
+    Object.assign(dbgFlag.style, {
+      position:'fixed', right:'8px', bottom:'8px', zIndex:99999,
+      background:'#111c', color:'#0f0', font:'12px/1.4 monospace',
+      border:'1px solid #0f0', padding:'6px 8px', borderRadius:'6px', maxWidth:'48vw', whiteSpace:'pre-wrap'
+    });
+    document.body.appendChild(dbgFlag);
+  }
 
   function fmt(s){
     s = Math.max(0, Math.floor(s||0));
@@ -541,7 +565,7 @@ Sugerencia: activá "⛶ Pantalla completa" en la página antes de transmitir pa
   function startTick(){
     if (tickInt) return;
     tickInt = setInterval(()=>{
-      if (!phase.startEpoch || !phase.dur || !phase.activo){ lblTimer.textContent = '0:00'; return; }
+      if (!phase.startEpoch || !phase.dur || (!phase.activo && !FORCE)){ lblTimer.textContent = '0:00'; return; }
       const now = Math.floor(Date.now()/1000);
       const elapsed = Math.max(0, now - phase.startEpoch);
       const remain = Math.max(0, phase.dur - elapsed);
@@ -549,58 +573,119 @@ Sugerencia: activá "⛶ Pantalla completa" en la página antes de transmitir pa
     }, 1000);
   }
 
+  function applyState(d){
+    const activo = parseInt(d?.activo||0,10);
+    phase.activo = activo;
+
+    // HUD visible: si activo=1 o si forzado
+    hud.style.display = (activo || FORCE) ? 'block' : 'none';
+    if (!activo && !FORCE) return;
+
+    // Cambio de pelea por mesa
+    const mesaPeleaId = parseInt(d?.pelea_actual_id||0,10);
+    if (mesaPeleaId && mesaPeleaId !== phase.peleaId){
+      const params = new URLSearchParams(window.location.search);
+      params.set('pelea_id', String(mesaPeleaId));
+      if (<?= $share ? 'true' : 'false' ?>) params.set('share','1');
+      window.location.search = params.toString();
+      return;
+    }
+
+    const rN = parseInt(d?.ronda_actual||1,10);
+    const inRest = (String(d?.en_descanso||'0') === '1');
+    const epochInicio = parseInt(d?.epoch_inicio||0,10);
+    const durRound = parseInt(d?.dur_round||0,10) || 120;
+    const durRest = parseInt(d?.dur_descanso||0,10) || 60;
+
+    lblRound.textContent = 'R' + (rN>0 ? rN : 1);
+    badgeRest.style.display = inRest ? '' : 'none';
+
+    phase.inRest = inRest;
+    // Usamos el epoch real; solo "demoramos" la aplicación con LAG
+    phase.startEpoch = epochInicio || Math.floor(Date.now()/1000);
+    phase.dur = inRest ? durRest : durRound;
+
+    try{
+      const rojo = document.querySelector('.vs .corner:nth-child(1) h4')?.textContent?.replace(/^🟥\s*/,'') || 'Rojo';
+      const azul = document.querySelector('.vs .corner:nth-child(2) h4')?.textContent?.replace(/^🟦\s*/,'') || 'Azul';
+      lblFight.textContent = `${rojo} vs ${azul}`;
+    }catch(e){}
+
+    startTick();
+  }
+
   async function pollEstado(){
     try{
       const r = await fetch(`api_combate_estado_poll.php?evento_id=${encodeURIComponent(eventoId)}`, {cache:'no-store'});
       const j = await r.json();
+      if(DEBUG) dbgFlag.textContent = 'DEBUG ON\n' + JSON.stringify(j, null, 2);
+
       if(!j || !j.ok){ return; }
       const d = j.data;
-      if(!d){
-        hud.style.display = 'none';
-        return;
-      }
+      if(!d){ hud.style.display = (FORCE ? 'block' : 'none'); return; }
 
-      const activo = parseInt(d.activo||0,10);
-      phase.activo = activo;
-      hud.style.display = activo ? 'block' : 'none';
-      if(!activo) return;
-
-      const mesaPeleaId = parseInt(d.pelea_actual_id||0,10);
-      if (mesaPeleaId && mesaPeleaId !== phase.peleaId){
-        const params = new URLSearchParams(window.location.search);
-        params.set('pelea_id', String(mesaPeleaId));
-        if (<?= $share ? 'true' : 'false' ?>) params.set('share','1');
-        window.location.search = params.toString();
-        return;
-      }
-
-      const rN = parseInt(d.ronda_actual||1,10);
-      const inRest = (String(d.en_descanso||'0') === '1');
-      const epochInicio = parseInt(d.epoch_inicio||0,10);
-      const durRound = parseInt(d.dur_round||0,10) || 120;
-      const durRest = parseInt(d.dur_descanso||0,10) || 60;
-
-      lblRound.textContent = 'R' + (rN>0 ? rN : 1);
-      badgeRest.style.display = inRest ? '' : 'none';
-
-      phase.inRest = inRest;
-      phase.startEpoch = epochInicio || Math.floor(Date.now()/1000);
-      phase.dur = inRest ? durRest : durRound;
-
-      try{
-        const rojo = document.querySelector('.vs .corner:nth-child(1) h4')?.textContent?.replace(/^🟥\s*/,'') || 'Rojo';
-        const azul = document.querySelector('.vs .corner:nth-child(2) h4')?.textContent?.replace(/^🟦\s*/,'') || 'Azul';
-        lblFight.textContent = `${rojo} vs ${azul}`;
-      }catch(e){}
-
-      startTick();
+      // Aplicamos LAG si está configurado
+      if (LAG > 0) setTimeout(()=>applyState(d), LAG * 1000);
+      else applyState(d);
     }catch(e){
-      // silencioso
+      if(DEBUG) dbgFlag.textContent = 'ERROR\n' + (e?.message||String(e));
     }
   }
 
   setInterval(pollEstado, 2000);
   pollEstado();
+
+  // ==== Rotación / Espejo ====
+  const playerWrap = document.getElementById('playerWrap');
+  const btnRotCycle = document.getElementById('btnRotateCycle');
+  const btnRot180   = document.getElementById('btnRotate180');
+  const btnMirrorH  = document.getElementById('btnMirrorH');
+
+  function clearRot(){
+    playerWrap?.classList.remove('rot-90','rot-180','rot-270','mirrorH');
+    // reset styles manuales
+    playerWrap?.querySelector('.ratio')?.style?.setProperty('aspect-ratio','');
+  }
+
+  let rotStep = 0; // 0,90,180,270
+  function applyCycle(){
+    if (!playerWrap) return;
+    clearRot();
+    rotStep = (rotStep + 1) % 4;
+    const labels = ['⤴️ Rotar 0°','⤴️ Rotar 90°','⤴️ Rotar 180°','⤴️ Rotar 270°'];
+    if (btnRotCycle) btnRotCycle.textContent = labels[rotStep];
+    switch(rotStep){
+      case 0: break;
+      case 1: playerWrap.classList.add('rot-90'); break;
+      case 2: playerWrap.classList.add('rot-180'); break;
+      case 3: playerWrap.classList.add('rot-270'); break;
+    }
+  }
+
+  function set180(){
+    if (!playerWrap) return;
+    clearRot();
+    rotStep = 2;
+    playerWrap.classList.add('rot-180');
+    if (btnRotCycle) btnRotCycle.textContent = '⤴️ Rotar 180°';
+  }
+
+  let mirrorOn = false;
+  function toggleMirror(){
+    if (!playerWrap) return;
+    mirrorOn = !mirrorOn;
+    if (mirrorOn) {
+      playerWrap.classList.add('mirrorH');
+      if (btnMirrorH) btnMirrorH.textContent = '🪞 Espejo H (ON)';
+    } else {
+      playerWrap.classList.remove('mirrorH');
+      if (btnMirrorH) btnMirrorH.textContent = '🪞 Espejo H';
+    }
+  }
+
+  btnRotCycle?.addEventListener('click', applyCycle);
+  btnRot180  ?.addEventListener('click', set180);
+  btnMirrorH ?.addEventListener('click', toggleMirror);
 })();
 </script>
 </body>

@@ -1,40 +1,55 @@
 <?php
-// api_combate_estado_poll.php
-// Devuelve el estado actual del combate para un evento_id
+/* ==========================================================
+   api_combate_estado_poll.php — PÚBLICA (solo lectura)
+   Devuelve el estado del combate para HUD:
+   - pelea_actual_id, activo, ronda_actual, en_descanso
+   - epoch_inicio (UNIX), dur_round, dur_descanso
+
+   IMPORTANTE:
+   • No requiere login.
+   • No usa $_SESSION para lógica de acceso.
+   • Asegurate que la "mesa" escriba en ESTA misma base/host.
+   ========================================================== */
 if (session_status() === PHP_SESSION_NONE) session_start();
-require_once __DIR__ . '/conexion.php';
+require_once __DIR__.'/conexion.php';
 
 header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
 header('Pragma: no-cache');
 
-function get_int($k){ return isset($_GET[$k]) ? (int)$_GET[$k] : 0; }
-
-$evento_id = get_int('evento_id');
-if ($evento_id <= 0) { echo json_encode(['ok'=>false,'error'=>'evento_id_invalido']); exit; }
-
 if (!isset($conexion) || !($conexion instanceof mysqli)) {
-  echo json_encode(['ok'=>false,'error'=>'db']); exit;
+  http_response_code(500);
+  echo json_encode(['ok'=>false,'err'=>'BD']); exit;
 }
-@$conexion->set_charset('utf8mb4');
 
-// combate_estado tiene: evento_id, pelea_actual_id, activo, actualizado_en
-$st = $conexion->prepare("SELECT evento_id, pelea_actual_id, activo, 
-                                 IFNULL(ronda_actual, NULL) AS ronda_actual,
-                                 IFNULL(en_descanso, NULL) AS en_descanso,
-                                 IFNULL(epoch_inicio, NULL) AS epoch_inicio,
-                                 IFNULL(dur_round, NULL) AS dur_round,
-                                 IFNULL(dur_descanso, NULL) AS dur_descanso,
-                                 UNIX_TIMESTAMP(actualizado_en) AS ts
-                          FROM combate_estado
-                          WHERE evento_id=? LIMIT 1");
-if (!$st){ echo json_encode(['ok'=>false,'error'=>'no_table']); exit; }
-$st->bind_param('i',$evento_id);
-$st->execute();
-$r = $st->get_result();
-$row = $r->fetch_assoc();
-$st->close();
+$evento_id = isset($_GET['evento_id']) ? (int)$_GET['evento_id'] : 0;
+if ($evento_id<=0){
+  echo json_encode(['ok'=>false,'err'=>'bad_event']); exit;
+}
 
-if (!$row){ echo json_encode(['ok'=>true,'data'=>null]); exit; }
+/*  Tabla esperada:
+    combate_estado:
+      evento_id (PK o UNIQUE),
+      pelea_actual_id INT,
+      activo TINYINT(1),
+      ronda_actual INT,
+      en_descanso TINYINT(1),
+      epoch_inicio INT,
+      dur_round INT,
+      dur_descanso INT
+*/
+$sql = "SELECT pelea_actual_id, activo, ronda_actual, en_descanso, epoch_inicio, dur_round, dur_descanso
+        FROM combate_estado
+        WHERE evento_id={$evento_id}
+        LIMIT 1";
+$r = $conexion->query($sql);
+$resp = null;
+if ($r && $r->num_rows) {
+  $resp = $r->fetch_assoc();
+  foreach (['pelea_actual_id','activo','ronda_actual','en_descanso','epoch_inicio','dur_round','dur_descanso'] as $k){
+    $resp[$k] = is_null($resp[$k]) ? 0 : 0 + $resp[$k];
+  }
+}
+if ($r instanceof mysqli_result) $r->free();
 
-echo json_encode(['ok'=>true,'data'=>$row,'now'=>time()]);
+echo json_encode(['ok'=>true,'data'=>$resp], JSON_UNESCAPED_UNICODE);

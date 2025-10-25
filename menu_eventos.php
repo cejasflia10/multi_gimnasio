@@ -98,6 +98,7 @@ $backUrl = safe_back_url();
         <li><a href="pesajes.php">⚖️ Pesaje</a></li>
         <li><a href="en_vivo.php">🎥 En Vivo evento</a></li>
         <li><a href="youtube_live_set.php">🎛️ Configurar YouTube</a></li>
+        <li><a href="generar_ficha_pelea.php">🎛️ Generar Ficha Medica</a></li>
 
 
       </ul>

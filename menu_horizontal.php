@@ -1,6 +1,7 @@
 <?php
 if (session_status() === PHP_SESSION_NONE) { session_start(); }
 @require_once __DIR__ . '/permiso.php';
+@require_once __DIR__ . '/conexion.php'; // <-- agregado para consultar el flag en BD
 
 if (function_exists('refresh_permissions') && !empty($_SESSION['gimnasio_id'])) {
   refresh_permissions((int)$_SESSION['gimnasio_id']);
@@ -11,6 +12,20 @@ if (!function_exists('has_perm')) {
     return function_exists('has_feature') ? has_feature($feature) : true;
   }
 }
+
+/* === Helpers de flags de sistema (ajustes_gimnasio) === */
+if (!function_exists('gymFlag')) {
+  function gymFlag(mysqli $db, int $gid, string $clave, $def='0'){
+    $q=$db->prepare("SELECT valor FROM ajustes_gimnasio WHERE gimnasio_id=? AND clave=? LIMIT 1");
+    $q->bind_param("is",$gid,$clave); $q->execute();
+    $r=$q->get_result()->fetch_assoc(); $q->close();
+    return $r['valor'] ?? $def;
+  }
+}
+$gimnasio_id = (int)($_SESSION['gimnasio_id'] ?? 0);
+$ROL         = $_SESSION['rol'] ?? '';
+$isAdmin     = in_array(strtolower($ROL), ['admin','superadmin','owner','dueño'], true);
+$horariosOn  = ($gimnasio_id && isset($conexion) && $conexion instanceof mysqli && gymFlag($conexion,$gimnasio_id,'horarios_gym_activo','0')==='1');
 
 /** Definición única del menú **/
 $MENU = [
@@ -24,6 +39,7 @@ $MENU = [
     ['Agregar Cliente','agregar_cliente.php'],
     ['🏷️ QR de Máquinas','maquinas_qr.php'],
     ['📈 Seguimiento de alumnos','profesor_seguimiento.php'],
+    // ⬇️ El link "Horarios del Gimnasio" se agrega dinámicamente más abajo
   ]],
   'membresias' => ['label'=>'📅 Membresías','perm'=>'membresias','items'=>[
     ['Ver Membresías','ver_membresias.php'],
@@ -78,6 +94,18 @@ $MENU = [
     ['Eventos Públicos','eventos_publicos.php',['extra_perm'=>'eventos']],
   ]],
 ];
+
+/* === Inyección dinámica del link dentro de CLIENTES (abajo del submenú) === */
+if (isset($MENU['clientes'])) {
+  if ($horariosOn) {
+    // Módulo encendido: lo ven todos
+    $MENU['clientes']['items'][] = ['🗓️ Horarios del Gimnasio','horarios_gimnasio.php'];
+  } elseif ($isAdmin) {
+    // Módulo apagado: solo admin lo ve con un estilo atenuado
+    $MENU['clientes']['items'][] = ['🔒 Horarios del Gimnasio','horarios_gimnasio.php',['class'=>'disabled','title'=>'Módulo apagado']];
+  }
+}
+
 $SALIDA = ['label'=>'❌ Cerrar','items'=>[
   ['Volver al Inicio','index.php'],
   ['Cerrar Sesión','logout.php'],
@@ -95,8 +123,10 @@ function render_link($label,$href,$opts=[]){
     if (!empty($opts['name']))     $attrs[]='data-window="'.htmlspecialchars($opts['name']).'"';
   }
   if (!empty($opts['class'])) $cls[]=$opts['class'];
+  if (!empty($opts['title'])) $attrs[]='title="'.htmlspecialchars($opts['title']).'"';
   $clsAttr = $cls ? ' class="'.implode(' ',$cls).'"' : '';
-  return '<a href="'.htmlspecialchars($href).'"'.$clsAttr.' '.implode(' ',$attrs).'>'.htmlspecialchars($label).'</a>';
+  $attrsStr = $attrs ? ' '.implode(' ',$attrs) : '';
+  return '<a href="'.htmlspecialchars($href).'"'.$clsAttr.$attrsStr.'>'.htmlspecialchars($label).'</a>';
 }
 function render_menu_desktop($MENU,$SALIDA){
   ob_start(); ?>
@@ -206,6 +236,7 @@ function render_menu_mobile($MENU,$SALIDA){
     .dd-body a{ display:block; padding:10px 12px; border-radius:8px; color:var(--fg); text-decoration:none }
     .dd-body a:hover{ background:#f1f5f9 }
     .dd-body a.newwin::after{ content:"↗"; margin-left:8px; opacity:.85 }
+    .dd-body a.disabled{ opacity:.6; pointer-events:auto } /* candado admins */
   }
 
   /* ====== Celular (solo celular) ====== */
@@ -238,6 +269,7 @@ function render_menu_mobile($MENU,$SALIDA){
     .acc-body a{ display:block; padding:9px 10px; border-radius:8px; color:var(--fg); text-decoration:none }
     .acc-body a:hover{ background:#f1f5f9 }
     .acc-body a.newwin::after{ content:"↗"; margin-left:8px; opacity:.85 }
+    .acc-body a.disabled{ opacity:.6 } /* candado admins */
 
     #drawer-backdrop{ display:block; position:fixed; inset:0; background:rgba(2,6,23,.35); z-index:1001 }
     #drawer-backdrop[hidden]{ display:none }
