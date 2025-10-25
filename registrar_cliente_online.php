@@ -2,22 +2,36 @@
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
-include 'conexion.php';
+require_once __DIR__ . '/conexion.php';
 
-$gimnasio_id = $_GET['gimnasio'] ?? 0;
+$gimnasio_id = isset($_GET['gimnasio']) ? (int)$_GET['gimnasio'] : 0;
 
-// Obtener logo y nombre del gimnasio
-$info = $conexion->query("SELECT nombre, logo FROM gimnasios WHERE id = $gimnasio_id")->fetch_assoc();
-$nombre_gimnasio = $info['nombre'] ?? 'Gimnasio';
-$logo_gimnasio = $info['logo'] ?? 'logo.png';
+// Obtener logo y nombre del gimnasio (consulta segura)
+$nombre_gimnasio = 'Gimnasio';
+$logo_gimnasio   = 'logo.png';
+if ($gimnasio_id > 0) {
+    $st = $conexion->prepare("SELECT nombre, logo FROM gimnasios WHERE id = ? LIMIT 1");
+    $st->bind_param("i", $gimnasio_id);
+    $st->execute();
+    $res = $st->get_result();
+    if ($res && ($row = $res->fetch_assoc())) {
+        $nombre_gimnasio = $row['nombre'] ?: $nombre_gimnasio;
+        $logo_gimnasio   = $row['logo']   ?: $logo_gimnasio;
+    }
+    $st->close();
+}
 
-// Obtener disciplinas del gimnasio
+// Obtener disciplinas del gimnasio (mismo formato)
 $disciplinas = [];
-if ($gimnasio_id) {
-    $resultado = $conexion->query("SELECT id, nombre FROM disciplinas WHERE gimnasio_id = $gimnasio_id");
-    while ($fila = $resultado->fetch_assoc()) {
+if ($gimnasio_id > 0) {
+    $st = $conexion->prepare("SELECT id, nombre FROM disciplinas WHERE gimnasio_id = ? ORDER BY nombre");
+    $st->bind_param("i", $gimnasio_id);
+    $st->execute();
+    $r = $st->get_result();
+    while ($r && ($fila = $r->fetch_assoc())) {
         $disciplinas[] = $fila;
     }
+    $st->close();
 }
 ?>
 
@@ -27,61 +41,96 @@ if ($gimnasio_id) {
     <meta charset="UTF-8">
     <title>Registro de Cliente Online</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <!-- Hoja global -->
     <link rel="stylesheet" href="estilo_unificado.css">
+
+    <!-- Ajustes mínimos, neutros y responsive que NO pisan tu estilo -->
     <style>
-        body {
-            background: #000;
-            color: gold;
-            font-family: Arial, sans-serif;
-            padding: 20px;
+        /* Contenedor centrado y responsive */
+        .contenedor{
+            max-width: 560px;
+            margin: 16px auto;
+            padding: 0 16px 24px;
         }
-        .contenedor {
-            max-width: 500px;
-            margin: auto;
+
+        /* Logo responsivo */
+        .logo{
+            display: block;
+            margin: 0 auto 16px auto;
+            max-width: 160px;
+            height: auto;
+            object-fit: contain;
+            background: var(--surface, #fff);
+            border: 1px solid var(--stroke, #e5e7eb);
+            border-radius: 12px;
+            padding: 6px;
+            box-shadow: var(--shadow, 0 1px 2px rgba(0,0,0,.06));
         }
-        h2 {
+
+        /* Títulos sin forzar colores, solo espaciado */
+        h2{
             text-align: center;
-            margin-bottom: 20px;
-            color: gold;
+            margin: 6px 0 4px;
+            line-height: 1.2;
         }
-        label {
-            display: block;
-            margin-top: 10px;
+        h3{
+            text-align: center;
+            margin: 0 0 14px;
+            line-height: 1.2;
+            color: var(--muted, #64748b);
+            font-weight: 700;
         }
-        input, select {
+
+        /* Etiquetas e inputs fluidos */
+        label{ display:block; margin-top: 10px; font-weight: 600; }
+        input, select{
             width: 100%;
-            padding: 8px;
-            margin-top: 5px;
+            padding: .65rem .75rem;
+            margin-top: 6px;
+            border-radius: 10px;
+            border: 1px solid var(--stroke, #e5e7eb);
+            background: var(--surface, #fff);
+            color: var(--ink, #0f172a);
+            outline: none;
         }
-        .logo {
-            display: block;
-            margin: 0 auto 20px auto;
-            max-width: 150px;
+        input:focus, select:focus{
+            box-shadow: 0 0 0 3px rgba(245,158,11,.18);
         }
-        .btn {
-            background-color: gold;
-            color: black;
-            font-weight: bold;
-            border: none;
-            padding: 10px;
-            margin-top: 20px;
+
+        /* Botón principal alineado al diseño unificado */
+        .btn{
+            display: inline-block;
+            width: 100%;
+            margin-top: 18px;
+            padding: .75rem 1rem;
+            border-radius: 12px;
+            border: 1px solid var(--stroke, #e5e7eb);
+            background: var(--primary, #f59e0b);
+            color: var(--on-primary, #111827);
+            font-weight: 800;
             cursor: pointer;
         }
-        .btn:hover {
-            background-color: #ffc107;
+        .btn:hover{ filter: brightness(1.03); }
+
+        /* Pequeñas mejoras móviles */
+        @media (max-width: 420px){
+            .contenedor{ padding: 0 12px 20px; }
+            .logo{ max-width: 140px; }
         }
     </style>
 </head>
 <body>
     <div class="contenedor">
-        <?php if ($logo_gimnasio): ?>
+        <?php if (!empty($logo_gimnasio)): ?>
             <img src="<?= htmlspecialchars($logo_gimnasio) ?>" alt="Logo Gimnasio" class="logo">
         <?php endif; ?>
+
         <h2><?= htmlspecialchars($nombre_gimnasio) ?></h2>
         <h3>Registro de Cliente Online</h3>
 
         <form action="guardar_cliente_online.php" method="post" onsubmit="return redirigirDespues()">
-            <input type="hidden" name="gimnasio_id" value="<?= htmlspecialchars($gimnasio_id) ?>">
+            <input type="hidden" name="gimnasio_id" value="<?= (int)$gimnasio_id ?>">
 
             <label>Apellido:</label>
             <input type="text" name="apellido" required>
@@ -90,7 +139,7 @@ if ($gimnasio_id) {
             <input type="text" name="nombre" required>
 
             <label>DNI:</label>
-            <input type="number" name="dni" required>
+            <input type="number" name="dni" inputmode="numeric" required>
 
             <label>Fecha de nacimiento:</label>
             <input type="date" name="fecha_nacimiento" required>
@@ -122,8 +171,8 @@ if ($gimnasio_id) {
         function redirigirDespues() {
             setTimeout(function () {
                 window.location.href = "cliente_acceso.php";
-            }, 1000); // espera 1 segundo
-            return true; // permitir que se envíe el formulario
+            }, 1000);
+            return true;
         }
     </script>
 </body>
