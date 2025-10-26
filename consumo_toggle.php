@@ -7,14 +7,9 @@ if (function_exists('mysqli_report')) { mysqli_report(MYSQLI_REPORT_OFF); }
 @$conexion->set_charset('utf8mb4');
 
 function qv($db,$s){ return "'".$db->real_escape_string((string)$s)."'"; }
-function mem_pick_gymcol(mysqli $db): string {
-  $rs = $db->query("SHOW COLUMNS FROM membresias LIKE 'gimnasio_id'");
-  return ($rs && $rs->num_rows) ? 'gimnasio_id' : 'id_gimnasio';
-}
 function mem_is_activa_row(array $m): bool {
   $ok_estado = true;
   if (array_key_exists('activa',$m) && $m['activa']!==null) $ok_estado = ((string)$m['activa']==='1');
-  elseif (array_key_exists('estado',$m) && $m['estado']!=='') $ok_estado = in_array(strtolower((string)$m['estado']), ['activa','activo','vigente','al_dia','si','sí','1'], true);
   $ok_vto = true;
   if (!empty($m['fecha_vencimiento']) && $m['fecha_vencimiento']!=='0000-00-00') $ok_vto = ($m['fecha_vencimiento'] >= date('Y-m-d'));
   return $ok_estado && $ok_vto;
@@ -35,12 +30,11 @@ if (!$rs || !$rs->num_rows){ http_response_code(404); exit('Acceso no encontrado
 $acc = $rs->fetch_assoc();
 $cliente_id = (int)$acc['cliente_id'];
 
-/* Membresía activa más reciente */
-$gymcol = mem_pick_gymcol($conexion);
+/* Membresía activa más reciente (gimnasio_id) */
 $hoy = date('Y-m-d');
-$qm = "SELECT id, plan, clases_disponibles, activa, estado, fecha_vencimiento
+$qm = "SELECT id, plan, clases_disponibles, activa, fecha_vencimiento
        FROM membresias
-       WHERE {$gymcol}={$gimnasio_id} AND cliente_id={$cliente_id}
+       WHERE gimnasio_id={$gimnasio_id} AND cliente_id={$cliente_id}
          AND (fecha_vencimiento IS NULL OR fecha_vencimiento='0000-00-00' OR fecha_vencimiento>='{$hoy}')
        ORDER BY COALESCE(fecha_vencimiento, '9999-12-31') DESC, id DESC
        LIMIT 1";
@@ -56,7 +50,7 @@ if ($accion==='aplicar'){
 
   $conexion->query("UPDATE membresias
                     SET clases_disponibles = CASE WHEN clases_disponibles>0 THEN clases_disponibles-1 ELSE 0 END
-                    WHERE id={$mem_id} AND clases_disponibles>0");
+                    WHERE id={$mem_id} AND gimnasio_id={$gimnasio_id} AND clases_disponibles>0");
   if ($conexion->affected_rows===0){ exit('⚠️ Sin clases disponibles'); }
 
   $conexion->query("INSERT INTO membresia_consumos (gimnasio_id, cliente_id, membresia_id, acceso_id, origen)
@@ -68,7 +62,7 @@ if ($accion==='deshacer'){
   $ck = $conexion->query("SELECT id FROM membresia_consumos WHERE acceso_id={$acceso_id} LIMIT 1");
   if (!$ck || !$ck->num_rows){ header("Location: accesos_gimnasio.php?g={$gimnasio_id}"); exit; }
 
-  $conexion->query("UPDATE membresias SET clases_disponibles = clases_disponibles + 1 WHERE id={$mem_id}");
+  $conexion->query("UPDATE membresias SET clases_disponibles = clases_disponibles + 1 WHERE id={$mem_id} AND gimnasio_id={$gimnasio_id}");
   $conexion->query("DELETE FROM membresia_consumos WHERE acceso_id={$acceso_id} LIMIT 1");
   header("Location: accesos_gimnasio.php?g={$gimnasio_id}"); exit;
 }

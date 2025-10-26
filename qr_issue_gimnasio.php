@@ -24,7 +24,7 @@ if (!empty($gym['qr_secret'])) {
 }
 $url = rtrim((isset($_SERVER['HTTPS'])?'https':'http').'://'.$_SERVER['HTTP_HOST'].dirname($_SERVER['REQUEST_URI']),'/')."/gym_qr_checkin.php?{$base}".($sig?("&sig={$sig}"):"");
 
-// QR vía API pública (puede cambiarla por otra o por librería local)
+// QR vía API pública
 $qrPng = "https://api.qrserver.com/v1/create-qr-code/?size=420x420&margin=10&data=".rawurlencode($url);
 
 ?><!doctype html>

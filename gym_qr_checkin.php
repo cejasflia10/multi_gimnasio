@@ -75,26 +75,68 @@ function find_cliente_for_login(mysqli $db, int $gimnasio_id, ?string $dni, ?str
   $rs = $db->query($sql);
   return $rs && $rs->num_rows ? $rs->fetch_assoc() : null;
 }
+
+/* ===== Helpers de membresía: SIEMPRE usar gimnasio_id ===== */
+function mem_row_es_activa(array $m): bool {
+  $ok_estado = true;
+  if (array_key_exists('activa',$m) && $m['activa'] !== null && $m['activa']!=='') {
+    $ok_estado = ((string)$m['activa'] === '1');
+  }
+  $ok_vto = true;
+  if (isset($m['fecha_vencimiento']) && $m['fecha_vencimiento'] && $m['fecha_vencimiento']!=='0000-00-00') {
+    $ok_vto = ($m['fecha_vencimiento'] >= date('Y-m-d'));
+  }
+  return $ok_estado && $ok_vto;
+}
 function tiene_membresia_activa(mysqli $db, int $cliente_id, int $gimnasio_id): bool{
-  $sql = "SELECT id, estado, fecha_vencimiento, fecha_inicio
+  $hoy = date('Y-m-d');
+  $sql = "SELECT id, cliente_id, gimnasio_id, activa, fecha_inicio, fecha_vencimiento
           FROM membresias
-          WHERE cliente_id={$cliente_id} AND gimnasio_id={$gimnasio_id}
-          ORDER BY COALESCE(fecha_vencimiento, fecha_inicio) DESC
+          WHERE cliente_id={$cliente_id}
+            AND gimnasio_id={$gimnasio_id}
+            AND (fecha_vencimiento IS NULL OR fecha_vencimiento='0000-00-00' OR fecha_vencimiento >= '{$hoy}')
+          ORDER BY COALESCE(fecha_vencimiento, fecha_inicio) DESC, id DESC
           LIMIT 1";
   $rs = $db->query($sql);
   if (!$rs || !$rs->num_rows) return false;
-  $m = $rs->fetch_assoc();
-  $estado_ok = true;
-  if (isset($m['estado']) && $m['estado']!=='') {
-    $estado_ok = in_array(strtolower($m['estado']), ['activa','activo','al_dia','vigente','1','si','sí'], true);
-  }
-  $hoy = date('Y-m-d');
-  $vto_ok = true;
-  if (!empty($m['fecha_vencimiento']) && $m['fecha_vencimiento']!=='0000-00-00') {
-    $vto_ok = ($m['fecha_vencimiento'] >= $hoy);
-  }
-  return $estado_ok && $vto_ok;
+  return mem_row_es_activa($rs->fetch_assoc());
 }
+function mem_find_activa(mysqli $db, int $gimnasio_id, int $cliente_id): ?array {
+  $hoy = date('Y-m-d');
+  $sql = "SELECT id, cliente_id, gimnasio_id, plan_id, plan, fecha_inicio, fecha_vencimiento,
+                 clases_disponibles, activa
+          FROM membresias
+          WHERE cliente_id={$cliente_id}
+            AND gimnasio_id={$gimnasio_id}
+            AND (fecha_vencimiento IS NULL OR fecha_vencimiento='0000-00-00' OR fecha_vencimiento >= '{$hoy}')
+          ORDER BY COALESCE(fecha_vencimiento, fecha_inicio) DESC, id DESC
+          LIMIT 1";
+  $rs = $db->query($sql);
+  if (!$rs || !$rs->num_rows) return null;
+  $m = $rs->fetch_assoc();
+  return mem_row_es_activa($m) ? $m : null;
+}
+/** Idempotente por acceso_id; descuenta 1 si hay stock > 0 y loguea */
+function mem_aplicar_consumo(mysqli $db, int $gimnasio_id, int $cliente_id, ?int $acceso_id=null): array {
+  if (!is_null($acceso_id)) {
+    $chk = $db->query("SELECT id FROM membresia_consumos WHERE acceso_id={$acceso_id} LIMIT 1");
+    if ($chk && $chk->num_rows) return ['ok'=>true, 'msg'=>'Ya aplicado previamente (log)'];
+  }
+  $mem = mem_find_activa($db, $gimnasio_id, $cliente_id);
+  if (!$mem) return ['ok'=>false, 'msg'=>'Sin membresía activa en membresias'];
+
+  $mem_id = (int)$mem['id'];
+  $db->query("UPDATE membresias
+              SET clases_disponibles = CASE WHEN clases_disponibles>0 THEN clases_disponibles-1 ELSE 0 END
+              WHERE id={$mem_id} AND gimnasio_id={$gimnasio_id} AND clases_disponibles>0");
+  if ($db->affected_rows === 0) return ['ok'=>false, 'msg'=>'Sin clases disponibles para descontar'];
+
+  $acc = is_null($acceso_id) ? "NULL" : (int)$acceso_id;
+  $db->query("INSERT INTO membresia_consumos (gimnasio_id, cliente_id, membresia_id, acceso_id, origen)
+              VALUES ({$gimnasio_id}, {$cliente_id}, {$mem_id}, {$acc}, 'checkin')");
+  return ['ok'=>true, 'msg'=>'Clase descontada'];
+}
+
 function pudo_registrar(mysqli $db, int $cliente_id, int $gimnasio_id, int $min_bloqueo): bool{
   $sql="SELECT id FROM accesos_gimnasio
         WHERE cliente_id={$cliente_id} AND gimnasio_id={$gimnasio_id}
@@ -126,56 +168,6 @@ function fire_webhook(?string $url, array $payload){
   @curl_close($ch);
 }
 
-/* ===== Helpers de membresía: descuento en membresias.clases_disponibles ===== */
-function mem_pick_gymcol(mysqli $db): string {
-  $rs = $db->query("SHOW COLUMNS FROM membresias LIKE 'gimnasio_id'");
-  return ($rs && $rs->num_rows) ? 'gimnasio_id' : 'id_gimnasio';
-}
-function mem_is_activa_row(array $m): bool {
-  $ok_estado = true;
-  if (array_key_exists('activa',$m) && $m['activa']!==null) $ok_estado = ((string)$m['activa']==='1');
-  elseif (array_key_exists('estado',$m) && $m['estado']!=='') $ok_estado = in_array(strtolower((string)$m['estado']), ['activa','activo','vigente','al_dia','si','sí','1'], true);
-  $ok_vto = true;
-  if (!empty($m['fecha_vencimiento']) && $m['fecha_vencimiento']!=='0000-00-00') $ok_vto = ($m['fecha_vencimiento'] >= date('Y-m-d'));
-  return $ok_estado && $ok_vto;
-}
-function mem_find_activa(mysqli $db, int $gimnasio_id, int $cliente_id): ?array {
-  $gymcol = mem_pick_gymcol($db);
-  $hoy = date('Y-m-d');
-  $sql = "SELECT id, cliente_id, {$gymcol} AS gimnasio_id, plan_id, plan, fecha_inicio, fecha_vencimiento,
-                 clases_disponibles, activa, estado
-          FROM membresias
-          WHERE cliente_id={$cliente_id}
-            AND {$gymcol}={$gimnasio_id}
-            AND (fecha_vencimiento IS NULL OR fecha_vencimiento='0000-00-00' OR fecha_vencimiento >= '{$hoy}')
-          ORDER BY COALESCE(fecha_vencimiento, fecha_inicio) DESC, id DESC
-          LIMIT 1";
-  $rs = $db->query($sql);
-  if (!$rs || !$rs->num_rows) return null;
-  $m = $rs->fetch_assoc();
-  return mem_is_activa_row($m) ? $m : null;
-}
-/** Idempotente por acceso_id; descuenta 1 si hay stock > 0 y loguea */
-function mem_aplicar_consumo(mysqli $db, int $gimnasio_id, int $cliente_id, ?int $acceso_id=null): array {
-  if (!is_null($acceso_id)) {
-    $chk = $db->query("SELECT id FROM membresia_consumos WHERE acceso_id={$acceso_id} LIMIT 1");
-    if ($chk && $chk->num_rows) return ['ok'=>true, 'msg'=>'Ya aplicado previamente (log)'];
-  }
-  $mem = mem_find_activa($db, $gimnasio_id, $cliente_id);
-  if (!$mem) return ['ok'=>false, 'msg'=>'Sin membresía activa en membresias'];
-
-  $mem_id = (int)$mem['id'];
-  $db->query("UPDATE membresias
-              SET clases_disponibles = CASE WHEN clases_disponibles>0 THEN clases_disponibles-1 ELSE 0 END
-              WHERE id={$mem_id} AND clases_disponibles>0");
-  if ($db->affected_rows === 0) return ['ok'=>false, 'msg'=>'Sin clases disponibles para descontar'];
-
-  $acc = is_null($acceso_id) ? "NULL" : (int)$acceso_id;
-  $db->query("INSERT INTO membresia_consumos (gimnasio_id, cliente_id, membresia_id, acceso_id, origen)
-              VALUES ({$gimnasio_id}, {$cliente_id}, {$mem_id}, {$acc}, 'checkin')");
-  return ['ok'=>true, 'msg'=>'Clase descontada'];
-}
-
 /* ===== Autologin por cookie si no hay sesión ===== */
 if (empty($_SESSION['cliente_id']) && isset($_COOKIE['cli_autologin'])) {
   [$cid,$tok] = explode('.', $_COOKIE['cli_autologin'] ?? '.', 2) + [null,null];
@@ -195,17 +187,13 @@ if (empty($_SESSION['cliente_id']) && isset($_COOKIE['cli_autologin'])) {
   }
 }
 
-/* ===== Acciones OTP (en el mismo endpoint) ===== */
+/* ===== Acciones OTP ===== */
 function generar_codigo_otp(int $len=6){ return str_pad((string)random_int(0, 10**$len - 1), $len, '0', STR_PAD_LEFT); }
-function enviar_por_whatsapp_sms(string $destino, string $texto): bool {
-  // TODO: Integrar proveedor (Twilio, Meta WhatsApp Cloud, etc.)
-  // Por ahora stub (simula envío ok):
-  return true;
-}
+function enviar_por_whatsapp_sms(string $destino, string $texto): bool { return true; } // stub
+
 if (isset($_POST['otp_send'])) {
   $tel = trim($_POST['telefono'] ?? '');
   if ($tel===''){ render_page_form("Ingresá tu teléfono para enviar código OTP.", false); exit; }
-
   $code = generar_codigo_otp(6);
   $canal = $OTP_CANAL_DEF;
   $expira = date('Y-m-d H:i:s', time() + $OTP_MINUTOS*60);

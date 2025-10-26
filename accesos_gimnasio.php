@@ -8,14 +8,9 @@ if (function_exists('mysqli_report')) { mysqli_report(MYSQLI_REPORT_OFF); }
 
 function h($s){ return htmlspecialchars((string)$s, ENT_QUOTES|ENT_SUBSTITUTE,'UTF-8'); }
 function qv($db,$s){ return "'".$db->real_escape_string((string)$s)."'"; }
-function mem_pick_gymcol(mysqli $db): string {
-  $rs = $db->query("SHOW COLUMNS FROM membresias LIKE 'gimnasio_id'");
-  return ($rs && $rs->num_rows) ? 'gimnasio_id' : 'id_gimnasio';
-}
 function mem_is_activa_row(array $m): bool {
   $ok_estado = true;
   if (array_key_exists('activa',$m) && $m['activa']!==null) $ok_estado = ((string)$m['activa']==='1');
-  elseif (array_key_exists('estado',$m) && $m['estado']!=='') $ok_estado = in_array(strtolower((string)$m['estado']), ['activa','activo','vigente','al_dia','si','sí','1'], true);
   $ok_vto = true;
   if (!empty($m['fecha_vencimiento']) && $m['fecha_vencimiento']!=='0000-00-00') $ok_vto = ($m['fecha_vencimiento'] >= date('Y-m-d'));
   return $ok_estado && $ok_vto;
@@ -41,10 +36,9 @@ $cli_ids = array_unique(array_map(fn($x)=>(int)$x['cliente_id'],$accesos));
 $mapMem = [];
 if ($cli_ids){
   $ids = implode(',', $cli_ids);
-  $gymcol = mem_pick_gymcol($conexion);
-  $q = "SELECT id, cliente_id, {$gymcol} AS gimnasio_id, plan, clases_disponibles, activa, estado, fecha_vencimiento
+  $q = "SELECT id, cliente_id, gimnasio_id, plan, clases_disponibles, activa, fecha_vencimiento
         FROM membresias
-        WHERE {$gymcol}={$gimnasio_id} AND cliente_id IN ({$ids})
+        WHERE gimnasio_id={$gimnasio_id} AND cliente_id IN ({$ids})
         ORDER BY COALESCE(fecha_vencimiento,'9999-12-31') DESC, id DESC";
   $rm = $conexion->query($q);
   if ($rm) while($m=$rm->fetch_assoc()){
