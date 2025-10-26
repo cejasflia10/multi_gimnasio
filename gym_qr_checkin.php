@@ -2,7 +2,7 @@
 /* ============================================================
    gym_qr_checkin.php — Check-in por QR (MultiGimnasio)
    Solo DNI + recordar en dispositivo + registro online si no existe
-   Auto-checkin: SOLO 1 VEZ por escaneo (se resetea al rescANEAR: exp cambia)
+   Auto-checkin: SOLO 1 VEZ por escaneo (se resetea al RE-ESCANEAR: exp cambia)
    URL: .../gym_qr_checkin.php?g=<g>&exp=<ISO-UTC>&sig=<hex>
    ============================================================ */
 
@@ -34,7 +34,7 @@ function redirect302(string $url){
 
 /* ===== Inputs ===== */
 $gimnasio_id = (int)($_GET['g'] ?? 0);
-$exp = $_GET['exp'] ?? null;   // IMPORTANTE: lo usamos como “scan key”
+$exp = $_GET['exp'] ?? null;   // clave por escaneo
 $sig = $_GET['sig'] ?? null;
 if ($gimnasio_id<=0){ http_response_code(400); exit('❌ Falta ?g'); }
 
@@ -262,12 +262,16 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && isset($_POST['dni'])){
 
   $cli = find_cliente_por_dni($conexion,$gimnasio_id,$dni);
 
-  // Si NO está registrado → registro_online.php con g, dni y return
+  // Si NO está registrado → registro_online.php con g, gimnasio_id, dni y return (NO marca ingreso)
   if (!$cli){
     $return = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] ? 'https://' : 'http://')
             . ($_SERVER['HTTP_HOST'] ?? '')
             . ($_SERVER['REQUEST_URI'] ?? ('/gym_qr_checkin.php?g='.$gimnasio_id));
-    $url = 'registro_online.php?g='.$gimnasio_id.'&dni='.rawurlencode($dni).'&return='.rawurlencode($return);
+    $url = 'registro_online.php'
+         . '?g='.$gimnasio_id
+         . '&gimnasio_id='.$gimnasio_id
+         . '&dni='.rawurlencode($dni)
+         . '&return='.rawurlencode($return);
     redirect302($url);
   }
 
@@ -397,7 +401,7 @@ function disableUI(disabled, msg){
 
 function goRegistro(){
   const dniVal = (document.querySelector('input[name=dni]')?.value || '').replace(/\D+/g,'');
-  let url = 'registro_online.php?g='+G;
+  let url = 'registro_online.php?g='+G+'&gimnasio_id='+G; // mandamos ambos
   if (dniVal) url += '&dni='+encodeURIComponent(dniVal);
   url += '&return='+encodeURIComponent(location.href);
   location.href = url;
@@ -426,8 +430,7 @@ document.addEventListener('DOMContentLoaded', function(){
     if (remember && remember.checked && dniVal.length>=6) {
       localStorage.setItem(KEY_DNI, dniVal);
     }
-    // Si el envío es manual y aún no marcamos esta sesión de escaneo, marcarla para evitar bucles si recarga
-    if (!sessionStorage.getItem(KEY_SCAN)) sessionStorage.setItem(KEY_SCAN, '1');
+    if (!sessionStorage.getItem(KEY_SCAN)) sessionStorage.setItem(KEY_SCAN, '1'); // evitar bucles si recarga
     disableUI(true);
   });
 });
