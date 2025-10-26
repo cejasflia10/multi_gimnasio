@@ -1,8 +1,9 @@
 <?php
 /* ============================================================
    gym_qr_checkin.php — Check-in por QR (MultiGimnasio)
-   URL: .../gym_qr_checkin.php?g=<g>&exp=<ISO-UTC>&sig=<hex>
-   - Firma HMAC por gimnasio (si hay qr_secret).
+   URL esperada: .../gym_qr_checkin.php?g=<g>&exp=<ISO-UTC>&sig=<hex>
+   Features:
+   - Firma HMAC por gimnasio (si hay qr_secret en tabla gimnasios).
    - Autologin por sesión o token persistente (cookie).
    - Geocerca opcional por gimnasio (lat/lon + radio en metros).
    - Fallback por DNI o PIN; OTP (WhatsApp/SMS) opcional.
@@ -10,6 +11,7 @@
    - Webhook por gimnasio (POST JSON) tras check-in OK.
    - Descuenta 1 clase en membresias.clases_disponibles (idempotente).
    ============================================================ */
+
 if (session_status() === PHP_SESSION_NONE) session_start();
 require_once __DIR__ . '/conexion.php';
 if (!isset($conexion) || !($conexion instanceof mysqli)) { http_response_code(500); exit('❌ Sin conexión a BD'); }
@@ -17,6 +19,7 @@ if (function_exists('mysqli_report')) { mysqli_report(MYSQLI_REPORT_OFF); }
 @$conexion->set_charset('utf8mb4');
 
 /* ===== Config ===== */
+define('QR_DEBUG', true);          // ⬅️ poner en false en producción
 $REINGRESO_BLOQUEO_MIN = 15;
 $PERMITE_DNI = true;
 $PERMITE_PIN = true;
@@ -76,7 +79,7 @@ function find_cliente_for_login(mysqli $db, int $gimnasio_id, ?string $dni, ?str
   return $rs && $rs->num_rows ? $rs->fetch_assoc() : null;
 }
 
-/* ===== Helpers de membresía: SIEMPRE usar gimnasio_id ===== */
+/* ===== Helpers de membresía (usa SIEMPRE gimnasio_id) ===== */
 function mem_row_es_activa(array $m): bool {
   $ok_estado = true;
   if (array_key_exists('activa',$m) && $m['activa'] !== null && $m['activa']!=='') {
@@ -137,23 +140,49 @@ function mem_aplicar_consumo(mysqli $db, int $gimnasio_id, int $cliente_id, ?int
   return ['ok'=>true, 'msg'=>'Clase descontada'];
 }
 
+/* ===== Accesos: anti-doble y registrar (ROBUSTO + DEBUG) ===== */
 function pudo_registrar(mysqli $db, int $cliente_id, int $gimnasio_id, int $min_bloqueo): bool{
   $sql="SELECT id FROM accesos_gimnasio
         WHERE cliente_id={$cliente_id} AND gimnasio_id={$gimnasio_id}
           AND fecha_ingreso >= (NOW() - INTERVAL {$min_bloqueo} MINUTE)
         ORDER BY fecha_ingreso DESC LIMIT 1";
   $rs=$db->query($sql);
-  return !($rs && $rs->num_rows);
+  if (!$rs) { error_log("pudo_registrar SQL error: ".$db->error); return true; } // si falla, no bloqueamos
+  return !($rs->num_rows);
 }
-/** Inserta acceso y retorna ID (0 si falla) */
+
+/** Inserta acceso y retorna ID (>0 si ok). Loguea errores precisos. */
 function registrar_acceso(mysqli $db, int $cliente_id, int $gimnasio_id, string $metodo='QR-GYM', ?float $lat=null, ?float $lon=null): int{
-  $latv = is_null($lat) ? "NULL" : (float)$lat;
-  $lonv = is_null($lon) ? "NULL" : (float)$lon;
-  $sql="INSERT INTO accesos_gimnasio (cliente_id, gimnasio_id, fecha_ingreso, metodo, lat, lon)
-        VALUES ({$cliente_id}, {$gimnasio_id}, NOW(), ".qv($db,$metodo).", {$latv}, {$lonv})";
-  if ($db->query($sql)) return (int)$db->insert_id;
-  return 0;
+  // Verificar columnas disponibles en accesos_gimnasio
+  static $hasLatLon = null;
+  if ($hasLatLon === null) {
+    $hasLatLon = ['lat'=>false,'lon'=>false];
+    if ($rs = $db->query("SHOW COLUMNS FROM accesos_gimnasio")) {
+      while ($c = $rs->fetch_assoc()) {
+        $n = strtolower($c['Field'] ?? '');
+        if ($n==='lat') $hasLatLon['lat']=true;
+        if ($n==='lon') $hasLatLon['lon']=true;
+      }
+    }
+  }
+
+  $fields = "cliente_id, gimnasio_id, fecha_ingreso, metodo";
+  $values = "{$cliente_id}, {$gimnasio_id}, NOW(), ".qv($db,$metodo);
+
+  if ($hasLatLon['lat']) { $fields .= ", lat"; $values .= ", ".(is_null($lat) ? "NULL" : (float)$lat); }
+  if ($hasLatLon['lon']) { $fields .= ", lon"; $values .= ", ".(is_null($lon) ? "NULL" : (float)$lon); }
+
+  $sql="INSERT INTO accesos_gimnasio ({$fields}) VALUES ({$values})";
+  if (!$db->query($sql)) {
+    $msg = "INSERT acceso FAILED: ".$db->error." | SQL=".$sql;
+    error_log($msg);
+    if (QR_DEBUG) { echo "<pre style='color:#ffb3b3;background:#2b2b2b;padding:10px;border-radius:8px'>".$msg."</pre>"; }
+    return 0;
+  }
+  return (int)$db->insert_id;
 }
+
+/* ===== Webhook ===== */
 function fire_webhook(?string $url, array $payload){
   if (!$url) return;
   $ch = curl_init($url);
@@ -187,9 +216,9 @@ if (empty($_SESSION['cliente_id']) && isset($_COOKIE['cli_autologin'])) {
   }
 }
 
-/* ===== Acciones OTP ===== */
+/* ===== OTP (en el mismo endpoint) ===== */
 function generar_codigo_otp(int $len=6){ return str_pad((string)random_int(0, 10**$len - 1), $len, '0', STR_PAD_LEFT); }
-function enviar_por_whatsapp_sms(string $destino, string $texto): bool { return true; } // stub
+function enviar_por_whatsapp_sms(string $destino, string $texto): bool { return true; } // TODO: integrar proveedor real
 
 if (isset($_POST['otp_send'])) {
   $tel = trim($_POST['telefono'] ?? '');
@@ -344,7 +373,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && (isset($_POST['dni']) || isset($_POST
 
     render_page_done($gimnasio_id,$gym['nombre']??'', "✅ Ingreso marcado — ".h($cli['nombre'].' '.$cli['apellido'])." ".date('H:i'), true);
   } else {
-    render_page_form("❌ Error al registrar el ingreso.", false, ['need_geo'=>true]);
+    render_page_form("❌ Error al registrar el ingreso. (Ver log)", false, ['need_geo'=>true]);
   }
   exit;
 }
