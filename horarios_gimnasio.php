@@ -1,6 +1,9 @@
 <?php
 /* =============================================================================
-   horarios_gimnasio.php — Horarios GYM + planes fijos SIN reservas
+   horarios_gimnasio.php — Horarios GYM + planes fijos SIN reservas (OPTIMIZADO)
+   - Batch caches por día/hora para ocupación y listado de fijos
+   - Regla: si la franja base NO tiene profesor, cuentan TODOS los fijos (incluye profesor_id NULL)
+            si la franja base TIENE profesor, cuentan solo los fijos de ese profesor (excluye NULL)
    ============================================================================== */
 
 ob_start();
@@ -52,15 +55,21 @@ function run_stmt(mysqli $db, string $sql, callable $binder=null, bool $returnRe
 }
 
 /* ===================== PLANES (tu tabla) ===================== */
-function traerPlanPorId(mysqli $db, int $plan_id): ?array {
-  $res = run_stmt($db, "SELECT id, nombre, precio, cantidad_clases, clases, gimnasio_id,
-                               duracion_meses, dias_disponibles, duracion,
-                               clases_disponibles, duracion_dias
-                          FROM planes WHERE id=? LIMIT 1",
-                  function($st) use ($plan_id){ $st->bind_param("i",$plan_id); });
+function traerPlanPorId($db, $plan_id) {
+  if (!($db instanceof mysqli)) return null;
+  $plan_id = (int)$plan_id;
+
+  $res = run_stmt($db,
+    "SELECT id, nombre, precio, cantidad_clases, clases, gimnasio_id,
+            duracion_meses, dias_disponibles, duracion,
+            clases_disponibles, duracion_dias
+       FROM planes WHERE id=? LIMIT 1",
+    function($st) use ($plan_id){ $st->bind_param("i",$plan_id); }
+  );
   $row = safe_fetch($res);
-  return $row ?: null;
+  return $row ? $row : null;
 }
+
 
 /* ===================== pagos ===================== */
 function existeTabla(mysqli $db, string $tabla): bool {
@@ -178,77 +187,87 @@ function cupoParaFechaHora(mysqli $db,int $g,int $prof=null,string $fecha,string
   return $row ? max(1,(int)$row['cupo_maximo']) : 1;
 }
 
-/* ===================== ocupación fija (sin reservas) ===================== */
-/* $prof === -1  => contar cualquier profesor (para franjas base sin profesor).
-   $prof === null => contar SOLO los fijos con profesor NULL.
-   $prof >= 0    => contar SOLO los fijos de ese profesor.
+/* ===================== ocupación fija — OPTIMIZADO ===================== */
+/* Política:
+   - Franja base SIN profesor: ocupados = TODOS los fijos (incluye profesor_id NULL y los que tienen profesor)
+   - Franja base CON profesor: ocupados = solo fijos de ese profesor (excluye NULL)
 */
-function ocupacionFijaSemanal(mysqli $db,int $g, $prof, string $dia, string $hora, string $fechaRef): int{
-  $likeDia = '%"'.$db->real_escape_string($dia).'"%';
 
-  if ($prof === -1) {
-    $sql = "SELECT COUNT(*) c
-              FROM gym_clientes_plan
-             WHERE gimnasio_id=? AND hora=? AND desde<=? AND hasta>=? AND dias_json LIKE ?";
-    $res = run_stmt($db,$sql,function($st) use($g,$hora,$fechaRef,$likeDia){
-      $st->bind_param("issss",$g,$hora,$fechaRef,$fechaRef,$likeDia);
-    });
-  } elseif ($prof === null) {
-    $sql = "SELECT COUNT(*) c
-              FROM gym_clientes_plan
-             WHERE gimnasio_id=? AND hora=? AND profesor_id IS NULL
-               AND desde<=? AND hasta>=? AND dias_json LIKE ?";
-    $res = run_stmt($db,$sql,function($st) use($g,$hora,$fechaRef,$likeDia){
-      $st->bind_param("issss",$g,$hora,$fechaRef,$fechaRef,$likeDia);
-    });
-  } else {
-    $sql = "SELECT COUNT(*) c
-              FROM gym_clientes_plan
-             WHERE gimnasio_id=? AND hora=? AND profesor_id=?
-               AND desde<=? AND hasta>=? AND dias_json LIKE ?";
-    $res = run_stmt($db,$sql,function($st) use($g,$hora,$prof,$fechaRef,$likeDia){
-      $st->bind_param("isisss",$g,$hora,$prof,$fechaRef,$fechaRef,$likeDia);
-    });
+/* Caches:
+   $occCache[dia][hora] = [
+     'SUM_ALL' => total (incluye NULL y cualquier profesor),
+     'SUM_ASSIGNED' => total solo con profesor asignado,
+     <prof_id> => count solo de ese profe
+   ]
+
+   $fijosCache[dia][hora] = [
+     'NULL'  => [ filas de fijos sin profesor ],
+     <prof_id> => [ filas de fijos de ese profe ]
+   ]
+*/
+function buildOcupacionCache(mysqli $db,int $g,string $fechaRef): array{
+  $dias = ['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado','Domingo'];
+  $cache = [];
+  foreach($dias as $dia){
+    $likeDia = '%"'.$db->real_escape_string($dia).'"%';
+
+    // Conteo por profe específico (excluye NULL)
+    $sql1 = "SELECT gp.hora, gp.profesor_id, COUNT(*) c
+               FROM gym_clientes_plan gp
+              WHERE gp.gimnasio_id=? AND gp.desde<=? AND gp.hasta>=?
+                AND gp.profesor_id IS NOT NULL AND gp.dias_json LIKE ?
+              GROUP BY gp.hora, gp.profesor_id";
+    $res1 = run_stmt($db,$sql1,function($st) use($g,$fechaRef,$likeDia){ $st->bind_param("isss",$g,$fechaRef,$fechaRef,$likeDia); });
+
+    // Conteo total ALL (incluye NULL)
+    $sql2 = "SELECT gp.hora, COUNT(*) c
+               FROM gym_clientes_plan gp
+              WHERE gp.gimnasio_id=? AND gp.desde<=? AND gp.hasta>=?
+                AND gp.dias_json LIKE ?
+              GROUP BY gp.hora";
+    $res2 = run_stmt($db,$sql2,function($st) use($g,$fechaRef,$likeDia){ $st->bind_param("isss",$g,$fechaRef,$fechaRef,$likeDia); });
+
+    // Armar estructura
+    $cache[$dia] = $cache[$dia] ?? [];
+
+    if($res1){ while($r=$res1->fetch_assoc()){
+      $h = substr($r['hora'],0,5);
+      $pid = (int)$r['profesor_id'];
+      $c = (int)$r['c'];
+      if(!isset($cache[$dia][$h])) $cache[$dia][$h] = ['SUM_ALL'=>0,'SUM_ASSIGNED'=>0];
+      $cache[$dia][$h]['SUM_ASSIGNED'] += $c;
+      $cache[$dia][$h][$pid] = $c;
+    }}
+
+    if($res2){ while($r=$res2->fetch_assoc()){
+      $h = substr($r['hora'],0,5);
+      $c = (int)$r['c'];
+      if(!isset($cache[$dia][$h])) $cache[$dia][$h] = ['SUM_ALL'=>0,'SUM_ASSIGNED'=>0];
+      $cache[$dia][$h]['SUM_ALL'] = $c;
+    }}
   }
-  $row = safe_fetch($res);
-  return (int)($row['c'] ?? 0);
+  return $cache;
 }
 
-/* === NUEVO: listar fijos con datos para acciones (id cliente, dias_json, profesor_id) === */
-function fijosSemanalConDatos(mysqli $db,int $g, $prof, string $dia, string $hora, string $fechaRef): array{
-  $likeDia = '%"'.$db->real_escape_string($dia).'"%';
-  if ($prof === -1) {
+function buildFijosCache(mysqli $db,int $g,string $fechaRef): array{
+  $dias = ['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado','Domingo'];
+  $cache = [];
+  foreach($dias as $dia){
+    $likeDia = '%"'.$db->real_escape_string($dia).'"%';
     $sql = "SELECT c.id AS cliente_id, c.apellido, c.nombre, gp.dias_json, gp.hora, gp.profesor_id
               FROM gym_clientes_plan gp
               JOIN clientes c ON c.id=gp.cliente_id
-             WHERE gp.gimnasio_id=? AND gp.hora=? AND gp.desde<=? AND gp.hasta>=? AND gp.dias_json LIKE ?
+             WHERE gp.gimnasio_id=? AND gp.desde<=? AND gp.hasta>=?
+               AND gp.dias_json LIKE ?
              ORDER BY c.apellido, c.nombre";
-    $res = run_stmt($db,$sql,function($st) use($g,$hora,$fechaRef,$likeDia){
-      $st->bind_param("issss",$g,$hora,$fechaRef,$fechaRef,$likeDia);
-    });
-  } elseif ($prof === null) {
-    $sql = "SELECT c.id AS cliente_id, c.apellido, c.nombre, gp.dias_json, gp.hora, gp.profesor_id
-              FROM gym_clientes_plan gp
-              JOIN clientes c ON c.id=gp.cliente_id
-             WHERE gp.gimnasio_id=? AND gp.hora=? AND gp.profesor_id IS NULL
-               AND gp.desde<=? AND gp.hasta>=? AND gp.dias_json LIKE ?
-             ORDER BY c.apellido, c.nombre";
-    $res = run_stmt($db,$sql,function($st) use($g,$hora,$fechaRef,$likeDia){
-      $st->bind_param("issss",$g,$hora,$fechaRef,$fechaRef,$likeDia);
-    });
-  } else {
-    $sql = "SELECT c.id AS cliente_id, c.apellido, c.nombre, gp.dias_json, gp.hora, gp.profesor_id
-              FROM gym_clientes_plan gp
-              JOIN clientes c ON c.id=gp.cliente_id
-             WHERE gp.gimnasio_id=? AND gp.hora=? AND gp.profesor_id=?
-               AND gp.desde<=? AND gp.hasta>=? AND gp.dias_json LIKE ?
-             ORDER BY c.apellido, c.nombre";
-    $res = run_stmt($db,$sql,function($st) use($g,$hora,$prof,$fechaRef,$likeDia){
-      $st->bind_param("isisss",$g,$hora,$prof,$fechaRef,$fechaRef,$likeDia);
-    });
+    $res = run_stmt($db,$sql,function($st) use($g,$fechaRef,$likeDia){ $st->bind_param("isss",$g,$fechaRef,$fechaRef,$likeDia); });
+    if($res){ while($r=$res->fetch_assoc()){
+      $h = substr($r['hora'],0,5);
+      $pid = $r['profesor_id']===null ? 'NULL' : (string)(int)$r['profesor_id'];
+      $cache[$dia][$h][$pid][] = $r;
+    }}
   }
-  $out=[]; if($res){ while($r=$res->fetch_assoc()){ $out[]=$r; } }
-  return $out;
+  return $cache;
 }
 
 /* ===================== estado del form (preview) ===================== */
@@ -539,12 +558,34 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && $accion==='preview' && $sel_cliente>0
         if (in_array(nombreDiaEs($f), $sel_dias, true)) $fechas[] = $f;
       }
 
+      // Para preview: si elige profesor => cuenta solo ese; si deja vacío => cuenta TODOS (incluye NULL)
       $rows = [];
       foreach($fechas as $f){
         $cap = cupoParaFechaHora($conexion,$gimnasio_id,$sel_prof,$f,$sel_hora);
-        $profModo = ($sel_prof===null ? -1 : $sel_prof);
-        $occ = ocupacionFijaSemanal($conexion,$gimnasio_id,$profModo,nombreDiaEs($f),$sel_hora,hoyYmd());
-        $rows[] = ['fecha'=>$f,'cupo'=>$cap,'ocupados'=>$occ,'restante'=>max(0,$cap-$occ)];
+        $diaTxt = nombreDiaEs($f);
+
+        // Batch-like: una query rápida por fila (8 max), costo bajo:
+        if ($sel_prof === null){
+          $sql = "SELECT COUNT(*) c
+                    FROM gym_clientes_plan
+                   WHERE gimnasio_id=? AND hora=? AND desde<=? AND hasta>=?
+                     AND dias_json LIKE ?";
+          $likeDia = '%"'.$conexion->real_escape_string($diaTxt).'"%';
+          $res = run_stmt($conexion,$sql,function($st) use($gimnasio_id,$sel_hora,$f,$likeDia){
+            $st->bind_param("issss",$gimnasio_id,$sel_hora,$f,$f,$likeDia);
+          });
+        } else {
+          $sql = "SELECT COUNT(*) c
+                    FROM gym_clientes_plan
+                   WHERE gimnasio_id=? AND hora=? AND profesor_id=?
+                     AND desde<=? AND hasta>=? AND dias_json LIKE ?";
+          $likeDia = '%"'.$conexion->real_escape_string($diaTxt).'"%';
+          $res = run_stmt($conexion,$sql,function($st) use($gimnasio_id,$sel_hora,$sel_prof,$f,$likeDia){
+            $st->bind_param("isisss",$gimnasio_id,$sel_hora,$sel_prof,$f,$f,$likeDia);
+          });
+        }
+        $c = (int)((safe_fetch($res)['c'] ?? 0));
+        $rows[] = ['fecha'=>$f,'cupo'=>$cap,'ocupados'=>$c,'restante'=>max(0,$cap-$c)];
       }
       $preview = [
         'plan_nombre' => $planRow['nombre'] ?? '—',
@@ -663,6 +704,10 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && $accion==='rep_fijo'){
 }
 
 /* ===================== 5) Listas ===================== */
+$DIAS_SEM = ['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado','Domingo'];
+$filtra_dia = $_GET['dia'] ?? '';
+if (!in_array($filtra_dia, $DIAS_SEM, true)) $filtra_dia = '';
+
 $profes = run_stmt($conexion,
   "SELECT id, apellido, nombre FROM profesores WHERE gimnasio_id=? ORDER BY apellido, nombre",
   function($st) use($gimnasio_id){ $st->bind_param("i",$gimnasio_id); }
@@ -671,17 +716,32 @@ $clientes = run_stmt($conexion,
   "SELECT id, apellido, nombre FROM clientes WHERE gimnasio_id=? ORDER BY apellido, nombre",
   function($st) use($gimnasio_id){ $st->bind_param("i",$gimnasio_id); }
 );
-$base_list = run_stmt($conexion,
-  "SELECT b.*, p.apellido, p.nombre
-     FROM gym_horarios_base b
-     LEFT JOIN profesores p ON p.id=b.profesor_id
-    WHERE b.gimnasio_id=?
-    ORDER BY FIELD(b.dia,'Lunes','Martes','Miércoles','Jueves','Viernes','Sábado','Domingo'),
-             b.hora_inicio, p.apellido, p.nombre",
-  function($st) use($gimnasio_id){ $st->bind_param("i",$gimnasio_id); }
-);
+if ($filtra_dia) {
+  $base_list = run_stmt($conexion,
+    "SELECT b.*, p.apellido, p.nombre
+       FROM gym_horarios_base b
+       LEFT JOIN profesores p ON p.id=b.profesor_id
+      WHERE b.gimnasio_id=? AND b.dia=?
+      ORDER BY b.hora_inicio, p.apellido, p.nombre",
+    function($st) use($gimnasio_id,$filtra_dia){ $st->bind_param("is",$gimnasio_id,$filtra_dia); }
+  );
+} else {
+  $base_list = run_stmt($conexion,
+    "SELECT b.*, p.apellido, p.nombre
+       FROM gym_horarios_base b
+       LEFT JOIN profesores p ON p.id=b.profesor_id
+      WHERE b.gimnasio_id=?
+      ORDER BY FIELD(b.dia,'Lunes','Martes','Miércoles','Jueves','Viernes','Sábado','Domingo'),
+               b.hora_inicio, p.apellido, p.nombre",
+    function($st) use($gimnasio_id){ $st->bind_param("i",$gimnasio_id); }
+  );
+}
 
 $hoy = hoyYmd();
+
+/* ===================== CARGAR CACHES (rápido) ===================== */
+$occCache   = buildOcupacionCache($conexion,$gimnasio_id,$hoy);
+$fijosCache = buildFijosCache($conexion,$gimnasio_id,$hoy);
 
 ?><!DOCTYPE html>
 <html lang="es">
@@ -716,7 +776,6 @@ $hoy = hoyYmd();
     .inline-edit input[type="time"],
     .inline-edit input[type="number"]{ max-width: 140px; }
 
-    /* mini editor de fijo */
     .tiny{font-size:.85em;padding:.3rem .45rem}
     details.fijo-edit{display:inline-block;margin:.15rem 0 0 .25rem;}
     details.fijo-edit > summary{list-style:none;cursor:pointer;display:inline-block;padding:.05rem .4rem;border:1px solid #475569;border-radius:.4rem}
@@ -759,7 +818,7 @@ $hoy = hoyYmd();
 
       <div class="fila">
         <div class="dias">
-          <?php foreach(['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado','Domingo'] as $d): ?>
+          <?php foreach($DIAS_SEM as $d): ?>
             <label><input type="checkbox" name="dias_base[]" value="<?=$d?>"> <?=$d?></label>
           <?php endforeach; ?>
         </div>
@@ -794,7 +853,7 @@ $hoy = hoyYmd();
       <input type="hidden" name="__accion" value="alta_base">
       <label>Día:
         <select name="dia" required>
-          <?php foreach(['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado','Domingo'] as $d): ?>
+          <?php foreach($DIAS_SEM as $d): ?>
             <option value="<?=$d?>"><?=$d?></option>
           <?php endforeach; ?>
         </select>
@@ -821,7 +880,7 @@ $hoy = hoyYmd();
       <input type="hidden" name="__accion" value="editar_cupo_base">
       <label>Día:
         <select name="dia" required>
-          <?php foreach(['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado','Domingo'] as $d): ?>
+          <?php foreach($DIAS_SEM as $d): ?>
             <option value="<?=$d?>"><?=$d?></option>
           <?php endforeach; ?>
         </select>
@@ -875,9 +934,7 @@ $hoy = hoyYmd();
 
       <div class="fila">
         <div class="dias">
-          <?php
-          $diasTodos=['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado','Domingo'];
-          foreach($diasTodos as $d):
+          <?php foreach($DIAS_SEM as $d):
             $chk = in_array($d,$sel_dias,true) ? 'checked' : '';
           ?>
             <label><input type="checkbox" name="dias[]" value="<?=$d?>" <?=$chk?> onchange="submitPreview()"> <?=$d?></label>
@@ -917,6 +974,19 @@ $hoy = hoyYmd();
 
   <!-- 4) Ocupación actual por turno (base semanal) -->
   <div class="card">
+    <div class="fila" style="margin-top:.25rem">
+      <form method="get" action="horarios_gimnasio.php" class="inline">
+        <label>Filtrar por día:
+          <select name="dia" onchange="this.form.submit()">
+            <option value="">Todos</option>
+            <?php foreach($DIAS_SEM as $d): ?>
+              <option value="<?=$d?>" <?= $filtra_dia===$d?'selected':'' ?>><?=$d?></option>
+            <?php endforeach; ?>
+          </select>
+        </label>
+      </form>
+    </div>
+
     <h2>⏱️ Ocupación actual por turno (base semanal)</h2>
     <table>
       <tr>
@@ -934,14 +1004,33 @@ $hoy = hoyYmd();
         $dia = $b['dia'];
         $hora_ref = toHM($b['hora_inicio']); // usamos inicio como hora fija
         $prof_id = array_key_exists('profesor_id',$b) ? $b['profesor_id'] : null;
-        $profModo = ($prof_id === null) ? -1 : (int)$prof_id; // SIN profesor => contamos todos
 
         $cupo_base = (int)$b['cupo_maximo'];
-        $ocupados  = ocupacionFijaSemanal($conexion,$gimnasio_id,$profModo,$dia,$hora_ref,$hoy);
+
+        $occDia = $occCache[$dia][$hora_ref] ?? null;
+        if ($prof_id === null) {
+          // SIN profesor: contar TODOS (incluye NULL)
+          $ocupados = (int)($occDia['SUM_ALL'] ?? 0);
+          // Listado: concatenar NULL + todos los profes
+          $fijosData = [];
+          if(isset($fijosCache[$dia][$hora_ref])){
+            if(isset($fijosCache[$dia][$hora_ref]['NULL'])){
+              foreach($fijosCache[$dia][$hora_ref]['NULL'] as $r){ $fijosData[]=$r; }
+            }
+            foreach($fijosCache[$dia][$hora_ref] as $pid => $arr){
+              if($pid==='NULL') continue;
+              foreach($arr as $r){ $fijosData[]=$r; }
+            }
+          }
+        } else {
+          // CON profesor: solo ese profesor
+          $ocupados = (int)($occDia[(int)$prof_id] ?? 0);
+          $fijosData = $fijosCache[$dia][$hora_ref][(string)(int)$prof_id] ?? [];
+        }
+
         $restante  = max(0, $cupo_base - $ocupados);
-        $fijosData = fijosSemanalConDatos($conexion,$gimnasio_id,$profModo,$dia,$hora_ref,$hoy);
         $profn = h(trim(($b['apellido']??'').' '.($b['nombre']??''))) ?: '—';
-        $diasTodos=['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado','Domingo'];
+        $diasTodos = $DIAS_SEM;
       ?>
         <tr>
           <form method="post" action="horarios_gimnasio.php" class="inline-edit">
@@ -950,7 +1039,7 @@ $hoy = hoyYmd();
 
             <td>
               <select name="dia">
-                <?php foreach(['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado','Domingo'] as $dopt): ?>
+                <?php foreach($DIAS_SEM as $dopt): ?>
                   <option value="<?=$dopt?>" <?= $dopt===$dia?'selected':'' ?>><?=$dopt?></option>
                 <?php endforeach; ?>
               </select>
@@ -977,15 +1066,16 @@ $hoy = hoyYmd();
                 foreach ($fijosData as $fd) {
                   $nm = trim(($fd['apellido']??'').' '.($fd['nombre']??''));
                   $dias_actuales = json_decode($fd['dias_json'] ?? '[]', true) ?: [];
+                  $pidShow = is_null($fd['profesor_id']) ? '—' : (string)(int)$fd['profesor_id'];
                   ?>
                   <div class="pill">
-                    <?= h($nm) ?>
+                    <?= h($nm) ?> <span class="muted">(Prof: <?=$pidShow?>)</span>
                     <!-- eliminar fijo -->
                     <form method="post" action="horarios_gimnasio.php" style="display:inline" onsubmit="return confirm('¿Eliminar fijo de <?=h($nm)?>?');">
                       <input type="hidden" name="__accion" value="del_fijo">
                       <input type="hidden" name="cliente_id" value="<?= (int)$fd['cliente_id'] ?>">
                       <input type="hidden" name="hora_old" value="<?= h($hora_ref) ?>">
-                      <input type="hidden" name="profesor_old" value="<?= ($prof_id===null?'':(int)$prof_id) ?>">
+                      <input type="hidden" name="profesor_old" value="<?= is_null($fd['profesor_id']) ? '' : (int)$fd['profesor_id'] ?>">
                       <button class="tiny" title="Eliminar fijo">🗑️</button>
                     </form>
 
@@ -997,7 +1087,7 @@ $hoy = hoyYmd();
                           <input type="hidden" name="__accion" value="rep_fijo">
                           <input type="hidden" name="cliente_id" value="<?= (int)$fd['cliente_id'] ?>">
                           <input type="hidden" name="hora_old" value="<?= h($hora_ref) ?>">
-                          <input type="hidden" name="profesor_old" value="<?= ($prof_id===null?'':(int)$prof_id) ?>">
+                          <input type="hidden" name="profesor_old" value="<?= is_null($fd['profesor_id']) ? '' : (int)$fd['profesor_id'] ?>">
 
                           <label>Hora nueva:
                             <input type="time" name="hora_new" value="<?= h($hora_ref) ?>" required>
@@ -1045,7 +1135,10 @@ $hoy = hoyYmd();
         <tr><td colspan="9">Sin franjas cargadas.</td></tr>
       <?php } ?>
     </table>
-    <p class="muted">Si la franja <em>no</em> tiene profesor, se cuentan todos los fijos de ese día+hora. Si la franja tiene profesor, solo los fijos de ese profesor.</p>
+    <p class="muted">
+      Reglas: si la franja <strong>no</strong> tiene profesor, se cuentan todos los fijos (incluye sin profesor).
+      Si la franja tiene profesor, solo los fijos de ese profesor.
+    </p>
   </div>
 </div>
 </body>

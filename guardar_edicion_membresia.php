@@ -1,5 +1,8 @@
 <?php
-// guardar_edicion_membresia.php — Edita clases/vencimiento y actualiza turnos personalizados (profesor, rango, días/horas)
+// guardar_edicion_membresia.php
+// Edita clases/vencimiento y actualiza turnos personalizados (profesor, rango, días/horas)
+// Además: SINCRONIZA con gym_clientes_plan para que horarios_gimnasio.php descuente/ocupe cupos.
+
 if (session_status() === PHP_SESSION_NONE) session_start();
 require __DIR__ . '/conexion.php';
 
@@ -9,24 +12,30 @@ if (function_exists('mysqli_report')) { mysqli_report(MYSQLI_REPORT_OFF); }
 
 /* ===== Helpers ===== */
 function h($s){ return htmlspecialchars((string)$s, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'); }
-function hcol(mysqli $db, string $table, string $col): bool {
+function hcol($db, $table, $col){
+  if (!($db instanceof mysqli)) return false;
   $table = $db->real_escape_string($table);
   $col   = $db->real_escape_string($col);
   $res = $db->query("SHOW COLUMNS FROM `$table` LIKE '$col'");
   return ($res && $res->num_rows > 0);
 }
-function table_exists(mysqli $db, string $t): bool {
+function table_exists($db, $t){
+  if (!($db instanceof mysqli)) return false;
   $t = $db->real_escape_string($t);
   $q = $db->query("SHOW TABLES LIKE '$t'");
   return ($q && $q->num_rows > 0);
 }
-function valid_date($s): bool {
+function valid_date($s){
   if (!$s) return false;
   $d = DateTime::createFromFormat('Y-m-d', $s);
   return $d && $d->format('Y-m-d') === $s;
 }
 function clean_date($s){ return preg_replace('/[^0-9\-]/','', (string)$s); }
-function clean_time($s){ return preg_replace('/[^0-9:]/','', (string)$s); }
+function clean_time($s){
+  $t = preg_replace('/[^0-9:]/','', (string)$s);
+  if (strlen($t) === 5) $t .= ':00';
+  return $t;
+}
 
 /* ===== Gate de método ===== */
 if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'POST') {
@@ -39,9 +48,9 @@ $id             = (int)($_POST['id'] ?? 0);
 $gimnasio_id    = (int)($_POST['gimnasio_id'] ?? ($_SESSION['gimnasio_id'] ?? 0));
 $nuevas_clases  = isset($_POST['clases_disponibles']) ? (int)$_POST['clases_disponibles'] : 0;
 $nuevo_vto      = (string)($_POST['fecha_vencimiento'] ?? '');
-$turnos_json    = (string)($_POST['turnos_json'] ?? '[]');         // [{dow,hora,desde,hasta,profesor_id?}, ...]
-$pers_habilitar = isset($_POST['pers_habilitar']);                 // checkbox
-$borrar_pers    = !empty($_POST['borrar_personalizados']);         // checkbox
+$turnos_json    = (string)($_POST['turnos_json'] ?? '[]'); // [{dow,hora,desde,hasta,profesor_id?}, ...]
+$pers_habilitar = isset($_POST['pers_habilitar']);         // checkbox (recrear personalizados con lo enviado)
+$borrar_pers    = !empty($_POST['borrar_personalizados']); // checkbox (borrar personalizados existentes)
 
 if ($id <= 0 || $gimnasio_id <= 0) { http_response_code(400); exit('Datos inválidos'); }
 if ($nuevas_clases < 0) $nuevas_clases = 0;
@@ -49,6 +58,9 @@ if (!valid_date($nuevo_vto)) { http_response_code(400); exit('Fecha de vencimien
 
 $items = json_decode($turnos_json, true);
 if (!is_array($items)) $items = [];
+
+// Mapa DOW→ES (0..6)
+$MAP_DOW_ES = ['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'];
 
 try {
   $conexion->begin_transaction();
@@ -69,6 +81,9 @@ try {
   $stmt->close();
 
   if (!$mem) { throw new Exception("Membresía no encontrada"); }
+
+  $cliente_id = (int)$mem['cliente_id'];
+  $plan_id    = (int)$mem['plan_id'];
 
   // Validar que no se retrocede por detrás del inicio
   if (valid_date($mem['fecha_inicio']) && $nuevo_vto < $mem['fecha_inicio']) {
@@ -141,7 +156,7 @@ try {
     $w = [];
     if ($has_gim) $w[] = "gimnasio_id = ".$gimnasio_id;
     if ($has_mem) $w[] = "membresia_id = ".$id;
-    elseif ($has_cli) $w[] = "cliente_id = ".(int)$mem['cliente_id'];
+    elseif ($has_cli) $w[] = "cliente_id = ".$cliente_id;
     $where_sql = $w ? ("WHERE ".implode(" AND ", $w)) : "";
 
     // ¿Borrar existentes?
@@ -188,7 +203,7 @@ try {
           $types = $typesIns;
 
           if ($has_gim) $vals[] = $gimnasio_id;
-          if ($has_mem) $vals[] = $id; else if ($has_cli) $vals[] = (int)$mem['cliente_id'];
+          if ($has_mem) $vals[] = $id; else if ($has_cli) $vals[] = $cliente_id;
           if ($col_prof) { $vals[] = $prof; }
 
           $vals[] = $dow;   $types .= 'i';
@@ -211,6 +226,85 @@ try {
         $conexion->query("UPDATE `$fixed_table` SET `hasta` = '".$conexion->real_escape_string($nuevo_vto)."' $where_sql");
       }
     }
+  }
+
+  /* 5) === SINCRONIZAR con gym_clientes_plan (para que horarios_gimnasio.php descuente/ocupe) ===
+     Política:
+     - Si $pers_habilitar: reemplazamos los fijos del cliente en gym_clientes_plan por lo enviado.
+     - Si $borrar_pers y !pers_habilitar: eliminamos los fijos del cliente en gym_clientes_plan.
+     - Si solo se extendió vencimiento: actualizamos `hasta` de las filas actuales.
+  */
+
+  // ¿Existe la tabla destino?
+  if (table_exists($conexion, 'gym_clientes_plan')) {
+    // a) Borrar todo del cliente si se va a recrear o borrar
+    if ($pers_habilitar || $borrar_pers) {
+      $delSql = "DELETE FROM gym_clientes_plan WHERE gimnasio_id=? AND cliente_id=?";
+      $stDel = $conexion->prepare($delSql);
+      if ($stDel) {
+        $stDel->bind_param("ii", $gimnasio_id, $cliente_id);
+        $stDel->execute();
+        $stDel->close();
+      }
+    }
+
+    // b) Recrear desde $items (si corresponde)
+    if ($pers_habilitar && !empty($items)) {
+      // Agrupar por (hora, profesor_id, desde, hasta) → dias_json (Lunes..Domingo)
+      $grupos = []; // key => ['hora'=>..., 'prof'=>null|int, 'desde'=>..., 'hasta'=>..., 'dias'=>set()]
+      foreach ($items as $t) {
+        $dow   = isset($t['dow']) ? (int)$t['dow'] : -1;
+        $hora  = clean_time($t['hora']  ?? '');
+        $desde = clean_date($t['desde'] ?? '');
+        $hasta = clean_date($t['hasta'] ?? '');
+        $profRaw = isset($t['profesor_id']) ? $t['profesor_id'] : '';
+        $prof    = ($profRaw === '' || $profRaw === null) ? null : (int)$profRaw;
+
+        if ($dow < 0 || $dow > 6 || !$hora || !$desde || !$hasta) continue;
+
+        $diaEs = $MAP_DOW_ES[$dow];
+        $key = $hora.'|'.($prof===null?'NULL':$prof).'|'.$desde.'|'.$hasta;
+        if (!isset($grupos[$key])) {
+          $grupos[$key] = ['hora'=>$hora,'prof'=>$prof,'desde'=>$desde,'hasta'=>$hasta,'dias'=>[]];
+        }
+        $grupos[$key]['dias'][$diaEs] = true; // set
+      }
+
+      foreach ($grupos as $ginfo) {
+        $dias_json = json_encode(array_keys($ginfo['dias']), JSON_UNESCAPED_UNICODE);
+        if ($ginfo['prof'] === null) {
+          $sqlG = "INSERT INTO gym_clientes_plan (gimnasio_id, cliente_id, plan_id, desde, hasta, hora, dias_json, profesor_id)
+                   VALUES (?,?,?,?,?,?,?,NULL)
+                   ON DUPLICATE KEY UPDATE dias_json=VALUES(dias_json), hora=VALUES(hora)";
+          $stG = $conexion->prepare($sqlG);
+          if (!$stG) throw new Exception("Prepare gym_clientes_plan (NULL): ".$conexion->error);
+          $stG->bind_param("iiissss", $gimnasio_id, $cliente_id, $plan_id, $ginfo['desde'], $ginfo['hasta'], $ginfo['hora'], $dias_json);
+        } else {
+          $sqlG = "INSERT INTO gym_clientes_plan (gimnasio_id, cliente_id, plan_id, desde, hasta, hora, dias_json, profesor_id)
+                   VALUES (?,?,?,?,?,?,?,?)
+                   ON DUPLICATE KEY UPDATE dias_json=VALUES(dias_json), hora=VALUES(hora), profesor_id=VALUES(profesor_id)";
+          $stG = $conexion->prepare($sqlG);
+          if (!$stG) throw new Exception("Prepare gym_clientes_plan (prof): ".$conexion->error);
+          $stG->bind_param("iiissssi", $gimnasio_id, $cliente_id, $plan_id, $ginfo['desde'], $ginfo['hasta'], $ginfo['hora'], $dias_json, $ginfo['prof']);
+        }
+        if (!$stG->execute()) {
+          if ((int)$stG->errno !== 1062) { // si no es duplicado
+            throw new Exception("Exec gym_clientes_plan: ".$stG->error);
+          }
+        }
+        $stG->close();
+      }
+    } elseif (!$pers_habilitar && !$borrar_pers) {
+      // c) Solo actualizar vencimiento de lo existente (extensión)
+      $sqlUpG = "UPDATE gym_clientes_plan SET hasta=? WHERE gimnasio_id=? AND cliente_id=? AND hasta<?";
+      $stUpG = $conexion->prepare($sqlUpG);
+      if ($stUpG) {
+        $stUpG->bind_param("siis", $nuevo_vto, $gimnasio_id, $cliente_id, $nuevo_vto);
+        $stUpG->execute();
+        $stUpG->close();
+      }
+    }
+    // d) Si se pidió borrar y no recrear → ya se eliminaron en (a)
   }
 
   $conexion->commit();

@@ -1,5 +1,7 @@
 <?php
-// guardar_membresia.php — registra deuda/saldo en cc_movimientos (DEBE/HABER) + turnos fijos (con profesor)
+// guardar_membresia.php — registra deuda/saldo en cc_movimientos (DEBE/HABER) + turnos fijos
+// y SINCRONIZA en gym_clientes_plan para que horarios_gimnasio.php descuente cupo.
+
 if (session_status() === PHP_SESSION_NONE) session_start();
 require __DIR__ . '/conexion.php';
 
@@ -15,17 +17,19 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'POST') {
 
 /* ===== Helpers ===== */
 function h($s){ return htmlspecialchars((string)$s, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'); }
-function table_exists(mysqli $db, string $t): bool {
+function table_exists($db, $t){
+  if (!($db instanceof mysqli)) return false;
   $q = $db->query("SHOW TABLES LIKE '".$db->real_escape_string($t)."'");
   return ($q && $q->num_rows > 0);
 }
-function hcol(mysqli $db, string $table, string $col): bool {
+function hcol($db, $table, $col){
+  if (!($db instanceof mysqli)) return false;
   $table = $db->real_escape_string($table);
   $col   = $db->real_escape_string($col);
   $res = $db->query("SHOW COLUMNS FROM `$table` LIKE '$col'");
   return ($res && $res->num_rows > 0);
 }
-function pick_fixed_table(mysqli $db): ?string {
+function pick_fixed_table($db){
   foreach (['clientes_fijos','turnos_personalizados'] as $t) {
     if (table_exists($db, $t)) return $t;
   }
@@ -85,7 +89,7 @@ $fecha_vencimiento = ($fecha_venc_post === '' || $fecha_venc_post === null)
 $total_adicionales = 0.0;
 $adicionales_ids   = [];
 if (!empty($adicionales) && is_array($adicionales)) {
-  $adicionales_ids = array_values(array_filter(array_map('intval', $adicionales), fn($x)=>$x>0));
+  $adicionales_ids = array_values(array_filter(array_map('intval', $adicionales), function($x){ return $x>0; }));
   if ($adicionales_ids) {
     $ids_list = implode(',', $adicionales_ids);
     $sqlAd = "SELECT id, precio FROM planes_adicionales WHERE id IN ($ids_list) AND gimnasio_id = ?";
@@ -131,7 +135,6 @@ try {
   ");
   if (!$stmt) { throw new Exception("Prepare membresias: ".$conexion->error); }
 
-  // saldo_cc se actualizará abajo con (debe - haber) real
   $tmp_saldo_cc = 0.0;
 
   $types = "iissiddddsddi";
@@ -215,13 +218,13 @@ try {
   if (!$stmtUpd->execute()) { throw new Exception("Exec update saldo_cc: ".$stmtUpd->error); }
   $stmtUpd->close();
 
-  /* ===== 7.5) Insertar TURNOS FIJOS (si vinieron) =====
+  /* ===== 7.5) Insertar TURNOS FIJOS + SINCRONIZAR gym_clientes_plan =====
      JSON esperado por ítem: {dia, dow(0..6), hora(HH:MM), desde(YYYY-MM-DD), hasta(YYYY-MM-DD), profesor_id|null}
-     Tabla preferida: clientes_fijos. Alternativa: turnos_personalizados.
-     Columnas base: gimnasio_id, cliente_id, membresia_id, dow, hora, desde, hasta, creado_at
-     Columna profesor (si existe): profesor_id | profe_id | instructor_id | entrenador_id
+     - Guardamos en clientes_fijos/turnos_personalizados (si la tabla existe)
+     - Y además sincronizamos en gym_clientes_plan para que horarios_gimnasio.php descuente cupo
   */
   if (!empty($turnos_arr)) {
+    // --- (A) Guardar en tabla de fijos si existe (compatibilidad con tus tablas históricas) ---
     $fixed_table = pick_fixed_table($conexion);
     if ($fixed_table) {
       // Detectar columna de profesor
@@ -235,17 +238,12 @@ try {
       $typesIns = '';
       $valsIns  = [];
 
-      // columnas comunes (si existen en la tabla)
       if (hcol($conexion,$fixed_table,'gimnasio_id')) { $cols[]='gimnasio_id';   $typesIns.='i'; $valsIns[]=$gimnasio_id; }
       if (hcol($conexion,$fixed_table,'cliente_id'))  { $cols[]='cliente_id';    $typesIns.='i'; $valsIns[]=$cliente_id; }
       if (hcol($conexion,$fixed_table,'membresia_id')){ $cols[]='membresia_id';  $typesIns.='i'; $valsIns[]=$membresia_id; }
       if ($col_prof)                                   { $cols[]=$col_prof;       $typesIns.='i'; /* valor por fila */  }
       // siempre
       $cols = array_merge($cols, ['dow','hora','desde','hasta','creado_at']);
-      $typesTail = 'issss'; // dow(int), hora(str), desde(str), hasta(str), NOW()
-      // NOTA: agregaremos por fila: dow, hora, desde, hasta (NOW() no va en bind)
-
-      // construir placeholders
       $ph = implode(',', array_fill(0, count($cols)-1, '?')) . ',NOW()';
       $sqlFix = "INSERT INTO `$fixed_table` (".implode(',', $cols).") VALUES ($ph)";
       $stmtFix = $conexion->prepare($sqlFix);
@@ -254,38 +252,88 @@ try {
       foreach ($turnos_arr as $t) {
         $dow   = isset($t['dow']) ? (int)$t['dow'] : -1;
         $hora  = isset($t['hora']) ? preg_replace('/[^0-9:]/','', (string)$t['hora']) : '';
+        if (strlen($hora)===5) $hora .= ':00';
         $desde = isset($t['desde']) ? preg_replace('/[^0-9\-]/','', (string)$t['desde']) : '';
         $hasta = isset($t['hasta']) ? preg_replace('/[^0-9\-]/','', (string)$t['hasta']) : '';
         $prof  = isset($t['profesor_id']) && $t['profesor_id'] !== '' ? (int)$t['profesor_id'] : 0;
 
         if ($dow < 0 || $dow > 6 || !$hora || !$desde || !$hasta) continue;
 
-        // valores por fila
-        $vals = $valsIns;          // gym, cliente, membresia (si corresponden)
-        $types = $typesIns;
-
+        $vals = $valsIns; $types = $typesIns;
         if ($col_prof) { $vals[] = $prof; $types .= 'i'; }
-
         $vals[] = $dow;   $types .= 'i';
         $vals[] = $hora;  $types .= 's';
         $vals[] = $desde; $types .= 's';
         $vals[] = $hasta; $types .= 's';
 
-        // bind dinámico
         $refs=[]; $refs[]=&$types;
         foreach ($vals as $k=>$v){ $refs[]=&$vals[$k]; }
         if (!call_user_func_array([$stmtFix,'bind_param'],$refs)) {
           throw new Exception("bind_param $fixed_table falló");
         }
         if (!$stmtFix->execute()) {
-          // índice único duplicado -> ignorar
-          if ((int)$stmtFix->errno === 1062) { continue; }
+          if ((int)$stmtFix->errno === 1062) { continue; } // duplicado: ignorar
           throw new Exception("Exec $fixed_table: ".$stmtFix->error);
         }
       }
       $stmtFix->close();
     }
-    // si no hay tabla de fijos, se omite sin romper
+
+    // --- (B) SINCRONIZAR a gym_clientes_plan (lo que hace “descontar” cupo/ocupar) ---
+    // Agrupar por (hora, profesor_id, desde, hasta) y juntar días en español (dias_json)
+    $mapDowToEs = ['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado']; // 0..6
+    $grupos = []; // key => ['hora'=>..., 'prof'=>null|int, 'desde'=>..., 'hasta'=>..., 'dias'=>set()]
+    foreach ($turnos_arr as $t) {
+      $dow   = isset($t['dow']) ? (int)$t['dow'] : -1;
+      $hora  = isset($t['hora']) ? preg_replace('/[^0-9:]/','', (string)$t['hora']) : '';
+      if (strlen($hora)===5) $hora .= ':00';
+      $desde = isset($t['desde']) ? preg_replace('/[^0-9\-]/','', (string)$t['desde']) : '';
+      $hasta = isset($t['hasta']) ? preg_replace('/[^0-9\-]/','', (string)$t['hasta']) : '';
+      $profRaw  = isset($t['profesor_id']) ? $t['profesor_id'] : '';
+      $prof = ($profRaw === '' || $profRaw === null) ? null : (int)$profRaw;
+
+      if ($dow < 0 || $dow > 6 || !$hora || !$desde || !$hasta) continue;
+
+      $diaEs = $mapDowToEs[$dow];
+      $key = $hora.'|'.($prof===null?'NULL':$prof).'|'.$desde.'|'.$hasta;
+      if (!isset($grupos[$key])) {
+        $grupos[$key] = ['hora'=>$hora,'prof'=>$prof,'desde'=>$desde,'hasta'=>$hasta,'dias'=>[]];
+      }
+      $grupos[$key]['dias'][$diaEs] = true; // set
+    }
+
+    // Insertar/actualizar filas en gym_clientes_plan (una por grupo)
+    foreach ($grupos as $gk => $ginfo) {
+      $dias_json = json_encode(array_keys($ginfo['dias']), JSON_UNESCAPED_UNICODE);
+      if ($ginfo['prof'] === null) {
+        // profesor_id NULL
+        $sqlG = "INSERT INTO gym_clientes_plan (gimnasio_id, cliente_id, plan_id, desde, hasta, hora, dias_json, profesor_id)
+                 VALUES (?,?,?,?,?,?,?,NULL)
+                 ON DUPLICATE KEY UPDATE dias_json=VALUES(dias_json), hora=VALUES(hora)";
+        $stG = $conexion->prepare($sqlG);
+        if (!$stG) { throw new Exception("Prepare gym_clientes_plan (NULL): ".$conexion->error); }
+        $stG->bind_param(
+          "iiissss",
+          $gimnasio_id, $cliente_id, $plan_id, $ginfo['desde'], $ginfo['hasta'], $ginfo['hora'], $dias_json
+        );
+      } else {
+        $sqlG = "INSERT INTO gym_clientes_plan (gimnasio_id, cliente_id, plan_id, desde, hasta, hora, dias_json, profesor_id)
+                 VALUES (?,?,?,?,?,?,?,?)
+                 ON DUPLICATE KEY UPDATE dias_json=VALUES(dias_json), hora=VALUES(hora), profesor_id=VALUES(profesor_id)";
+        $stG = $conexion->prepare($sqlG);
+        if (!$stG) { throw new Exception("Prepare gym_clientes_plan (prof): ".$conexion->error); }
+        $stG->bind_param(
+          "iiissssi",
+          $gimnasio_id, $cliente_id, $plan_id, $ginfo['desde'], $ginfo['hasta'], $ginfo['hora'], $dias_json, $ginfo['prof']
+        );
+      }
+      if (!$stG->execute()) {
+        if ((int)$stG->errno !== 1062) { // si no es duplicado
+          throw new Exception("Exec gym_clientes_plan: ".$stG->error);
+        }
+      }
+      $stG->close();
+    }
   }
 
   $conexion->commit();
