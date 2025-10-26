@@ -109,7 +109,7 @@ $disabledIfNoGym = ($gid > 0) ? [] : ['class'=>'disabled','title'=>'Seleccioná 
 /* 1) Emitir QR del Gimnasio */
 if (isset($MENU['panel_gimnasio'])) {
   $optsQR = $disabledIfNoGym;
-  $MENU['panel_gimnasio']['items'][] = ['🏷️ Emitir QR del Gimnasio','qr_issue_gimnasio.php'.$gidParam,$optsQR];
+  $MENU['asistencias']['items'][] = ['🏷️ Emitir QR del Gimnasio','qr_issue_gimnasio.php'.$gidParam,$optsQR];
 }
 
 /* 2) Accesos en vivo + 3) Check-in público */
