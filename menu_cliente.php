@@ -17,7 +17,7 @@ if (!function_exists('render_menu_cliente')) {
       'progreso' => ['📈','Ver Progreso','form_progreso.php'],
       'evol'     => ['📊','Evolución','ver_progreso_cliente.php'],
       'tienda'   => ['🛍️','Indumentaria','tienda_indumentaria.php'],
-      'ia'       => ['🤖','Asistente IA','asistente_ia.php'],
+      'ia'       => ['🤖','Asistente IA','asistente_ia_api.php'],
       'cena'     => ['🍽️','Cena Fin de Año','cena_fin_anio.php'],
       'qrmaq'    => ['🧰','QR de Máquinas','cliente_qr_maquinas.php'],
       'salir'    => ['🚪','Salir','cliente_acceso.php?logout=1'],
