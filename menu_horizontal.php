@@ -22,110 +22,128 @@ if (!function_exists('gymFlag')) {
     return $r['valor'] ?? $def;
   }
 }
+
 $gimnasio_id = (int)($_SESSION['gimnasio_id'] ?? 0);
 $horariosOn  = ($gimnasio_id && isset($conexion) && $conexion instanceof mysqli && gymFlag($conexion,$gimnasio_id,'horarios_gym_activo','0')==='1');
 
-/** Menú base **/
-$MENU = [
-  'panel_gimnasio' => ['label'=>'🏢 Panel Gimnasio','perm'=>'panel_gimnasio','items'=>[
-    ['Dashboard','panel_gimnasios.php'],
-    ['Agregar Gimnasio','agregar_gimnasio.php'],
-    ['Renovar Plan','renovar_gimnasio.php'],
-  ]],
-  'clientes' => ['label'=>'👤 Clientes','perm'=>'clientes','items'=>[
-    ['Ver Clientes','ver_clientes.php'],
-    ['Agregar Cliente','agregar_cliente.php'],
-    ['🏷️ QR de Máquinas','maquinas_qr.php'],
-    ['📈 Seguimiento de alumnos','profesor_seguimiento.php'],
-  ]],
-  'membresias' => ['label'=>'📅 Membresías','perm'=>'membresias','items'=>[
-    ['Ver Membresías','ver_membresias.php'],
-    ['Agregar Membresía','nueva_membresia.php'],
-    ['Disciplinas','disciplinas.php'],
-    ['Planes','planes.php'],
-    ['Adicionales','adicionales.php'],
-    ['🍽️ Cena (Admin)','admin_cena.php'],
-  ]],
-  'pagos' => ['label'=>'💳 Pagos','perm'=>'pagos','items'=>[
-    ['Pagos Pendientes','ver_pagos_pendientes.php'],
-    ['Alias','config_alias.php'],
-    ['Pagos del Mes','ver_pagos_mes.php'],
-    ['Pagos Cuenta Corriente','ver_cuentas_corrientes.php'],
-    ['Gastos','gastos.php'],
-  ]],
-  'asistencias' => ['label'=>'🧍‍♂️ Asistencias','perm'=>'asistencias','items'=>[
-    ['Ver Asistencias','ver_asistencia.php'],
-    ['Registrar Asistencia','registrar_asistencia.php',[
-      'popup'=>true,'name'=>'asistenciaWin','features'=>'width=1200,height=800,menubar=no,toolbar=no,location=no,status=no,scrollbars=yes,resizable=yes'
-    ]],
-    ['Escaneo QR','scanner_qr.php'],
-    ['Asistencia Profesores','ver_asistencias_profesor.php'],
-  ]],
-  'ventas' => ['label'=>'🛒 Ventas','perm'=>'ventas','items'=>[
-    ['Agregar Productos','agregar_producto.php'],
-    ['Ventas Protecciones','ventas_proteccion.php'],
-    ['Ventas Suplementos','ventas_suplementos.php'],
-    ['Ventas Indumentaria','ventas_indumentaria.php'],
-    ['Ver Productos','ver_productos.php'],
-    ['Ver Facturas','ver_facturas.php'],
-    ['Promociones','promociones_admin.php'],
-    ['🛍️ Indumentaria (Admin)','admin_indum.php'],
-    ['🧾 Pedidos indumentaria','admin_pedidos_indum.php'],
-  ]],
-  'profesores' => ['label'=>'👨‍🏫 Profesores','perm'=>'profesores','items'=>[
-    ['Agregar Profesor','agregar_profesor.php'],
-    ['Panel','login_profesor.php'],
-    ['Ver Profesores','ver_profesores.php'],
-    ['Turnos Profesores','turnos_profesor.php'],
-    ['Precio de Horas','editar_tarifa_profesor.php'],
-    ['Reporte de Horas','reporte_horas_profesor.php'],
-    ['Enrolar huella','biometria/enrolar_profesores.php'],
-  ]],
-  'panel_cliente' => ['label'=>'📲 Panel Cliente','perm'=>'panel_cliente','items'=>[
-    ['Panel','cliente_acceso.php'],
-    ['Panel Configuración','panel_configuracion.php'],
-  ]],
-  'eventos' => ['label'=>'🎪 Eventos','perm'=>'eventos_panel','items'=>[
-    ['Panel de Eventos','panel_eventos.php'],
-    ['Acceso a Panel','login_evento.php'],
-    ['Eventos Públicos','eventos_publicos.php',['extra_perm'=>'eventos']],
-  ]],
-];
-
-/* Inyección: Horarios del Gimnasio (todos lo ven; atenuado si flag off) */
-if (isset($MENU['clientes'])) {
-  if ($horariosOn) {
-    $MENU['clientes']['items'][] = ['🗓️ Horarios del Gimnasio','horarios_gimnasio.php'];
-  } else {
-    $MENU['clientes']['items'][] = ['🔒 Horarios del Gimnasio','horarios_gimnasio.php',['class'=>'disabled','title'=>'Módulo apagado']];
-  }
-}
-
-/* NUEVO: Accesos / Check-in / Emitir QR (sin admin) */
-$gid = (int)($_SESSION['gimnasio_id'] ?? 0);
-$gidParam = $gid > 0 ? ('?g='.$gid) : '';
+/* ===== Helpers de URL y estado ===== */
+$gid       = $gimnasio_id;
+$gidParam  = $gid > 0 ? ('?g='.$gid) : '';
 $disabledIfNoGym = ($gid > 0) ? [] : ['class'=>'disabled','title'=>'Seleccioná un gimnasio para habilitar'];
 
-/* 1) Emitir QR del Gimnasio */
-if (isset($MENU['panel_gimnasio'])) {
-  $optsQR = $disabledIfNoGym;
-  $MENU['panel_gimnasio']['items'][] = ['🏷️ Emitir QR del Gimnasio','qr_issue_gimnasio.php'.$gidParam,$optsQR];
+/* ===== Secciones base ===== */
+$SEC_PANEL_GYM = ['label'=>'🏢 Panel Gimnasio','perm'=>'panel_gimnasio','items'=>[
+  ['Dashboard','panel_gimnasios.php'],
+  ['Agregar Gimnasio','agregar_gimnasio.php'],
+  ['Renovar Plan','renovar_gimnasio.php'],
+]];
+
+$SEC_CLIENTES = ['label'=>'👤 Clientes','perm'=>'clientes','items'=>[
+  ['Ver Clientes','ver_clientes.php'],
+  ['Agregar Cliente','agregar_cliente.php'],
+  ['🏷️ QR de Máquinas','maquinas_qr.php'],
+  ['📈 Seguimiento de alumnos','profesor_seguimiento.php'],
+]];
+
+if ($horariosOn) {
+  $SEC_CLIENTES['items'][] = ['🗓️ Horarios del Gimnasio','horarios_gimnasio.php'];
+} else {
+  $SEC_CLIENTES['items'][] = ['🔒 Horarios del Gimnasio','horarios_gimnasio.php',['class'=>'disabled','title'=>'Módulo apagado']];
 }
 
-/* 2) Accesos en vivo + 3) Check-in público */
-if (isset($MENU['asistencias'])) {
-  $optsPanel = array_merge($disabledIfNoGym, [
-    'popup'=>true,'name'=>'accesosLive',
-    'features'=>'width=1200,height=800,menubar=no,toolbar=no,location=no,status=no,scrollbars=yes,resizable=yes'
-  ]);
-  $MENU['asistencias']['items'][] = ['🟢 Accesos en vivo','accesos_gimnasio.php'.$gidParam,$optsPanel];
+$SEC_MEMBRESIAS = ['label'=>'📅 Membresías','perm'=>'membresias','items'=>[
+  ['Ver Membresías','ver_membresias.php'],
+  ['Agregar Membresía','nueva_membresia.php'],
+  ['Disciplinas','disciplinas.php'],
+  ['Planes','planes.php'],
+  ['Adicionales','adicionales.php'],
+  ['🍽️ Cena (Admin)','admin_cena.php'],
+]];
 
-  $optsPub = array_merge($disabledIfNoGym, [
+$SEC_PAGOS = ['label'=>'💳 Pagos','perm'=>'pagos','items'=>[
+  ['Pagos Pendientes','ver_pagos_pendientes.php'],
+  ['Alias','config_alias.php'],
+  ['Pagos del Mes','ver_pagos_mes.php'],
+  ['Pagos Cuenta Corriente','ver_cuentas_corrientes.php'],
+  ['Gastos','gastos.php'],
+]];
+
+/* ===== NUEVO BLOQUE: QR Ingresos (entre Pagos y Asistencias) ===== */
+$SEC_QR = ['label'=>'🔳 QR Ingresos','perm'=>'asistencias','items'=>[
+  // 1) Check-in QR (público)
+  ['📳 Check-in QR (público)','gym_qr_checkin.php'.$gidParam, array_merge($disabledIfNoGym, [
     'popup'=>true,'name'=>'checkinPublic',
     'features'=>'width=460,height=820,menubar=no,toolbar=no,location=no,status=no,scrollbars=yes,resizable=yes'
-  ]);
-  $MENU['asistencias']['items'][] = ['📳 Check-in público (QR)','gym_qr_checkin.php'.$gidParam,$optsPub];
-}
+  ])],
+  // 2) Registro online
+  ['📝 Registro Online','registro_online.php'.$gidParam, array_merge($disabledIfNoGym, [
+    'popup'=>true,'name'=>'registroOnline',
+    'features'=>'width=520,height=820,menubar=no,toolbar=no,location=no,status=no,scrollbars=yes,resizable=yes'
+  ])],
+  // 3) Accesos en vivo (panel con logo/keepalive)
+  ['🟢 Accesos en vivo','panel_accesos.php'.$gidParam, array_merge($disabledIfNoGym, [
+    'popup'=>true,'name'=>'accesosLive',
+    'features'=>'width=1200,height=800,menubar=no,toolbar=no,location=no,status=no,scrollbars=yes,resizable=yes'
+  ])],
+]];
+
+$SEC_ASISTENCIAS = ['label'=>'🧍‍♂️ Asistencias','perm'=>'asistencias','items'=>[
+  ['Ver Asistencias','ver_asistencia.php'],
+  ['Registrar Asistencia','registrar_asistencia.php',[
+    'popup'=>true,'name'=>'asistenciaWin','features'=>'width=1200,height=800,menubar=no,toolbar=no,location=no,status=no,scrollbars=yes,resizable=yes'
+  ]],
+  ['Escaneo QR','scanner_qr.php'],
+  ['Asistencia Profesores','ver_asistencias_profesor.php'],
+]];
+
+$SEC_VENTAS = ['label'=>'🛒 Ventas','perm'=>'ventas','items'=>[
+  ['Agregar Productos','agregar_producto.php'],
+  ['Ventas Protecciones','ventas_proteccion.php'],
+  ['Ventas Suplementos','ventas_suplementos.php'],
+  ['Ventas Indumentaria','ventas_indumentaria.php'],
+  ['Ver Productos','ver_productos.php'],
+  ['Ver Facturas','ver_facturas.php'],
+  ['Promociones','promociones_admin.php'],
+  ['🛍️ Indumentaria (Admin)','admin_indum.php'],
+  ['🧾 Pedidos indumentaria','admin_pedidos_indum.php'],
+]];
+
+$SEC_PROFES = ['label'=>'👨‍🏫 Profesores','perm'=>'profesores','items'=>[
+  ['Agregar Profesor','agregar_profesor.php'],
+  ['Panel','login_profesor.php'],
+  ['Ver Profesores','ver_profesores.php'],
+  ['Turnos Profesores','turnos_profesor.php'],
+  ['Precio de Horas','editar_tarifa_profesor.php'],
+  ['Reporte de Horas','reporte_horas_profesor.php'],
+  ['Enrolar huella','biometria/enrolar_profesores.php'],
+]];
+
+$SEC_PANEL_CLIENTE = ['label'=>'📲 Panel Cliente','perm'=>'panel_cliente','items'=>[
+  ['Panel','cliente_acceso.php'],
+  ['Panel Configuración','panel_configuracion.php'],
+]];
+
+$SEC_EVENTOS = ['label'=>'🎪 Eventos','perm'=>'eventos_panel','items'=>[
+  ['Panel de Eventos','panel_eventos.php'],
+  ['Acceso a Panel','login_evento.php'],
+  ['Eventos Públicos','eventos_publicos.php',['extra_perm'=>'eventos']],
+]];
+
+/* ===== Orden final de secciones (QR Ingresos va entre Pagos y Asistencias) ===== */
+$MENU = [
+  'panel_gimnasio' => $SEC_PANEL_GYM,
+  'clientes'       => $SEC_CLIENTES,
+  'membresias'     => $SEC_MEMBRESIAS,
+  'pagos'          => $SEC_PAGOS,
+
+  'qr_ingresos'    => $SEC_QR,          // ⬅️ NUEVO BLOQUE AQUÍ
+
+  'asistencias'    => $SEC_ASISTENCIAS,
+  'ventas'         => $SEC_VENTAS,
+  'profesores'     => $SEC_PROFES,
+  'panel_cliente'  => $SEC_PANEL_CLIENTE,
+  'eventos'        => $SEC_EVENTOS,
+];
 
 $SALIDA = ['label'=>'❌ Cerrar','items'=>[
   ['Volver al Inicio','index.php'],
@@ -269,8 +287,8 @@ function render_menu_mobile($MENU,$SALIDA){
       const finalFeats = `${base},left=${left},top=${top}`;
       let win = opened.get(winName);
       if (win && !win.closed) { try{ win.focus(); win.location.href = href; }catch{} }
-      else { win = window.open(href, winName, finalFeats); if (win) { try{ win.opener=null; }catch{} opened.set(winName,win); try{ win.focus(); }catch{} } else { window.open(href,'_blank','noopener'); } }
-    });
+      else { win = window.open(href, winName, finalFeats); if (win) { try{ win.opener=null; }catch{} opened.set(winName,win); try{ win.focus(); }catch{} } else { window.open(href,'_blank','noopener'); }
+    }});
   })();
 </script>
 </head>
