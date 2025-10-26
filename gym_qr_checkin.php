@@ -2,15 +2,9 @@
 /* ============================================================
    gym_qr_checkin.php — Check-in por QR (MultiGimnasio)
    Modo simple: SOLO DNI (sin PIN ni OTP)
-   URL: .../gym_qr_checkin.php?g=<g>&exp=<ISO-UTC>&sig=<hex>
+   Novedad: Recordar DNI en el dispositivo (localStorage) y auto-checkin
 
-   - Firma HMAC por gimnasio (si hay qr_secret).
-   - Geocerca opcional (lat/lon + radio en metros).
-   - Autologin por cookie (si ya quedó "Recordar").
-   - Anti-doble ingreso (ventana minutos).
-   - Webhook (POST JSON) tras check-in OK.
-   - Descuenta 1 clase en membresias.clases_disponibles (idempotente).
-   - UI mobile-first con logo + nombre del gimnasio (columnas: gimnasios.nombre, gimnasios.logo).
+   URL: .../gym_qr_checkin.php?g=<g>&exp=<ISO-UTC>&sig=<hex>
    ============================================================ */
 
 if (session_status() === PHP_SESSION_NONE) session_start();
@@ -57,37 +51,26 @@ if (!empty($gym['qr_secret'])) {
   if ($exp_ts === false || time() > $exp_ts) { http_response_code(403); exit('❌ QR vencido'); }
 }
 
-/* ===== Marca (nombre/logo) — usa gimnasios.nombre y gimnasios.logo ===== */
+/* ===== Marca (nombre/logo) ===== */
 function resolver_logo_gimnasio(?string $logoRaw): ?string {
   $logoRaw = trim((string)$logoRaw);
   if ($logoRaw === '') return null;
-
-  if (preg_match('#^(https?:)?//#i', $logoRaw) || str_starts_with($logoRaw, 'data:')) {
-    return $logoRaw; // URL absoluta o data URI
-  }
-
+  if (preg_match('#^(https?:)?//#i', $logoRaw) || str_starts_with($logoRaw, 'data:')) return $logoRaw;
   $candidatos = [
     __DIR__ . '/uploads/gimnasios/' . $logoRaw => '/uploads/gimnasios/' . rawurlencode($logoRaw),
     __DIR__ . '/img/' . $logoRaw              => '/img/' . rawurlencode($logoRaw),
     __DIR__ . '/' . ltrim($logoRaw, '/\\')    => '/' . ltrim($logoRaw, '/\\'),
   ];
   foreach ($candidatos as $fs => $url) {
-    if (is_file($fs)) {
-      $v = @filemtime($fs) ?: time();
-      return $url . '?v=' . $v; // cache-busting
-    }
+    if (is_file($fs)) return $url . '?v=' . ((int)@filemtime($fs));
   }
-  return $logoRaw ?: null; // último recurso
+  return $logoRaw ?: null;
 }
-$nombre_gimnasio = 'Gimnasio';
-$logo_gimnasio   = null;
-if (!empty($gym['nombre'])) $nombre_gimnasio = $gym['nombre'];
-if (!empty($gym['logo']))   $logo_gimnasio   = resolver_logo_gimnasio($gym['logo']);
+$nombre_gimnasio = !empty($gym['nombre']) ? $gym['nombre'] : 'Gimnasio';
+$logo_gimnasio   = !empty($gym['logo'])   ? resolver_logo_gimnasio($gym['logo']) : null;
 if ($logo_gimnasio === null) {
   $fallback = __DIR__ . '/img/logo-default.png';
-  if (is_file($fallback)) {
-    $logo_gimnasio = '/img/logo-default.png?v=' . (@filemtime($fallback) ?: time());
-  }
+  if (is_file($fallback)) $logo_gimnasio = '/img/logo-default.png?v=' . ((int)@filemtime($fallback));
 }
 
 /* ===== BD: clientes ===== */
@@ -106,7 +89,7 @@ function find_cliente_por_dni(mysqli $db, int $gimnasio_id, ?string $dni){
   return $rs && $rs->num_rows ? $rs->fetch_assoc() : null;
 }
 
-/* ===== BD: membresías (usa SIEMPRE gimnasio_id) ===== */
+/* ===== BD: membresías ===== */
 function mem_row_es_activa(array $m): bool {
   $ok_estado = true;
   if (array_key_exists('activa',$m) && $m['activa'] !== null && $m['activa']!=='') $ok_estado = ((string)$m['activa'] === '1');
@@ -142,7 +125,6 @@ function mem_find_activa(mysqli $db, int $gimnasio_id, int $cliente_id): ?array 
   $m = $rs->fetch_assoc();
   return mem_row_es_activa($m) ? $m : null;
 }
-/** Idempotente por acceso_id; descuenta 1 si hay stock > 0 y loguea */
 function mem_aplicar_consumo(mysqli $db, int $gimnasio_id, int $cliente_id, ?int $acceso_id=null): array {
   if (!is_null($acceso_id)) {
     $chk = $db->query("SELECT id FROM membresia_consumos WHERE acceso_id={$acceso_id} LIMIT 1");
@@ -150,20 +132,18 @@ function mem_aplicar_consumo(mysqli $db, int $gimnasio_id, int $cliente_id, ?int
   }
   $mem = mem_find_activa($db, $gimnasio_id, $cliente_id);
   if (!$mem) return ['ok'=>false, 'msg'=>'Sin membresía activa'];
-
   $mem_id = (int)$mem['id'];
   $db->query("UPDATE membresias
               SET clases_disponibles = CASE WHEN clases_disponibles>0 THEN clases_disponibles-1 ELSE 0 END
               WHERE id={$mem_id} AND gimnasio_id={$gimnasio_id} AND clases_disponibles>0");
   if ($db->affected_rows === 0) return ['ok'=>false, 'msg'=>'Sin clases disponibles'];
-
   $acc = is_null($acceso_id) ? "NULL" : (int)$acceso_id;
   $db->query("INSERT INTO membresia_consumos (gimnasio_id, cliente_id, membresia_id, acceso_id, origen)
               VALUES ({$gimnasio_id}, {$cliente_id}, {$mem_id}, {$acc}, 'checkin')");
   return ['ok'=>true, 'msg'=>'Clase descontada'];
 }
 
-/* ===== Accesos: anti-doble y registrar (robusto + debug) ===== */
+/* ===== Accesos ===== */
 function pudo_registrar(mysqli $db, int $cliente_id, int $gimnasio_id, int $min_bloqueo): bool{
   $sql="SELECT id FROM accesos_gimnasio
         WHERE cliente_id={$cliente_id} AND gimnasio_id={$gimnasio_id}
@@ -189,7 +169,6 @@ function registrar_acceso(mysqli $db, int $cliente_id, int $gimnasio_id, string 
   $values = "{$cliente_id}, {$gimnasio_id}, NOW(), ".qv($db,$metodo);
   if ($hasLatLon['lat']) { $fields .= ", lat"; $values .= ", ".(is_null($lat) ? "NULL" : (float)$lat); }
   if ($hasLatLon['lon']) { $fields .= ", lon"; $values .= ", ".(is_null($lon) ? "NULL" : (float)$lon); }
-
   $sql="INSERT INTO accesos_gimnasio ({$fields}) VALUES ({$values})";
   if (!$db->query($sql)) {
     $msg = "INSERT acceso FAILED: ".$db->error." | SQL=".$sql;
@@ -243,17 +222,17 @@ if ($cliente_id_sesion>0){
     $lonReq = isset($_POST['lon']) ? (float)$_POST['lon'] : (isset($_GET['lon'])?(float)$_GET['lon']:null);
     if (!is_null($gym['geofence_radius_m']) && $gym['lat']!==null && $gym['lon']!==null) {
       $dist = haversine_m((float)$gym['lat'], (float)$gym['lon'], $latReq, $lonReq);
-      if ($dist===null) { render_page_form($nombre_gimnasio,$logo_gimnasio,"📍 Necesitamos tu ubicación para validar el ingreso.", false, ['need_geo'=>true]); exit; }
+      if ($dist===null) { render_page_form($nombre_gimnasio,$logo_gimnasio,"📍 Necesitamos tu ubicación para validar el ingreso.", false, ['need_geo'=>true, 'g'=>$gimnasio_id]); exit; }
       if ($dist > (int)$gym['geofence_radius_m']) {
-        render_page_form($nombre_gimnasio,$logo_gimnasio,"🚫 Fuera del área del gimnasio (".round($dist)." m). Acercate para marcar ingreso.", false, ['need_geo'=>true]); exit;
+        render_page_form($nombre_gimnasio,$logo_gimnasio,"🚫 Fuera del área del gimnasio (".round($dist)." m). Acercate para marcar ingreso.", false, ['need_geo'=>true, 'g'=>$gimnasio_id]); exit;
       }
     }
 
     if (!tiene_membresia_activa($conexion,$cliente_id_sesion,$gimnasio_id)){
-      render_page_form($nombre_gimnasio,$logo_gimnasio,"⚠️ Membresía no activa o vencida. Acercate a recepción.", false); exit;
+      render_page_form($nombre_gimnasio,$logo_gimnasio,"⚠️ Membresía no activa o vencida. Acercate a recepción.", false, ['g'=>$gimnasio_id]); exit;
     }
     if (!pudo_registrar($conexion,$cliente_id_sesion,$gimnasio_id,$REINGRESO_BLOQUEO_MIN)){
-      render_page_form($nombre_gimnasio,$logo_gimnasio,"⏱️ Ya registraste un ingreso hace poco. Esperá {$REINGRESO_BLOQUEO_MIN} min.", false); exit;
+      render_page_form($nombre_gimnasio,$logo_gimnasio,"⏱️ Ya registraste un ingreso hace poco. Esperá {$REINGRESO_BLOQUEO_MIN} min.", false, ['g'=>$gimnasio_id]); exit;
     }
     $acceso_id = registrar_acceso($conexion,$cliente_id_sesion,$gimnasio_id,'QR-GYM/DNI',$latReq,$lonReq);
     $ok = $acceso_id>0;
@@ -278,24 +257,24 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && isset($_POST['dni'])){
   $latReq = isset($_POST['lat']) ? (float)$_POST['lat'] : null;
   $lonReq = isset($_POST['lon']) ? (float)$_POST['lon'] : null;
 
-  if (!$dni){ render_page_form($nombre_gimnasio,$logo_gimnasio,"❌ Ingresá tu DNI.", false, ['need_geo'=>true]); exit; }
+  if (!$dni){ render_page_form($nombre_gimnasio,$logo_gimnasio,"❌ Ingresá tu DNI.", false, ['need_geo'=>true, 'g'=>$gimnasio_id]); exit; }
 
   $cli = find_cliente_por_dni($conexion,$gimnasio_id,$dni);
-  if (!$cli){ render_page_form($nombre_gimnasio,$logo_gimnasio,"❌ No encontramos un cliente con ese DNI en este gimnasio.", false, ['need_geo'=>true]); exit; }
+  if (!$cli){ render_page_form($nombre_gimnasio,$logo_gimnasio,"❌ No encontramos un cliente con ese DNI en este gimnasio.", false, ['need_geo'=>true, 'g'=>$gimnasio_id]); exit; }
 
   if (!is_null($gym['geofence_radius_m']) && $gym['lat']!==null && $gym['lon']!==null) {
     $dist = haversine_m((float)$gym['lat'], (float)$gym['lon'], $latReq, $lonReq);
-    if ($dist===null) { render_page_form($nombre_gimnasio,$logo_gimnasio,"📍 Necesitamos tu ubicación para validar el ingreso.", false, ['need_geo'=>true]); exit; }
+    if ($dist===null) { render_page_form($nombre_gimnasio,$logo_gimnasio,"📍 Necesitamos tu ubicación para validar el ingreso.", false, ['need_geo'=>true, 'g'=>$gimnasio_id]); exit; }
     if ($dist > (int)$gym['geofence_radius_m']) {
-      render_page_form($nombre_gimnasio,$logo_gimnasio,"🚫 Fuera del área del gimnasio (".round($dist)." m). Acercate para marcar ingreso.", false, ['need_geo'=>true]); exit;
+      render_page_form($nombre_gimnasio,$logo_gimnasio,"🚫 Fuera del área del gimnasio (".round($dist)." m). Acercate para marcar ingreso.", false, ['need_geo'=>true, 'g'=>$gimnasio_id]); exit;
     }
   }
 
   if (!tiene_membresia_activa($conexion,(int)$cli['id'],$gimnasio_id)){
-    render_page_form($nombre_gimnasio,$logo_gimnasio,"⚠️ Membresía no activa o vencida. Consultá en recepción.", false, ['need_geo'=>true]); exit;
+    render_page_form($nombre_gimnasio,$logo_gimnasio,"⚠️ Membresía no activa o vencida. Consultá en recepción.", false, ['need_geo'=>true, 'g'=>$gimnasio_id]); exit;
   }
   if (!pudo_registrar($conexion,(int)$cli['id'],$gimnasio_id,$REINGRESO_BLOQUEO_MIN)){
-    render_page_form($nombre_gimnasio,$logo_gimnasio,"⏱️ Ya registraste un ingreso recientemente. Intentá en {$REINGRESO_BLOQUEO_MIN} minutos.", false, ['need_geo'=>true]); exit;
+    render_page_form($nombre_gimnasio,$logo_gimnasio,"⏱️ Ya registraste un ingreso recientemente. Intentá en {$REINGRESO_BLOQUEO_MIN} minutos.", false, ['need_geo'=>true, 'g'=>$gimnasio_id]); exit;
   }
 
   $acceso_id = registrar_acceso($conexion,(int)$cli['id'],$gimnasio_id,'QR-GYM/DNI',$latReq,$lonReq);
@@ -315,13 +294,13 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && isset($_POST['dni'])){
 
     render_page_done($nombre_gimnasio,$logo_gimnasio,$gimnasio_id, "✅ Ingreso marcado — ".h($cli['nombre'].' '.$cli['apellido'])." ".date('H:i'), true);
   } else {
-    render_page_form($nombre_gimnasio,$logo_gimnasio,"❌ Error al registrar el ingreso. (Ver log)", false, ['need_geo'=>true]);
+    render_page_form($nombre_gimnasio,$logo_gimnasio,"❌ Error al registrar el ingreso. (Ver log)", false, ['need_geo'=>true, 'g'=>$gimnasio_id]);
   }
   exit;
 }
 
 /* ===== Primer render ===== */
-render_page_form($nombre_gimnasio,$logo_gimnasio, null, null, ['need_geo'=>true]); // pide ubicación
+render_page_form($nombre_gimnasio,$logo_gimnasio, null, null, ['need_geo'=>true, 'g'=>$gimnasio_id]); // pide ubicación
 exit;
 
 /* ================== VISTAS ================== */
@@ -346,10 +325,14 @@ function base_css(){ return "
   .btn{width:100%;padding:14px 16px;border-radius:12px;border:0;background:var(--accent);color:#000;font-weight:800;font-size:18px;margin-top:14px;cursor:pointer}
   .help{font-size:12px;color:var(--muted);margin-top:10px;text-align:center}
   .grid{display:grid;gap:10px}
+  .row{display:flex;gap:10px;align-items:center;justify-content:space-between}
+  .small{font-size:12px;color:#9aa0a6}
+  a.inline{color:#bcd7ff;text-decoration:none}
 "; }
 
 function render_page_form(string $nombreGym, ?string $logoGym, ?string $flash, ?bool $ok, array $opts=[]){
   $need_geo = !empty($opts['need_geo']);
+  $g        = (int)($opts['g'] ?? 0);
   $okClass = $ok === null ? '' : ($ok ? 'ok' : 'warn');
   $okIcon  = $ok === null ? '' : ($ok ? '✅' : '⚠️'); ?>
 <!doctype html>
@@ -361,19 +344,70 @@ function render_page_form(string $nombreGym, ?string $logoGym, ?string $flash, ?
 <meta name="color-scheme" content="dark">
 <style><?= base_css() ?></style>
 <script>
-let lat=null, lon=null;
+let lat=null, lon=null, readyGeo=false, autoTried=false;
+const G = <?= (int)$g ?>;
+const KEY = 'qr_dni_g' + G;
+
 function askGeo(){
-  if (!navigator.geolocation) return;
+  if (!navigator.geolocation) { readyGeo = true; maybeAutoSubmit(); return; }
   navigator.geolocation.getCurrentPosition(
-    (pos)=>{ lat=pos.coords.latitude; lon=pos.coords.longitude;
+    (pos)=>{ lat=pos.coords.latitude; lon=pos.coords.longitude; readyGeo=true;
       document.querySelectorAll('input[name=lat]').forEach(e=>e.value=lat);
       document.querySelectorAll('input[name=lon]').forEach(e=>e.value=lon);
+      maybeAutoSubmit();
     },
-    (err)=>{ console.log('geo error', err); },
+    (err)=>{ console.log('geo error', err); readyGeo=true; maybeAutoSubmit(); },
     { enableHighAccuracy:true, timeout:6000, maximumAge:0 }
   );
 }
-document.addEventListener('DOMContentLoaded', askGeo);
+
+function maybeAutoSubmit(){
+  if (autoTried) return;
+  const dniSaved = localStorage.getItem(KEY);
+  if (!dniSaved) return;
+  const dniInput = document.querySelector('input[name=dni]');
+  const form     = document.getElementById('checkinForm');
+  if (!dniInput || !form) return;
+  dniInput.value = dniSaved;
+  // cuando tenemos ubicación (o no se requiere), auto-enviar una sola vez
+  autoTried = true;
+  disableUI(true, 'Marcando ingreso...');
+  form.submit();
+}
+
+function disableUI(disabled, msg){
+  const btn = document.getElementById('btnIngresar');
+  if (btn){ btn.disabled = !!disabled; btn.textContent = disabled ? (msg||'Procesando...') : 'Marcar mi ingreso'; }
+}
+
+document.addEventListener('DOMContentLoaded', function(){
+  askGeo();
+
+  // Si hay un DNI guardado, mostrar link "Usar otro DNI"
+  const dniSaved = localStorage.getItem(KEY);
+  const otherLink = document.getElementById('useOther');
+  if (dniSaved && otherLink) {
+    otherLink.style.display = 'inline';
+    otherLink.addEventListener('click', function(e){
+      e.preventDefault();
+      localStorage.removeItem(KEY);
+      const dniInput = document.querySelector('input[name=dni]');
+      if (dniInput){ dniInput.value=''; dniInput.focus(); }
+      this.style.display='none';
+    });
+  }
+
+  // Guardar al enviar si el checkbox está tildado
+  const form = document.getElementById('checkinForm');
+  form.addEventListener('submit', function(){
+    const dniVal = (document.querySelector('input[name=dni]')?.value || '').replace(/\\D+/g,'');
+    const remember = document.getElementById('rememberDNI');
+    if (remember && remember.checked && dniVal.length>=6) {
+      localStorage.setItem(KEY, dniVal);
+    }
+    disableUI(true);
+  });
+});
 </script>
 </head>
 <body>
@@ -389,13 +423,17 @@ document.addEventListener('DOMContentLoaded', askGeo);
         <div class="flash <?= $okClass ?>"><?= $okIcon." ".h($flash) ?></div>
       <?php endif; ?>
 
-      <form method="post" class="grid">
+      <form id="checkinForm" method="post" class="grid" novalidate>
         <input type="hidden" name="lat"><input type="hidden" name="lon">
         <label>DNI</label>
-        <input inputmode="numeric" pattern="[0-9]*" name="dni" placeholder="Ej: 35123456" autofocus>
-        <button class="btn" type="submit">Marcar mi ingreso</button>
+        <input inputmode="numeric" pattern="[0-9]*" name="dni" placeholder="Ej: 35123456" autocomplete="one-time-code" autofocus>
+        <div class="row">
+          <label class="small"><input type="checkbox" id="rememberDNI" style="vertical-align:-2px;margin-right:6px"> Recordar mi DNI en este dispositivo</label>
+          <a href="#" id="useOther" class="inline small" style="display:none">Usar otro DNI</a>
+        </div>
+        <button class="btn" id="btnIngresar" type="submit">Marcar mi ingreso</button>
         <?php if ($need_geo): ?>
-          <div class="help">📍 Si se te solicita, permití la ubicación para validar que estás en el gimnasio.</div>
+          <div class="help">📍 Permití la ubicación si se solicita para validar que estás en el gimnasio.</div>
         <?php endif; ?>
       </form>
     </div>
@@ -415,6 +453,9 @@ function render_page_done(string $nombreGym, ?string $logoGym, int $g, ?string $
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
 <meta name="color-scheme" content="dark">
 <style><?= base_css() ?></style>
+<script>
+// Si hay DNI guardado, no hacemos nada. Si no hay, ofrecemos recordar (no aplica aquí).
+</script>
 </head>
 <body>
   <div class="wrap">
