@@ -26,7 +26,7 @@ if (!function_exists('gymFlag')) {
 $gimnasio_id = (int)($_SESSION['gimnasio_id'] ?? 0);
 $horariosOn  = ($gimnasio_id && isset($conexion) && $conexion instanceof mysqli && gymFlag($conexion,$gimnasio_id,'horarios_gym_activo','0')==='1');
 
-/* ===== Helpers de URL y estado ===== */
+/* ===== Helpers de URL/estado ===== */
 $gid       = $gimnasio_id;
 $gidParam  = $gid > 0 ? ('?g='.$gid) : '';
 $disabledIfNoGym = ($gid > 0) ? [] : ['class'=>'disabled','title'=>'Seleccioná un gimnasio para habilitar'];
@@ -44,7 +44,6 @@ $SEC_CLIENTES = ['label'=>'👤 Clientes','perm'=>'clientes','items'=>[
   ['🏷️ QR de Máquinas','maquinas_qr.php'],
   ['📈 Seguimiento de alumnos','profesor_seguimiento.php'],
 ]];
-
 if ($horariosOn) {
   $SEC_CLIENTES['items'][] = ['🗓️ Horarios del Gimnasio','horarios_gimnasio.php'];
 } else {
@@ -68,7 +67,7 @@ $SEC_PAGOS = ['label'=>'💳 Pagos','perm'=>'pagos','items'=>[
   ['Gastos','gastos.php'],
 ]];
 
-/* ===== NUEVO BLOQUE: QR Ingresos (entre Pagos y Asistencias) ===== */
+/* ===== NUEVO: QR Ingresos (entre Pagos y Asistencias) ===== */
 $SEC_QR = ['label'=>'🔳 QR Ingresos','perm'=>'asistencias','items'=>[
   // 1) Check-in QR (público)
   ['📳 Check-in QR (público)','gym_qr_checkin.php'.$gidParam, array_merge($disabledIfNoGym, [
@@ -80,8 +79,8 @@ $SEC_QR = ['label'=>'🔳 QR Ingresos','perm'=>'asistencias','items'=>[
     'popup'=>true,'name'=>'registroOnline',
     'features'=>'width=520,height=820,menubar=no,toolbar=no,location=no,status=no,scrollbars=yes,resizable=yes'
   ])],
-  // 3) Accesos en vivo (panel con logo/keepalive)
-  ['🟢 Accesos en vivo','panel_accesos.php'.$gidParam, array_merge($disabledIfNoGym, [
+  // 3) Accesos en vivo (APUNTA SOLO A accesos_gimnasio.php)
+  ['🟢 Accesos en vivo','accesos_gimnasio.php'.$gidParam, array_merge($disabledIfNoGym, [
     'popup'=>true,'name'=>'accesosLive',
     'features'=>'width=1200,height=800,menubar=no,toolbar=no,location=no,status=no,scrollbars=yes,resizable=yes'
   ])],
@@ -129,14 +128,14 @@ $SEC_EVENTOS = ['label'=>'🎪 Eventos','perm'=>'eventos_panel','items'=>[
   ['Eventos Públicos','eventos_publicos.php',['extra_perm'=>'eventos']],
 ]];
 
-/* ===== Orden final de secciones (QR Ingresos va entre Pagos y Asistencias) ===== */
+/* ===== Orden final con QR intercalado ===== */
 $MENU = [
   'panel_gimnasio' => $SEC_PANEL_GYM,
   'clientes'       => $SEC_CLIENTES,
   'membresias'     => $SEC_MEMBRESIAS,
   'pagos'          => $SEC_PAGOS,
 
-  'qr_ingresos'    => $SEC_QR,          // ⬅️ NUEVO BLOQUE AQUÍ
+  'qr_ingresos'    => $SEC_QR,          // ← NUEVO BLOQUE AQUÍ
 
   'asistencias'    => $SEC_ASISTENCIAS,
   'ventas'         => $SEC_VENTAS,
@@ -250,13 +249,25 @@ function render_menu_mobile($MENU,$SALIDA){
   }
   @media (max-width: 991.98px){
     .mobile-bar{ display:flex; position:sticky; top:0; z-index:1001; height:48px; align-items:center; justify-content:space-between; padding:0 10px; background:linear-gradient(180deg,#fff,#f8fafc); border-bottom:1px solid var(--stroke); }
-    .mobile-bar .hamb{ font-size:20px; border:none; background:#fff; padding:6px 10px; border-radius:10px } .mobile-bar .brand-mini{ font-weight:800; color:var(--brand); letter-spacing:.3px } .mobile-bar .logout{ color:var(--fg); text-decoration:none; font-size:18px; padding:6px 10px }
+    .mobile-bar .hamb{ font-size:20px; border:none; background:#fff; padding:6px 10px; border-radius:10px }
+    .mobile-bar .brand-mini{ font-weight:800; color:var(--brand); letter-spacing:.3px }
+    .mobile-bar .logout{ color:var(--fg); text-decoration:none; font-size:18px; padding:6px 10px }
     .drawer{ display:block; position:fixed; inset:0 35% 0 0; transform:translateX(-100%); background:#fff; border-right:1px solid var(--stroke); box-shadow:var(--shadow); transition:.25s transform ease; z-index:1002; overflow:auto }
-    .drawer.open{ transform:translateX(0) } .drawer-inner{ padding:10px } .drawer-head{ display:flex; justify-content:space-between; align-items:center; padding:6px 2px 10px; border-bottom:1px solid var(--stroke) } .drawer-head .close{ border:none; background:#fff; font-size:20px; padding:6px 10px; border-radius:8px }
-    .accordion{ padding:6px 0 } .acc-item{ border-bottom:1px solid var(--stroke) } .acc-item summary{ list-style:none; cursor:pointer; padding:12px 4px; font-weight:700; color:var(--fg) } .acc-item summary::-webkit-details-marker{ display:none }
-    .acc-body{ padding:4px 0 10px 8px } .acc-body a{ display:block; padding:9px 10px; border-radius:8px; color:var(--fg); text-decoration:none } .acc-body a:hover{ background:#f1f5f9 }
-    .acc-body a.newwin::after{ content:"↗"; margin-left:8px; opacity:.85 } .acc-body a.disabled{ opacity:.6 }
-    #drawer-backdrop{ display:block; position:fixed; inset:0; background:rgba(2,6,23,.35); z-index:1001 } #drawer-backdrop[hidden]{ display:none }
+    .drawer.open{ transform:translateX(0) }
+    .drawer-inner{ padding:10px }
+    .drawer-head{ display:flex; justify-content:space-between; align-items:center; padding:6px 2px 10px; border-bottom:1px solid var(--stroke) }
+    .drawer-head .close{ border:none; background:#fff; font-size:20px; padding:6px 10px; border-radius:8px }
+    .accordion{ padding:6px 0 }
+    .acc-item{ border-bottom:1px solid var(--stroke) }
+    .acc-item summary{ list-style:none; cursor:pointer; padding:12px 4px; font-weight:700; color:var(--fg) }
+    .acc-item summary::-webkit-details-marker{ display:none }
+    .acc-body{ padding:4px 0 10px 8px }
+    .acc-body a{ display:block; padding:9px 10px; border-radius:8px; color:var(--fg); text-decoration:none }
+    .acc-body a:hover{ background:#f1f5f9 }
+    .acc-body a.newwin::after{ content:"↗"; margin-left:8px; opacity:.85 }
+    .acc-body a.disabled{ opacity:.6 }
+    #drawer-backdrop{ display:block; position:fixed; inset:0; background:rgba(2,6,23,.35); z-index:1001 }
+    #drawer-backdrop[hidden]{ display:none }
   }
 </style>
 <script>
@@ -266,29 +277,76 @@ function render_menu_mobile($MENU,$SALIDA){
     const hamb     = document.querySelector('.mobile-bar .hamb');
     const closeBtn = document.querySelector('.drawer .close');
     if(!drawer || !hamb) return;
-    function openDrawer(){ drawer.classList.add('open'); drawer.setAttribute('aria-hidden','false'); if(backdrop){ backdrop.hidden=false; } hamb.setAttribute('aria-expanded','true'); }
-    function closeDrawer(){ drawer.classList.remove('open'); drawer.setAttribute('aria-hidden','true'); if(backdrop){ backdrop.hidden=true; } hamb.setAttribute('aria-expanded','false'); }
+
+    function openDrawer(){
+      drawer.classList.add('open');
+      drawer.setAttribute('aria-hidden','false');
+      if(backdrop){ backdrop.hidden=false; }
+      hamb.setAttribute('aria-expanded','true');
+    }
+    function closeDrawer(){
+      drawer.classList.remove('open');
+      drawer.setAttribute('aria-hidden','true');
+      if(backdrop){ backdrop.hidden=true; }
+      hamb.setAttribute('aria-expanded','false');
+    }
     hamb.addEventListener('click', openDrawer);
     if(closeBtn) closeBtn.addEventListener('click', closeDrawer);
     if(backdrop) backdrop.addEventListener('click', closeDrawer);
     document.addEventListener('keydown', (e)=>{ if(e.key==='Escape') closeDrawer(); });
   });
-  function cerrarApp(){ if (confirm("¿Seguro que deseas cerrar la aplicación?")) { if (window.electronAPI) { window.electronAPI.cerrarVentana(); } else { window.close(); } } }
+
+  function cerrarApp(){
+    if (confirm("¿Seguro que deseas cerrar la aplicación?")) {
+      if (window.electronAPI) { window.electronAPI.cerrarVentana(); }
+      else { window.close(); }
+    }
+  }
+
+  // Popups controlados para <a.newwin>
   (function(){
     const opened = new Map();
     document.addEventListener('click', function(e){
-      const a = e.target.closest('a.newwin'); if (!a) return; e.preventDefault();
-      const href=a.href; const isPopup=a.dataset.popup==='1'; const features=(a.dataset.features||'').trim(); const winName=(a.dataset.window||'_blank').trim();
-      if (!isPopup) { window.open(href,'_blank','noopener'); return; }
-      const parseFeat=(k,d)=>{ const m=new RegExp(k+'=([0-9]+)').exec(features); return m?parseInt(m[1],10):d; };
-      const w=parseFeat('width',1200), h=parseFeat('height',800);
-      const left=Math.max(0,Math.floor((screen.availWidth-w)/2)); const top=Math.max(0,Math.floor((screen.availHeight-h)/2));
-      const base = features ? features.replace(/\bleft=\d+\b/g,'').replace(/\btop=\d+\b/g,'') : `menubar=no,toolbar=no,location=no,status=no,scrollbars=yes,resizable=yes,width=${w},height=${h}`;
+      const a = e.target.closest('a.newwin');
+      if (!a) return;
+      e.preventDefault();
+
+      const href     = a.href;
+      const isPopup  = a.dataset.popup === '1';
+      const features = (a.dataset.features || '').trim();
+      const winName  = (a.dataset.window || '_blank').trim();
+
+      if (!isPopup) {
+        window.open(href,'_blank','noopener');
+        return;
+      }
+
+      const parseFeat = (k, d) => {
+        const m = new RegExp(k+'=([0-9]+)').exec(features);
+        return m ? parseInt(m[1],10) : d;
+      };
+      const w = parseFeat('width',1200), h = parseFeat('height',800);
+      const left = Math.max(0, Math.floor((screen.availWidth  - w)/2));
+      const top  = Math.max(0, Math.floor((screen.availHeight - h)/2));
+      const base = features
+        ? features.replace(/\bleft=\d+\b/g,'').replace(/\btop=\d+\b/g,'')
+        : `menubar=no,toolbar=no,location=no,status=no,scrollbars=yes,resizable=yes,width=${w},height=${h}`;
       const finalFeats = `${base},left=${left},top=${top}`;
+
       let win = opened.get(winName);
-      if (win && !win.closed) { try{ win.focus(); win.location.href = href; }catch{} }
-      else { win = window.open(href, winName, finalFeats); if (win) { try{ win.opener=null; }catch{} opened.set(winName,win); try{ win.focus(); }catch{} } else { window.open(href,'_blank','noopener'); }
-    }});
+      if (win && !win.closed) {
+        try{ win.focus(); win.location.href = href; }catch{}
+      } else {
+        win = window.open(href, winName, finalFeats);
+        if (win) {
+          try{ win.opener=null; }catch{}
+          opened.set(winName,win);
+          try{ win.focus(); }catch{}
+        } else {
+          window.open(href,'_blank','noopener');
+        }
+      }
+    });
   })();
 </script>
 </head>
