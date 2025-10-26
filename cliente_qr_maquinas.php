@@ -16,6 +16,7 @@ if ($cliente_id <= 0 || $gimnasio_id <= 0) { header('Location: cliente_acceso.ph
 
 /* Helpers */
 function h($s){ return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); }
+/* Base pública (solo lectura) para abrir rutina por token */
 $public_base = 'https://multi-gimnasio-51bq.onrender.com/maquinas_qr.php?t=';
 ?>
 <!doctype html>
@@ -38,6 +39,8 @@ $public_base = 'https://multi-gimnasio-51bq.onrender.com/maquinas_qr.php?t=';
 
       /* Base panel */
       --bg:#0b0b0b; --surface:#0f1115; --card:#12141a; --fg:#f1f5f9; --muted:#a0a7b4; --acc:#f5c542; --border:rgba(255,255,255,.12);
+
+      --ok:#10371f; --okb:#2e7d32; --err:#3a1010; --errb:#7a2d2d;
     }
     .mnu-bar{ position:sticky; top:0; z-index:1000; display:flex; align-items:center; gap:12px; padding:10px 14px; background:var(--mnu-bg-bar); -webkit-backdrop-filter: blur(10px) saturate(1.05); backdrop-filter: blur(10px) saturate(1.05); border-bottom:1px solid var(--mnu-border); }
     .mnu-title{ font-weight:800; color:var(--mnu-accent); }
@@ -82,11 +85,11 @@ $public_base = 'https://multi-gimnasio-51bq.onrender.com/maquinas_qr.php?t=';
     @keyframes scan{ 0%{top:10%} 50%{top:90%} 100%{top:10%} }
 
     .status{ margin-top:8px; font-size:.95rem; }
-    .ok{ color:#22c55e } .bad{ color:#ef9a9a; }
+    .ok{ color:#22c55e } .bad{ color:#f2bcbc; }
 
     .actions{ display:flex; gap:10px; flex-wrap:wrap; margin-top:10px }
     button, .btn{ background:var(--acc); border:0; color:#111; font-weight:800; padding:12px 16px; border-radius:12px; cursor:pointer; text-decoration:none; display:inline-block; }
-    .ghost{ background:#111; color:#fff; }
+    .ghost{ background:#111; color:#fff; border:1px solid rgba(255,255,255,.16); }
     .danger{ background:#ef4444; color:#fff; }
     @media (max-width:520px){ .actions button, .actions .btn{ flex:1 1 46%; } }
 
@@ -101,6 +104,8 @@ $public_base = 'https://multi-gimnasio-51bq.onrender.com/maquinas_qr.php?t=';
     .notice .box{ background:#111827; border:1px solid #374151; border-radius:16px; padding:18px; width:min(560px, 92vw); }
     .notice.show{ display:flex; }
     .badge{ display:inline-block; padding:4px 8px; border-radius:999px; background:#1f2937; color:#e5e7eb; font-size:.8rem; }
+
+    .alert-err{background:var(--err);border:1px solid var(--errb);color:#f2bcbc;padding:10px;border-radius:10px;margin:8px 0}
   </style>
 
   <!-- Fallback WebView -->
@@ -110,17 +115,19 @@ $public_base = 'https://multi-gimnasio-51bq.onrender.com/maquinas_qr.php?t=';
 </head>
 <body>
 
+  <noscript><div class="alert-err">⚠️ Activá JavaScript para usar la cámara y decodificar QRs.</div></noscript>
+
   <!-- ===== Menú Unificado (mismo markup y enlaces) ===== -->
   <header>
     <div class="mnu-bar">
-      <button class="mnu-btn mnu-open">☰ Menú</button>
+      <button class="mnu-btn mnu-open" type="button" aria-label="Abrir menú">☰ Menú</button>
       <div class="mnu-title">Panel Cliente</div>
       <div class="mnu-spacer"></div>
       <a class="mnu-btn mnu-btn--ghost" href="cliente_acceso.php?logout=1">Salir</a>
     </div>
 
     <!-- Tabs inline (PC) -->
-    <nav class="mnu-inline">
+    <nav class="mnu-inline" aria-label="Navegación principal">
       <a class="mnu-tab" href="panel_cliente.php">🏠 Inicio</a>
       <a class="mnu-tab" href="ver_turnos_cliente.php">📅 Ver Turnos</a>
       <a class="mnu-tab" href="ver_mis_pagos.php">💳 Mis Pagos</a>
@@ -136,9 +143,9 @@ $public_base = 'https://multi-gimnasio-51bq.onrender.com/maquinas_qr.php?t=';
 
     <!-- Drawer (móvil) -->
     <div class="mnu-backdrop" id="mnu-backdrop"></div>
-    <aside class="mnu-drawer" id="mnu-drawer">
+    <aside class="mnu-drawer" id="mnu-drawer" aria-label="Menú lateral" aria-hidden="true">
       <div class="mnu-head">
-        <button class="mnu-close" id="mnu-close">✕</button>
+        <button class="mnu-close" id="mnu-close" type="button" aria-label="Cerrar">✕</button>
         <div class="mnu-title">Menú</div>
       </div>
       <ul class="mnu-list">
@@ -171,11 +178,11 @@ $public_base = 'https://multi-gimnasio-51bq.onrender.com/maquinas_qr.php?t=';
         </div>
         <div class="status" id="status" aria-live="polite">Preparando cámara…</div>
         <div class="actions">
-          <button id="btnStart">Iniciar cámara</button>
-          <button id="btnStop" class="ghost">Detener</button>
-          <button id="btnSwitch" class="ghost">Cambiar cámara</button>
-          <button id="btnTorch" class="ghost">Linterna</button>
-          <button id="btnExternal" class="danger" title="Abrir en el navegador del sistema">Abrir en navegador</button>
+          <button id="btnStart" type="button">Iniciar cámara</button>
+          <button id="btnStop" type="button" class="ghost">Detener</button>
+          <button id="btnSwitch" type="button" class="ghost">Cambiar cámara</button>
+          <button id="btnTorch" type="button" class="ghost">Linterna</button>
+          <button id="btnExternal" type="button" class="danger" title="Abrir en el navegador del sistema">Abrir en navegador</button>
         </div>
         <div class="hint" style="margin-top:8px">Tip: acercá el código hasta ocupar buena parte de la pantalla y mantené el pulso.</div>
       </section>
@@ -194,8 +201,8 @@ $public_base = 'https://multi-gimnasio-51bq.onrender.com/maquinas_qr.php?t=';
         <div>
           <label for="manual">Pegar enlace o token</label>
           <div class="row">
-            <input id="manual" type="text" placeholder="Ej: <?php echo h($public_base); ?>TOKEN  — o solo TOKEN">
-            <button id="btnOpen" class="btn">Abrir rutina</button>
+            <input id="manual" type="text" placeholder="Ej: <?php echo h($public_base); ?>TOKEN  — o solo TOKEN" autocomplete="off" inputmode="text">
+            <button id="btnOpen" class="btn" type="button">Abrir rutina</button>
           </div>
           <div class="hint">Si pegás solo el TOKEN, vamos a: <?php echo h($public_base); ?>TOKEN</div>
         </div>
@@ -209,8 +216,8 @@ $public_base = 'https://multi-gimnasio-51bq.onrender.com/maquinas_qr.php?t=';
       <h3 id="nTitle" style="margin:0 0 8px;">Atención</h3>
       <div id="nMsg" class="hint" style="margin-bottom:12px">Mensaje</div>
       <div class="actions">
-        <button id="nRetry" class="btn">Reintentar</button>
-        <button id="nClose" class="ghost">Cerrar</button>
+        <button id="nRetry" class="btn" type="button">Reintentar</button>
+        <button id="nClose" class="ghost" type="button">Cerrar</button>
       </div>
     </div>
   </div>
@@ -225,8 +232,8 @@ $public_base = 'https://multi-gimnasio-51bq.onrender.com/maquinas_qr.php?t=';
       const openBtn  = document.querySelector('.mnu-open');
       const closeBtn = document.getElementById('mnu-close');
       const lock = (on)=>{ document.documentElement.style.overflow = document.body.style.overflow = on?'hidden':''; }
-      function open(){ drawer.classList.add('open'); backdrop.classList.add('show'); lock(true); }
-      function close(){ drawer.classList.remove('open'); backdrop.classList.remove('show'); lock(false); }
+      function open(){ drawer.classList.add('open'); drawer.setAttribute('aria-hidden','false'); backdrop.classList.add('show'); lock(true); }
+      function close(){ drawer.classList.remove('open'); drawer.setAttribute('aria-hidden','true'); backdrop.classList.remove('show'); lock(false); }
       openBtn?.addEventListener('click', open);
       closeBtn?.addEventListener('click', close);
       backdrop?.addEventListener('click', close);
@@ -243,7 +250,7 @@ $public_base = 'https://multi-gimnasio-51bq.onrender.com/maquinas_qr.php?t=';
 
     const PUBLIC_BASE = <?php echo json_encode($public_base, JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES); ?>;
 
-    let stream=null, currentDeviceId=null, devices=[], scanning=false, detector=null, track=null, html5q=null;
+    let stream=null, currentDeviceId=null, devices=[], scanning=false, detector=null, track=null, html5q=null, torchOn=false, visStop=false;
 
     function isInAppWebView(){
       const ua = navigator.userAgent || '';
@@ -261,7 +268,7 @@ $public_base = 'https://multi-gimnasio-51bq.onrender.com/maquinas_qr.php?t=';
         html5q = new Html5Qrcode('reader');
         await html5q.start(
           { facingMode:'environment' },
-          { fps:12, qrbox:(vw,vh)=>Math.min(300, Math.floor(Math.min(vw,vh)*0.7)) },
+          { fps:12, qrbox:(vw,vh)=>Math.min(320, Math.floor(Math.min(vw,vh)*0.72)) },
           decoded => decoded && onResult(decoded),
           _err => {}
         );
@@ -285,8 +292,9 @@ $public_base = 'https://multi-gimnasio-51bq.onrender.com/maquinas_qr.php?t=';
     async function ensureDetector(){
       if ('BarcodeDetector' in window){
         try{
-          const formats = await BarcodeDetector.getSupportedFormats();
-          if (formats && formats.includes('qr_code')){ detector=new BarcodeDetector({formats:['qr_code']}); return true; }
+          const formats = (await BarcodeDetector.getSupportedFormats()) || [];
+          const ok = formats.includes('qr_code') || formats.includes('qr');
+          if (ok){ detector=new BarcodeDetector({formats:['qr_code','qr'].filter(f=>formats.includes(f))}); return true; }
         }catch{}
       }
       return false;
@@ -310,7 +318,7 @@ $public_base = 'https://multi-gimnasio-51bq.onrender.com/maquinas_qr.php?t=';
 
       await listCameras();
       if (devices.length){
-        const back = devices.find(d => /back|trasera|rear/i.test(d.label));
+        const back = devices.find(d => /back|trasera|rear|environment/i.test(d.label));
         currentDeviceId = (back || devices[devices.length-1]).deviceId;
       }
 
@@ -320,6 +328,7 @@ $public_base = 'https://multi-gimnasio-51bq.onrender.com/maquinas_qr.php?t=';
         });
         video.srcObject=stream; await video.play();
         track = stream.getVideoTracks()[0] || null;
+        torchOn = false;
         status('Cámara activa. Buscando QR…');
         scanning=true; scanLoop();
       }catch(e){
@@ -329,8 +338,11 @@ $public_base = 'https://multi-gimnasio-51bq.onrender.com/maquinas_qr.php?t=';
       }
     }
 
-    function stopCamera(){
-      scanning=false; stopHtml5();
+    async function stopCamera(){
+      scanning=false; await stopHtml5();
+      if (track && torchOn){
+        try{ await track.applyConstraints({advanced:[{torch:false}]}); }catch(_){}
+      }
       if (stream){ stream.getTracks().forEach(t=>t.stop()); stream=null; track=null; }
       status('Cámara detenida.');
     }
@@ -341,7 +353,7 @@ $public_base = 'https://multi-gimnasio-51bq.onrender.com/maquinas_qr.php?t=';
       if (!devices.length) return;
       const idx = devices.findIndex(d => d.deviceId===currentDeviceId);
       currentDeviceId = devices[(idx+1)%devices.length].deviceId;
-      stopCamera(); startCamera();
+      await stopCamera(); startCamera();
     }
 
     async function toggleTorch(){
@@ -349,9 +361,9 @@ $public_base = 'https://multi-gimnasio-51bq.onrender.com/maquinas_qr.php?t=';
       if (!track) return status('Cámara no disponible.', true);
       const caps = track.getCapabilities?.(); if (!caps || !caps.torch) return status('Tu cámara no soporta linterna.', true);
       try{
-        const on = !(track.getConstraints()?.advanced?.[0]?.torch);
-        await track.applyConstraints({ advanced:[{ torch: on }] });
-        status(on?'Linterna encendida.':'Linterna apagada.');
+        torchOn = !torchOn;
+        await track.applyConstraints({ advanced:[{ torch: torchOn }] });
+        status(torchOn?'Linterna encendida.':'Linterna apagada.');
       }catch{
         status('No se pudo cambiar la linterna.', true);
       }
@@ -377,18 +389,26 @@ $public_base = 'https://multi-gimnasio-51bq.onrender.com/maquinas_qr.php?t=';
       })();
     }
 
-    function onResult(raw){
-      scanning=false; stopCamera();
-      let url=raw;
+    function buildUrlFromValue(raw){
+      // Aceptar: URL completa, ?t=TOKEN, /maquinas_qr.php?t=TOKEN, solo TOKEN (hex/base64-url)
+      const tokenRe = /(?:[?&#]t=|\/t\/|^)([A-Za-z0-9_\-]{8,128})/;
       try{
         const u=new URL(raw, location.origin);
-        if (!/maquinas_qr\.php/i.test(u.pathname) && /^[a-f0-9]{8,64}$/i.test(raw)) url = PUBLIC_BASE+encodeURIComponent(raw);
-        else url=u.href;
-      }catch(_){
-        if (/^[a-f0-9]{8,64}$/i.test(raw)) url = PUBLIC_BASE+encodeURIComponent(raw);
-        else { const m=raw.match(/t=([A-Za-z0-9_\-]+)/); url = m ? (PUBLIC_BASE+encodeURIComponent(m[1])) : raw; }
-      }
-      status('QR detectado. Abriendo rutina…'); location.href=url;
+        const m = u.search.match(/(?:^|[?&#])t=([^&]+)/);
+        if (m && m[1]) return PUBLIC_BASE+encodeURIComponent(m[1]);
+        if (/maquinas_qr\.php/i.test(u.pathname)) return u.href;
+      }catch(_){}
+      const m2 = raw.match(tokenRe);
+      if (m2 && m2[1]) return PUBLIC_BASE+encodeURIComponent(m2[1]);
+      if (/^[A-Za-z0-9_\-]{8,128}$/.test(raw)) return PUBLIC_BASE+encodeURIComponent(raw);
+      return raw; // último recurso: abrir tal cual
+    }
+
+    function onResult(raw){
+      scanning=false; stopCamera();
+      const url = buildUrlFromValue(raw);
+      status('QR detectado. Abriendo rutina…');
+      location.href=url;
     }
 
     /* --------- Foto → Decodificar con jsQR (sin cámara en vivo) --------- */
@@ -400,7 +420,7 @@ $public_base = 'https://multi-gimnasio-51bq.onrender.com/maquinas_qr.php?t=';
       img.onload = ()=>{
         const canvas = $('canvas');
         const ctx = canvas.getContext('2d');
-        const maxSide = 1280;
+        const maxSide = 1600;
         let w = img.width, h = img.height;
         if (Math.max(w,h) > maxSide){
           const ratio = maxSide / Math.max(w,h);
@@ -427,8 +447,15 @@ $public_base = 'https://multi-gimnasio-51bq.onrender.com/maquinas_qr.php?t=';
       img.src = URL.createObjectURL(file);
     });
 
-    // Abrir esta misma página en el navegador del sistema (Android)
+    // Abrir esta misma página en el navegador del sistema (Android / iOS)
     btnExternal.addEventListener('click', ()=>{
+      const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
+      if (isIOS){
+        // Forzar abrir en Safari
+        window.location.href = location.href.replace(/^https?:\/\//,'http://') // iOS hace handoff mejor con http->https
+          .replace(/^http:\/\//,'https://');
+        return;
+      }
       const proto = location.protocol.replace(':',''); // https
       const intent = `intent://${location.host}${location.pathname}${location.search}#Intent;scheme=${proto};package=com.android.chrome;end`;
       const win = window.open(intent, '_self');
@@ -438,14 +465,25 @@ $public_base = 'https://multi-gimnasio-51bq.onrender.com/maquinas_qr.php?t=';
     // Manual
     btnOpen.addEventListener('click', ()=>{
       let v=(manual.value||'').trim(); if (!v) return alert('Pegá un enlace o token.');
-      if (/^https?:\/\//i.test(v)) location.href=v; else location.href=PUBLIC_BASE+encodeURIComponent(v);
+      const url = buildUrlFromValue(v);
+      location.href = url;
     });
+    manual.addEventListener('keydown', (e)=>{ if(e.key==='Enter'){ e.preventDefault(); btnOpen.click(); } });
 
     // Botones cámara
     $('btnStart').addEventListener('click', startCamera);
     $('btnStop').addEventListener('click', stopCamera);
     $('btnSwitch').addEventListener('click', switchCamera);
     $('btnTorch').addEventListener('click', toggleTorch);
+
+    // Pausar cámara si la pestaña se oculta (ahorra batería y evita bloqueos)
+    document.addEventListener('visibilitychange', ()=>{
+      if (document.hidden && stream){ visStop=true; stopCamera(); }
+      else if (!document.hidden && visStop){ visStop=false; startCamera(); }
+    });
+
+    // Liberar recursos al salir
+    window.addEventListener('beforeunload', ()=>{ if (stream){ stream.getTracks().forEach(t=>t.stop()); } });
 
     // Arranque
     startCamera();

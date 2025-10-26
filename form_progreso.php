@@ -1,5 +1,5 @@
 <?php
-// registrar_progreso.php — Registrar progreso con MENÚ UNIFICADO (cliente)
+// registrar_progreso.php — Registrar progreso con MENÚ REUSABLE (cliente)
 if (session_status() === PHP_SESSION_NONE) session_start();
 require_once __DIR__ . '/conexion.php';
 
@@ -99,7 +99,7 @@ if (db_has_table($conexion, 'progreso')) {
     .mnu-item:hover{ background:rgba(255,255,255,.10); border-color:rgba(255,255,255,.30); }
     .mnu-item__icon{ width:24px; display:inline-grid; place-items:center; color:#fff; }
     .mnu-item__text{ font-size:18px; }
-    .mnu-bar *, .mnu-drawer *, .mnu-inline *, .mnu-item, .mnu-item *{ color:#fff !important; -webkit-text-fill-color:#fff !important; text-shadow:none !important; background-clip:initial !important; -webkit-background-clip:initial !IMPORTANT; }
+    .mnu-bar *, .mnu-drawer *, .mnu-inline *, .mnu-item, .mnu-item *{ color:#fff !important; -webkit-text-fill-color:#fff !important; text-shadow:none !important; background-clip:initial !important; -webkit-background-clip:initial !important; }
 
     /* ================== BASE / GLASS ================== */
     *{box-sizing:border-box}
@@ -177,51 +177,11 @@ if (db_has_table($conexion, 'progreso')) {
 </head>
 <body>
 
-  <!-- ===== Menú Unificado ===== -->
-  <header>
-    <div class="mnu-bar">
-      <button class="mnu-btn mnu-open">☰ Menú</button>
-      <div class="mnu-title">Panel Cliente</div>
-      <div class="mnu-spacer"></div>
-      <a class="mnu-btn mnu-btn--ghost" href="cliente_acceso.php?logout=1">Salir</a>
-    </div>
-
-    <!-- Tabs inline (PC) -->
-    <nav class="mnu-inline">
-      <a class="mnu-tab" href="panel_cliente.php">🏠 Inicio</a>
-      <a class="mnu-tab" href="ver_turnos_cliente.php">📅 Ver Turnos</a>
-      <a class="mnu-tab" href="ver_mis_pagos.php">💳 Mis Pagos</a>
-      <a class="mnu-tab" href="pago_online.php">⚡ Pago Online</a>
-      <a class="mnu-tab" href="form_progreso.php">📈 Ver Progreso</a>
-      <a class="mnu-tab" href="evolucion_cliente.php">📊 Evolución</a>
-      <a class="mnu-tab" href="tienda_indumentaria.php">🛍️ Indumentaria</a>
-      <a class="mnu-tab" href="asistente_ia.php">🤖 Asistente IA</a>
-      <a class="mnu-tab" href="cena_fin_anio.php">🍽️ Cena Fin de Año</a>
-      <a class="mnu-tab" href="cliente_qr_maquinas.php">🧰 QR de Máquinas</a>
-    </nav>
-
-    <!-- Drawer (móvil) -->
-    <div class="mnu-backdrop" id="mnu-backdrop"></div>
-    <aside class="mnu-drawer" id="mnu-drawer">
-      <div class="mnu-head">
-        <button class="mnu-close" id="mnu-close">✕</button>
-        <div class="mnu-title">Menú</div>
-      </div>
-      <ul class="mnu-list">
-        <li><a class="mnu-item" href="panel_cliente.php"><span class="mnu-item__icon">🏠</span><span class="mnu-item__text">Inicio</span></a></li>
-        <li><a class="mnu-item" href="ver_turnos_cliente.php"><span class="mnu-item__icon">📅</span><span class="mnu-item__text">Ver Turnos</span></a></li>
-        <li><a class="mnu-item" href="ver_mis_pagos.php"><span class="mnu-item__icon">💳</span><span class="mnu-item__text">Mis Pagos</span></a></li>
-        <li><a class="mnu-item" href="pago_online.php"><span class="mnu-item__icon">⚡</span><span class="mnu-item__text">Pago Online</span></a></li>
-        <li><a class="mnu-item" href="form_progreso.php"><span class="mnu-item__icon">📈</span><span class="mnu-item__text">Ver Progreso</span></a></li>
-        <li><a class="mnu-item" href="evolucion_cliente.php"><span class="mnu-item__icon">📊</span><span class="mnu-item__text">Evolución</span></a></li>
-        <li><a class="mnu-item" href="tienda_indumentaria.php"><span class="mnu-item__icon">🛍️</span><span class="mnu-item__text">Indumentaria</span></a></li>
-        <li><a class="mnu-item" href="asistente_ia.php"><span class="mnu-item__icon">🤖</span><span class="mnu-item__text">Asistente IA</span></a></li>
-        <li><a class="mnu-item" href="cena_fin_anio.php"><span class="mnu-item__icon">🍽️</span><span class="mnu-item__text">Cena Fin de Año</span></a></li>
-        <li><a class="mnu-item" href="cliente_qr_maquinas.php"><span class="mnu-item__icon">🧰</span><span class="mnu-item__text">QR de Máquinas</span></a></li>
-        <li><a class="mnu-item" href="cliente_acceso.php?logout=1"><span class="mnu-item__icon">🚪</span><span class="mnu-item__text">Salir</span></a></li>
-      </ul>
-    </aside>
-  </header>
+  <?php
+    // ===== Menú REUSABLE =====
+    require_once __DIR__.'/menu_cliente.php';
+    render_menu_cliente('form_progreso'); // pestaña activa
+  ?>
 
   <div class="container">
     <h2>📈 Registrar Progreso Físico</h2>

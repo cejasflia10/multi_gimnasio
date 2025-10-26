@@ -9,6 +9,12 @@ if (session_status() === PHP_SESSION_NONE) session_start();
 require_once __DIR__ . '/conexion.php';
 @include __DIR__ . '/menu_cliente.php';
 
+/* ---------- CSRF ---------- */
+if (empty($_SESSION['csrf_token'])) {
+  $_SESSION['csrf_token'] = bin2hex(random_bytes(16));
+}
+$csrf_token = $_SESSION['csrf_token'];
+
 /* ---------- Conexión y charset ---------- */
 if (!isset($conexion) || !($conexion instanceof mysqli)) {
   http_response_code(500);
@@ -26,9 +32,14 @@ function num($n, $dec=1){ return number_format((float)$n, $dec, ',', '.'); }
 function prepare_or_fail(mysqli $db, string $sql, string $ctx){
   $stmt = $db->prepare($sql);
   if (!$stmt) {
-    echo "<div style='color:#ff6b6b; padding:14px; font:14px/1.3 monospace'>
-            <b>⚠️ Error SQL en $ctx</b><br>Consulta: ".h($sql)."<br>MySQL: ".h($db->error)."
-          </div>";
+    $dbg = (bool)ini_get('display_errors');
+    if ($dbg) {
+      echo "<div style='color:#ff6b6b; padding:14px; font:14px/1.3 monospace'>
+              <b>⚠️ Error SQL en $ctx</b><br>Consulta: ".h($sql)."<br>MySQL: ".h($db->error)."
+            </div>";
+    } else {
+      echo "<div style='color:#ff6b6b; padding:14px'>⚠️ Error interno ($ctx).</div>";
+    }
     exit;
   }
   return $stmt;
@@ -269,7 +280,7 @@ if ($peso_hoy !== null && $peso_prev !== null) {
 }
 
 /* ---------- Gemini (API Key) ---------- */
-$apiKey = 'AIzaSyDVMv4gliTqbrHqdgNcql7P8eP8jQL7Iwo'; // <-- tu clave
+$apiKey = getenv('GEMINI_API_KEY') ?: ''; // export GEMINI_API_KEY=tu_clave
 
 $resultado_modelo = '';
 $error_modelo = '';
@@ -283,24 +294,34 @@ $retry_after_ui   = 0;
 
 /* Procesar imagen */
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['imagen_base64'])) {
-  $minGap = 3.0;
-  $now = microtime(true);
-  if (!isset($_SESSION['last_gem_call'])) $_SESSION['last_gem_call'] = 0;
-  if (($now - $_SESSION['last_gem_call']) < $minGap) {
-    $error_modelo = "Estás enviando muy seguido. Probá de nuevo en unos segundos.";
+  if (!hash_equals($csrf_token, (string)($_POST['csrf'] ?? ''))) {
+    $error_modelo = "❌ Sesión expirada. Recargá la página e intentá de nuevo.";
   } else {
-    $_SESSION['last_gem_call'] = $now;
-
-    $base64 = (string)$_POST['imagen_base64'];
-    $mime   = (stripos($base64, 'image/png') !== false) ? 'image/png' : 'image/jpeg';
-    $payload_b64 = preg_replace('#^data:image/[^;]+;base64,#', '', $base64);
-
-    if (!$apiKey) {
-      $error_modelo = "⚠️ Falta configurar GEMINI_API_KEY en el servidor.";
-    } elseif (!function_exists('curl_init')) {
-      $error_modelo = "⚠️ cURL no está habilitado en el servidor. Activá php-curl.";
+    $minGap = 3.0;
+    $now = microtime(true);
+    if (!isset($_SESSION['last_gem_call'])) $_SESSION['last_gem_call'] = 0;
+    if (($now - $_SESSION['last_gem_call']) < $minGap) {
+      $error_modelo = "Estás enviando muy seguido. Probá de nuevo en unos segundos.";
     } else {
-      $prompt = "Analiza la imagen de comida y devuelve SOLO un JSON minificado (sin texto extra) con este esquema:
+      $_SESSION['last_gem_call'] = $now;
+
+      $base64 = (string)$_POST['imagen_base64'];
+      $mime   = (stripos($base64, 'image/png') !== false) ? 'image/png' : 'image/jpeg';
+      $payload_b64 = preg_replace('#^data:image/[^;]+;base64,#', '', $base64);
+
+      // Límite servidor (≈ bytes = 3/4 * len(base64))
+      $approx_bytes = (int)floor(strlen($payload_b64) * 0.75);
+      if ($approx_bytes <= 0 || $approx_bytes > 5 * 1024 * 1024) {
+        $error_modelo = "La imagen es muy grande (máx. 5 MB). Subí otra con menor tamaño.";
+      }
+
+      if (!$error_modelo) {
+        if (!$apiKey) {
+          $error_modelo = "⚠️ Falta configurar GEMINI_API_KEY en el servidor.";
+        } elseif (!function_exists('curl_init')) {
+          $error_modelo = "⚠️ cURL no está habilitado en el servidor. Activá php-curl.";
+        } else {
+          $prompt = "Analiza la imagen de comida y devuelve SOLO un JSON minificado (sin texto extra) con este esquema:
 {
   \"nombre\": string,
   \"kcal_por_porcion\": number,
@@ -308,43 +329,45 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['imagen_base64'])) {
   \"kcal_por_100g\": number
 }
 Responde únicamente el JSON, sin backticks, sin explicación.";
-      $res = gem_call_with_cache($apiKey, $payload_b64, $mime, $prompt, 'gemini-2.0-flash');
+          $res = gem_call_with_cache($apiKey, $payload_b64, $mime, $prompt, 'gemini-2.0-flash');
 
-      if (!$res['ok']) {
-        if (($res['code'] ?? 0) == 429) {
-          $retry_after_ui = (int)ceil($res['retry_after'] ?: 20);
-          $error_modelo = "Límite temporal alcanzado. Esperá " . $retry_after_ui . " s y probá de nuevo.";
-        } else {
-          $error_modelo = "No se pudo procesar la imagen (HTTP ".($res['code'] ?? '?')."). ".$res['message'];
-        }
-      } else {
-        $data = $res['data'];
-        if (isset($data['candidates'][0]['content']['parts'][0]['text'])) {
-          $texto = trim($data['candidates'][0]['content']['parts'][0]['text']);
-          $texto = preg_replace('/^```(?:json)?/i', '', $texto);
-          $texto = preg_replace('/```$/', '', $texto);
-          $texto = trim($texto);
-          $gem_json_bruto = $texto;
-
-          $parsed = json_decode($texto, true);
-          if (is_array($parsed)) {
-            $nombre_detectado = isset($parsed['nombre']) ? (string)$parsed['nombre'] : $nombre_detectado;
-            if (isset($parsed['kcal_por_porcion'])) $kcal_detectadas = (int)round((float)$parsed['kcal_por_porcion']);
-            if (isset($parsed['kcal_por_100g']))    $kcal_por_100g   = (float)$parsed['kcal_por_100g'];
-            if (isset($parsed['porcion_sugerida']['cantidad'])) $sug_porcion_cant = (float)$parsed['porcion_sugerida']['cantidad'];
-            if (isset($parsed['porcion_sugerida']['unidad']))   $sug_porcion_uni  = strtolower((string)$parsed['porcion_sugerida']['unidad']);
-            $resultado_modelo = "Detectado: {$nombre_detectado}. kcal/porción aprox: {$kcal_detectadas}".($sug_porcion_cant? " | Porción sugerida: {$sug_porcion_cant} ".h($sug_porcion_uni):"");
+          if (!$res['ok']) {
+            if (($res['code'] ?? 0) == 429) {
+              $retry_after_ui = (int)ceil($res['retry_after'] ?: 20);
+              $error_modelo = "Límite temporal alcanzado. Esperá " . $retry_after_ui . " s y probá de nuevo.";
+            } else {
+              $error_modelo = "No se pudo procesar la imagen (HTTP ".($res['code'] ?? '?')."). ".$res['message'];
+            }
           } else {
-            $resultado_modelo = $texto;
-            if (preg_match('/(\d{2,5})\s?k?cal/i', $texto, $m)) $kcal_detectadas = (int)$m[1];
-            if (preg_match('/^(.{3,80}?)(?:\s+(?:contiene|tiene|aprox|aprox\.|≈))/iu', $texto, $n)) {
-              $nombre_detectado = trim($n[1]);
-            } elseif (preg_match('/^([A-ZÁÉÍÓÚÑa-záéíóúñ ]{3,80})/u', $texto, $n2)) {
-              $nombre_detectado = trim($n2[1]);
+            $data = $res['data'];
+            if (isset($data['candidates'][0]['content']['parts'][0]['text'])) {
+              $texto = trim($data['candidates'][0]['content']['parts'][0]['text']);
+              $texto = preg_replace('/^```(?:json)?/i', '', $texto);
+              $texto = preg_replace('/```$/', '', $texto);
+              $texto = trim($texto);
+              $gem_json_bruto = $texto;
+
+              $parsed = json_decode($texto, true);
+              if (is_array($parsed)) {
+                $nombre_detectado = isset($parsed['nombre']) ? (string)$parsed['nombre'] : $nombre_detectado;
+                if (isset($parsed['kcal_por_porcion'])) $kcal_detectadas = (int)round((float)$parsed['kcal_por_porcion']);
+                if (isset($parsed['kcal_por_100g']))    $kcal_por_100g   = (float)$parsed['kcal_por_100g'];
+                if (isset($parsed['porcion_sugerida']['cantidad'])) $sug_porcion_cant = (float)$parsed['porcion_sugerida']['cantidad'];
+                if (isset($parsed['porcion_sugerida']['unidad']))   $sug_porcion_uni  = strtolower((string)$parsed['porcion_sugerida']['unidad']);
+                $resultado_modelo = "Detectado: {$nombre_detectado}. kcal/porción aprox: {$kcal_detectadas}".($sug_porcion_cant? " | Porción sugerida: {$sug_porcion_cant} ".h($sug_porcion_uni):"");
+              } else {
+                $resultado_modelo = $texto;
+                if (preg_match('/(\d{2,5})\s?k?cal/i', $texto, $m)) $kcal_detectadas = (int)$m[1];
+                if (preg_match('/^(.{3,80}?)(?:\s+(?:contiene|tiene|aprox|aprox\.|≈))/iu', $texto, $n)) {
+                  $nombre_detectado = trim($n[1]);
+                } elseif (preg_match('/^([A-ZÁÉÍÓÚÑa-záéíóúñ ]{3,80})/u', $texto, $n2)) {
+                  $nombre_detectado = trim($n2[1]);
+                }
+              }
+            } else {
+              $error_modelo = "Respuesta inesperada del modelo.";
             }
           }
-        } else {
-          $error_modelo = "Respuesta inesperada del modelo.";
         }
       }
     }
@@ -396,32 +419,36 @@ if (!$rc['cli'] || !$rc['gym'] || !$rc['fecha']) {
 /* Guardar comida */
 $mensaje_guardado = '';
 if (isset($_POST['guardar']) && isset($_POST['nombre'], $_POST['porciones'], $_POST['calorias'])) {
-  $nombre = trim((string)$_POST['nombre']);
-  $porc   = n_in($_POST['porciones']);
-  $kcal   = n_in($_POST['calorias']);
-
-  if ($nombre !== '' && $porc > 0 && $kcal > 0) {
-    $total   = $porc * $kcal;
-    $hoy_sql = $hoy;
-
-    $cols = [$rc['cli'], $rc['gym'], $rc['fecha']];
-    $vals = ["?","?","?"];
-    $types = "iis";
-    $data = [$cliente_id, $gimnasio_id, $hoy_sql];
-
-    if ($rc['nombre']){ $cols[]=$rc['nombre']; $vals[]="?"; $types.="s"; $data[]=$nombre; }
-    if ($rc['porc'])  { $cols[]=$rc['porc'];   $vals[]="?"; $types.="d"; $data[]=$porc; }
-    if ($rc['kcal'])  { $cols[]=$rc['kcal'];   $vals[]="?"; $types.="d"; $data[]=$kcal; }
-    if ($rc['total']) { $cols[]=$rc['total'];  $vals[]="?"; $types.="d"; $data[]=$total; }
-
-    $sql = "INSERT INTO `{$tbl}` (".implode(',', $cols).") VALUES (".implode(',', $vals).")";
-    $st = prepare_or_fail($conexion, $sql, 'insert_registro_comidas_dyn');
-    bind_params($st, $types, $data);
-    if ($st->execute()) $mensaje_guardado = "✅ Comida registrada correctamente.";
-    else                $mensaje_guardado = "⚠️ No se pudo registrar: ".$st->error;
-    $st->close();
+  if (!hash_equals($csrf_token, (string)($_POST['csrf'] ?? ''))) {
+    $mensaje_guardado = "❌ Sesión expirada. Recargá la página e intentá de nuevo.";
   } else {
-    $mensaje_guardado = "⚠️ Datos inválidos para registrar la comida.";
+    $nombre = trim((string)$_POST['nombre']);
+    $porc   = n_in($_POST['porciones']);
+    $kcal   = n_in($_POST['calorias']);
+
+    if ($nombre !== '' && $porc > 0 && $kcal > 0) {
+      $total   = $porc * $kcal;
+      $hoy_sql = $hoy;
+
+      $cols = [$rc['cli'], $rc['gym'], $rc['fecha']];
+      $vals = ["?","?","?"];
+      $types = "iis";
+      $data = [$cliente_id, $gimnasio_id, $hoy_sql];
+
+      if ($rc['nombre']){ $cols[]=$rc['nombre']; $vals[]="?"; $types.="s"; $data[]=$nombre; }
+      if ($rc['porc'])  { $cols[]=$rc['porc'];   $vals[]="?"; $types.="d"; $data[]=$porc; }
+      if ($rc['kcal'])  { $cols[]=$rc['kcal'];   $vals[]="?"; $types.="d"; $data[]=$kcal; }
+      if ($rc['total']) { $cols[]=$rc['total'];  $vals[]="?"; $types.="d"; $data[]=$total; }
+
+      $sql = "INSERT INTO `{$tbl}` (".implode(',', $cols).") VALUES (".implode(',', $vals).")";
+      $st = prepare_or_fail($conexion, $sql, 'insert_registro_comidas_dyn');
+      bind_params($st, $types, $data);
+      if ($st->execute()) $mensaje_guardado = "✅ Comida registrada correctamente.";
+      else                $mensaje_guardado = "⚠️ No se pudo registrar: ".$st->error;
+      $st->close();
+    } else {
+      $mensaje_guardado = "⚠️ Datos inválidos para registrar la comida.";
+    }
   }
 }
 
@@ -551,6 +578,7 @@ $estado_neto  = ($balance_neto > 250) ? 'Superávit' : (($balance_neto < -250) ?
   </style>
 </head>
 <body>
+<?php if (function_exists('render_menu_cliente')) { render_menu_cliente('asistente_ia'); } ?>
 <div class="container">
   <h2>📷 Escanear comida con IA 
     <span class="pill"><?= h($objetivo) ?></span>
@@ -661,6 +689,7 @@ $estado_neto  = ($balance_neto > 250) ? 'Superávit' : (($balance_neto < -250) ?
       <canvas id="canvas" style="display:none"></canvas>
       <form method="POST" id="form_enviar" style="display:none; margin-top:8px">
         <input type="hidden" name="imagen_base64" id="imagen_base64">
+        <input type="hidden" name="csrf" value="<?= h($csrf_token) ?>">
         <button type="submit" class="btn btn-primary">Enviar imagen</button>
       </form>
     </section>
@@ -715,6 +744,7 @@ $estado_neto  = ($balance_neto > 250) ? 'Superávit' : (($balance_neto < -250) ?
       <h4 style="margin:6px 0">💾 Registrar</h4>
       <form method="POST" class="form-mini" autocomplete="off" id="formGuardar">
         <input type="hidden" name="guardar" value="1">
+        <input type="hidden" name="csrf" value="<?= h($csrf_token) ?>">
         <div class="full">
           <label>Comida</label>
           <input type="text" id="campoNombre" name="nombre" placeholder="Ej: Ensalada de pollo" value="<?= h($nombre_detectado) ?>" required>

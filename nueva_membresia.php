@@ -5,15 +5,29 @@ if (session_status() === PHP_SESSION_NONE) {
 include 'conexion.php';
 include 'menu_horizontal.php';
 
-$gimnasio_id = $_SESSION['gimnasio_id'] ?? 0;
+$gimnasio_id = (int)($_SESSION['gimnasio_id'] ?? 0);
 
-$planes = $conexion->query("SELECT * FROM planes WHERE gimnasio_id = $gimnasio_id");
-$clientes = $conexion->query("SELECT id, nombre, apellido, dni FROM clientes WHERE gimnasio_id = $gimnasio_id");
-$adicionales = $conexion->query("SELECT id, nombre, precio FROM planes_adicionales WHERE gimnasio_id = $gimnasio_id");
+// === Planes / Clientes / Adicionales ===
+$planes      = $conexion->query("SELECT * FROM planes WHERE gimnasio_id = {$gimnasio_id}");
+$clientes    = $conexion->query("SELECT id, nombre, apellido, dni FROM clientes WHERE gimnasio_id = {$gimnasio_id}");
+$adicionales = $conexion->query("SELECT id, nombre, precio FROM planes_adicionales WHERE gimnasio_id = {$gimnasio_id}");
 
 $clientes_array = [];
-while ($c = $clientes->fetch_assoc()) {
-    $clientes_array[] = $c;
+while ($c = $clientes->fetch_assoc()) { $clientes_array[] = $c; }
+
+// === Profesores (opcional) ===
+$profes = [];
+$tbl_prof = $conexion->query("SHOW TABLES LIKE 'profesores'");
+if ($tbl_prof && $tbl_prof->num_rows > 0) {
+    $has_activo = $conexion->query("SHOW COLUMNS FROM profesores LIKE 'activo'");
+    $cond_act   = ($has_activo && $has_activo->num_rows > 0) ? "AND activo=1" : "";
+    $q = $conexion->query("
+        SELECT id, nombre, apellido
+        FROM profesores
+        WHERE gimnasio_id = {$gimnasio_id} {$cond_act}
+        ORDER BY apellido, nombre
+    ");
+    while ($q && $r = $q->fetch_assoc()) { $profes[] = $r; }
 }
 ?>
 <!DOCTYPE html>
@@ -45,9 +59,7 @@ window.addEventListener('DOMContentLoaded', () => {
 function actualizarTotalVisible() {
     const total = document.getElementById('total_pagar');
     const span = document.getElementById('total_visible');
-    if (total && span) {
-        span.textContent = total.value;
-    }
+    if (total && span) { span.textContent = total.value; }
 }
 setInterval(actualizarTotalVisible, 500);
 </script>
@@ -60,23 +72,21 @@ setInterval(actualizarTotalVisible, 500);
     ✅ Membresía cargada correctamente
 </div>
 <script>
-    setTimeout(() => {
-        window.location.href = "nueva_membresia.php";
-    }, 2500);
+    setTimeout(() => { window.location.href = "nueva_membresia.php"; }, 2500);
 </script>
 <?php endif; ?>
 
 <div class="container">
     <h1>Registrar Nueva Membresía</h1>
 
-    <!-- IMPORTANTE: el onsubmit ahora valida pagos y empaqueta turnos personalizados en JSON -->
+    <!-- IMPORTANTE: el onsubmit valida pagos y empaqueta turnos personalizados en JSON -->
     <form method="POST" action="guardar_membresia.php" onsubmit="return prepararEnvio()">
         <label>Buscar Cliente (DNI, nombre o apellido):</label>
         <input type="text" id="buscador_cliente" list="clientes" required oninput="buscarCliente()">
         <input type="hidden" name="cliente_id" id="cliente_id">
         <datalist id="clientes">
             <?php foreach ($clientes_array as $c): ?>
-                <option data-id="<?= $c['id'] ?>" value="<?= $c['apellido'] ?>, <?= $c['nombre'] ?> (<?= $c['dni'] ?>)"></option>
+                <option data-id="<?= (int)$c['id'] ?>" value="<?= htmlspecialchars($c['apellido']) ?>, <?= htmlspecialchars($c['nombre']) ?> (<?= htmlspecialchars($c['dni']) ?>)"></option>
             <?php endforeach; ?>
         </datalist>
 
@@ -84,19 +94,17 @@ setInterval(actualizarTotalVisible, 500);
         <select name="plan_id" id="plan" required onchange="cargarDatosPlan()">
             <option value="">Seleccionar plan</option>
             <?php foreach ($planes as $p): ?>
-                <option value="<?= $p['id'] ?>"
-                        data-precio="<?= $p['precio'] ?>"
-                        data-clases="<?= $p['clases_disponibles'] ?>"
-                        data-duracion="<?= $p['duracion_meses'] ?>">
+                <option value="<?= (int)$p['id'] ?>"
+                        data-precio="<?= htmlspecialchars($p['precio']) ?>"
+                        data-clases="<?= (int)$p['clases_disponibles'] ?>"
+                        data-duracion="<?= (int)$p['duracion_meses'] ?>">
                     <?= htmlspecialchars($p['nombre']) ?>
                 </option>
             <?php endforeach; ?>
         </select>
 
         <div style="max-height: 500px; overflow-y: auto; display:none;">
-            <table>
-                <!-- (Reservado) -->
-            </table>
+            <table><!-- (Reservado) --></table>
         </div>
 
         <label>Precio del Plan:</label>
@@ -113,12 +121,12 @@ setInterval(actualizarTotalVisible, 500);
 
         <label>Planes Adicionales:</label>
         <div id="lista_adicionales">
-            <?php foreach ($adicionales as $a): ?>
+            <?php while ($a = $adicionales->fetch_assoc()): ?>
                 <label style="display:block; margin:2px 0;">
-                    <input type="checkbox" name="adicionales[]" value="<?= $a['id'] ?>" data-precio="<?= $a['precio'] ?>" onchange="calcularTotal()">
-                    <?= htmlspecialchars($a['nombre']) ?> ($<?= number_format($a['precio'], 2, ',', '.') ?>)
+                    <input type="checkbox" name="adicionales[]" value="<?= (int)$a['id'] ?>" data-precio="<?= htmlspecialchars($a['precio']) ?>" onchange="calcularTotal()">
+                    <?= htmlspecialchars($a['nombre']) ?> ($<?= number_format((float)$a['precio'], 2, ',', '.') ?>)
                 </label>
-            <?php endforeach; ?>
+            <?php endwhile; ?>
         </div>
 
         <label>Otros Pagos:</label>
@@ -141,16 +149,12 @@ setInterval(actualizarTotalVisible, 500);
         <div>
             <label>💵 Efectivo: </label>
             <input type="number" step="0.01" min="0" name="pago_efectivo" value="0"><br>
-
             <label>🏦 Transferencia: </label>
             <input type="number" step="0.01" min="0" name="pago_transferencia" value="0"><br>
-
             <label>💳 Débito: </label>
             <input type="number" step="0.01" min="0" name="pago_debito" value="0"><br>
-
             <label>💳 Crédito: </label>
             <input type="number" step="0.01" min="0" name="pago_credito" value="0"><br>
-
             <label>📒 Cuenta Corriente (Deuda): </label>
             <input type="number" step="0.01" min="0" name="pago_cuenta_corriente" value="0"><br>
         </div>
@@ -169,6 +173,22 @@ setInterval(actualizarTotalVisible, 500);
         </label>
 
         <div id="bloque_personalizados" style="display:none; border:1px solid #444; border-radius:8px; padding:12px;">
+            <!-- Profesor global (aplica a todos los días seleccionados) -->
+            <div style="display:flex; gap:12px; flex-wrap:wrap; margin-bottom:10px;">
+                <div>
+                    <label>Profesor (aplica a todos los días):</label>
+                    <select id="profesor_id">
+                        <option value="">-- Sin asignar --</option>
+                        <?php foreach (($profes ?? []) as $pr): ?>
+                            <option value="<?= (int)$pr['id'] ?>">
+                                <?= htmlspecialchars(($pr['apellido'] ?? '').', '.($pr['nombre'] ?? '')) ?>
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
+                    <small style="opacity:.7; display:block;">Si tu vista de horarios filtra por profesor, asignalo aquí.</small>
+                </div>
+            </div>
+
             <div style="display:flex; gap:12px; flex-wrap:wrap; margin-bottom:10px;">
                 <div>
                     <label>Desde:</label>
@@ -197,17 +217,20 @@ setInterval(actualizarTotalVisible, 500);
                 ?>
                 <div style="border:1px dashed #555; border-radius:10px; padding:8px;">
                     <label style="display:block;">
-                        <input type="checkbox" class="pers_dia_chk" data-dow="<?= $d['dow'] ?>" onchange="toggleHora(this)">
-                        <?= $d['label'] ?>
+                        <input type="checkbox" class="pers_dia_chk" data-dow="<?= (int)$d['dow'] ?>" onchange="toggleHora(this)">
+                        <?= htmlspecialchars($d['label']) ?>
                     </label>
                     <label style="display:block; margin-top:6px; opacity:.8;">Hora:</label>
-                    <input type="time" class="pers_hora" data-dow="<?= $d['dow'] ?>" disabled>
+                    <input type="time" class="pers_hora" data-dow="<?= (int)$d['dow'] ?>" disabled>
                 </div>
                 <?php endforeach; ?>
             </div>
 
             <input type="hidden" name="turnos_json" id="turnos_json">
-            <small style="display:block; margin-top:8px; opacity:.8;">Este JSON se procesará en <b>guardar_membresia.php</b> para crear los registros de turnos fijos (p. ej. en <code>clientes_fijos</code> o <code>turnos_personalizados</code>).</small>
+            <small style="display:block; margin-top:8px; opacity:.8;">
+                Este JSON se procesará en <b>guardar_membresia.php</b> para crear los registros de turnos fijos
+                (p. ej. en <code>clientes_fijos</code> o <code>turnos_personalizados</code>), incluyendo el <b>profesor</b> si la tabla lo admite.
+            </small>
         </div>
         <!-- /TURNOS PERSONALIZADOS -->
 
@@ -260,8 +283,8 @@ function calcularVencimiento() {
 
 function calcularTotal() {
     const precioPlan = parseFloat(document.getElementById('precio').value) || 0;
-    const otros = parseFloat(document.getElementById('otros_pagos').value) || 0;
-    const descuento = parseFloat(document.getElementById('descuento').value) || 0;
+    const otros      = parseFloat(document.getElementById('otros_pagos').value) || 0;
+    const descuento  = parseFloat(document.getElementById('descuento').value) || 0;
     let totalAdicionales = 0;
 
     document.querySelectorAll('#lista_adicionales input[type="checkbox"]:checked').forEach(cb => {
@@ -276,11 +299,11 @@ function calcularTotal() {
 }
 
 function actualizarTotalAbonadoLive(){
-    const efectivo = parseFloat(document.querySelector('[name=pago_efectivo]')?.value) || 0;
-    const transferencia = parseFloat(document.querySelector('[name=pago_transferencia]')?.value) || 0;
-    const debito = parseFloat(document.querySelector('[name=pago_debito]')?.value) || 0;
-    const credito = parseFloat(document.querySelector('[name=pago_credito]')?.value) || 0;
-    const cuenta_corriente = parseFloat(document.querySelector('[name=pago_cuenta_corriente]')?.value) || 0;
+    const efectivo        = parseFloat(document.querySelector('[name=pago_efectivo]')?.value) || 0;
+    const transferencia   = parseFloat(document.querySelector('[name=pago_transferencia]')?.value) || 0;
+    const debito          = parseFloat(document.querySelector('[name=pago_debito]')?.value) || 0;
+    const credito         = parseFloat(document.querySelector('[name=pago_credito]')?.value) || 0;
+    const cuenta_corriente= parseFloat(document.querySelector('[name=pago_cuenta_corriente]')?.value) || 0;
 
     const total = efectivo + transferencia + debito + credito + cuenta_corriente;
     const tgt = document.getElementById('total_abonado');
@@ -328,18 +351,21 @@ function validarRangoPers(){
     }
 }
 
-// Empaqueta el JSON con los días/horas elegidos
+// Empaqueta el JSON con días/horas y profesor elegido
 function buildTurnosJSON(){
     const enabled = document.getElementById('pers_habilitar')?.checked;
     if (!enabled) return '[]';
 
     const desde = document.getElementById('pers_desde')?.value || '';
     const hasta = document.getElementById('pers_hasta')?.value || '';
+    const profesorSel = document.getElementById('profesor_id');
+    const profesor_id = profesorSel && profesorSel.value ? parseInt(profesorSel.value) : null;
+
     const out = [];
     const labels = {0:'Domingo',1:'Lunes',2:'Martes',3:'Miércoles',4:'Jueves',5:'Viernes',6:'Sábado'};
 
     document.querySelectorAll('.pers_dia_chk:checked').forEach(chk=>{
-        const dow = parseInt(chk.getAttribute('data-dow'));
+        const dow  = parseInt(chk.getAttribute('data-dow'));
         const hora = document.querySelector('.pers_hora[data-dow="'+dow+'"]')?.value || '';
         if (hora){
             out.push({
@@ -347,7 +373,8 @@ function buildTurnosJSON(){
                 dow: dow,
                 hora: hora,
                 desde: desde,
-                hasta: hasta
+                hasta: hasta,
+                profesor_id: profesor_id // <-- clave para aparecer en "Horarios" si filtra por profe
             });
         }
     });
@@ -360,11 +387,11 @@ function validarPagos() {
     // Usamos el total final calculado
     const total_plan = parseFloat(document.getElementById('total_pagar').value) || 0;
 
-    const efectivo = parseFloat(document.querySelector('[name=pago_efectivo]').value) || 0;
-    const transferencia = parseFloat(document.querySelector('[name=pago_transferencia]').value) || 0;
-    const debito = parseFloat(document.querySelector('[name=pago_debito]').value) || 0;
-    const credito = parseFloat(document.querySelector('[name=pago_credito]').value) || 0;
-    const cuenta_corriente = parseFloat(document.querySelector('[name=pago_cuenta_corriente]').value) || 0;
+    const efectivo        = parseFloat(document.querySelector('[name=pago_efectivo]').value) || 0;
+    const transferencia   = parseFloat(document.querySelector('[name=pago_transferencia]').value) || 0;
+    const debito          = parseFloat(document.querySelector('[name=pago_debito]').value) || 0;
+    const credito         = parseFloat(document.querySelector('[name=pago_credito]').value) || 0;
+    const cuenta_corriente= parseFloat(document.querySelector('[name=pago_cuenta_corriente]').value) || 0;
 
     const total_pagado = efectivo + transferencia + debito + credito + cuenta_corriente;
 

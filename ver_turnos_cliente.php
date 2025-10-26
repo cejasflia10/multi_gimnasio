@@ -1,7 +1,7 @@
 <?php
 /* ============================================================
    ver_turnos_cliente.php — Listado y Reservar/Cancelar
-   MISMO look & feel que panel_cliente.php (menú .mnu-* + glass)
+   Usa menú reusable (menu_cliente.php) con render_menu_cliente('turnos')
    ============================================================ */
 if (session_status() === PHP_SESSION_NONE) session_start();
 require_once __DIR__.'/conexion.php';
@@ -144,58 +144,6 @@ function turno_habilitado_simple(array $t, bool $cerradoGlobal, array $cerradosP
   <title>Ver Turnos</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
-    /* ============== MENÚ UNIFICADO (copiado de panel_cliente.php) ============== */
-    :root{
-      --mnu-bg-bar: rgba(15,19,32,.78);
-      --mnu-bg-drawer: rgba(10,12,20,.94);
-      --mnu-fg: #fff;
-      --mnu-fg-dim: #cbd5e1;
-      --mnu-accent: #ffd600;      /* dorado */
-      --mnu-border: rgba(255,255,255,.16);
-      --mnu-shadow: 0 10px 30px rgba(0,0,0,.45);
-    }
-    .mnu-bar{
-      position:sticky; top:0; z-index:1000;
-      display:flex; align-items:center; gap:12px;
-      padding:10px 14px; background:var(--mnu-bg-bar);
-      -webkit-backdrop-filter: blur(10px) saturate(1.05);
-      backdrop-filter: blur(10px) saturate(1.05);
-      border-bottom:1px solid var(--mnu-border);
-    }
-    .mnu-title{ font-weight:800; color:var(--mnu-accent); }
-    .mnu-spacer{ flex:1; }
-    .mnu-btn{ display:inline-flex; align-items:center; gap:8px; padding:10px 14px; border-radius:999px; cursor:pointer; background:var(--mnu-accent); color:#111; border:none; font-weight:700; }
-    .mnu-btn--ghost{ background:transparent; color:var(--mnu-fg); border:1px solid var(--mnu-border); }
-
-    .mnu-inline{ display:flex; gap:10px; flex-wrap:wrap; padding:10px 14px; background:transparent; border-bottom:1px solid var(--mnu-border); }
-    .mnu-tab{ padding:10px 14px; border-radius:14px; border:1px solid var(--mnu-border); color:var(--mnu-fg); text-decoration:none; }
-    .mnu-tab:hover{ background:rgba(255,255,255,.06); }
-
-    @media (max-width:920px){ .mnu-inline{ display:none !important; } }
-
-    .mnu-backdrop{ position:fixed; inset:0; background:rgba(0,0,0,.55); z-index:10005; display:none; }
-    .mnu-drawer{
-      position:fixed; top:0; bottom:0; left:0; width:86vw; max-width:360px;
-      background:var(--mnu-bg-drawer); border-right:1px solid var(--mnu-border);
-      box-shadow:var(--mnu-shadow); transform:translateX(-100%); transition:transform .25s ease;
-      z-index:10010; padding:14px; display:flex; flex-direction:column; gap:12px;
-    }
-    .mnu-drawer.open{ transform:translateX(0); }
-    .mnu-backdrop.show{ display:block; }
-    .mnu-head{ display:flex; align-items:center; gap:10px; margin-bottom:6px; }
-    .mnu-close{ width:44px; height:44px; border-radius:50%; display:grid; place-items:center; cursor:pointer; background:var(--mnu-accent); color:#111; font-weight:900; border:none; }
-    .mnu-list{ display:flex; flex-direction:column; gap:12px; margin:0; padding:0; list-style:none; }
-    .mnu-item{ display:flex; align-items:center; gap:12px; padding:14px; border-radius:14px; border:1px solid var(--mnu-border); color:#fff; text-decoration:none; background:transparent; }
-    .mnu-item:hover{ background:rgba(255,255,255,.10); border-color:rgba(255,255,255,.30); }
-    .mnu-item__icon{ width:24px; display:inline-grid; place-items:center; color:#fff; }
-    .mnu-item__text{ font-size:18px; }
-
-    /* legibilidad anti background-clip/text-fill heredados */
-    .mnu-bar *, .mnu-drawer *, .mnu-inline *, .mnu-item, .mnu-item *{
-      color:#fff !important; -webkit-text-fill-color:#fff !important;
-      text-shadow:none !important; background-clip:initial !important; -webkit-background-clip:initial !important;
-    }
-
     /* ================== ESTILOS GENERALES (idénticos al panel) ================== */
     :root{
       --bg:#0b0b0b; --surface:#0f1115; --card:#12141a; --fg:#f1f5f9; --muted:#a0a7b4; --acc:#f5c542; --border:rgba(255,255,255,.12);
@@ -228,51 +176,11 @@ function turno_habilitado_simple(array $t, bool $cerradoGlobal, array $cerradosP
 </head>
 <body>
 
-  <!-- ===== Menú Unificado (igual al panel) ===== -->
-  <header>
-    <div class="mnu-bar">
-      <button class="mnu-btn mnu-open">☰ Menú</button>
-      <div class="mnu-title">Panel Cliente</div>
-      <div class="mnu-spacer"></div>
-      <a class="mnu-btn mnu-btn--ghost" href="cliente_acceso.php?logout=1">Salir</a>
-    </div>
-
-    <!-- Tabs inline (PC) -->
-    <nav class="mnu-inline">
-      <a class="mnu-tab" href="panel_cliente.php">🏠 Inicio</a>
-      <a class="mnu-tab" href="ver_turnos_cliente.php">📅 Ver Turnos</a>
-      <a class="mnu-tab" href="ver_mis_pagos.php">💳 Mis Pagos</a>
-      <a class="mnu-tab" href="pago_online.php">⚡ Pago Online</a>
-      <a class="mnu-tab" href="form_progreso.php">📈 Ver Progreso</a>
-      <a class="mnu-tab" href="evolucion_cliente.php">📊 Evolución</a>
-      <a class="mnu-tab" href="tienda_indumentaria.php">🛍️ Indumentaria</a>
-      <a class="mnu-tab" href="asistente_ia.php">🤖 Asistente IA</a>
-      <a class="mnu-tab" href="cena_fin_anio.php">🍽️ Cena Fin de Año</a>
-      <a class="mnu-tab" href="cliente_qr_maquinas.php">🧰 QR de Máquinas</a>
-    </nav>
-
-    <!-- Drawer (móvil) -->
-    <div class="mnu-backdrop" id="mnu-backdrop"></div>
-    <aside class="mnu-drawer" id="mnu-drawer">
-      <div class="mnu-head">
-        <button class="mnu-close" id="mnu-close">✕</button>
-        <div class="mnu-title">Menú</div>
-      </div>
-      <ul class="mnu-list">
-        <li><a class="mnu-item" href="panel_cliente.php"><span class="mnu-item__icon">🏠</span><span class="mnu-item__text">Inicio</span></a></li>
-        <li><a class="mnu-item" href="ver_turnos_cliente.php"><span class="mnu-item__icon">📅</span><span class="mnu-item__text">Ver Turnos</span></a></li>
-        <li><a class="mnu-item" href="ver_mis_pagos.php"><span class="mnu-item__icon">💳</span><span class="mnu-item__text">Mis Pagos</span></a></li>
-        <li><a class="mnu-item" href="pago_online.php"><span class="mnu-item__icon">⚡</span><span class="mnu-item__text">Pago Online</span></a></li>
-        <li><a class="mnu-item" href="form_progreso.php"><span class="mnu-item__icon">📈</span><span class="mnu-item__text">Ver Progreso</span></a></li>
-        <li><a class="mnu-item" href="evolucion_cliente.php"><span class="mnu-item__icon">📊</span><span class="mnu-item__text">Evolución</span></a></li>
-        <li><a class="mnu-item" href="tienda_indumentaria.php"><span class="mnu-item__icon">🛍️</span><span class="mnu-item__text">Indumentaria</span></a></li>
-        <li><a class="mnu-item" href="asistente_ia.php"><span class="mnu-item__icon">🤖</span><span class="mnu-item__text">Asistente IA</span></a></li>
-        <li><a class="mnu-item" href="cena_fin_anio.php"><span class="mnu-item__icon">🍽️</span><span class="mnu-item__text">Cena Fin de Año</span></a></li>
-        <li><a class="mnu-item" href="cliente_qr_maquinas.php"><span class="mnu-item__icon">🧰</span><span class="mnu-item__text">QR de Máquinas</span></a></li>
-        <li><a class="mnu-item" href="cliente_acceso.php?logout=1"><span class="mnu-item__icon">🚪</span><span class="mnu-item__text">Salir</span></a></li>
-      </ul>
-    </aside>
-  </header>
+  <?php
+    // ===== Menú REUSABLE =====
+    require_once __DIR__.'/menu_cliente.php';
+    render_menu_cliente('turnos'); // pestaña activa
+  ?>
 
   <div class="container">
     <section class="glass card">
@@ -346,21 +254,5 @@ function turno_habilitado_simple(array $t, bool $cerradoGlobal, array $cerradosP
     </section>
   </div>
 
-  <script>
-    // ===== Menú (abrir/cerrar + bloquear scroll) =====
-    (function(){
-      const drawer = document.getElementById('mnu-drawer');
-      const backdrop = document.getElementById('mnu-backdrop');
-      const openBtn = document.querySelector('.mnu-open');
-      const closeBtn = document.getElementById('mnu-close');
-      const lock = (on)=>{ document.documentElement.style.overflow = document.body.style.overflow = on?'hidden':''; }
-      function open(){ drawer.classList.add('open'); backdrop.classList.add('show'); lock(true); }
-      function close(){ drawer.classList.remove('open'); backdrop.classList.remove('show'); lock(false); }
-      openBtn?.addEventListener('click', open);
-      closeBtn?.addEventListener('click', close);
-      backdrop?.addEventListener('click', close);
-      window.addEventListener('keydown', e=>{ if(e.key==='Escape') close(); });
-    })();
-  </script>
 </body>
 </html>

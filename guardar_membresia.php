@@ -1,5 +1,5 @@
 <?php
-// guardar_membresia.php — registra deuda/saldo en cc_movimientos (DEBE/HABER) + turnos fijos
+// guardar_membresia.php — registra deuda/saldo en cc_movimientos (DEBE/HABER) + turnos fijos (con profesor)
 if (session_status() === PHP_SESSION_NONE) session_start();
 require __DIR__ . '/conexion.php';
 
@@ -9,29 +9,28 @@ if (function_exists('mysqli_report')) { mysqli_report(MYSQLI_REPORT_OFF); }
 $gimnasio_id = (int)($_SESSION['gimnasio_id'] ?? 0);
 if ($gimnasio_id <= 0) { http_response_code(403); die("Acceso denegado."); }
 
-if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'POST') {
   http_response_code(405); die("Acceso no permitido.");
 }
 
 /* ===== Helpers ===== */
-function table_exists(mysqli $db, string $table): bool {
-  $stmt = $db->prepare("SELECT 1 FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = ? LIMIT 1");
-  if (!$stmt) return false;
-  $stmt->bind_param('s', $table);
-  $ok = $stmt->execute();
-  $stmt->close();
-  return (bool)$ok && $db->affected_rows >= 0; // si ejecuta, ya luego probaremos insert
+function h($s){ return htmlspecialchars((string)$s, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'); }
+function table_exists(mysqli $db, string $t): bool {
+  $q = $db->query("SHOW TABLES LIKE '".$db->real_escape_string($t)."'");
+  return ($q && $q->num_rows > 0);
+}
+function hcol(mysqli $db, string $table, string $col): bool {
+  $table = $db->real_escape_string($table);
+  $col   = $db->real_escape_string($col);
+  $res = $db->query("SHOW COLUMNS FROM `$table` LIKE '$col'");
+  return ($res && $res->num_rows > 0);
 }
 function pick_fixed_table(mysqli $db): ?string {
-  // Preferimos clientes_fijos; si no existe, probamos turnos_personalizados
-  $cands = ['clientes_fijos','turnos_personalizados'];
-  foreach ($cands as $t) {
-    $q = $db->query("SHOW TABLES LIKE '".$db->real_escape_string($t)."'");
-    if ($q && $q->num_rows > 0) return $t;
+  foreach (['clientes_fijos','turnos_personalizados'] as $t) {
+    if (table_exists($db, $t)) return $t;
   }
   return null;
 }
-function h($s){ return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); }
 
 /* ===== 1) Entradas ===== */
 $cliente_id         = (int)($_POST['cliente_id'] ?? 0);
@@ -51,7 +50,7 @@ $pago_credito       = (float)($_POST['pago_credito'] ?? 0);
 // parte que el recepcionista manda explícitamente a Cuenta Corriente (DEBE)
 $pago_cc_manual     = (float)($_POST['pago_cuenta_corriente'] ?? 0);
 
-// turnos personalizados (JSON)
+// turnos personalizados (JSON con posible profesor_id)
 $turnos_json_raw    = $_POST['turnos_json'] ?? '[]';
 $turnos_arr         = json_decode($turnos_json_raw, true);
 if (!is_array($turnos_arr)) $turnos_arr = [];
@@ -86,8 +85,7 @@ $fecha_vencimiento = ($fecha_venc_post === '' || $fecha_venc_post === null)
 $total_adicionales = 0.0;
 $adicionales_ids   = [];
 if (!empty($adicionales) && is_array($adicionales)) {
-  $adicionales_ids = array_map('intval', $adicionales);
-  $adicionales_ids = array_values(array_filter($adicionales_ids, fn($x)=>$x>0));
+  $adicionales_ids = array_values(array_filter(array_map('intval', $adicionales), fn($x)=>$x>0));
   if ($adicionales_ids) {
     $ids_list = implode(',', $adicionales_ids);
     $sqlAd = "SELECT id, precio FROM planes_adicionales WHERE id IN ($ids_list) AND gimnasio_id = ?";
@@ -109,10 +107,7 @@ $total_final = round($total_bruto - ($total_bruto * ($descuento_pct / 100)), 2);
 /* ===== 5) Total abonado HOY (solo medios inmediatos) ===== */
 $total_abonado_hoy = round($pago_efectivo + $pago_transferencia + $pago_debito + $pago_credito, 2);
 
-/* ===== 6) Diferencia respecto al total =====
-   dif = total_final - abonado_hoy
-   (si >0 falta pagar, si <0 sobra dinero a favor)
-*/
+/* ===== 6) Diferencia respecto al total ===== */
 $dif = round($total_final - $total_abonado_hoy, 2);
 
 /* Detalle de métodos pagados hoy (texto) */
@@ -167,7 +162,7 @@ try {
   $debe_total  = 0.0;
   $haber_total = 0.0;
 
-  // a) Asiento manual a CC (DEBE) si vino en el form
+  // a) Asiento manual a CC (DEBE)
   if ($pago_cc_manual > 0.009) {
     $concepto = "Membresía #{$membresia_id} - CC manual";
     $stmtCC = $conexion->prepare("
@@ -179,15 +174,13 @@ try {
     if (!$stmtCC->execute()) { throw new Exception("Exec cc_movimientos (manual): ".$stmtCC->error); }
     $stmtCC->close();
     $debe_total += $pago_cc_manual;
-
-    // ese manual forma parte del total adeudado; ya está contemplado en total_final
     $dif = round($dif - $pago_cc_manual, 2);
   }
 
-  // b) Remanente: si falta pagar -> DEBE; si sobra -> HABER
+  // b) Remanente a CC
   if (abs($dif) > 0.009) {
     if ($dif > 0) {
-      // Falta pagar: DEBE
+      // deuda
       $concepto = "Membresía #{$membresia_id} - deuda (remanente)";
       $stmtCC2 = $conexion->prepare("
         INSERT INTO cc_movimientos (gimnasio_id, cliente_id, venta_id, fecha, concepto, debe, haber)
@@ -199,7 +192,7 @@ try {
       $stmtCC2->close();
       $debe_total += $dif;
     } else {
-      // Sobra dinero: HABER
+      // saldo a favor
       $haber = abs($dif);
       $concepto = "Membresía #{$membresia_id} - saldo a favor (remanente)";
       $stmtCC3 = $conexion->prepare("
@@ -223,18 +216,38 @@ try {
   $stmtUpd->close();
 
   /* ===== 7.5) Insertar TURNOS FIJOS (si vinieron) =====
-     Estructura esperada por ítem: {dia, dow(0..6), hora(HH:MM), desde(YYYY-MM-DD), hasta(YYYY-MM-DD)}
+     JSON esperado por ítem: {dia, dow(0..6), hora(HH:MM), desde(YYYY-MM-DD), hasta(YYYY-MM-DD), profesor_id|null}
      Tabla preferida: clientes_fijos. Alternativa: turnos_personalizados.
-     Campos: gimnasio_id, cliente_id, membresia_id, dow, hora, desde, hasta, creado_at
+     Columnas base: gimnasio_id, cliente_id, membresia_id, dow, hora, desde, hasta, creado_at
+     Columna profesor (si existe): profesor_id | profe_id | instructor_id | entrenador_id
   */
   if (!empty($turnos_arr)) {
     $fixed_table = pick_fixed_table($conexion);
     if ($fixed_table) {
-      // Usamos TIME/DATE como strings "HH:MM" / "YYYY-MM-DD". El motor castea a TIME/DATE si corresponde.
-      $sqlFix = "
-        INSERT INTO `$fixed_table` (gimnasio_id, cliente_id, membresia_id, dow, hora, desde, hasta, creado_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, NOW())
-      ";
+      // Detectar columna de profesor
+      $col_prof = null;
+      foreach (['profesor_id','profe_id','instructor_id','entrenador_id'] as $cp) {
+        if (hcol($conexion, $fixed_table, $cp)) { $col_prof = $cp; break; }
+      }
+
+      // Armar columnas dinámicas
+      $cols = [];
+      $typesIns = '';
+      $valsIns  = [];
+
+      // columnas comunes (si existen en la tabla)
+      if (hcol($conexion,$fixed_table,'gimnasio_id')) { $cols[]='gimnasio_id';   $typesIns.='i'; $valsIns[]=$gimnasio_id; }
+      if (hcol($conexion,$fixed_table,'cliente_id'))  { $cols[]='cliente_id';    $typesIns.='i'; $valsIns[]=$cliente_id; }
+      if (hcol($conexion,$fixed_table,'membresia_id')){ $cols[]='membresia_id';  $typesIns.='i'; $valsIns[]=$membresia_id; }
+      if ($col_prof)                                   { $cols[]=$col_prof;       $typesIns.='i'; /* valor por fila */  }
+      // siempre
+      $cols = array_merge($cols, ['dow','hora','desde','hasta','creado_at']);
+      $typesTail = 'issss'; // dow(int), hora(str), desde(str), hasta(str), NOW()
+      // NOTA: agregaremos por fila: dow, hora, desde, hasta (NOW() no va en bind)
+
+      // construir placeholders
+      $ph = implode(',', array_fill(0, count($cols)-1, '?')) . ',NOW()';
+      $sqlFix = "INSERT INTO `$fixed_table` (".implode(',', $cols).") VALUES ($ph)";
       $stmtFix = $conexion->prepare($sqlFix);
       if (!$stmtFix) { throw new Exception("Prepare $fixed_table: ".$conexion->error); }
 
@@ -243,21 +256,36 @@ try {
         $hora  = isset($t['hora']) ? preg_replace('/[^0-9:]/','', (string)$t['hora']) : '';
         $desde = isset($t['desde']) ? preg_replace('/[^0-9\-]/','', (string)$t['desde']) : '';
         $hasta = isset($t['hasta']) ? preg_replace('/[^0-9\-]/','', (string)$t['hasta']) : '';
+        $prof  = isset($t['profesor_id']) && $t['profesor_id'] !== '' ? (int)$t['profesor_id'] : 0;
 
         if ($dow < 0 || $dow > 6 || !$hora || !$desde || !$hasta) continue;
 
-        $stmtFix->bind_param("iiiisss",
-          $gimnasio_id, $cliente_id, $membresia_id, $dow, $hora, $desde, $hasta
-        );
+        // valores por fila
+        $vals = $valsIns;          // gym, cliente, membresia (si corresponden)
+        $types = $typesIns;
+
+        if ($col_prof) { $vals[] = $prof; $types .= 'i'; }
+
+        $vals[] = $dow;   $types .= 'i';
+        $vals[] = $hora;  $types .= 's';
+        $vals[] = $desde; $types .= 's';
+        $vals[] = $hasta; $types .= 's';
+
+        // bind dinámico
+        $refs=[]; $refs[]=&$types;
+        foreach ($vals as $k=>$v){ $refs[]=&$vals[$k]; }
+        if (!call_user_func_array([$stmtFix,'bind_param'],$refs)) {
+          throw new Exception("bind_param $fixed_table falló");
+        }
         if (!$stmtFix->execute()) {
-          // Si hay índice único por duplicado exacto, seguimos; si es otro error, lanzamos
+          // índice único duplicado -> ignorar
           if ((int)$stmtFix->errno === 1062) { continue; }
           throw new Exception("Exec $fixed_table: ".$stmtFix->error);
         }
       }
       $stmtFix->close();
     }
-    // Si no existe ninguna tabla, simplemente se omite sin romper guardado.
+    // si no hay tabla de fijos, se omite sin romper
   }
 
   $conexion->commit();

@@ -48,6 +48,10 @@ function build_slots(): array {
   return $out;
 }
 $slots = build_slots();
+
+// Flash GET
+$flash_ok  = isset($_GET['ok']) ? "✅ Reserva registrada correctamente." : '';
+$flash_err = isset($_GET['err']) ? (string)($_GET['msg'] ?? '⚠️ No se pudo registrar la reserva.') : '';
 ?>
 <!doctype html>
 <html lang="es">
@@ -68,6 +72,7 @@ $slots = build_slots();
 
       /* Base panel */
       --bg:#0b0b0b; --surface:#0f1115; --card:#12141a; --fg:#f1f5f9; --muted:#a0a7b4; --acc:#f5c542; --border:rgba(255,255,255,.12);
+      --ok:#10371f; --okb:#2e7d32; --err:#3a1010; --errb:#7a2d2d;
     }
     .mnu-bar{ position:sticky; top:0; z-index:1000; display:flex; align-items:center; gap:12px; padding:10px 14px; background:var(--mnu-bg-bar); -webkit-backdrop-filter: blur(10px) saturate(1.05); backdrop-filter: blur(10px) saturate(1.05); border-bottom:1px solid var(--mnu-border); }
     .mnu-title{ font-weight:800; color:var(--mnu-accent); }
@@ -112,21 +117,25 @@ $slots = build_slots();
     .chip{padding:6px 10px;border:1px solid var(--border);border-radius:999px;cursor:pointer;font-size:12px}
     .tot{margin-top:10px;padding:10px;border-radius:10px;background:#1a1d24;border:1px solid rgba(255,255,255,.08)}
     .mini{font-size:12px}
+    .alert-ok{background:var(--ok);border:1px solid var(--okb);color:#b6f0c9;padding:10px;border-radius:10px;margin-bottom:10px}
+    .alert-err{background:var(--err);border:1px solid var(--errb);color:#f2bcbc;padding:10px;border-radius:10px;margin-bottom:10px}
   </style>
 </head>
 <body>
 
+<noscript><div style="background:#3a1010;color:#f2bcbc;padding:10px;text-align:center">⚠️ Activá JavaScript para calcular totales y seleccionar horarios más rápido.</div></noscript>
+
 <!-- ===== Menú Unificado (incrustado) ===== -->
 <header>
   <div class="mnu-bar">
-    <button class="mnu-btn mnu-open">☰ Menú</button>
+    <button class="mnu-btn mnu-open" type="button" aria-label="Abrir menú">☰ Menú</button>
     <div class="mnu-title">Panel Cliente</div>
     <div class="mnu-spacer"></div>
     <a class="mnu-btn mnu-btn--ghost" href="cliente_acceso.php?logout=1">Salir</a>
   </div>
 
   <!-- Tabs inline (PC) -->
-  <nav class="mnu-inline">
+  <nav class="mnu-inline" aria-label="Navegación principal">
     <a class="mnu-tab" href="panel_cliente.php">🏠 Inicio</a>
     <a class="mnu-tab" href="ver_turnos_cliente.php">📅 Ver Turnos</a>
     <a class="mnu-tab" href="ver_mis_pagos.php">💳 Mis Pagos</a>
@@ -141,9 +150,9 @@ $slots = build_slots();
 
   <!-- Drawer (móvil) -->
   <div class="mnu-backdrop" id="mnu-backdrop"></div>
-  <aside class="mnu-drawer" id="mnu-drawer">
+  <aside class="mnu-drawer" id="mnu-drawer" aria-label="Menú lateral" aria-hidden="true">
     <div class="mnu-head">
-      <button class="mnu-close" id="mnu-close">✕</button>
+      <button class="mnu-close" id="mnu-close" type="button" aria-label="Cerrar">✕</button>
       <div class="mnu-title">Menú</div>
     </div>
     <ul class="mnu-list">
@@ -164,6 +173,13 @@ $slots = build_slots();
 
 <div class="container">
   <h2>🍽️ Cena de Fin de Año</h2>
+
+  <?php if ($flash_ok): ?>
+    <div class="alert-ok" role="status" aria-live="polite"><?= h($flash_ok) ?></div>
+  <?php endif; ?>
+  <?php if ($flash_err): ?>
+    <div class="alert-err" role="alert" aria-live="assertive"><?= h($flash_err) ?></div>
+  <?php endif; ?>
 
   <?php if (!$evento): ?>
     <section class="glass card">
@@ -201,22 +217,22 @@ $slots = build_slots();
           <input type="hidden" id="sena_unit" value="<?= (float)$sena_minima ?>">
 
           <label for="cantidad">Cantidad de cubiertos</label>
-          <input class="input" type="number" id="cantidad" name="cantidad" min="1" max="<?= (int)$cupo_disponible ?>" value="1" required>
+          <input class="input" type="number" id="cantidad" name="cantidad" min="1" max="<?= (int)$cupo_disponible ?>" value="1" required placeholder="Ej: 2">
 
           <label>Seleccioná horarios (podés elegir varios)</label>
-          <div class="chips">
+          <div class="chips" role="group" aria-label="Rangos rápidos">
             <span class="chip" data-range="12:00-15:00">Almuerzo rápido</span>
             <span class="chip" data-range="16:00-18:00">Merienda</span>
             <span class="chip" data-range="20:00-23:00">Cena típica</span>
             <span class="chip" data-range="10:00-24:00">Todo el día</span>
             <span class="chip" data-clear="1">Limpiar</span>
           </div>
-          <select class="input" id="horarios" name="horarios[]" multiple required>
+          <select class="input" id="horarios" name="horarios[]" multiple required aria-describedby="horariosHelp">
             <?php foreach ($slots as $h): ?>
               <option value="<?= h($h) ?>"><?= h($h) ?></option>
             <?php endforeach; ?>
           </select>
-          <small class="mini muted">Tip: mantené Ctrl/⌘ para seleccionar varios horarios.</small>
+          <small id="horariosHelp" class="mini muted">Tip: mantené Ctrl/⌘ para seleccionar varios horarios.</small>
 
           <label for="nombres">Nombres de acompañantes <span class="mini muted">(opcional)</span></label>
           <textarea class="input" id="nombres" name="nombres" rows="3" placeholder="Ej: Juan Pérez, Ana López"></textarea>
@@ -239,15 +255,17 @@ $slots = build_slots();
             <small class="mini muted">Subí el recibo/transferencia. Se guardará en la nube.</small>
           </div>
 
-          <div class="tot" id="tot_view">
+          <div class="tot" id="tot_view" aria-live="polite">
             <div>Subtotal: <strong id="subtot">$0,00</strong></div>
             <div id="desc_line" style="display:none">Descuento: <strong id="desc">$0,00</strong></div>
             <div>Total: <strong id="total">$0,00</strong></div>
             <div>Seña mínima estimada: <strong id="sena_estimada">$0,00</strong></div>
           </div>
 
+          <div id="warn_cupo" class="alert-err" style="display:none; margin-top:8px">⚠️ La cantidad supera el cupo disponible.</div>
+
           <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
-            <button class="btn" style="background:var(--acc);color:#111" type="submit">Reservar</button>
+            <button id="btnSubmit" class="btn" style="background:var(--acc);color:#111" type="submit">Reservar</button>
             <a class="btn" style="background:transparent;border:1px solid var(--border);color:#fff;text-decoration:none" href="mis_reservas_cena.php">Ver mis reservas</a>
           </div>
         </form>
@@ -279,8 +297,8 @@ $slots = build_slots();
   const openBtn  = document.querySelector('.mnu-open');
   const closeBtn = document.getElementById('mnu-close');
   const lock = (on)=>{ document.documentElement.style.overflow = document.body.style.overflow = on?'hidden':''; }
-  function open(){ drawer.classList.add('open'); backdrop.classList.add('show'); lock(true); }
-  function close(){ drawer.classList.remove('open'); backdrop.classList.remove('show'); lock(false); }
+  function open(){ drawer.classList.add('open'); drawer.setAttribute('aria-hidden','false'); backdrop.classList.add('show'); lock(true); }
+  function close(){ drawer.classList.remove('open'); drawer.setAttribute('aria-hidden','true'); backdrop.classList.remove('show'); lock(false); }
   openBtn?.addEventListener('click', open);
   closeBtn?.addEventListener('click', close);
   backdrop?.addEventListener('click', close);
@@ -293,6 +311,7 @@ $slots = build_slots();
   const $ = (id)=>document.getElementById(id);
   const precio = parseFloat(($('precio_unit')?.value)||'0');
   const sena   = parseFloat(($('sena_unit')?.value)||'0');
+  const cupo   = <?= (int)$cupo_disponible ?>;
   const fmt = (n)=> n.toLocaleString('es-AR', {minimumFractionDigits:2, maximumFractionDigits:2});
 
   function recalc(){
@@ -308,10 +327,22 @@ $slots = build_slots();
     $('desc').textContent = '$'+fmt(desc);
     $('total').textContent = '$'+fmt(total);
     $('sena_estimada').textContent = '$'+fmt(sena*q);
+
+    // Validación cupo
+    const over = q > cupo;
+    const warn = $('warn_cupo');
+    const btn  = $('btnSubmit');
+    if (warn) warn.style.display = over ? '' : 'none';
+    if (btn)  btn.disabled = over;
   }
-  function toggleComprobante(){
+  function toggleComprobante(resetFile=true){
     const v = $('pago').value;
-    $('wrap_comprobante').style.display = (v==='sena_transferencia' || v==='total_transferencia') ? '' : 'none';
+    const wrap = $('wrap_comprobante');
+    wrap.style.display = (v==='sena_transferencia' || v==='total_transferencia') ? '' : 'none';
+    if (resetFile) {
+      const file = $('comprobante');
+      if (file) file.value = '';
+    }
   }
 
   // Chips de rango rápido
@@ -333,9 +364,9 @@ $slots = build_slots();
     });
   });
 
-  $('cantidad').addEventListener('input', recalc);
-  $('pago').addEventListener('change', toggleComprobante);
-  recalc(); toggleComprobante();
+  $('cantidad')?.addEventListener('input', recalc);
+  $('pago')?.addEventListener('change', ()=>toggleComprobante(true));
+  recalc(); toggleComprobante(false);
 })();
 </script>
 </body>
