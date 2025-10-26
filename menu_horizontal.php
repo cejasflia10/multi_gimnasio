@@ -79,10 +79,15 @@ $SEC_QR = ['label'=>'🔳 QR Ingresos','perm'=>'asistencias','items'=>[
     'popup'=>true,'name'=>'registroOnline',
     'features'=>'width=520,height=820,menubar=no,toolbar=no,location=no,status=no,scrollbars=yes,resizable=yes'
   ])],
-  // 3) Accesos en vivo (APUNTA SOLO A accesos_gimnasio.php)
+  // 3) Accesos en vivo (solo accesos_gimnasio.php)
   ['🟢 Accesos en vivo','accesos_gimnasio.php'.$gidParam, array_merge($disabledIfNoGym, [
     'popup'=>true,'name'=>'accesosLive',
     'features'=>'width=1200,height=800,menubar=no,toolbar=no,location=no,status=no,scrollbars=yes,resizable=yes'
+  ])],
+  // 4) Emitir / Crear QR del Gimnasio (AGREGADO)
+  ['🏷️ Emitir QR del Gimnasio','qr_issue_gimnasio.php'.$gidParam, array_merge($disabledIfNoGym, [
+    'popup'=>true,'name'=>'emitirQR',
+    'features'=>'width=720,height=640,menubar=no,toolbar=no,location=no,status=no,scrollbars=yes,resizable=yes'
   ])],
 ]];
 
@@ -135,7 +140,7 @@ $MENU = [
   'membresias'     => $SEC_MEMBRESIAS,
   'pagos'          => $SEC_PAGOS,
 
-  'qr_ingresos'    => $SEC_QR,          // ← NUEVO BLOQUE AQUÍ
+  'qr_ingresos'    => $SEC_QR,          // ← NUEVO BLOQUE CON “Emitir QR del Gimnasio”
 
   'asistencias'    => $SEC_ASISTENCIAS,
   'ventas'         => $SEC_VENTAS,
