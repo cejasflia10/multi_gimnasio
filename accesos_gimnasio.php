@@ -1,30 +1,20 @@
 <?php
 /* ==========================================================
-   accesos_gimnasio.php — Panel de accesos (lectura + auto-aplicar QR)
-   • Lista accesos del rango elegido.
-   • Muestra cliente, método, plan, clases, estado de consumo.
-   • Auto-aplica consumo para QR pendientes (opcional, activado).
+   accesos_gimnasio.php — Panel de accesos (FIX zona horaria)
+   • Lee accesos_gimnasio (fecha_ingreso, metodo, cliente_id, gimnasio_id).
+   • “Hoy” se filtra con CURRENT_DATE() de MySQL (no con PHP).
+   • Rango: 00:00:00–23:59:59 sin romper índices.
+   • Fallback: si el rango queda vacío, muestra últimos 100 accesos.
    ========================================================== */
+
 if (session_status() === PHP_SESSION_NONE) session_start();
 require_once __DIR__ . '/conexion.php';
 if (!isset($conexion) || !($conexion instanceof mysqli)) { http_response_code(500); exit('❌ Sin BD'); }
 if (function_exists('mysqli_report')) { mysqli_report(MYSQLI_REPORT_OFF); }
 @$conexion->set_charset('utf8mb4');
 
-/* ===== Config ===== */
-$AUTO_APLICAR_QR = true;           // auto-descontar QR pendientes al cargar el panel
-$AUTO_MAX_PROCESAR = 100;          // seguridad: máximo de accesos a procesar por carga
-
-/* ===== Helpers ===== */
 function h($s){ return htmlspecialchars((string)$s, ENT_QUOTES|ENT_SUBSTITUTE,'UTF-8'); }
 function qv($db,$s){ return "'".$db->real_escape_string((string)$s)."'"; }
-function mem_is_activa_row(array $m): bool {
-  $ok_estado = true;
-  if (array_key_exists('activa',$m) && $m['activa']!==null) $ok_estado = ((string)$m['activa']==='1');
-  $ok_vto = true;
-  if (!empty($m['fecha_vencimiento']) && $m['fecha_vencimiento']!=='0000-00-00') $ok_vto = ($m['fecha_vencimiento'] >= date('Y-m-d'));
-  return $ok_estado && $ok_vto;
-}
 function logo_url(?string $logo): ?string {
   $logo = trim((string)$logo);
   if ($logo==='') return null;
@@ -37,27 +27,17 @@ function logo_url(?string $logo): ?string {
   foreach ($cands as $fs=>$url) if (is_file($fs)) return $url.'?v='.(int)@filemtime($fs);
   return $logo;
 }
-function col_exists(mysqli $db, string $table, string $col): bool {
-  $table = $db->real_escape_string($table);
-  $col   = $db->real_escape_string($col);
-  $rs = $db->query("SHOW COLUMNS FROM `$table` LIKE '$col'");
-  return $rs && $rs->num_rows>0;
-}
-function pick_col(mysqli $db, string $table, array $cands, string $fallback=null){
-  foreach($cands as $c) if (col_exists($db,$table,$c)) return $c;
-  return $fallback;
-}
 
-/* ==== Inputs ==== */
+/* ==== Parámetros ==== */
 $gimnasio_id = (int)($_GET['g'] ?? ($_SESSION['gimnasio_id'] ?? 0));
 if ($gimnasio_id<=0){ http_response_code(400); exit('Falta g'); }
-$hoy   = date('Y-m-d');
-$desde = $_GET['desde'] ?? $hoy;
-$hasta = $_GET['hasta'] ?? $hoy;
-$desde_dt = $desde . ' 00:00:00';
-$hasta_dt = $hasta . ' 23:59:59';
+$hoyPHP = date('Y-m-d');
+$desde  = $_GET['desde'] ?? $hoyPHP;
+$hasta  = $_GET['hasta'] ?? $hoyPHP;
+/* Usar “modo hoy” si el usuario no cambió filtros o si eligió explícitamente hoy-hoy */
+$modo_hoy = (!isset($_GET['desde']) && !isset($_GET['hasta'])) || ($desde===$hoyPHP && $hasta===$hoyPHP);
 
-/* ==== Marca gimnasio ==== */
+/* ==== Marca del gimnasio ==== */
 $gym_name = 'Gimnasio'; $gym_logo = null;
 if ($rs = $conexion->query("SELECT nombre, logo FROM gimnasios WHERE id={$gimnasio_id} LIMIT 1")){
   if ($rs->num_rows){ $g=$rs->fetch_assoc();
@@ -66,109 +46,79 @@ if ($rs = $conexion->query("SELECT nombre, logo FROM gimnasios WHERE id={$gimnas
   }
 }
 
-/* ==== Columnas accesos (resiliente) ==== */
+/* ==== Query de accesos ==== */
+/* Esquema exacto que nos pasaste: fecha_ingreso/metodo/cliente_id/gimnasio_id */
 $A_TABLE = 'accesos_gimnasio';
-$A_TS    = pick_col($conexion,$A_TABLE, ['fecha_ingreso','creado_en','created_at','fecha','ts','timestamp'], 'fecha_ingreso');
-$A_MET   = pick_col($conexion,$A_TABLE, ['metodo','metodo_ingreso','medio','tipo'], 'metodo');
-$A_CLI   = pick_col($conexion,$A_TABLE, ['cliente_id','id_cliente'], 'cliente_id');
-$A_GYM   = pick_col($conexion,$A_TABLE, ['gimnasio_id','id_gimnasio'], 'gimnasio_id');
 
-/* ==== (Opcional) AUTO-APLICAR consumo de QR pendientes del rango ==== */
-if ($AUTO_APLICAR_QR) {
-  // Buscar accesos QR del rango sin consumo aplicado
-  $sqlPend = "
-    SELECT a.id AS acceso_id, a.$A_CLI AS cliente_id
+if ($modo_hoy) {
+  // Usamos fecha “hoy” desde MySQL (CURRENT_DATE) para evitar desfases de TZ
+  $sql = "
+    SELECT a.id, a.fecha_ingreso, a.metodo, a.cliente_id, c.nombre, c.apellido
     FROM $A_TABLE a
-    LEFT JOIN membresia_consumos mc ON mc.acceso_id = a.id
-    WHERE a.$A_GYM = $gimnasio_id
-      AND a.$A_TS BETWEEN ".qv($conexion,$desde_dt)." AND ".qv($conexion,$hasta_dt)."
-      AND a.$A_MET = 'QR'
-      AND mc.id IS NULL
-    ORDER BY a.$A_TS DESC
-    LIMIT $AUTO_MAX_PROCESAR";
-  if ($rp = $conexion->query($sqlPend)) {
-    while ($p = $rp->fetch_assoc()) {
-      $acceso_id  = (int)$p['acceso_id'];
-      $cliente_id = (int)$p['cliente_id'];
-
-      // Aplicar consumo con lógica similar a la del endpoint QR
-      try {
-        $conexion->begin_transaction();
-
-        // Tomar membresía activa y no vencida (con cupo)
-        $hoyYmd = date('Y-m-d');
-        $sqlM = "SELECT id, clases_disponibles, plan, fecha_vencimiento
-                 FROM membresias
-                 WHERE gimnasio_id=$gimnasio_id
-                   AND cliente_id=$cliente_id
-                   AND (activa=1 OR activa='1')
-                   AND (fecha_vencimiento IS NULL OR fecha_vencimiento='' OR fecha_vencimiento='0000-00-00' OR fecha_vencimiento >= '$hoyYmd')
-                 ORDER BY COALESCE(fecha_vencimiento,'9999-12-31') DESC, id DESC
-                 LIMIT 1
-                 FOR UPDATE";
-        $rm = $conexion->query($sqlM);
-        if ($rm && $rm->num_rows) {
-          $mem = $rm->fetch_assoc();
-          $membresia_id = (int)$mem['id'];
-          $restantes    = (int)$mem['clases_disponibles'];
-
-          if ($restantes > 0) {
-            $sqlU = "UPDATE membresias SET clases_disponibles = clases_disponibles - 1 WHERE id=$membresia_id AND clases_disponibles > 0";
-            if (!$conexion->query($sqlU)) throw new Exception('upd mem: '.$conexion->error);
-
-            // Registrar consumo
-            $sqlL = "INSERT INTO membresia_consumos (membresia_id, acceso_id, cliente_id, gimnasio_id, fecha_consumo, metodo)
-                     VALUES ($membresia_id, $acceso_id, $cliente_id, $gimnasio_id, NOW(), 'QR')";
-            if (!$conexion->query($sqlL)) throw new Exception('log consumo: '.$conexion->error);
-          }
-        }
-
-        $conexion->commit();
-      } catch (Throwable $e) {
-        $conexion->rollback();
-        // No interrumpe el render: seguimos con el resto.
-      }
-    }
-  }
+    JOIN clientes c ON c.id = a.cliente_id
+    WHERE a.gimnasio_id = {$gimnasio_id}
+      AND a.fecha_ingreso >= CURRENT_DATE()
+      AND a.fecha_ingreso <  (CURRENT_DATE() + INTERVAL 1 DAY)
+    ORDER BY a.fecha_ingreso DESC
+  ";
+} else {
+  $desde_dt = $desde.' 00:00:00';
+  $hasta_dt = $hasta.' 23:59:59';
+  $sql = "
+    SELECT a.id, a.fecha_ingreso, a.metodo, a.cliente_id, c.nombre, c.apellido
+    FROM $A_TABLE a
+    JOIN clientes c ON c.id = a.cliente_id
+    WHERE a.gimnasio_id = {$gimnasio_id}
+      AND a.fecha_ingreso BETWEEN ".qv($conexion,$desde_dt)." AND ".qv($conexion,$hasta_dt)."
+    ORDER BY a.fecha_ingreso DESC
+  ";
 }
 
-/* ==== Accesos del rango (sin romper índices) ==== */
-$sql = "SELECT a.id, a.$A_TS AS fecha_ts, a.$A_MET AS metodo, a.$A_CLI AS cliente_id,
-               c.nombre, c.apellido
-        FROM $A_TABLE a
-        JOIN clientes c ON c.id=a.$A_CLI
-        WHERE a.$A_GYM={$gimnasio_id}
-          AND a.$A_TS BETWEEN ".qv($conexion,$desde_dt)." AND ".qv($conexion,$hasta_dt)."
-        ORDER BY a.$A_TS DESC";
-$rs = $conexion->query($sql);
-$accesos=[]; if ($rs) while($r=$rs->fetch_assoc()){ $accesos[]=$r; }
+$accesos=[]; 
+if ($rs = $conexion->query($sql)) while($r=$rs->fetch_assoc()) $accesos[]=$r;
 
-/* ==== Membresía activa más reciente por cliente para este gym ==== */
+/* Fallback: si no hay filas en el rango, mostramos los últimos 100 del gimnasio */
+$fallback_used = false;
+if (!$accesos){
+  $sql_fb = "
+    SELECT a.id, a.fecha_ingreso, a.metodo, a.cliente_id, c.nombre, c.apellido
+    FROM $A_TABLE a
+    JOIN clientes c ON c.id = a.cliente_id
+    WHERE a.gimnasio_id = {$gimnasio_id}
+    ORDER BY a.fecha_ingreso DESC
+    LIMIT 100
+  ";
+  if ($rf = $conexion->query($sql_fb)) { while($r=$rf->fetch_assoc()) $accesos[]=$r; }
+  $fallback_used = (bool)$accesos;
+}
+
+/* ===== Membresías ===== */
+function mem_is_activa_row(array $m): bool {
+  $ok_estado = true;
+  if (array_key_exists('activa',$m) && $m['activa']!==null) $ok_estado = ((string)$m['activa']==='1');
+  $ok_vto = true;
+  if (!empty($m['fecha_vencimiento']) && $m['fecha_vencimiento']!=='0000-00-00')
+    $ok_vto = ($m['fecha_vencimiento'] >= date('Y-m-d'));
+  return $ok_estado && $ok_vto;
+}
+
 $cli_ids = array_unique(array_map(fn($x)=>(int)$x['cliente_id'],$accesos));
 $mapMem = [];
 if ($cli_ids){
-  $ids = implode(',', $cli_ids);
-  $M_TABLE = 'membresias';
-  $M_CLI   = pick_col($conexion,$M_TABLE, ['cliente_id','id_cliente'],'cliente_id');
-  $M_GYM   = pick_col($conexion,$M_TABLE, ['gimnasio_id','id_gimnasio'],'gimnasio_id');
-  $M_PLAN  = pick_col($conexion,$M_TABLE, ['plan','plan_nombre','nombre_plan'],'plan');
-  $M_REST  = pick_col($conexion,$M_TABLE, ['clases_disponibles','clases_restantes','restantes'],'clases_disponibles');
-  $M_ACT   = pick_col($conexion,$M_TABLE, ['activa'],'activa');
-  $M_VTO   = pick_col($conexion,$M_TABLE, ['fecha_vencimiento','vencimiento'],'fecha_vencimiento');
-
-  $q = "SELECT id, $M_CLI AS cliente_id, $M_GYM AS gimnasio_id, $M_PLAN AS plan, $M_REST AS clases_disponibles, $M_ACT AS activa, $M_VTO AS fecha_vencimiento
-        FROM $M_TABLE
-        WHERE $M_GYM={$gimnasio_id} AND $M_CLI IN ({$ids})
-        ORDER BY COALESCE($M_VTO,'9999-12-31') DESC, id DESC";
-  $rm = $conexion->query($q);
-  if ($rm) while($m=$rm->fetch_assoc()){
-    if (!isset($mapMem[(int)$m['cliente_id']]) && mem_is_activa_row($m)) {
-      $mapMem[(int)$m['cliente_id']] = $m;
+  $ids = implode(',',$cli_ids);
+  $q = "SELECT id, cliente_id, gimnasio_id, plan, clases_disponibles, activa, fecha_vencimiento
+        FROM membresias
+        WHERE gimnasio_id={$gimnasio_id} AND cliente_id IN ($ids)
+        ORDER BY COALESCE(fecha_vencimiento,'9999-12-31') DESC, id DESC";
+  if ($rm = $conexion->query($q)){
+    while($m=$rm->fetch_assoc()){
+      if (!isset($mapMem[(int)$m['cliente_id']]) && mem_is_activa_row($m))
+        $mapMem[(int)$m['cliente_id']] = $m;
     }
   }
 }
 
-/* ==== ¿Consumo aplicado? (membresia_consumos) ==== */
+/* ¿Consumo aplicado? (membresia_consumos) */
 foreach ($accesos as &$A){
   $A['mem'] = $mapMem[(int)$A['cliente_id']] ?? null;
   $rlog = $conexion->query("SELECT id FROM membresia_consumos WHERE acceso_id=".(int)$A['id']." LIMIT 1");
@@ -198,9 +148,11 @@ tr{background:#171717;border:1px solid #222}
 .danger{background:#b8141433;color:#ff9e9e;border:1px solid #9b1f1f}
 .actions{display:flex;gap:6px}
 small{color:#aaa}
+.note{margin:8px 0;padding:8px 10px;border-radius:10px;border:1px solid #454545;background:#1a1a1a;color:#ddd;font-size:13px}
 footer{margin:12px 0;color:#7a7f87;font-size:12px;display:flex;gap:8px;align-items:center}
 footer .dot{width:6px;height:6px;border-radius:9999px;background:#3b82f6;display:inline-block}
 ";
+
 ?>
 <!doctype html>
 <html lang="es">
@@ -211,10 +163,8 @@ footer .dot{width:6px;height:6px;border-radius:9999px;background:#3b82f6;display
 <style><?= $css ?></style>
 <meta http-equiv="refresh" content="10">
 <script>
-// KeepAlive cada 4 min para que no se corte la sesión
-function keepAlive(){
-  fetch('keepalive.php', {credentials:'same-origin', cache:'no-store'}).catch(()=>{});
-}
+// KeepAlive cada 4 min
+function keepAlive(){ fetch('keepalive.php',{credentials:'same-origin',cache:'no-store'}).catch(()=>{}); }
 setInterval(keepAlive, 4*60*1000);
 document.addEventListener('visibilitychange', ()=>{ if(!document.hidden) keepAlive(); });
 window.addEventListener('load', keepAlive);
@@ -235,8 +185,12 @@ window.addEventListener('load', keepAlive);
       <div><label>Desde</label><br><input type="date" name="desde" value="<?= h($desde) ?>"></div>
       <div><label>Hasta</label><br><input type="date" name="hasta" value="<?= h($hasta) ?>"></div>
       <div><button type="submit">Filtrar</button></div>
-      <div><a href="?g=<?= (int)$gimnasio_id ?>&desde=<?= h($hoy) ?>&hasta=<?= h($hoy) ?>"><button type="button">Hoy</button></a></div>
+      <div><a href="?g=<?= (int)$gimnasio_id ?>&desde=<?= h($hoyPHP) ?>&hasta=<?= h($hoyPHP) ?>"><button type="button">Hoy</button></a></div>
     </form>
+
+    <?php if ($fallback_used): ?>
+      <div class="note">⚠️ No hubo accesos en el rango seleccionado (posible diferencia de zona horaria). Mostrando los <b>últimos 100</b> accesos para verificar que el QR está grabando.</div>
+    <?php endif; ?>
 
     <table>
       <thead>
@@ -246,14 +200,14 @@ window.addEventListener('load', keepAlive);
       </thead>
       <tbody>
       <?php if(!$accesos): ?>
-        <tr><td colspan="7"><small>Sin accesos en el rango.</small></td></tr>
+        <tr><td colspan="7"><small>Sin accesos.</small></td></tr>
       <?php else: foreach($accesos as $row):
-        $m = $row['mem'];
+        $m = $row['mem'] ?? null;
         $disp = is_null($m)? null : (int)$m['clases_disponibles'];
         $badge = is_null($m)? 'warn' : ($disp>0?'ok':'danger'); ?>
         <tr>
-          <td><?= h(date('H:i', strtotime($row['fecha_ts']))) ?></td>
-          <td><?= h($row['apellido'].' '.$row['nombre']) ?></td>
+          <td><?= h(date('H:i', strtotime($row['fecha_ingreso']))) ?></td>
+          <td><?= h(trim(($row['apellido']??'').' '.($row['nombre']??''))) ?></td>
           <td><span class="badge"><?= h($row['metodo']) ?></span></td>
           <td>
             <?php if ($m): ?>
@@ -271,7 +225,7 @@ window.addEventListener('load', keepAlive);
             <?php else: ?>—<?php endif; ?>
           </td>
           <td>
-            <?php if ($row['consumo_aplicado']): ?>
+            <?php if (!empty($row['consumo_aplicado'])): ?>
               <span class="badge ok">Aplicado</span>
             <?php else: ?>
               <span class="badge warn">Pendiente</span>
@@ -279,7 +233,7 @@ window.addEventListener('load', keepAlive);
           </td>
           <td class="actions">
             <?php if ($m): ?>
-              <?php if (!$row['consumo_aplicado']): ?>
+              <?php if (empty($row['consumo_aplicado'])): ?>
                 <form action="consumo_toggle.php" method="post" style="display:inline">
                   <input type="hidden" name="g" value="<?= (int)$gimnasio_id ?>">
                   <input type="hidden" name="accion" value="aplicar">
