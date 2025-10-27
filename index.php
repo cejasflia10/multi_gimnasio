@@ -192,35 +192,19 @@ body{
   .card{ grid-column:1 / -1; }
 }
 
-/* ====== ALUMNOS HOY (lista limpia) ====== */
-#contenedor-alumnos ul.asistencias-hoy{ list-style:none; margin:0; padding:0; }
-#contenedor-alumnos ul.asistencias-hoy li{
-  display:flex; justify-content:space-between; align-items:baseline;
-  gap:10px; padding:8px 6px; border-bottom:1px dashed rgba(15,23,42,.12);
-}
-#contenedor-alumnos ul.asistencias-hoy li:last-child{ border-bottom:none; }
-#contenedor-alumnos .n{ flex:1 1 auto; min-width:0; white-space:normal; word-break:keep-all; overflow-wrap:anywhere; line-height:1.25; }
-#contenedor-alumnos .h{ flex:0 0 auto; font-variant-numeric:tabular-nums; white-space:nowrap; }
+/* ====== ALUMNOS HOY (vertical por turno) ====== */
+#contenedor-alumnos ul.alum-list{ list-style:none; margin:0; padding:0; }
+#contenedor-alumnos ul.alum-list li{ padding:8px 6px; border-bottom:1px dashed rgba(15,23,42,.12); }
+#contenedor-alumnos ul.alum-list li:last-child{ border-bottom:none; }
+#contenedor-alumnos .alum-head{ font-weight:800; color:#b45309; margin-bottom:4px; }
+#contenedor-alumnos .alum-name{ white-space:normal; overflow-wrap:anywhere; line-height:1.25; }
 
-/* ====== RESERVAS (compacto en móvil) ====== */
-@media (max-width:900px){
-  #contenedor-reservas .res-card{
-    border:1px solid rgba(15,23,42,.08);
-    border-radius:16px; box-shadow:0 6px 16px rgba(2,6,23,.06);
-    padding:10px 12px; margin:10px 0; background:#fff;
-    text-align:left;
-  }
-  #contenedor-reservas .res-head{
-    display:flex; align-items:center; gap:8px;
-    font-weight:800; color:#b45309; font-size:1.02rem; line-height:1.2;
-    margin-bottom:6px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
-  }
-  #contenedor-reservas .res-body{
-    display:grid; grid-template-columns:1fr 1fr; gap:8px; align-items:start;
-  }
-  #contenedor-reservas .res-body > div{ display:flex; gap:6px; line-height:1.25; }
-  @media (max-width:520px){ #contenedor-reservas .res-body{ grid-template-columns:1fr; } }
-}
+/* ====== RESERVAS (vertical por turno) ====== */
+#contenedor-reservas ul.res-list{ list-style:none; margin:0; padding:0; }
+#contenedor-reservas ul.res-list li{ padding:8px 6px; border-bottom:1px dashed rgba(15,23,42,.12); }
+#contenedor-reservas ul.res-list li:last-child{ border-bottom:none; }
+#contenedor-reservas .res-head{ font-weight:800; color:#b45309; margin-bottom:4px; }
+#contenedor-reservas .cli{ white-space:normal; overflow-wrap:anywhere; line-height:1.25; }
 
 /* ===== CENTRAR LAS 3 TARJETAS ===== */
 #contenedor-ingresos,
@@ -396,35 +380,28 @@ function fetchIntoBody(url, bodyId, afterLoad){
     .catch(()=>{});
 }
 
-/* ===== ALUMNOS: agrupar por HORA => "HH hs — Nombre, Nombre" ===== */
+/* ===== ALUMNOS: agrupar por HORA en vertical ===== */
 function normalizeAlumnos(root){
-  // contador (si viene del HTML)
   const m = (root.textContent||'').match(/(\d+)\s+ingresos?/i);
   if (m) {
     const span = document.getElementById('alumnos-count');
     if (span) span.textContent = m[1]+' ingresos';
   }
 
-  // Normalizamos a una <ul> con <li>
-  let ul = root.querySelector('ul');
-  if (!ul){
-    const items = root.querySelectorAll('li');
-    if (items.length){
-      ul = document.createElement('ul');
-      items.forEach(li => ul.appendChild(li));
-      root.innerHTML = '';
-      root.appendChild(ul);
-    }
+  // Aseguramos una colección de <li> inicial
+  let seedLis = root.querySelectorAll('li');
+  if (!seedLis.length) {
+    const ul = root.querySelector('ul');
+    if (ul) seedLis = ul.querySelectorAll('li');
   }
-  if (!ul) return;
+  if (!seedLis.length) return;
 
-  // Extraemos (nombre, hora) de cada li (acepta HH:MM o HH:MM:SS)
+  // Extraemos nombre + hora y agrupamos por HH
   const registros = [];
-  ul.querySelectorAll('li').forEach(li=>{
+  seedLis.forEach(li=>{
     const txt = (li.textContent||'').replace(/\s+/g,' ').trim();
     const mm = txt.match(/^(.*?)[\s\-–]*\b(\d{2}):(\d{2})(?::\d{2})?\b.*$/);
     const nombre = (mm ? mm[1] : txt).trim();
-    // Truncamos a HORA redonda: HH
     const horaHH = mm ? mm[2] : null;
     if (nombre){
       const key = horaHH ? (horaHH.padStart(2,'0')+' hs') : '— hs';
@@ -432,95 +409,135 @@ function normalizeAlumnos(root){
     }
   });
 
-  // Agrupamos por "HH hs"
   const map = new Map();
   for (const r of registros){
-    if (!map.has(r.key)) map.set(r.key, []);
-    map.get(r.key).push(r.nombre);
+    if (!map.has(r.key)) map.set(r.key, new Set());
+    map.get(r.key).add(r.nombre);
   }
 
-  // Ordenamos por hora asc (— hs al final)
   const sorted = [...map.entries()].sort((a,b)=>{
     if (a[0]==='— hs') return 1;
     if (b[0]==='— hs') return -1;
     return a[0].localeCompare(b[0]);
   });
 
-  // Render
-  ul.className = 'asistencias-hoy';
-  ul.innerHTML = '';
-  for (const [key, nombres] of sorted){
+  // Render vertical
+  root.innerHTML = '';
+  const ul = document.createElement('ul');
+  ul.className = 'alum-list';
+
+  for (const [hora, setNombres] of sorted){
     const li = document.createElement('li');
-    li.innerHTML = `<span class="n"><strong>${key}</strong> — ${nombres.join(', ')}</span>`;
+
+    const head = document.createElement('div');
+    head.className = 'alum-head';
+    head.textContent = hora;
+
+    const body = document.createElement('div');
+    [...setNombres].forEach(n=>{
+      const d = document.createElement('div');
+      d.className = 'alum-name';
+      d.textContent = n;
+      body.appendChild(d);
+    });
+
+    li.appendChild(head);
+    li.appendChild(body);
     ul.appendChild(li);
   }
+
+  root.appendChild(ul);
 }
 
-/* ===== RESERVAS: agrupar por HORA => "HH hs — Nombre, Nombre" ===== */
+/* ===== RESERVAS: SOLO hora + clientes, en vertical; sin profesor ===== */
 function normalizeReservas(root){
-  // Buscamos nodos que contengan una hora para identificar reservas
+  const WEEKDAYS = /\b(Lunes|Martes|Mi[eé]rcoles|Jueves|Viernes|S[áa]bado|Domingo)\b/ig;
+
   const nodos = [...root.querySelectorAll('*')].filter(e=>{
-    const t = (e.textContent||'').trim();
+    const t=(e.textContent||'').trim();
     return /\b\d{2}:\d{2}(?::\d{2})?\b/.test(t);
   });
 
-  const registros = [];
-  nodos.forEach(card=>{
-    const texto = (card.textContent||'').replace(/\s+/g,' ').trim();
+  const map = new Map();
 
-    // Hora => HH (truncada)
+  nodos.forEach(node=>{
+    const texto = (node.textContent||'').replace(/\s+/g,' ').trim();
     const hm = texto.match(/\b(\d{2}):(\d{2})(?::\d{2})?\b/);
     const horaHH = hm ? hm[1] : null;
     const key = horaHH ? (horaHH.padStart(2,'0')+' hs') : '— hs';
+    if (!map.has(key)) map.set(key, {clientes:new Set(), profesores:new Set()});
 
-    // Nombre del alumno: buscamos 👤 / "Alumno:"
-    let nombre = '';
-    const nodoAlumno = [...card.querySelectorAll('*')].find(e=>/👤|alumno/i.test(e.textContent||''));
-    if (nodoAlumno){
-      nombre = (nodoAlumno.textContent||'').replace(/👤/g,'').replace(/alumno:?/i,'').trim();
-    } else {
-      const m2 = texto.match(/alumno:?\s*([^|·•\-–—\n]+?)(?:\s{2,}|$)/i);
-      if (m2) nombre = m2[1].trim();
-    }
-    if (!nombre){
-      // Fallback: primer fragmento sin la hora
-      nombre = texto.replace(/\b\d{2}:\d{2}(?::\d{2})?\b/,'').trim();
-      nombre = nombre.split(/[,|·•\-–—]/)[0].trim();
+    const candidatos = [];
+    node.querySelectorAll('*').forEach(n=>{
+      const tx=(n.textContent||'').trim();
+      let m;
+      if ((m = tx.match(/^(?:👤\s*)?(.+)$/)) && /👤/.test(tx)) {
+        candidatos.push(m[1].replace(/^Alumno:?\s*/i,'').trim());
+      }
+      if ((m = tx.match(/(?:Alumno|Cliente|Socio):?\s*([A-Za-zÁÉÍÓÚÑñÜü'´` .-]+)/i))) {
+        candidatos.push(m[1].trim());
+      }
+      if ((m = tx.match(/(?:Profesor|Profe|Entrenador|Coach):?\s*([A-Za-zÁÉÍÓÚÑñÜü'´` .-]+)/i))) {
+        map.get(key).profesores.add(m[1].trim());
+      }
+    });
+
+    if (!candidatos.length){
+      let t = texto;
+      t = t.replace(WEEKDAYS,'');
+      t = t.replace(/\b\d{2}:\d{2}(?::\d{2})?\b/g,' ');
+      t = t.replace(/\b(Profesor|Profe|Entrenador|Coach)\b.*$/i,' ');
+      t = t.replace(/[🕒📅⏰•·\-\–\—]/g,' ');
+      t = t.replace(/\s+/g,' ').trim();
+      t.split(/[,|\/]/).map(s=>s.trim()).filter(Boolean).forEach(nm=>candidatos.push(nm));
     }
 
-    if (nombre) registros.push({ key, nombre });
+    candidatos.filter(Boolean).forEach(nm=>map.get(key).clientes.add(nm));
   });
 
-  // Agrupar por "HH hs"
-  const map = new Map();
-  for (const r of registros){
-    if (!map.has(r.key)) map.set(r.key, []);
-    map.get(r.key).push(r.nombre);
+  for (const [,obj] of map.entries()){
+    for (const prof of obj.profesores){
+      if (obj.clientes.has(prof)) obj.clientes.delete(prof);
+    }
   }
 
-  // Ordenar por hora asc
   const sorted = [...map.entries()].sort((a,b)=>{
     if (a[0]==='— hs') return 1;
     if (b[0]==='— hs') return -1;
     return a[0].localeCompare(b[0]);
   });
 
-  // Render minimalista en #reservas-body (sin tocar estilos existentes)
   const cont = document.getElementById('reservas-body') || root;
   cont.innerHTML = '';
   if (!sorted.length){
     cont.innerHTML = '<div class="mut">No hay reservas para este día.</div>';
     return;
   }
+
   const ul = document.createElement('ul');
-  ul.style.listStyle='none'; ul.style.padding='0'; ul.style.margin='0';
-  for (const [key, nombres] of sorted){
+  ul.className = 'res-list';
+
+  for (const [hora, obj] of sorted){
     const li = document.createElement('li');
-    li.style.padding='8px 6px';
-    li.style.borderBottom='1px dashed rgba(15,23,42,.12)';
-    li.innerHTML = `<div class="res-head"><strong>${key}</strong> — ${nombres.join(', ')}</div>`;
+    const head = document.createElement('div'); head.className='res-head'; head.textContent = hora;
+    const body = document.createElement('div');
+
+    const clientes = [...obj.clientes];
+    if (!clientes.length) {
+      const empty = document.createElement('div'); empty.className='cli'; empty.textContent='—';
+      body.appendChild(empty);
+    } else {
+      clientes.forEach(n=>{
+        const d = document.createElement('div'); d.className='cli'; d.textContent = n;
+        body.appendChild(d);
+      });
+    }
+
+    li.appendChild(head);
+    li.appendChild(body);
     ul.appendChild(li);
   }
+
   cont.appendChild(ul);
 }
 
@@ -528,7 +545,6 @@ function normalizeReservas(root){
 function cargarDatos(){
   const f = document.getElementById('fecha')?.value;
 
-  // Ingresos: el ajax que ya funciona
   fetchIntoBody('ajax_ingresos.php', 'ingresos-body');
 
   if (f) fetchIntoBody('ajax_reservas.php?fecha='+encodeURIComponent(f), 'reservas-body', normalizeReservas);
