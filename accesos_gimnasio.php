@@ -1,10 +1,10 @@
 <?php
 /* ==========================================================
    accesos_gimnasio.php — Panel de accesos (FIX zona horaria)
-   • Lee accesos_gimnasio (fecha_ingreso, metodo, cliente_id, gimnasio_id).
-   • “Hoy” se filtra con CURRENT_DATE() de MySQL (no con PHP).
-   • Rango: 00:00:00–23:59:59 sin romper índices.
-   • Fallback: si el rango queda vacío, muestra últimos 100 accesos.
+   • Hora mostrada en -03:00 (San Luis/Argentina) con CONVERT_TZ.
+   • “Hoy” con CURRENT_DATE() (no depende de PHP).
+   • Rango: 00:00:00–23:59:59.
+   • Fallback: últimos 100 si el rango queda vacío.
    ========================================================== */
 
 if (session_status() === PHP_SESSION_NONE) session_start();
@@ -12,6 +12,9 @@ require_once __DIR__ . '/conexion.php';
 if (!isset($conexion) || !($conexion instanceof mysqli)) { http_response_code(500); exit('❌ Sin BD'); }
 if (function_exists('mysqli_report')) { mysqli_report(MYSQLI_REPORT_OFF); }
 @$conexion->set_charset('utf8mb4');
+
+/* Fuerzo la TZ de PHP (por si se usa date() de respaldo) */
+@date_default_timezone_set('America/Argentina/San_Luis');
 
 function h($s){ return htmlspecialchars((string)$s, ENT_QUOTES|ENT_SUBSTITUTE,'UTF-8'); }
 function qv($db,$s){ return "'".$db->real_escape_string((string)$s)."'"; }
@@ -34,7 +37,7 @@ if ($gimnasio_id<=0){ http_response_code(400); exit('Falta g'); }
 $hoyPHP = date('Y-m-d');
 $desde  = $_GET['desde'] ?? $hoyPHP;
 $hasta  = $_GET['hasta'] ?? $hoyPHP;
-/* Usar “modo hoy” si el usuario no cambió filtros o si eligió explícitamente hoy-hoy */
+/* Modo hoy si no tocaron filtros, o eligieron hoy-hoy */
 $modo_hoy = (!isset($_GET['desde']) && !isset($_GET['hasta'])) || ($desde===$hoyPHP && $hasta===$hoyPHP);
 
 /* ==== Marca del gimnasio ==== */
@@ -46,47 +49,62 @@ if ($rs = $conexion->query("SELECT nombre, logo FROM gimnasios WHERE id={$gimnas
   }
 }
 
-/* ==== Query de accesos ==== */
-/* Esquema exacto que nos pasaste: fecha_ingreso/metodo/cliente_id/gimnasio_id */
+/* ==== Query de accesos (hora en -03:00) ==== */
 $A_TABLE = 'accesos_gimnasio';
 
 if ($modo_hoy) {
-  // Usamos fecha “hoy” desde MySQL (CURRENT_DATE) para evitar desfases de TZ
+  // CURRENT_DATE() usa la TZ del servidor MySQL, pero solo afecta límites del día.
+  // La hora mostrada SIEMPRE se convierte a -03:00 con CONVERT_TZ.
   $sql = "
-    SELECT a.id, a.fecha_ingreso, a.metodo, a.cliente_id, c.nombre, c.apellido
-    FROM $A_TABLE a
-    JOIN clientes c ON c.id = a.cliente_id
-    WHERE a.gimnasio_id = {$gimnasio_id}
-      AND a.fecha_ingreso >= CURRENT_DATE()
-      AND a.fecha_ingreso <  (CURRENT_DATE() + INTERVAL 1 DAY)
-    ORDER BY a.fecha_ingreso DESC
+    SELECT a.id,
+           a.fecha_ingreso,
+           TIME_FORMAT(CONVERT_TZ(a.fecha_ingreso, @@session.time_zone, '-03:00'), '%H:%i') AS hora_local,
+           a.metodo,
+           a.cliente_id,
+           c.nombre, c.apellido
+      FROM $A_TABLE a
+      JOIN clientes c ON c.id = a.cliente_id
+     WHERE a.gimnasio_id = {$gimnasio_id}
+       AND a.fecha_ingreso >= CURRENT_DATE()
+       AND a.fecha_ingreso <  (CURRENT_DATE() + INTERVAL 1 DAY)
+     ORDER BY a.fecha_ingreso DESC
   ";
 } else {
   $desde_dt = $desde.' 00:00:00';
   $hasta_dt = $hasta.' 23:59:59';
   $sql = "
-    SELECT a.id, a.fecha_ingreso, a.metodo, a.cliente_id, c.nombre, c.apellido
-    FROM $A_TABLE a
-    JOIN clientes c ON c.id = a.cliente_id
-    WHERE a.gimnasio_id = {$gimnasio_id}
-      AND a.fecha_ingreso BETWEEN ".qv($conexion,$desde_dt)." AND ".qv($conexion,$hasta_dt)."
-    ORDER BY a.fecha_ingreso DESC
+    SELECT a.id,
+           a.fecha_ingreso,
+           TIME_FORMAT(CONVERT_TZ(a.fecha_ingreso, @@session.time_zone, '-03:00'), '%H:%i') AS hora_local,
+           a.metodo,
+           a.cliente_id,
+           c.nombre, c.apellido
+      FROM $A_TABLE a
+      JOIN clientes c ON c.id = a.cliente_id
+     WHERE a.gimnasio_id = {$gimnasio_id}
+       AND a.fecha_ingreso BETWEEN ".qv($conexion,$desde_dt)." AND ".qv($conexion,$hasta_dt)."
+     ORDER BY a.fecha_ingreso DESC
   ";
 }
 
 $accesos=[]; 
 if ($rs = $conexion->query($sql)) while($r=$rs->fetch_assoc()) $accesos[]=$r;
 
-/* Fallback: si no hay filas en el rango, mostramos los últimos 100 del gimnasio */
+/* Fallback: si no hay filas en el rango, mostrar últimos 100 */
 $fallback_used = false;
 if (!$accesos){
   $sql_fb = "
-    SELECT a.id, a.fecha_ingreso, a.metodo, a.cliente_id, c.nombre, c.apellido
-    FROM $A_TABLE a
-    JOIN clientes c ON c.id = a.cliente_id
-    WHERE a.gimnasio_id = {$gimnasio_id}
-    ORDER BY a.fecha_ingreso DESC
-    LIMIT 100
+    SELECT a.id,
+           a.fecha_ingreso,
+           TIME_FORMAT(CONVERT_TZ(a.fecha_ingreso, @@session.time_zone, '-03:00'), '%H:%i') AS hora_local,
+           a.metodo,
+           a.cliente_id,
+           c.nombre, c.apellido
+      FROM $A_TABLE a
+      JOIN clientes c ON c.id = a.cliente_id
+     WHERE a.gimnasio_id = {$gimnasio_id}
+     ORDER BY a.fecha_ingreso DESC
+     LIMIT 100
   ";
   if ($rf = $conexion->query($sql_fb)) { while($r=$rf->fetch_assoc()) $accesos[]=$r; }
   $fallback_used = (bool)$accesos;
@@ -189,7 +207,7 @@ window.addEventListener('load', keepAlive);
     </form>
 
     <?php if ($fallback_used): ?>
-      <div class="note">⚠️ No hubo accesos en el rango seleccionado (posible diferencia de zona horaria). Mostrando los <b>últimos 100</b> accesos para verificar que el QR está grabando.</div>
+      <div class="note">⚠️ No hubo accesos en el rango seleccionado. Mostrando los <b>últimos 100</b> para verificar que el QR está grabando.</div>
     <?php endif; ?>
 
     <table>
@@ -205,8 +223,8 @@ window.addEventListener('load', keepAlive);
         $m = $row['mem'] ?? null;
         $disp = is_null($m)? null : (int)$m['clases_disponibles'];
         $badge = is_null($m)? 'warn' : ($disp>0?'ok':'danger'); ?>
-        <tr>
-          <td><?= h(date('H:i', strtotime($row['fecha_ingreso']))) ?></td>
+        <tr<?= ($row['metodo']==='QR-DENEGADO'?' style="opacity:.7"':'') ?>>
+          <td><?= h($row['hora_local'] ?: date('H:i', strtotime($row['fecha_ingreso']))) ?></td>
           <td><?= h(trim(($row['apellido']??'').' '.($row['nombre']??''))) ?></td>
           <td><span class="badge"><?= h($row['metodo']) ?></span></td>
           <td>
