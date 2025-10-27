@@ -1,10 +1,10 @@
 <?php
 /* ============================================================================
-   detalle_membresia.php — Ficha de membresía (turnos + eliminar)
-   - Carga estilo_unificado.css
-   - Pagos: tabla pagos_membresia/pagos o embebidos
-   - Turnos: gym_clientes_plan (cliente_id OR plan_id) usando gimnasio de la membresía
-   - Botón Eliminar turno (gym_clientes_plan) con CSRF simple
+   detalle_membresia.php — Pagos (desde membresias) + Turnos (gym_clientes_plan)
+   - Muestra formas de pago de columnas propias de 'membresias'
+   - Desglose por pago_efectivo/transferencia/débito/crédito/cc/otros
+   - Lee metodo_pago / forma_pago / monto_pagado / total_pagado si están
+   - Turnos: usa gimnasio de la membresía; permite Eliminar con CSRF
    ============================================================================ */
 
 if (session_status() === PHP_SESSION_NONE) session_start();
@@ -15,7 +15,7 @@ if (!isset($conexion) || !($conexion instanceof mysqli)) { http_response_code(50
 if (function_exists('mysqli_report')) { mysqli_report(MYSQLI_REPORT_OFF); }
 @$conexion->set_charset('utf8mb4');
 
-/* Producción: ocultar warnings en pantalla */
+/* Producción */
 @ini_set('display_errors', 0);
 @ini_set('log_errors', 1);
 @error_reporting(E_ALL & ~E_NOTICE & ~E_WARNING);
@@ -23,24 +23,20 @@ if (function_exists('mysqli_report')) { mysqli_report(MYSQLI_REPORT_OFF); }
 /* ===== Helpers ===== */
 function h($s){ return htmlspecialchars((string)$s, ENT_QUOTES|ENT_SUBSTITUTE,'UTF-8'); }
 function has_table(mysqli $db, string $t): bool { $t=$db->real_escape_string($t); $r=$db->query("SHOW TABLES LIKE '$t'"); return $r&&$r->num_rows>0; }
-function col_exists(mysqli $db, string $table, string $col): bool {
-  $table=$db->real_escape_string($table); $col=$db->real_escape_string($col);
-  $r=$db->query("SHOW COLUMNS FROM `$table` LIKE '$col'"); return $r&&$r->num_rows>0;
-}
+function col_exists(mysqli $db, string $table, string $col): bool { $table=$db->real_escape_string($table); $col=$db->real_escape_string($col); $r=$db->query("SHOW COLUMNS FROM `$table` LIKE '$col'"); return $r&&$r->num_rows>0; }
 function pick_col(mysqli $db, string $table, array $cands){ foreach($cands as $c){ if(col_exists($db,$table,$c)) return $c; } return null; }
 function fetch_all_assoc(mysqli_result $res): array { $o=[]; while($x=$res->fetch_assoc()) $o[]=$x; return $o; }
 function fmt_date($d){ if(!$d || $d==='0000-00-00') return '—'; $ts=strtotime($d); return $ts?date('d/m/Y',$ts):h($d); }
 function fmt_hhmm_safe($t){ if ($t===null || $t==='') return '—'; return substr((string)$t,0,5); }
 function days_diff($a,$b){ $ta=strtotime($a); $tb=strtotime($b); if(!$ta||!$tb) return null; return (int)floor(($tb-$ta)/86400); }
 
-/* Normaliza dias_json con comillas dobladas y varios formatos */
+/* Normaliza dias_json */
 function parse_dias_any($raw){
   if ($raw===null || $raw==='') return '—';
   $s = (string)$raw;
-  if (strpos($s,'""') !== false) $s = str_replace('""','"',$s); // "[""Lunes"",""Martes""]" -> "["Lunes","Martes"]"
+  if (strpos($s,'""') !== false) $s = str_replace('""','"',$s);
   $s = trim($s);
   if (strlen($s)>=2 && ($s[0]==='"' && substr($s,-1)==='"')) $s = trim($s,'"');
-
   $j = json_decode($s, true);
   $list = [];
   if (json_last_error() === JSON_ERROR_NONE) {
@@ -48,20 +44,13 @@ function parse_dias_any($raw){
       $is_assoc = array_keys($j) !== range(0, count($j)-1);
       if ($is_assoc) { foreach ($j as $k=>$v) if ($v) $list[]=(string)$k; }
       else { foreach ($j as $v) $list[]=(string)$v; }
-    } elseif (is_string($j)) {
-      $list = preg_split('/[\s,;|]+/u', $j, -1, PREG_SPLIT_NO_EMPTY) ?: [];
-    }
-  } else {
-    $list = preg_split('/[\s,;|]+/u', $s, -1, PREG_SPLIT_NO_EMPTY) ?: [];
-  }
-
-  $map = [
-    '0'=>'Dom','1'=>'Lun','2'=>'Mar','3'=>'Mié','4'=>'Jue','5'=>'Vie','6'=>'Sáb','7'=>'Dom',
+    } elseif (is_string($j)) { $list = preg_split('/[\s,;|]+/u', $j, -1, PREG_SPLIT_NO_EMPTY) ?: []; }
+  } else { $list = preg_split('/[\s,;|]+/u', $s, -1, PREG_SPLIT_NO_EMPTY) ?: []; }
+  $map = ['0'=>'Dom','1'=>'Lun','2'=>'Mar','3'=>'Mié','4'=>'Jue','5'=>'Vie','6'=>'Sáb','7'=>'Dom',
     'dom'=>'Dom','domingo'=>'Dom','lun'=>'Lun','lunes'=>'Lun','mar'=>'Mar','martes'=>'Mar',
     'mie'=>'Mié','mié'=>'Mié','miercoles'=>'Mié','miércoles'=>'Mié',
     'jue'=>'Jue','jueves'=>'Jue','vie'=>'Vie','viernes'=>'Vie',
-    'sab'=>'Sáb','sáb'=>'Sáb','sabado'=>'Sáb','sábado'=>'Sáb'
-  ];
+    'sab'=>'Sáb','sáb'=>'Sáb','sabado'=>'Sáb','sábado'=>'Sáb'];
   $out=[];
   foreach ($list as $d){
     $k=strtolower(trim($d));
@@ -74,9 +63,7 @@ function parse_dias_any($raw){
 }
 
 /* ===== CSRF ===== */
-if (empty($_SESSION['csrf'])) {
-  $_SESSION['csrf'] = bin2hex(random_bytes(16));
-}
+if (empty($_SESSION['csrf'])) { $_SESSION['csrf'] = bin2hex(random_bytes(16)); }
 $CSRF = $_SESSION['csrf'];
 
 /* ===== Param ===== */
@@ -85,23 +72,15 @@ if ($id<=0){ header('Location: membresias.php'); exit; }
 
 /* ===== Acciones (Eliminar turno) ===== */
 $msg = null; $msg_err = null;
-if ($_SERVER['REQUEST_METHOD']==='POST' && isset($_POST['accion']) && $_POST['accion']==='del_turno') {
+if ($_SERVER['REQUEST_METHOD']==='POST' && ($_POST['accion'] ?? '')==='del_turno') {
   $csrf_ok = hash_equals($_SESSION['csrf'] ?? '', $_POST['csrf'] ?? '');
   $del_id = (int)($_POST['del_turno_id'] ?? 0);
-  if (!$csrf_ok) {
-    $msg_err = 'Operación no autorizada (CSRF).';
-  } elseif ($del_id<=0) {
-    $msg_err = 'ID de turno inválido.';
-  } else {
-    // Validar que el turno existe y pertenece al mismo gimnasio de la membresía
-    $qG = $conexion->query("SELECT gcp.id, gcp.gimnasio_id FROM gym_clientes_plan gcp WHERE gcp.id = $del_id LIMIT 1");
-    if (!$qG || $qG->num_rows===0) {
-      $msg_err = 'Turno no encontrado.';
-    } else {
-      $gcp = $qG->fetch_assoc();
-      // Aún no sabemos el gym de la membresía; lo verificamos tras cargar la membresía (debajo).
-      $_SESSION['__pending_delete_gcp'] = (int)$gcp['id']; // guardo para verificar después de cargar M
-    }
+  if (!$csrf_ok)         $msg_err = 'Operación no autorizada (CSRF).';
+  elseif ($del_id<=0)    $msg_err = 'ID de turno inválido.';
+  else {
+    $qG = $conexion->query("SELECT id, gimnasio_id FROM gym_clientes_plan WHERE id = $del_id LIMIT 1");
+    if (!$qG || $qG->num_rows===0) $msg_err = 'Turno no encontrado.';
+    else $_SESSION['__pending_delete_gcp'] = $del_id;
   }
 }
 
@@ -111,20 +90,20 @@ $TAB_C = has_table($conexion,'clientes')   ? 'clientes'   : null;
 $TAB_P = has_table($conexion,'planes')     ? 'planes'     : null;
 if (!$TAB_M){ http_response_code(500); exit('❌ No existe la tabla de membresías.'); }
 
-/* Cols membresía */
+/* Cols membresía (según tu esquema) */
 $COL_ID          = pick_col($conexion,$TAB_M,['id','membresia_id']);
 $COL_CLIENTE_ID  = pick_col($conexion,$TAB_M,['cliente_id','id_cliente']);
-$COL_GYM_ID      = pick_col($conexion,$TAB_M,['gimnasio_id','id_gimnasio','gimnasio']);
+$COL_GYM_ID      = pick_col($conexion,$TAB_M,['gimnasio_id','id_gimnasio','gimnasio']); // tienes ambos
 $COL_PLAN_ID     = pick_col($conexion,$TAB_M,['plan_id','id_plan']);
 $COL_FINI        = pick_col($conexion,$TAB_M,['fecha_inicio','inicio','desde']);
 $COL_FVTO        = pick_col($conexion,$TAB_M,['fecha_vencimiento','vencimiento','hasta']);
-$COL_CL_DISP     = pick_col($conexion,$TAB_M,['clases_disponibles','clases_restantes','clases']);
+$COL_CL_DISP     = pick_col($conexion,$TAB_M,['clases_disponibles','clases_restantes']);
 $COL_CL_TOT      = pick_col($conexion,$TAB_M,['clases_totales','clases_cantidad','total_clases']);
-$COL_TOTAL       = pick_col($conexion,$TAB_M,['total','monto_total','precio_total','importe','total_pagar']);
+$COL_TOTAL       = pick_col($conexion,$TAB_M,['total','precio','monto_pago']); // total del plan / precio
 $COL_OBS         = pick_col($conexion,$TAB_M,['observaciones','observacion','obs','nota']);
-$COL_ESTADO      = pick_col($conexion,$TAB_M,['estado','status']);
+$COL_ESTADO      = pick_col($conexion,$TAB_M,['estado','status','activa']);
 
-/* SELECT principal */
+/* SELECT principal membresía */
 $sel = [];
 $sel[] = "m.`$COL_ID` AS mid";
 if ($COL_CLIENTE_ID) $sel[] = "m.`$COL_CLIENTE_ID` AS cliente_id";
@@ -138,8 +117,11 @@ if ($COL_TOTAL)      $sel[] = "m.`$COL_TOTAL` AS total";
 if ($COL_OBS)        $sel[] = "m.`$COL_OBS` AS observaciones";
 if ($COL_ESTADO)     $sel[] = "m.`$COL_ESTADO` AS estado";
 
+/* Campos de pago en 'membresias' */
 foreach ([
-  'pago_efectivo','pago_transferencia','pago_debito','pago_credito','pago_cuenta_corriente','otros_pagos','descuento'
+  'metodo_pago','forma_pago','monto_pagado','total_pagado','monto_pago',
+  'pago_efectivo','pago_transferencia','pago_debito','pago_credito','pago_cuenta_corriente',
+  'otros_pagos','descuento','saldo_cc'
 ] as $alias){ if (col_exists($conexion,$TAB_M,$alias)) $sel[] = "m.`$alias` AS `$alias`"; }
 
 $sql = "SELECT ".implode(", ", $sel)." FROM `$TAB_M` m WHERE m.`$COL_ID` = ".(int)$id;
@@ -147,11 +129,11 @@ $res = $conexion->query($sql);
 if (!$res || $res->num_rows===0){ http_response_code(404); exit('❌ No se encontró la membresía.'); }
 $M = $res->fetch_assoc();
 
-/* Gym a usar para filtrar turnos: primero el de la membresía, si no hay, el de sesión */
+/* Gym para filtrar turnos: usa primero el de la membresía */
 $gimnasio_id_memb = (int)($M['gimnasio_id'] ?? 0);
 $gymFilterId = $gimnasio_id_memb > 0 ? $gimnasio_id_memb : (int)($_SESSION['gimnasio_id'] ?? 0);
 
-/* Si quedó una eliminación pendiente, validar gimnasio y ejecutar */
+/* Ejecutar eliminación pendiente (validando gimnasio) */
 if (isset($_SESSION['__pending_delete_gcp'])) {
   $del_id = (int)$_SESSION['__pending_delete_gcp'];
   unset($_SESSION['__pending_delete_gcp']);
@@ -159,17 +141,10 @@ if (isset($_SESSION['__pending_delete_gcp'])) {
   if ($qVal && $qVal->num_rows>0) {
     $rowV = $qVal->fetch_assoc();
     if ((int)$rowV['gimnasio_id'] === $gymFilterId) {
-      if ($conexion->query("DELETE FROM gym_clientes_plan WHERE id = $del_id")) {
-        $msg = 'Turno eliminado correctamente.';
-      } else {
-        $msg_err = 'No se pudo eliminar el turno. '.$conexion->error;
-      }
-    } else {
-      $msg_err = 'El turno no pertenece a este gimnasio. Operación cancelada.';
-    }
-  } else {
-    $msg_err = 'Turno no encontrado al eliminar.';
-  }
+      if ($conexion->query("DELETE FROM gym_clientes_plan WHERE id = $del_id")) $msg = 'Turno eliminado correctamente.';
+      else $msg_err = 'No se pudo eliminar el turno. '.$conexion->error;
+    } else { $msg_err = 'El turno no pertenece a este gimnasio. Operación cancelada.'; }
+  } else { $msg_err = 'Turno no encontrado al eliminar.'; }
 }
 
 /* Derivados */
@@ -181,45 +156,61 @@ $estado_txt='—'; $estado_cl='';
 if ($fecha_venc){
   if ($hoy > $fecha_venc){ $estado_txt='Vencida'; $estado_cl='estado-vencida'; }
   else { $estado_txt='Activa'; $estado_cl='estado-activa'; if ($dias_restantes!==null && $dias_restantes<=3){ $estado_txt='Próxima a vencer'; $estado_cl='estado-alerta'; } }
-} elseif (!empty($M['estado'])) { $estado_txt = (string)$M['estado']; }
+} elseif (isset($M['activa'])) { $estado_txt = ((int)$M['activa']===1 ? 'Activa' : 'Inactiva'); }
 
 /* Clases */
 $clases_totales     = isset($M['clases_totales']) ? (int)$M['clases_totales'] : null;
-$clases_disponibles = isset($M['clases_disponibles']) ? (int)$M['clases_disponibles'] : null;
+$clases_disponibles = isset($M['clases_disponibles']) ? (int)$M['clases_disponibles'] : (isset($M['clases_restantes'])?(int)$M['clases_restantes']:null);
 
-/* Pagos (tabla secundaria) */
-$pagos=[]; $TAB_PAG=null;
-foreach (['pagos_membresia','pagos'] as $tp){
-  if (!has_table($conexion,$tp)) continue;
-  $mid = pick_col($conexion,$tp,['membresia_id','id_membresia']); if(!$mid) continue;
-  $TAB_PAG = $tp;
-  $COL_PAG_FECHA = pick_col($conexion,$tp,['fecha','fecha_pago','created_at']);
-  $COL_PAG_MONTO = pick_col($conexion,$tp,['monto','importe','total']);
-  $COL_PAG_MET   = pick_col($conexion,$tp,['metodo','medio','forma']);
-  $COL_PAG_OBS   = pick_col($conexion,$tp,['observaciones','obs','nota']);
-  $sqlp = "SELECT ".
-          ($COL_PAG_FECHA ? "`$COL_PAG_FECHA` AS fecha," : "NULL AS fecha,").
-          ($COL_PAG_MONTO ? "`$COL_PAG_MONTO` AS monto," : "NULL AS monto,").
-          ($COL_PAG_MET   ? "`$COL_PAG_MET`   AS metodo," : "NULL AS metodo,").
-          ($COL_PAG_OBS   ? "`$COL_PAG_OBS`   AS obs"     : "NULL AS obs").
-          " FROM `$tp` WHERE `$mid` = ".(int)$id." ORDER BY ".($COL_PAG_FECHA? "`$COL_PAG_FECHA` DESC":"1");
-  if ($rp = $conexion->query($sqlp)){ $pagos = fetch_all_assoc($rp); }
-  break;
+/* =========== PAGOS (solo desde 'membresias') =========== */
+$pagos = [];
+
+/* 1) Desglose por campos específicos si > 0 */
+$desgloses = [
+  'Efectivo'          => (float)($M['pago_efectivo']          ?? 0),
+  'Transferencia'     => (float)($M['pago_transferencia']      ?? 0),
+  'Débito'            => (float)($M['pago_debito']             ?? 0),
+  'Crédito'           => (float)($M['pago_credito']            ?? 0),
+  'Cuenta corriente'  => (float)($M['pago_cuenta_corriente']   ?? 0),
+  'Otros'             => (float)($M['otros_pagos']             ?? 0),
+];
+foreach ($desgloses as $met => $monto) {
+  if ($monto > 0) $pagos[] = ['fecha'=> $M['fecha_inicio'] ?? null, 'metodo'=>$met, 'monto'=>$monto, 'obs'=>null];
 }
 
-/* Pagos embebidos (fallback) */
-$emb = [
-  'efectivo'       => (float)($M['pago_efectivo'] ?? 0),
-  'transferencia'  => (float)($M['pago_transferencia'] ?? 0),
-  'debito'         => (float)($M['pago_debito'] ?? 0),
-  'credito'        => (float)($M['pago_credito'] ?? 0),
-  'cuenta_corriente'=> (float)($M['pago_cuenta_corriente'] ?? 0),
-  'otros'          => (float)($M['otros_pagos'] ?? 0),
-];
-$descuento_val = (float)($M['descuento'] ?? 0);
-$total_plan = (float)($M['total'] ?? 0);
-$total_pagado_emb = array_sum($emb);
-$dif = $total_plan - $total_pagado_emb;
+/* 2) Registro general de método/forma y montos (si existen) */
+$metodo_pago   = trim((string)($M['metodo_pago'] ?? ''));
+$forma_pago    = trim((string)($M['forma_pago']  ?? ''));
+$monto_pagado  = (float)($M['monto_pagado']      ?? 0);
+$total_pagado  = (float)($M['total_pagado']      ?? 0);
+$monto_pago    = (float)($M['monto_pago']        ?? 0); // a veces se usa como total abonado
+
+if ($metodo_pago !== '' && $monto_pagado > 0) {
+  $pagos[] = ['fecha'=>$M['fecha_inicio'] ?? null, 'metodo'=>$metodo_pago, 'monto'=>$monto_pagado, 'obs'=>null];
+}
+if ($forma_pago !== '' && $total_pagado > 0) {
+  $pagos[] = ['fecha'=>$M['fecha_inicio'] ?? null, 'metodo'=>$forma_pago, 'monto'=>$total_pagado, 'obs'=>'(total pagado)'];
+}
+/* Si no hay total_pagado pero hay monto_pago + forma */
+if ($forma_pago !== '' && $total_pagado <= 0 && $monto_pago > 0) {
+  $pagos[] = ['fecha'=>$M['fecha_inicio'] ?? null, 'metodo'=>$forma_pago, 'monto'=>$monto_pago, 'obs'=>null];
+}
+
+/* Ordenar pagos por fecha desc (si existiera) */
+usort($pagos, function($a,$b){
+  $ta = strtotime($a['fecha'] ?? '') ?: 0;
+  $tb = strtotime($b['fecha'] ?? '') ?: 0;
+  return $tb <=> $ta;
+});
+
+/* Totales */
+$total_plan = (float)($M['total'] ?? ($M['precio'] ?? 0));
+$sum_pagos  = 0.0;
+foreach ($pagos as $p) $sum_pagos += (float)($p['monto'] ?? 0);
+/* Si además hay total_pagado y no lo incluimos en desglose, sumarlo una vez (evitar duplicar) */
+if ($total_pagado > 0 && $sum_pagos < $total_pagado) $sum_pagos = $total_pagado;
+
+$dif = $total_plan - $sum_pagos;
 
 /* ================= Turnos (gym_clientes_plan) ================= */
 $turnos = [];
@@ -228,32 +219,27 @@ $cliente_id   = (int)($M['cliente_id'] ?? 0);
 $plan_id_memb = (int)($M['plan_id'] ?? 0);
 
 if (has_table($conexion,'gym_clientes_plan') && ($cliente_id>0 || $plan_id_memb>0)) {
-  $t = 'gym_clientes_plan';
-
   $condsOR = [];
   if ($cliente_id>0)   $condsOR[] = "`cliente_id` = $cliente_id";
   if ($plan_id_memb>0) $condsOR[] = "`plan_id` = $plan_id_memb";
-
   $where = [];
-  if ($condsOR) $where[] = '('.implode(' OR ', $condsOR).')';
-  if ($gymFilterId>0)  $where[] = "`gimnasio_id` = $gymFilterId";
-  if (!$where) $where[] = '1';
+  if ($condsOR)       $where[] = '('.implode(' OR ', $condsOR).')';
+  if ($gymFilterId>0) $where[] = "`gimnasio_id` = $gymFilterId";
+  if (!$where)        $where[] = '1';
 
   $sqlt = "SELECT id, gimnasio_id, cliente_id, plan_id, desde, hasta, hora, dias_json, profesor_id
-           FROM `$t`
+           FROM `gym_clientes_plan`
            WHERE ".implode(' AND ', $where)."
            ORDER BY desde, hora";
-
   if ($rt = $conexion->query($sqlt)) {
     while ($r = $rt->fetch_assoc()) {
-      $dj = (string)($r['dias_json'] ?? '');
       $turnos[] = [
         'fuente' => 'gym_clientes_plan',
         'id'     => (int)$r['id'],
         'desde'  => $r['desde'] ?? null,
         'hasta'  => $r['hasta'] ?? null,
         'hora'   => $r['hora'] ?? null,
-        'dias'   => parse_dias_any($dj),
+        'dias'   => parse_dias_any($r['dias_json'] ?? ''),
         'profesor_id' => $r['profesor_id'] ?? null,
       ];
     }
@@ -297,9 +283,7 @@ $URL_PRINT  = 'waiver_print.php';
   </style>
   <script>
     function confirmarEliminacion(form){
-      if(confirm('¿Eliminar este turno fijo? Esta acción no se puede deshacer.')){
-        form.submit();
-      }
+      if(confirm('¿Eliminar este turno fijo? Esta acción no se puede deshacer.')){ form.submit(); }
       return false;
     }
   </script>
@@ -318,12 +302,10 @@ $URL_PRINT  = 'waiver_print.php';
       <h3>Datos</h3>
       <div class="fila"><span class="lbl">Estado:</span> <span class="badge <?php echo h($estado_cl); ?>"><?php echo h($estado_txt); ?><?php if($fecha_venc): ?> · vence <?php echo fmt_date($fecha_venc); ?><?php endif; ?></span></div>
       <div class="fila"><span class="lbl">Cliente:</span>
-        <span class="val">
-          <?php echo h(trim(($M['cli_nombre'] ?? '').' '.($M['cli_apellido'] ?? '')) ?: '—'); ?>
-        </span>
+        <span class="val"><?php echo h($M['cliente_id'] ?? '—'); ?></span>
       </div>
       <div class="fila"><span class="lbl">Plan:</span>
-        <span class="val"><?php echo h($M['plan_nombre'] ?? '—'); ?></span>
+        <span class="val"><?php echo h($M['plan_id'] ?? '—'); ?></span>
       </div>
       <div class="fila"><span class="lbl">Período:</span>
         <span class="val"><?php echo fmt_date($M['fecha_inicio'] ?? ''); ?> → <?php echo fmt_date($fecha_venc); ?>
@@ -343,7 +325,7 @@ $URL_PRINT  = 'waiver_print.php';
         </span>
       </div>
       <div class="fila"><span class="lbl">Importe plan:</span>
-        <span class="val"><?php echo isset($M['total']) ? '$'.number_format((float)$M['total'],2,',','.') : '—'; ?></span>
+        <span class="val"><?php echo isset($M['total']) ? '$'.number_format((float)$M['total'],2,',','.') : (isset($M['precio']) ? '$'.number_format((float)$M['precio'],2,',','.') : '—'); ?></span>
       </div>
 
       <?php if(!empty($M['observaciones'])): ?>
@@ -360,7 +342,7 @@ $URL_PRINT  = 'waiver_print.php';
     </div>
 
     <div class="card">
-      <h3>Pagos</h3>
+      <h3>Pagos (registrados en la membresía)</h3>
       <div class="table-wrap">
         <table class="tabla">
           <?php if (!empty($pagos)): ?>
@@ -371,32 +353,22 @@ $URL_PRINT  = 'waiver_print.php';
               <tr>
                 <td class="nowrap"><?php echo fmt_date($pg['fecha'] ?? ''); ?></td>
                 <td><?php echo h($pg['metodo'] ?? '—'); ?></td>
-                <td class="num">$<?php echo number_format((float)($pg['monto'] ?? 0),2,',','.'); ?></td>
+                <td class="num"><?php echo ($pg['monto']!==null && $pg['monto']!=='') ? '$'.number_format((float)$pg['monto'],2,',','.') : '—'; ?></td>
                 <td><?php echo h($pg['obs'] ?? ''); ?></td>
               </tr>
               <?php endforeach; ?>
+              <tr><th colspan="2">Total pagado</th><th class="num"><?php echo '$'.number_format($sum_pagos,2,',','.'); ?></th><th></th></tr>
+              <tr><th colspan="2">Total del plan</th><th class="num"><?php echo '$'.number_format($total_plan,2,',','.'); ?></th><th></th></tr>
+              <tr><th colspan="2">Diferencia</th><th class="num" style="color:<?php echo $dif<=0?'#16a34a':'#ef4444'; ?>"><?php echo '$'.number_format($dif,2,',','.'); ?></th><th></th></tr>
             </tbody>
           <?php else: ?>
-            <colgroup><col style="width:60%"><col style="width:40%"></colgroup>
-            <thead><tr><th>Concepto</th><th class="num">Importe</th></tr></thead>
+            <thead><tr><th>Detalle</th><th class="num">Importe</th></tr></thead>
             <tbody>
-              <tr><td>Efectivo</td><td class="num">$<?php echo number_format((float)($emb['efectivo'] ?? 0),2,',','.'); ?></td></tr>
-              <tr><td>Transferencia</td><td class="num">$<?php echo number_format((float)($emb['transferencia'] ?? 0),2,',','.'); ?></td></tr>
-              <tr><td>Débito</td><td class="num">$<?php echo number_format((float)($emb['debito'] ?? 0),2,',','.'); ?></td></tr>
-              <tr><td>Crédito</td><td class="num">$<?php echo number_format((float)($emb['credito'] ?? 0),2,',','.'); ?></td></tr>
-              <tr><td>Cuenta corriente</td><td class="num">$<?php echo number_format((float)($emb['cuenta_corriente'] ?? 0),2,',','.'); ?></td></tr>
-              <tr><td>Otros</td><td class="num">$<?php echo number_format((float)($emb['otros'] ?? 0),2,',','.'); ?></td></tr>
-              <tr><td>Descuento</td><td class="num"><?php echo $descuento_val>0? '$'.number_format($descuento_val,2,',','.') : '—'; ?></td></tr>
-              <tr><th>Total pagado</th><th class="num">$<?php echo number_format($total_pagado_emb,2,',','.'); ?></th></tr>
-              <tr><th>Total del plan</th><th class="num">$<?php echo number_format($total_plan,2,',','.'); ?></th></tr>
-              <tr><th>Diferencia</th><th class="num" style="color:<?php echo $dif<=0?'#16a34a':'#ef4444'; ?>">$<?php echo number_format($dif,2,',','.'); ?></th></tr>
+              <tr><td>No hay pagos registrados en esta membresía.</td><td class="num">—</td></tr>
+              <tr><th>Total del plan</th><th class="num"><?php echo '$'.number_format($total_plan,2,',','.'); ?></th></tr>
             </tbody>
           <?php endif; ?>
         </table>
-      </div>
-
-      <div class="fila acciones" style="gap:8px; flex-wrap:wrap;">
-        <a class="btn" href="registrar_pago.php?membresia_id=<?php echo (int)$M['mid']; ?>">＋ Registrar pago</a>
       </div>
     </div>
   </div>
@@ -415,8 +387,7 @@ $URL_PRINT  = 'waiver_print.php';
             <?php
               $vig     = fmt_date($t['desde'] ?? null) . ' → ' . fmt_date($t['hasta'] ?? null);
               $horaTxt = fmt_hhmm_safe($t['hora'] ?? null);
-              $profTxt = (isset($t['profesor_id']) && $t['profesor_id'] !== null && $t['profesor_id'] !== '')
-                          ? '#'.(int)$t['profesor_id'] : '—';
+              $profTxt = (isset($t['profesor_id']) && $t['profesor_id'] !== null && $t['profesor_id'] !== '') ? '#'.(int)$t['profesor_id'] : '—';
               $diasTxt = isset($t['dias']) && $t['dias'] !== '' ? (string)$t['dias'] : '—';
             ?>
             <tr>
@@ -446,7 +417,7 @@ $URL_PRINT  = 'waiver_print.php';
     </div>
 
     <?php if (!empty($turnos)): ?>
-      <div class="muted" style="margin-top:6px">Fuente: <b>gym_clientes_plan</b> (eliminación solo disponible para esta fuente)</div>
+      <div class="muted" style="margin-top:6px">Fuente: <b>gym_clientes_plan</b> (eliminación disponible)</div>
     <?php endif; ?>
 
     <div class="fila acciones" style="gap:8px; flex-wrap:wrap;">
