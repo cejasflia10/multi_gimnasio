@@ -1,16 +1,16 @@
 <?php
-/* Panel de Accesos + Clases (membresias.clases_disponibles) con FONDO
-   - NO duplica registrar_asistencia; solo añade imagen de fondo como ese panel.
-   - Lee configuracion_gimnasio.scan_bg_image_url para el gimnasio actual y la aplica como background.
-   - Mantiene keepalive + meta refresh 10s.
-*/
+/* ==========================================================
+   accesos_gimnasio.php — Panel de accesos (lectura)
+   • Lista accesos_gimnasio del rango elegido.
+   • Muestra nombre del cliente, método, plan y clases.
+   • Encabezado con logo/nombre del gym + keepalive.
+   ========================================================== */
 if (session_status() === PHP_SESSION_NONE) session_start();
 require_once __DIR__ . '/conexion.php';
 if (!isset($conexion) || !($conexion instanceof mysqli)) { http_response_code(500); exit('❌ Sin BD'); }
 if (function_exists('mysqli_report')) { mysqli_report(MYSQLI_REPORT_OFF); }
 @$conexion->set_charset('utf8mb4');
 
-/* ==== Helpers ==== */
 function h($s){ return htmlspecialchars((string)$s, ENT_QUOTES|ENT_SUBSTITUTE,'UTF-8'); }
 function qv($db,$s){ return "'".$db->real_escape_string((string)$s)."'"; }
 function mem_is_activa_row(array $m): bool {
@@ -41,32 +41,17 @@ $desde = $_GET['desde'] ?? $hoy;
 $hasta = $_GET['hasta'] ?? $hoy;
 
 /* ==== Marca gimnasio ==== */
-$gym_name = 'Gimnasio';
-$gym_logo = null;
-if ($rs = $conexion->query("SELECT nombre, logo FROM gimnasios WHERE id={$gimnasio_id} LIMIT 1")) {
-  if ($rs->num_rows) {
-    $g = $rs->fetch_assoc();
+$gym_name = 'Gimnasio'; $gym_logo = null;
+if ($rs = $conexion->query("SELECT nombre, logo FROM gimnasios WHERE id={$gimnasio_id} LIMIT 1")){
+  if ($rs->num_rows){ $g=$rs->fetch_assoc();
     if (!empty($g['nombre'])) $gym_name = $g['nombre'];
     if (!empty($g['logo']))   $gym_logo = logo_url($g['logo']);
   }
 }
 
-/* ==== Asegurar tabla de configuración del fondo (por si no existe) ==== */
-$conexion->query("CREATE TABLE IF NOT EXISTS configuracion_gimnasio (
-  gimnasio_id INT NOT NULL,
-  scan_bg_image_url VARCHAR(255) NULL,
-  updated_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  PRIMARY KEY (gimnasio_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
-
-/* ==== Leer URL de fondo para este gimnasio ==== */
-$scan_bg = '';
-if ($rbg = $conexion->query("SELECT scan_bg_image_url FROM configuracion_gimnasio WHERE gimnasio_id={$gimnasio_id} LIMIT 1")) {
-  if ($row = $rbg->fetch_assoc()) $scan_bg = (string)($row['scan_bg_image_url'] ?? '');
-}
-
 /* ==== Accesos del rango ==== */
-$sql = "SELECT a.id, a.fecha_ingreso, a.metodo, a.cliente_id, c.nombre, c.apellido
+$sql = "SELECT a.id, a.fecha_ingreso, a.metodo, a.cliente_id,
+               c.nombre, c.apellido
         FROM accesos_gimnasio a
         JOIN clientes c ON c.id=a.cliente_id
         WHERE a.gimnasio_id={$gimnasio_id}
@@ -75,7 +60,7 @@ $sql = "SELECT a.id, a.fecha_ingreso, a.metodo, a.cliente_id, c.nombre, c.apelli
 $rs = $conexion->query($sql);
 $accesos=[]; if ($rs) while($r=$rs->fetch_assoc()){ $accesos[]=$r; }
 
-/* ==== Traer membresía activa más reciente por cliente para este gym ==== */
+/* ==== Membresía activa más reciente por cliente para este gym ==== */
 $cli_ids = array_unique(array_map(fn($x)=>(int)$x['cliente_id'],$accesos));
 $mapMem = [];
 if ($cli_ids){
@@ -87,12 +72,12 @@ if ($cli_ids){
   $rm = $conexion->query($q);
   if ($rm) while($m=$rm->fetch_assoc()){
     if (!isset($mapMem[(int)$m['cliente_id']]) && mem_is_activa_row($m)) {
-      $mapMem[(int)$m['cliente_id']] = $m; // activa más reciente
+      $mapMem[(int)$m['cliente_id']] = $m;
     }
   }
 }
 
-/* ==== ¿Consumo aplicado para el acceso? (log membresia_consumos) ==== */
+/* ==== ¿Consumo aplicado? (membresia_consumos) ==== */
 foreach ($accesos as &$A){
   $A['mem'] = $mapMem[(int)$A['cliente_id']] ?? null;
   $rlog = $conexion->query("SELECT id FROM membresia_consumos WHERE acceso_id=".(int)$A['id']." LIMIT 1");
@@ -102,35 +87,12 @@ unset($A);
 
 /* ==== UI ==== */
 $css = "
-:root{ --veil:.45; }
-body{
-  margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Arial,sans-serif;
-  background:#0f0f10;color:#e6e6e6;
-}
-/* Fondo con imagen + velo (como registrar_asistencia) */
-body::before{
-  content:\"\"; position:fixed; inset:0;
-  background:
-    linear-gradient(180deg, rgba(0,0,0,var(--veil)), rgba(0,0,0, calc(var(--veil) + .20))),
-    url('".h($scan_bg)."') center/cover no-repeat;
-  z-index:-1; opacity: ".($scan_bg ? '1' : '0').";
-  transition: opacity .25s, background .2s; will-change: opacity, background;
-  background-attachment: fixed;
-}
-
+body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Arial,sans-serif;background:#0f0f10;color:#e6e6e6}
 .wrap{max-width:1200px;margin:22px auto;padding:0 16px}
 .brand{display:flex;align-items:center;gap:12px;margin-bottom:10px}
 .brand img{width:44px;height:44px;object-fit:cover;border-radius:10px;background:#fff;border:1px solid #2a2a2a}
 .brand .name{font-weight:900;font-size:22px;letter-spacing:.2px}
-.subtitle{color:#c6cad1;font-size:13px;margin-top:-2px}
-
-/* Tarjeta para mejorar contraste si hay fondo */
-.card{
-  background: ".($scan_bg ? 'rgba(17,18,20,.35)' : 'transparent').";
-  border:1px solid #222; border-radius:14px; padding:12px;
-  backdrop-filter: ".($scan_bg ? 'saturate(120%) blur(4px)' : 'none').";
-}
-
+.subtitle{color:#9aa0a6;font-size:13px;margin-top:-2px}
 h1{font-size:18px;margin:8px 0 12px}
 .filters{display:flex;gap:10px;align-items:end;flex-wrap:wrap;margin-bottom:12px}
 input,button{padding:8px 10px;border-radius:10px;border:1px solid #2a2a2a;background:#151515;color:#e6e6e6}
@@ -145,7 +107,7 @@ tr{background:#171717;border:1px solid #222}
 .danger{background:#b8141433;color:#ff9e9e;border:1px solid #9b1f1f}
 .actions{display:flex;gap:6px}
 small{color:#aaa}
-footer{margin:12px 0;color:#e2e8f0;font-size:12px;display:flex;gap:8px;align-items:center}
+footer{margin:12px 0;color:#7a7f87;font-size:12px;display:flex;gap:8px;align-items:center}
 footer .dot{width:6px;height:6px;border-radius:9999px;background:#3b82f6;display:inline-block}
 ";
 
@@ -158,163 +120,102 @@ footer .dot{width:6px;height:6px;border-radius:9999px;background:#3b82f6;display
 <title>Accesos · <?= h($gym_name) ?> (#<?= (int)$gimnasio_id ?>)</title>
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <style><?= $css ?></style>
-
-<!-- Auto refresh cada 10s -->
 <meta http-equiv="refresh" content="10">
-
 <script>
-// === KeepAlive: mantiene la sesión activa (evita que 'se corte') ===
+// KeepAlive cada 4 min para que no se corte la sesión
 function keepAlive(){
-  fetch('keepalive.php', {credentials:'same-origin', cache:'no-store'})
-    .then(()=>{/* ok */})
-    .catch(()=>{/* silencio */});
+  fetch('keepalive.php', {credentials:'same-origin', cache:'no-store'}).catch(()=>{});
 }
 setInterval(keepAlive, 4*60*1000);
-document.addEventListener('visibilitychange', ()=>{ if (!document.hidden) keepAlive(); });
+document.addEventListener('visibilitychange', ()=>{ if(!document.hidden) keepAlive(); });
 window.addEventListener('load', keepAlive);
-
-// Ajuste automático del velo según luminosidad promedio (opcional)
-(function(){
-  const bg = <?= json_encode($scan_bg) ?>;
-  if(!bg) return;
-  const img = new Image();
-  img.crossOrigin = 'anonymous';
-  img.referrerPolicy = 'no-referrer';
-  img.onload = () => {
-    try{
-      const w=32, h=32, c=document.createElement('canvas');
-      c.width=w; c.height=h;
-      const ctx=c.getContext('2d',{willReadFrequently:true});
-      ctx.drawImage(img,0,0,w,h);
-      const d=ctx.getImageData(0,0,w,h).data;
-      let sum=0, n=w*h;
-      for(let i=0;i<d.length;i+=4){
-        const r=d[i]/255, g=d[i+1]/255, b=d[i+2]/255;
-        const Y=0.2126*r + 0.7152*g + 0.0722*b;
-        sum+=Y;
-      }
-      const avg=sum/n; // 0..1
-      let veil = 0.45 + (avg-0.5)*0.6;
-      veil = Math.max(0.35, Math.min(0.75, veil));
-      document.documentElement.style.setProperty('--veil', veil.toFixed(2));
-    }catch(e){}
-  };
-  img.src = bg;
-})();
 </script>
 </head>
 <body>
   <div class="wrap">
-
-    <!-- Encabezado con logo + nombre (en tarjeta para contraste si hay fondo) -->
-    <div class="brand card">
-      <?php if ($gym_logo): ?>
-        <img src="<?= h($gym_logo) ?>" alt="Logo <?= h($gym_name) ?>" loading="lazy" decoding="async">
-      <?php endif; ?>
+    <div class="brand">
+      <?php if ($gym_logo): ?><img src="<?= h($gym_logo) ?>" alt="Logo <?= h($gym_name) ?>" loading="lazy" decoding="async"><?php endif; ?>
       <div>
         <div class="name"><?= h($gym_name) ?></div>
         <div class="subtitle">Panel de Accesos · Gimnasio #<?= (int)$gimnasio_id ?></div>
       </div>
     </div>
 
-    <!-- Filtros (también en tarjeta si hay fondo) -->
-    <div class="card">
-      <form class="filters" method="get">
-        <input type="hidden" name="g" value="<?= (int)$gimnasio_id ?>">
-        <div>
-          <label>Desde</label><br>
-          <input type="date" name="desde" value="<?= h($desde) ?>">
-        </div>
-        <div>
-          <label>Hasta</label><br>
-          <input type="date" name="hasta" value="<?= h($hasta) ?>">
-        </div>
-        <div><button type="submit">Filtrar</button></div>
-        <div>
-          <a href="?g=<?= (int)$gimnasio_id ?>&desde=<?= h($hoy) ?>&hasta=<?= h($hoy) ?>">
-            <button type="button">Hoy</button>
-          </a>
-        </div>
-      </form>
-    </div>
+    <form class="filters" method="get">
+      <input type="hidden" name="g" value="<?= (int)$gimnasio_id ?>">
+      <div><label>Desde</label><br><input type="date" name="desde" value="<?= h($desde) ?>"></div>
+      <div><label>Hasta</label><br><input type="date" name="hasta" value="<?= h($hasta) ?>"></div>
+      <div><button type="submit">Filtrar</button></div>
+      <div><a href="?g=<?= (int)$gimnasio_id ?>&desde=<?= h($hoy) ?>&hasta=<?= h($hoy) ?>"><button type="button">Hoy</button></a></div>
+    </form>
 
-    <!-- Tabla -->
-    <div class="card" style="margin-top:10px">
-      <table>
-        <thead>
-          <tr>
-            <th>Hora</th>
-            <th>Cliente</th>
-            <th>Método</th>
-            <th>Plan</th>
-            <th>Clases disp.</th>
-            <th>Consumo</th>
-            <th>Acciones</th>
-          </tr>
-        </thead>
-        <tbody>
-        <?php if(!$accesos): ?>
-          <tr><td colspan="7"><small>Sin accesos en el rango.</small></td></tr>
-        <?php else: foreach($accesos as $row):
-          $m = $row['mem'];
-          $disp = is_null($m)? null : (int)$m['clases_disponibles'];
-          $badge = is_null($m)? 'warn' : ($disp>0?'ok':'danger'); ?>
-          <tr>
-            <td><?= h(date('H:i', strtotime($row['fecha_ingreso']))) ?></td>
-            <td><?= h($row['apellido'].' '.$row['nombre']) ?></td>
-            <td><span class="badge"><?= h($row['metodo']) ?></span></td>
-            <td>
-              <?php if ($m): ?>
-                <span class="badge ok"><?= h($m['plan'] ?? 'Plan') ?></span>
-                <?php if (!empty($m['fecha_vencimiento']) && $m['fecha_vencimiento']!=='0000-00-00'): ?>
-                  <small>vto <?= h($m['fecha_vencimiento']) ?></small>
-                <?php endif; ?>
-              <?php else: ?>
-                <span class="badge danger">Sin activa</span>
+    <table>
+      <thead>
+        <tr>
+          <th>Hora</th><th>Cliente</th><th>Método</th><th>Plan</th><th>Clases disp.</th><th>Consumo</th><th>Acciones</th>
+        </tr>
+      </thead>
+      <tbody>
+      <?php if(!$accesos): ?>
+        <tr><td colspan="7"><small>Sin accesos en el rango.</small></td></tr>
+      <?php else: foreach($accesos as $row):
+        $m = $row['mem'];
+        $disp = is_null($m)? null : (int)$m['clases_disponibles'];
+        $badge = is_null($m)? 'warn' : ($disp>0?'ok':'danger'); ?>
+        <tr>
+          <td><?= h(date('H:i', strtotime($row['fecha_ingreso']))) ?></td>
+          <td><?= h($row['apellido'].' '.$row['nombre']) ?></td>
+          <td><span class="badge"><?= h($row['metodo']) ?></span></td>
+          <td>
+            <?php if ($m): ?>
+              <span class="badge ok"><?= h($m['plan'] ?? 'Plan') ?></span>
+              <?php if (!empty($m['fecha_vencimiento']) && $m['fecha_vencimiento']!=='0000-00-00'): ?>
+                <small>vto <?= h($m['fecha_vencimiento']) ?></small>
               <?php endif; ?>
-            </td>
-            <td>
-              <?php if ($m): ?>
-                <span class="badge <?= $badge ?>">Disponibles: <?= (int)$disp ?></span>
-              <?php else: ?>—<?php endif; ?>
-            </td>
-            <td>
-              <?php if ($row['consumo_aplicado']): ?>
-                <span class="badge ok">Aplicado</span>
+            <?php else: ?>
+              <span class="badge danger">Sin activa</span>
+            <?php endif; ?>
+          </td>
+          <td>
+            <?php if ($m): ?>
+              <span class="badge <?= $badge ?>">Disponibles: <?= (int)$disp ?></span>
+            <?php else: ?>—<?php endif; ?>
+          </td>
+          <td>
+            <?php if ($row['consumo_aplicado']): ?>
+              <span class="badge ok">Aplicado</span>
+            <?php else: ?>
+              <span class="badge warn">Pendiente</span>
+            <?php endif; ?>
+          </td>
+          <td class="actions">
+            <?php if ($m): ?>
+              <?php if (!$row['consumo_aplicado']): ?>
+                <form action="consumo_toggle.php" method="post" style="display:inline">
+                  <input type="hidden" name="g" value="<?= (int)$gimnasio_id ?>">
+                  <input type="hidden" name="accion" value="aplicar">
+                  <input type="hidden" name="acceso_id" value="<?= (int)$row['id'] ?>">
+                  <button>Aplicar consumo</button>
+                </form>
               <?php else: ?>
-                <span class="badge warn">Pendiente</span>
+                <form action="consumo_toggle.php" method="post" style="display:inline" onsubmit="return confirm('¿Deshacer consumo de esta asistencia?');">
+                  <input type="hidden" name="g" value="<?= (int)$gimnasio_id ?>">
+                  <input type="hidden" name="accion" value="deshacer">
+                  <input type="hidden" name="acceso_id" value="<?= (int)$row['id'] ?>">
+                  <button>Deshacer</button>
+                </form>
               <?php endif; ?>
-            </td>
-            <td class="actions">
-              <?php if ($m): ?>
-                <?php if (!$row['consumo_aplicado']): ?>
-                  <form action="consumo_toggle.php" method="post" style="display:inline">
-                    <input type="hidden" name="g" value="<?= (int)$gimnasio_id ?>">
-                    <input type="hidden" name="accion" value="aplicar">
-                    <input type="hidden" name="acceso_id" value="<?= (int)$row['id'] ?>">
-                    <button>Aplicar consumo</button>
-                  </form>
-                <?php else: ?>
-                  <form action="consumo_toggle.php" method="post" style="display:inline" onsubmit="return confirm('¿Deshacer consumo de esta asistencia?');">
-                    <input type="hidden" name="g" value="<?= (int)$gimnasio_id ?>">
-                    <input type="hidden" name="accion" value="deshacer">
-                    <input type="hidden" name="acceso_id" value="<?= (int)$row['id'] ?>">
-                    <button>Deshacer</button>
-                  </form>
-                <?php endif; ?>
-              <?php else: ?>—<?php endif; ?>
-            </td>
-          </tr>
-        <?php endforeach; endif; ?>
-        </tbody>
-      </table>
-    </div>
+            <?php else: ?>—<?php endif; ?>
+          </td>
+        </tr>
+      <?php endforeach; endif; ?>
+      </tbody>
+    </table>
 
     <footer>
       <span class="dot" title="KeepAlive activo"></span>
       <span>La sesión se mantiene activa mientras esta ventana permanezca abierta.</span>
     </footer>
-
   </div>
 </body>
 </html>
