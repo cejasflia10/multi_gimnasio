@@ -32,6 +32,16 @@ function logo_url(?string $logo): ?string {
   foreach ($cands as $fs=>$url) if (is_file($fs)) return $url.'?v='.(int)@filemtime($fs);
   return $logo;
 }
+function col_exists(mysqli $db, string $table, string $col): bool {
+  $table = $db->real_escape_string($table);
+  $col   = $db->real_escape_string($col);
+  $rs = $db->query("SHOW COLUMNS FROM `$table` LIKE '$col'");
+  return $rs && $rs->num_rows>0;
+}
+function pick_col(mysqli $db, string $table, array $cands, string $fallback=null){
+  foreach($cands as $c) if (col_exists($db,$table,$c)) return $c;
+  return $fallback;
+}
 
 /* ==== Inputs ==== */
 $gimnasio_id = (int)($_GET['g'] ?? ($_SESSION['gimnasio_id'] ?? 0));
@@ -49,14 +59,24 @@ if ($rs = $conexion->query("SELECT nombre, logo FROM gimnasios WHERE id={$gimnas
   }
 }
 
-/* ==== Accesos del rango ==== */
-$sql = "SELECT a.id, a.fecha_ingreso, a.metodo, a.cliente_id,
+/* ==== Columnas accesos (suave, sin romper tu esquema) ==== */
+$A_TABLE = 'accesos_gimnasio';
+$A_TS    = pick_col($conexion,$A_TABLE, ['fecha_ingreso','creado_en','created_at','fecha','ts','timestamp'], 'fecha_ingreso');
+$A_MET   = pick_col($conexion,$A_TABLE, ['metodo','metodo_ingreso','medio','tipo'], 'metodo');
+$A_CLI   = pick_col($conexion,$A_TABLE, ['cliente_id','id_cliente'], 'cliente_id');
+$A_GYM   = pick_col($conexion,$A_TABLE, ['gimnasio_id','id_gimnasio'], 'gimnasio_id');
+
+/* ==== Accesos del rango (SIN romper índices) ==== */
+$desde_dt = $desde . ' 00:00:00';
+$hasta_dt = $hasta . ' 23:59:59';
+
+$sql = "SELECT a.id, a.$A_TS AS fecha_ts, a.$A_MET AS metodo, a.$A_CLI AS cliente_id,
                c.nombre, c.apellido
-        FROM accesos_gimnasio a
-        JOIN clientes c ON c.id=a.cliente_id
-        WHERE a.gimnasio_id={$gimnasio_id}
-          AND DATE(a.fecha_ingreso) BETWEEN ".qv($conexion,$desde)." AND ".qv($conexion,$hasta)."
-        ORDER BY a.fecha_ingreso DESC";
+        FROM $A_TABLE a
+        JOIN clientes c ON c.id=a.$A_CLI
+        WHERE a.$A_GYM={$gimnasio_id}
+          AND a.$A_TS BETWEEN ".qv($conexion,$desde_dt)." AND ".qv($conexion,$hasta_dt)."
+        ORDER BY a.$A_TS DESC";
 $rs = $conexion->query($sql);
 $accesos=[]; if ($rs) while($r=$rs->fetch_assoc()){ $accesos[]=$r; }
 
@@ -65,10 +85,19 @@ $cli_ids = array_unique(array_map(fn($x)=>(int)$x['cliente_id'],$accesos));
 $mapMem = [];
 if ($cli_ids){
   $ids = implode(',', $cli_ids);
-  $q = "SELECT id, cliente_id, gimnasio_id, plan, clases_disponibles, activa, fecha_vencimiento
-        FROM membresias
-        WHERE gimnasio_id={$gimnasio_id} AND cliente_id IN ({$ids})
-        ORDER BY COALESCE(fecha_vencimiento,'9999-12-31') DESC, id DESC";
+  // Dejamos tu tabla y campos tal cual, con fallback SUAVE por si hay otro naming
+  $M_TABLE = 'membresias';
+  $M_CLI   = pick_col($conexion,$M_TABLE, ['cliente_id','id_cliente'],'cliente_id');
+  $M_GYM   = pick_col($conexion,$M_TABLE, ['gimnasio_id','id_gimnasio'],'gimnasio_id');
+  $M_PLAN  = pick_col($conexion,$M_TABLE, ['plan','plan_nombre','nombre_plan'],'plan');
+  $M_REST  = pick_col($conexion,$M_TABLE, ['clases_disponibles','clases_restantes','restantes'],'clases_disponibles');
+  $M_ACT   = pick_col($conexion,$M_TABLE, ['activa'],'activa');
+  $M_VTO   = pick_col($conexion,$M_TABLE, ['fecha_vencimiento','vencimiento'],'fecha_vencimiento');
+
+  $q = "SELECT id, $M_CLI AS cliente_id, $M_GYM AS gimnasio_id, $M_PLAN AS plan, $M_REST AS clases_disponibles, $M_ACT AS activa, $M_VTO AS fecha_vencimiento
+        FROM $M_TABLE
+        WHERE $M_GYM={$gimnasio_id} AND $M_CLI IN ({$ids})
+        ORDER BY COALESCE($M_VTO,'9999-12-31') DESC, id DESC";
   $rm = $conexion->query($q);
   if ($rm) while($m=$rm->fetch_assoc()){
     if (!isset($mapMem[(int)$m['cliente_id']]) && mem_is_activa_row($m)) {
@@ -110,8 +139,6 @@ small{color:#aaa}
 footer{margin:12px 0;color:#7a7f87;font-size:12px;display:flex;gap:8px;align-items:center}
 footer .dot{width:6px;height:6px;border-radius:9999px;background:#3b82f6;display:inline-block}
 ";
-
-/* ===== Salida ===== */
 ?>
 <!doctype html>
 <html lang="es">
@@ -163,7 +190,7 @@ window.addEventListener('load', keepAlive);
         $disp = is_null($m)? null : (int)$m['clases_disponibles'];
         $badge = is_null($m)? 'warn' : ($disp>0?'ok':'danger'); ?>
         <tr>
-          <td><?= h(date('H:i', strtotime($row['fecha_ingreso']))) ?></td>
+          <td><?= h(date('H:i', strtotime($row['fecha_ts']))) ?></td>
           <td><?= h($row['apellido'].' '.$row['nombre']) ?></td>
           <td><span class="badge"><?= h($row['metodo']) ?></span></td>
           <td>

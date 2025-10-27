@@ -1,13 +1,11 @@
 <?php
 /* ==========================================================
    gym_qr_checkin.php — Check-in por DNI (público/mostrador)
-   • Si el cliente existe (dni + gimnasio_id) → crea registro
-     en accesos_gimnasio (metodo='QR') y responde datos.
-   • Si NO existe → ofrece ir a registro_online.php?g=...
-   • Anti-doble envío: ignora repetición del mismo DNI por
-     10 segundos y evita múltiples inserciones en bucle.
-   • NO descuenta clases ni marca asistencia (eso es en
-     registrar_asistencia.php). Aquí sólo es “ingreso por QR”.
+   • Busca el cliente (dni + gimnasio_id).
+   • Inserta acceso en accesos_gimnasio (metodo='QR').
+   • Devuelve JSON con saludo + plan + clases + vencimiento.
+   • Si no existe, sugiere registro_online.php?g=...&dni=...
+   • Rate limit 10s por DNI para evitar dobles.
    ========================================================== */
 if (session_status() === PHP_SESSION_NONE) session_start();
 header('Cache-Control: no-store, no-cache, must-revalidate');
@@ -17,41 +15,51 @@ if (!isset($conexion) || !($conexion instanceof mysqli)) { http_response_code(50
 if (function_exists('mysqli_report')) { mysqli_report(MYSQLI_REPORT_OFF); }
 @$conexion->set_charset('utf8mb4');
 
-date_default_timezone_set('America/Argentina/San_Luis');
-
+/* ==== Helpers ==== */
 function h($s){ return htmlspecialchars((string)$s, ENT_QUOTES|ENT_SUBSTITUTE,'UTF-8'); }
-function logo_url(?string $logo): ?string {
-  $logo = trim((string)$logo);
-  if ($logo==='') return null;
-  if (preg_match('#^(https?:)?//#i', $logo) || str_starts_with($logo,'data:')) return $logo;
-  $cands = [
-    __DIR__ . '/uploads/gimnasios/' . $logo => '/uploads/gimnasios/' . rawurlencode($logo),
-    __DIR__ . '/img/' . $logo              => '/img/' . rawurlencode($logo),
-    __DIR__ . '/' . ltrim($logo,'/\\')     => '/' . ltrim($logo,'/\\'),
-  ];
-  foreach ($cands as $fs=>$url) if (is_file($fs)) return $url.'?v='.(int)@filemtime($fs);
-  return $logo;
-}
+function bt($c){ return '`'.str_replace('`','``',$c).'`'; }
+function table_exists(mysqli $db, string $t): bool { $t=$db->real_escape_string($t); $rs=$db->query("SHOW TABLES LIKE '$t'"); return $rs && $rs->num_rows>0; }
+function col_exists(mysqli $db, string $t, string $c): bool { $t=$db->real_escape_string($t); $c=$db->real_escape_string($c); $rs=$db->query("SHOW COLUMNS FROM `$t` LIKE '$c'"); return $rs && $rs->num_rows>0; }
+function pick_col(mysqli $db, string $t, array $cands, string $fallback=null){ foreach($cands as $c) if (col_exists($db,$t,$c)) return $c; return $fallback; }
 
-/* ===== Gimnasio actual ===== */
+/* ==== Inputs ==== */
 $gimnasio_id = (int)($_GET['g'] ?? ($_SESSION['gimnasio_id'] ?? 0));
-if ($gimnasio_id<=0){ http_response_code(400); exit('Gimnasio no registrado'); }
+if ($gimnasio_id<=0){ http_response_code(400); exit('Falta g'); }
 
-/* ===== Datos para marca (logo + nombre) ===== */
-$gym_name = 'Gimnasio'; $gym_logo = null;
-if ($rs = $conexion->query("SELECT nombre, logo FROM gimnasios WHERE id={$gimnasio_id} LIMIT 1")){
-  if ($rs->num_rows){ $g=$rs->fetch_assoc();
-    if (!empty($g['nombre'])) $gym_name = $g['nombre'];
-    if (!empty($g['logo']))   $gym_logo = logo_url($g['logo']);
-  }
-}
+/* ==== Descubrir tablas/columnas ==== */
+$T_CLIENT = table_exists($conexion,'clientes') ? 'clientes' : (table_exists($conexion,'clientes_gimnasio') ? 'clientes_gimnasio' : null);
+if (!$T_CLIENT) { http_response_code(500); exit('❌ Falta tabla clientes'); }
+$C_ID   = pick_col($conexion,$T_CLIENT,['id','cliente_id'],'id');
+$C_DNI  = pick_col($conexion,$T_CLIENT,['dni','documento','doc'],'dni');
+$C_GYM  = pick_col($conexion,$T_CLIENT,['gimnasio_id','id_gimnasio'], null);
+$C_NOM  = pick_col($conexion,$T_CLIENT,['nombre','nombres'],'nombre');
+$C_APE  = pick_col($conexion,$T_CLIENT,['apellido','apellidos'],'apellido');
 
-/* ===== CSRF ===== */
-if (empty($_SESSION['csrf_qr'])) $_SESSION['csrf_qr'] = bin2hex(random_bytes(32));
-$csrf = $_SESSION['csrf_qr'];
+$T_ACC  = 'accesos_gimnasio';
+if (!table_exists($conexion,$T_ACC)) { http_response_code(500); exit('❌ Falta tabla accesos_gimnasio'); }
+$A_ID   = pick_col($conexion,$T_ACC,['id'],'id');
+$A_GYM  = pick_col($conexion,$T_ACC,['gimnasio_id','id_gimnasio'],'gimnasio_id');
+$A_CLI  = pick_col($conexion,$T_ACC,['cliente_id','id_cliente'],'cliente_id');
+$A_MET  = pick_col($conexion,$T_ACC,['metodo','metodo_ingreso','medio','tipo'],'metodo');
+$A_TS   = pick_col($conexion,$T_ACC,['creado_en','created_at','fecha','ts','timestamp'],'creado_en');
+
+$T_MEM  = null;
+foreach (['membresias_clientes','membresias','membresias_vigentes'] as $t) if (table_exists($conexion,$t)) { $T_MEM=$t; break; }
+$M_CLI  = $T_MEM ? pick_col($conexion,$T_MEM,['cliente_id','id_cliente'],'cliente_id') : null;
+$M_GYM  = $T_MEM ? pick_col($conexion,$T_MEM,['gimnasio_id','id_gimnasio'], null) : null;
+$M_PLAN = $T_MEM ? pick_col($conexion,$T_MEM,['plan','plan_nombre','nombre_plan'], null) : null;
+$M_VEN  = $T_MEM ? pick_col($conexion,$T_MEM,['vence','fecha_vencimiento','vencimiento'], null) : null;
+$M_RES  = $T_MEM ? pick_col($conexion,$T_MEM,['clases_restantes','restantes'], null) : null;
+$M_TOT  = $T_MEM ? pick_col($conexion,$T_MEM,['clases_totales','clases'], null) : null;
+$M_USE  = $T_MEM ? pick_col($conexion,$T_MEM,['clases_usadas','usadas'], null) : null;
+$M_TS   = $T_MEM ? pick_col($conexion,$T_MEM,['creado_en','updated_at','fecha_alta','fecha_pago'], null) : null;
 
 /* ===== Anti-doble envío (10s misma persona) ===== */
 if (empty($_SESSION['qr_rate'])) $_SESSION['qr_rate'] = []; // dni => ts
+
+/* ===== CSRF simple ===== */
+if (empty($_SESSION['csrf_qr'])) $_SESSION['csrf_qr'] = bin2hex(random_bytes(16));
+$csrf = $_SESSION['csrf_qr'];
 
 /* ===== AJAX ===== */
 if ($_SERVER['REQUEST_METHOD']==='POST' && isset($_GET['ajax'])){
@@ -60,151 +68,186 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && isset($_GET['ajax'])){
 
   $dni  = trim((string)($_POST['dni'] ?? ''));
   $csrf_in = (string)($_POST['csrf'] ?? '');
-  if (!hash_equals($csrf, $csrf_in)) {
-    echo json_encode(['ok'=>false,'msg'=>'❌ CSRF inválido. Refrescá la página.']); exit;
-  }
+  if (!hash_equals($csrf, $csrf_in)) { echo json_encode(['ok'=>false,'msg'=>'❌ CSRF inválido. Refrescá.']); exit; }
   if ($dni===''){ echo json_encode(['ok'=>false,'msg'=>'Ingresá un DNI.']); exit; }
 
-  // Simple rate limit
-  $now=time();
-  $last = (int)($_SESSION['qr_rate'][$dni] ?? 0);
-  if ($now - $last < 10){
-    echo json_encode(['ok'=>false,'msg'=>'⌛ Aguarda un momento antes de volver a enviar.']); exit;
+  if (!empty($_SESSION['qr_rate'][$dni]) && (time()-$_SESSION['qr_rate'][$dni])<10){
+    echo json_encode(['ok'=>true,'repeat'=>true,'msg'=>'⏱️ Ya marcado hace instantes.']); exit;
   }
 
-  // Buscar cliente por DNI + gimnasio
-  $st = $conexion->prepare("SELECT id, apellido, nombre FROM clientes WHERE dni=? AND gimnasio_id=? LIMIT 1");
-  $st->bind_param("si",$dni,$gimnasio_id);
-  $st->execute();
-  $cli = $st->get_result()->fetch_assoc();
-  $st->close();
-
-  if (!$cli){
-    echo json_encode([
-      'ok'=>false,
-      'registro'=>true,
-      'msg'=>'No encontramos este DNI en el gimnasio.',
-      'url_registro'=>'registro_online.php?g='.$gimnasio_id.'&dni='.rawurlencode($dni)
-    ]);
-    exit;
+  /* === Buscar cliente === */
+  $dni_esc = $conexion->real_escape_string($dni);
+  $whereGym = $C_GYM ? "AND C.$C_GYM=$gimnasio_id" : '';
+  $sqlC = "SELECT C.$C_ID AS id, C.$C_NOM AS nombre, C.$C_APE AS apellido
+           FROM $T_CLIENT C
+           WHERE C.$C_DNI='$dni_esc' $whereGym
+           LIMIT 1";
+  $rc = $conexion->query($sqlC);
+  if (!$rc || $rc->num_rows===0){
+    $reg_url = "registro_online.php?g=".$gimnasio_id."&dni=".rawurlencode($dni);
+    echo json_encode(['ok'=>false,'no_reg'=>true,'msg'=>'No encontrado.','reg_url'=>$reg_url]); exit;
   }
-
+  $cli = $rc->fetch_assoc();
   $cliente_id = (int)$cli['id'];
 
-  // Evitar “tormenta” de inserts: ¿ya hay un acceso muy reciente?
-  $chk = $conexion->prepare("
-    SELECT id FROM accesos_gimnasio
-     WHERE gimnasio_id=? AND cliente_id=? AND TIMESTAMPDIFF(SECOND, fecha_ingreso, NOW()) <= 10
-     ORDER BY id DESC LIMIT 1
-  ");
-  $chk->bind_param("ii", $gimnasio_id, $cliente_id);
-  $chk->execute();
-  $reciente = (bool)$chk->get_result()->fetch_assoc();
-  $chk->close();
+  /* === Insertar acceso === */
+  $metodo = 'QR';
+  $fields = [$A_GYM,$A_CLI,$A_MET];
+  $values = [$gimnasio_id, $cliente_id, "'".$conexion->real_escape_string($metodo)."'"];
+  // Si la columna timestamp NO es auto, seteamos NOW()
+  if ($A_TS && col_exists($conexion,$T_ACC,$A_TS)){
+    $rsDesc = $conexion->query("SHOW COLUMNS FROM `$T_ACC` LIKE '".$conexion->real_escape_string($A_TS)."'");
+    if ($rsDesc && ($col = $rsDesc->fetch_assoc())){
+      $hasDefault = stripos($col['Default'] ?? '', 'current_timestamp') !== false;
+      if (!$hasDefault){ $fields[] = $A_TS; $values[] = "NOW()"; }
+    }
+  }
+  $sqlI = "INSERT INTO $T_ACC (".implode(',',array_map('bt',$fields)).") VALUES (".implode(',',$values).")";
+  $okI = $conexion->query($sqlI);
 
-  if (!$reciente){
-    $ins = $conexion->prepare("
-      INSERT INTO accesos_gimnasio (gimnasio_id, cliente_id, fecha_ingreso, metodo)
-      VALUES (?, ?, NOW(), 'QR')
-    ");
-    $ins->bind_param("ii", $gimnasio_id, $cliente_id);
-    $ins->execute();
-    $ins->close();
+  $_SESSION['qr_rate'][$dni] = time();
+
+  /* === Datos de membresía === */
+  $plan = null; $vence=null; $restantes=null;
+  if ($T_MEM){
+    $condGym = $M_GYM ? "AND M.$M_GYM=$gimnasio_id" : "";
+    $sqlM = "SELECT ".($M_PLAN?$M_PLAN:"NULL")." AS plan,
+                    ".($M_VEN?$M_VEN:"NULL")." AS vence,
+                    ".($M_RES?$M_RES:"NULL")." AS restantes,
+                    ".($M_TOT?$M_TOT:"NULL")." AS totales,
+                    ".($M_USE?$M_USE:"NULL")." AS usadas
+             FROM $T_MEM M
+             WHERE M.$M_CLI=$cliente_id $condGym
+             ORDER BY ".($M_TS?:'1')." DESC
+             LIMIT 1";
+    if ($rm = $conexion->query($sqlM)){
+      if ($m = $rm->fetch_assoc()){
+        $plan = $m['plan'] ?? null;
+        $vence = $m['vence'] ?? null;
+        if ($M_RES){
+          $restantes = is_null($m['restantes']) ? null : (int)$m['restantes'];
+        } else if ($M_TOT){
+          $tot = (int)($m['totales'] ?? 0);
+          $usa = (int)($m['usadas'] ?? 0);
+          $restantes = max(0, $tot - $usa);
+        }
+      }
+    }
   }
 
-  $_SESSION['qr_rate'][$dni] = $now;
-
-  $nombre = trim(($cli['apellido'] ?? '').' '.($cli['nombre'] ?? ''));
+  $nombre = trim(($cli['apellido']??'').' '.($cli['nombre']??''));
   echo json_encode([
     'ok'=>true,
-    'msg'=>"✅ Ingreso registrado para {$nombre}.",
-    'cliente'=>['id'=>$cliente_id,'nombre'=>$nombre]
-  ]);
+    'inserted'=>$okI?true:false,
+    'msg'=>$okI ? "✅ Ingreso registrado" : "⚠️ (mostrando datos, no se pudo registrar el ingreso)",
+    'cliente'=>[
+      'id'=>$cliente_id,
+      'nombre'=>$nombre
+    ],
+    'membresia'=>[
+      'plan'=>$plan,
+      'vence'=>$vence,
+      'clases_restantes'=>$restantes
+    ]
+  ], JSON_UNESCAPED_UNICODE);
   exit;
 }
 
-/* ===== UI ===== */
-?>
-<!doctype html>
+/* ===== Render página (form) ===== */
+?><!doctype html>
 <html lang="es">
 <head>
 <meta charset="utf-8">
-<title>Check-in QR · <?= h($gym_name) ?></title>
 <meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Check-in por DNI — Gimnasio #<?= (int)$gimnasio_id ?></title>
 <style>
-  :root{ --stroke:#e5e7eb; --ink:#0f172a; --mut:#64748b; --bg:#fafafa; --ok:#16a34a; --err:#b91c1c; }
-  *{box-sizing:border-box} body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Inter,Arial,sans-serif;background:var(--bg);color:var(--ink)}
-  .wrap{max-width:520px;margin:20px auto;padding:0 14px}
-  .card{background:#fff;border:1px solid var(--stroke);border-radius:16px;box-shadow:0 10px 24px rgba(2,6,23,.06);padding:16px}
-  .brand{display:flex;align-items:center;gap:12px;margin-bottom:8px}
-  .brand img{width:56px;height:56px;object-fit:cover;border-radius:12px;background:#fff;border:1px solid var(--stroke)}
-  .brand h1{margin:0;font-size:18px;font-weight:900;letter-spacing:.3px}
-  .mut{color:var(--mut);font-size:12px;margin-top:2px}
-  .scan input{width:100%;padding:14px 14px;font-size:20px;border:1px solid var(--stroke);border-radius:12px}
-  .btn{margin-top:10px;width:100%;padding:12px;border-radius:12px;border:1px solid var(--stroke);background:#f8fafc;font-weight:800;cursor:pointer}
-  .adv{margin-top:10px;font-weight:800}
-  .ok{color:var(--ok)} .err{color:var(--err)}
-  .row{display:flex;gap:8px;margin-top:10px}
-  .row .btn{flex:1}
+  :root{ color-scheme:dark; }
+  body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,'Helvetica Neue',Arial,sans-serif;background:#111;color:#eee;margin:0}
+  .wrap{max-width:680px;margin:0 auto;padding:20px}
+  h1{font-size:22px;margin:0 0 6px}
+  p{opacity:.8}
+  .scan{display:flex;gap:8px;margin:12px 0}
+  input{flex:1;background:#1b1b1b;border:1px solid #333;border-radius:10px;padding:12px;color:#eee;font-size:18px}
+  button{background:#2b2b2b;border:1px solid #444;border-radius:10px;padding:12px 16px;color:#fff;cursor:pointer}
+  .card{background:#141414;border:1px solid #222;border-radius:14px;padding:14px;margin-top:12px}
+  .muted{opacity:.75}
+  .big{font-size:20px}
+  .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  .pill{display:inline-block;padding:2px 8px;border-radius:999px;background:#222;border:1px solid #333;font-size:12px}
+  .ok{color:#8bd16a}
+  .warn{color:#f0c36d}
+  .bad{color:#e57373}
+  .adv{margin-top:6px;font-size:13px;opacity:.8}
 </style>
 <script>
-  const AJAX = <?= json_encode(basename(__FILE__).'?ajax=1&g='.$gimnasio_id) ?>;
-  const CSRF = <?= json_encode($csrf) ?>;
-
-  function focusDni(){ const i=document.getElementById('dni'); if(i) i.focus({preventScroll:true}); }
-  function enviar(e){
-    e.preventDefault();
-    const dni = (document.getElementById('dni').value || '').trim();
-    if(!dni){ focusDni(); return; }
-    const fd=new FormData(); fd.append('dni',dni); fd.append('csrf',CSRF);
-    fetch(AJAX, {method:'POST', body:fd, cache:'no-store'})
-      .then(r=>r.json())
-      .then(j=>{
-        const adv=document.getElementById('adv');
-        if(!j){ adv.textContent='⚠️ Error inesperado'; adv.className='adv err'; return; }
-        adv.textContent = j.msg || '';
-        adv.className = 'adv ' + (j.ok ? 'ok' : 'err');
-        if(!j.ok && j.registro && j.url_registro){
-          const reg = document.getElementById('reg');
-          reg.hidden = false;
-          reg.querySelector('a').href = j.url_registro;
-        } else {
-          document.getElementById('reg').hidden = true;
-        }
-        // limpiar campo y esperar nuevo escaneo
-        document.getElementById('dni').value='';
-        focusDni();
-      })
-      .catch(()=>{
-        const adv=document.getElementById('adv');
-        adv.textContent='⚠️ Problema de conexión'; adv.className='adv err';
-      });
+let csrf = <?= json_encode($csrf) ?>;
+async function enviar(ev){
+  ev.preventDefault();
+  const i = document.getElementById('dni');
+  const adv = document.getElementById('adv');
+  const res = document.getElementById('res');
+  const reg = document.getElementById('reg');
+  const val = (i.value||'').trim();
+  if(!val){ i.focus(); return; }
+  adv.textContent = 'Marcando ingreso…';
+  reg.hidden = true;
+  const fd = new FormData();
+  fd.set('dni', val);
+  fd.set('csrf', csrf);
+  const r = await fetch('?ajax=1&g=<?= (int)$gimnasio_id ?>', {method:'POST', body:fd});
+  const j = await r.json().catch(()=>({ok:false,msg:'Error de red'}));
+  if(!j.ok && !j.no_reg){ adv.textContent = j.msg||'Error.'; return; }
+  if(j.no_reg){
+    adv.textContent = 'No encontramos ese DNI.';
+    reg.hidden = false;
+    reg.querySelector('a').href = j.reg_url;
+    return;
   }
-
-  window.addEventListener('load', () => { focusDni(); });
-  document.addEventListener('visibilitychange', ()=>{ if(!document.hidden) focusDni(); });
+  adv.textContent = j.repeat ? '⏱️ Ya estaba marcado hace instantes.' : (j.msg || 'Hecho.');
+  // Mostrar tarjeta
+  res.hidden = false;
+  document.getElementById('cli').textContent = (j.cliente && j.cliente.nombre) ? j.cliente.nombre : 'Cliente';
+  const m = j.membresia||{};
+  const plan = m.plan || '—';
+  const vence = m.vence ? new Date(m.vence.replace(' ','T')) : null;
+  const venTxt = vence ? vence.toLocaleDateString() : '—';
+  document.getElementById('plan').textContent = plan;
+  document.getElementById('vence').textContent = venTxt;
+  const rest = (typeof m.clases_restantes === 'number') ? m.clases_restantes : null;
+  const restEl = document.getElementById('restantes');
+  if (rest===null){ restEl.textContent = '—'; restEl.className='pill'; }
+  else {
+    restEl.textContent = rest;
+    restEl.className = 'pill' + (rest<=0?' bad':(rest<=2?' warn':'')); 
+  }
+  i.value='';
+  i.focus();
+}
 </script>
 </head>
 <body>
   <div class="wrap">
+    <h1>Ingreso por DNI</h1>
+    <p class="muted">Escribí el DNI y presioná Enter. Se marcará el acceso y verás tu estado de membresía.</p>
+
     <div class="card">
-      <div class="brand">
-        <?php if ($gym_logo): ?><img src="<?= h($gym_logo) ?>" alt="logo"><?php endif; ?>
-        <div>
-          <h1><?= h($gym_name) ?></h1>
-          <div class="mut">Check-in por DNI (método: QR)</div>
+      <form class="scan" onsubmit="enviar(event)" autocomplete="off">
+        <input id="dni" inputmode="numeric" autocomplete="one-time-code" placeholder="Ingresar DNI y Enter…">
+        <button type="submit">Marcar</button>
+      </form>
+      <div id="adv" class="adv"></div>
+
+      <div id="res" class="card" hidden>
+        <div class="big" id="cli">Cliente</div>
+        <div class="row" style="margin-top:6px">
+          <div>Plan: <span id="plan" class="pill">—</span></div>
+          <div>Clases: <span id="restantes" class="pill">—</span></div>
+          <div>Vence: <span id="vence" class="">—</span></div>
         </div>
       </div>
 
-      <form class="scan" onsubmit="enviar(event)" autocomplete="off">
-        <input id="dni" inputmode="numeric" autocomplete="one-time-code" placeholder="Ingresar DNI y Enter…">
-        <button class="btn" type="submit">Marcar ingreso</button>
-      </form>
-
-      <div id="adv" class="adv"></div>
-
       <div id="reg" class="row" hidden>
-        <a class="btn" href="#" target="_blank" rel="noopener">📝 Registrarme</a>
+        <a class="pill" href="#" target="_blank" rel="noopener">📝 Registrarme</a>
       </div>
     </div>
   </div>
