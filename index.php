@@ -396,11 +396,16 @@ function fetchIntoBody(url, bodyId, afterLoad){
     .catch(()=>{});
 }
 
-/* ===== ALUMNOS: Nombre ..... Hora (y contador) ===== */
+/* ===== ALUMNOS: agrupar por HORA => "HH hs — Nombre, Nombre" ===== */
 function normalizeAlumnos(root){
+  // contador (si viene del HTML)
   const m = (root.textContent||'').match(/(\d+)\s+ingresos?/i);
-  if (m) document.getElementById('alumnos-count').textContent = m[1]+' ingresos';
+  if (m) {
+    const span = document.getElementById('alumnos-count');
+    if (span) span.textContent = m[1]+' ingresos';
+  }
 
+  // Normalizamos a una <ul> con <li>
   let ul = root.querySelector('ul');
   if (!ul){
     const items = root.querySelectorAll('li');
@@ -412,32 +417,111 @@ function normalizeAlumnos(root){
     }
   }
   if (!ul) return;
-  ul.classList.add('asistencias-hoy');
 
+  // Extraemos (nombre, hora) de cada li (acepta HH:MM o HH:MM:SS)
+  const registros = [];
   ul.querySelectorAll('li').forEach(li=>{
     const txt = (li.textContent||'').replace(/\s+/g,' ').trim();
-    const mm = txt.match(/^(.*?)[\s\-–]*\b(\d{2}:\d{2}:\d{2})\b.*$/);
+    const mm = txt.match(/^(.*?)[\s\-–]*\b(\d{2}):(\d{2})(?::\d{2})?\b.*$/);
     const nombre = (mm ? mm[1] : txt).trim();
-    const hora   = (mm ? mm[2] : '').trim();
-    li.innerHTML = `<span class="n">${nombre}</span>${hora?`<span class="h">${hora}</span>`:''}`;
+    // Truncamos a HORA redonda: HH
+    const horaHH = mm ? mm[2] : null;
+    if (nombre){
+      const key = horaHH ? (horaHH.padStart(2,'0')+' hs') : '— hs';
+      registros.push({ key, nombre });
+    }
   });
+
+  // Agrupamos por "HH hs"
+  const map = new Map();
+  for (const r of registros){
+    if (!map.has(r.key)) map.set(r.key, []);
+    map.get(r.key).push(r.nombre);
+  }
+
+  // Ordenamos por hora asc (— hs al final)
+  const sorted = [...map.entries()].sort((a,b)=>{
+    if (a[0]==='— hs') return 1;
+    if (b[0]==='— hs') return -1;
+    return a[0].localeCompare(b[0]);
+  });
+
+  // Render
+  ul.className = 'asistencias-hoy';
+  ul.innerHTML = '';
+  for (const [key, nombres] of sorted){
+    const li = document.createElement('li');
+    li.innerHTML = `<span class="n"><strong>${key}</strong> — ${nombres.join(', ')}</span>`;
+    ul.appendChild(li);
+  }
 }
 
-/* ===== RESERVAS: compactar visual ===== */
+/* ===== RESERVAS: agrupar por HORA => "HH hs — Nombre, Nombre" ===== */
 function normalizeReservas(root){
-  [...root.children].forEach(card=>{
-    if (card.nodeType!==1) return;
-    card.classList.add('res-card');
-    const head = [...card.querySelectorAll('*')].find(e=>/\b\d{2}:\d{2}:\d{2}\b/.test(e.textContent||'')) || card.firstElementChild;
-    if (head) head.classList.add('res-head');
-
-    const body = document.createElement('div'); body.className='res-body';
-    const alumno = [...card.querySelectorAll('*')].find(e=>/👤|alumno/i.test(e.textContent||''));
-    const profe  = [...card.querySelectorAll('*')].find(e=>/profe|entrenador|coach/i.test(e.textContent||''));
-    if (alumno){ const d=document.createElement('div'); d.innerHTML=`<span>👤</span><span>${alumno.textContent.trim()}</span>`; body.appendChild(d); }
-    if (profe){  const d=document.createElement('div'); d.innerHTML=`<span>🧑‍🏫</span><span>${profe.textContent.trim()}</span>`; body.appendChild(d); }
-    if (body.children.length) card.appendChild(body);
+  // Buscamos nodos que contengan una hora para identificar reservas
+  const nodos = [...root.querySelectorAll('*')].filter(e=>{
+    const t = (e.textContent||'').trim();
+    return /\b\d{2}:\d{2}(?::\d{2})?\b/.test(t);
   });
+
+  const registros = [];
+  nodos.forEach(card=>{
+    const texto = (card.textContent||'').replace(/\s+/g,' ').trim();
+
+    // Hora => HH (truncada)
+    const hm = texto.match(/\b(\d{2}):(\d{2})(?::\d{2})?\b/);
+    const horaHH = hm ? hm[1] : null;
+    const key = horaHH ? (horaHH.padStart(2,'0')+' hs') : '— hs';
+
+    // Nombre del alumno: buscamos 👤 / "Alumno:"
+    let nombre = '';
+    const nodoAlumno = [...card.querySelectorAll('*')].find(e=>/👤|alumno/i.test(e.textContent||''));
+    if (nodoAlumno){
+      nombre = (nodoAlumno.textContent||'').replace(/👤/g,'').replace(/alumno:?/i,'').trim();
+    } else {
+      const m2 = texto.match(/alumno:?\s*([^|·•\-–—\n]+?)(?:\s{2,}|$)/i);
+      if (m2) nombre = m2[1].trim();
+    }
+    if (!nombre){
+      // Fallback: primer fragmento sin la hora
+      nombre = texto.replace(/\b\d{2}:\d{2}(?::\d{2})?\b/,'').trim();
+      nombre = nombre.split(/[,|·•\-–—]/)[0].trim();
+    }
+
+    if (nombre) registros.push({ key, nombre });
+  });
+
+  // Agrupar por "HH hs"
+  const map = new Map();
+  for (const r of registros){
+    if (!map.has(r.key)) map.set(r.key, []);
+    map.get(r.key).push(r.nombre);
+  }
+
+  // Ordenar por hora asc
+  const sorted = [...map.entries()].sort((a,b)=>{
+    if (a[0]==='— hs') return 1;
+    if (b[0]==='— hs') return -1;
+    return a[0].localeCompare(b[0]);
+  });
+
+  // Render minimalista en #reservas-body (sin tocar estilos existentes)
+  const cont = document.getElementById('reservas-body') || root;
+  cont.innerHTML = '';
+  if (!sorted.length){
+    cont.innerHTML = '<div class="mut">No hay reservas para este día.</div>';
+    return;
+  }
+  const ul = document.createElement('ul');
+  ul.style.listStyle='none'; ul.style.padding='0'; ul.style.margin='0';
+  for (const [key, nombres] of sorted){
+    const li = document.createElement('li');
+    li.style.padding='8px 6px';
+    li.style.borderBottom='1px dashed rgba(15,23,42,.12)';
+    li.innerHTML = `<div class="res-head"><strong>${key}</strong> — ${nombres.join(', ')}</div>`;
+    ul.appendChild(li);
+  }
+  cont.appendChild(ul);
 }
 
 /* ===== Cargas periódicas ===== */
