@@ -1,15 +1,16 @@
 <?php
 /* ==========================================================
-   gym_qr_checkin.php — Móvil + Backend
-   • UI móvil simple (oscuro) sin romper tu flujo.
+   gym_qr_checkin.php — Móvil + Backend (COMPLETO y CORREGIDO)
+   • UI móvil dark, como el que enviaste.
    • Marca acceso en accesos_gimnasio (metodo='QR').
-   • Setea SIEMPRE timestamp donde corresponda:
-     - fecha_ingreso (prioridad) y, si existen, creado_en / created_at / fecha / ts / timestamp también.
+   • Setea SIEMPRE NOW() en todas las columnas de fecha existentes:
+     - prioridad fecha_ingreso; además creado_en / created_at / fecha / ts / timestamp si existen.
    • Soporta:
       - QR que abre ?dni=...&g=...
       - Form móvil via POST -> ?ajax=1&g=...
    • Devuelve JSON en ?ajax=1 (para tu JS).
    • Muestra Plan / Clases restantes / Vencimiento si hay membresía.
+   • Descuenta 1 clase de la membresía activa (si corresponde) y registra consumo.
    ========================================================== */
 
 if (session_status() === PHP_SESSION_NONE) session_start();
@@ -59,10 +60,19 @@ $M_CLI  = $T_MEM ? pick_col($conexion,$T_MEM,['cliente_id','id_cliente'],'client
 $M_GYM  = $T_MEM ? pick_col($conexion,$T_MEM,['gimnasio_id','id_gimnasio'], null) : null;
 $M_PLAN = $T_MEM ? pick_col($conexion,$T_MEM,['plan','plan_nombre','nombre_plan'], null) : null;
 $M_VEN  = $T_MEM ? pick_col($conexion,$T_MEM,['vence','fecha_vencimiento','vencimiento'], null) : null;
-$M_RES  = $T_MEM ? pick_col($conexion,$T_MEM,['clases_disponibles','clases_restantes','restantes'], null) : null;
+$M_RES  = $T_MEM ? pick_col($conexion,$T_MEM,['clases_disponibles','clases_restantes','restantes'], null) : null; // preferimos clases_disponibles
 $M_TOT  = $T_MEM ? pick_col($conexion,$T_MEM,['clases_totales','clases'], null) : null;
 $M_USE  = $T_MEM ? pick_col($conexion,$T_MEM,['clases_usadas','usadas'], null) : null;
 $M_TS   = $T_MEM ? pick_col($conexion,$T_MEM,['creado_en','updated_at','fecha_alta','fecha_pago'], null) : null;
+
+/* ==== Log de consumos (opcional) ==== */
+$T_CONS = table_exists($conexion,'membresia_consumos') ? 'membresia_consumos' : null;
+$K_MEMB = $T_CONS ? pick_col($conexion,$T_CONS,['membresia_id'],'membresia_id') : null;
+$K_ACC  = $T_CONS ? pick_col($conexion,$T_CONS,['acceso_id'],'acceso_id') : null;
+$K_CLI  = $T_CONS ? pick_col($conexion,$T_CONS,['cliente_id'],'cliente_id') : null;
+$K_GYM  = $T_CONS ? pick_col($conexion,$T_CONS,['gimnasio_id'],'gimnasio_id') : null;
+$K_FEC  = $T_CONS ? pick_col($conexion,$T_CONS,['fecha_consumo','creado_en','created_at'],'fecha_consumo') : null;
+$K_MET  = $T_CONS ? pick_col($conexion,$T_CONS,['metodo','medio','tipo'],'metodo') : null;
 
 /* ===== Rate limit simple por DNI (10s) ===== */
 if (empty($_SESSION['qr_rate'])) $_SESSION['qr_rate'] = [];
@@ -76,7 +86,7 @@ if ($IS_AJAX){
   if ($dni==='') jexit(['ok'=>false,'msg'=>'Ingresá un DNI']);
 
   if (!empty($_SESSION['qr_rate'][$dni]) && (time()-$_SESSION['qr_rate'][$dni])<10){
-    jexit(['ok'=>true,'repeat'=>true,'msg'=>'⏱️ Ya marcado hace instantes.']);
+    jexit(['ok'=>true,'repeat'=>true,'msg'=>'⏱️ Ya estaba marcado hace instantes.']);
   }
 
   /* Buscar cliente */
@@ -94,61 +104,117 @@ if ($IS_AJAX){
   $cli = $rc->fetch_assoc();
   $cliente_id = (int)$cli['id'];
 
-  /* Insertar acceso — metodo='QR' y timestamps */
-  $fields = [$A_GYM,$A_CLI,$A_MET];
-  $values = [$gimnasio_id, $cliente_id, "'QR'"];
-  foreach($A_TS_ALL as $tscol){ $fields[]=$tscol; $values[]="NOW()"; } // seteo TODAS las de fecha que existan
+  /* ===== Transacción: acceso + descuento membresía + consumo (opcional) ===== */
+  $conexion->begin_transaction();
+  try {
+    /* Insertar acceso — metodo='QR' y timestamps */
+    $fields = [$A_GYM,$A_CLI,$A_MET];
+    $values = [$gimnasio_id, $cliente_id, "'QR'"];
+    foreach($A_TS_ALL as $tscol){ $fields[]=$tscol; $values[]="NOW()"; } // seteo TODAS las de fecha que existan
 
-  $sqlI = "INSERT INTO $T_ACC (".implode(',',array_map('bt',$fields)).") VALUES (".implode(',', $values).")";
-  $okI  = $conexion->query($sqlI);
-  $err  = $okI ? null : $conexion->error;
+    $sqlI = "INSERT INTO $T_ACC (".implode(',',array_map('bt',$fields)).") VALUES (".implode(',', $values).")";
+    if (!$conexion->query($sqlI)) {
+      throw new Exception("Insert acceso: ".$conexion->error);
+    }
+    $acceso_id = (int)$conexion->insert_id;
 
-  $_SESSION['qr_rate'][$dni] = time();
+    $plan = null; $vence=null; $restantes=null; $descuento_ok=false;
 
-  /* Datos de membresía (si hay) */
-  $plan = null; $vence=null; $restantes=null;
-  if ($T_MEM){
-    $condGym = $M_GYM ? "AND M.$M_GYM=$gimnasio_id" : "";
-    $sqlM = "SELECT ".($M_PLAN?$M_PLAN:"NULL")." AS plan,
-                    ".($M_VEN?$M_VEN:"NULL")." AS vence,
-                    ".($M_RES?$M_RES:"NULL")." AS restantes,
-                    ".($M_TOT?$M_TOT:"NULL")." AS totales,
-                    ".($M_USE?$M_USE:"NULL")." AS usadas
-             FROM $T_MEM M
-             WHERE M.$M_CLI=$cliente_id $condGym
-             ORDER BY ".($M_TS?:'1')." DESC
-             LIMIT 1";
-    if ($rm = $conexion->query($sqlM)){
-      if ($m = $rm->fetch_assoc()){
-        $plan = $m['plan'] ?? null;
+    if ($T_MEM){
+      $hoy = date('Y-m-d');
+      $condGym = $M_GYM ? "AND M.$M_GYM=$gimnasio_id" : "";
+      // Lock de la membresía más reciente y vigente
+      $sqlM = "SELECT M.id,
+                      ".($M_PLAN?$M_PLAN:"NULL")." AS plan,
+                      ".($M_VEN?$M_VEN:"NULL")." AS vence,
+                      ".($M_RES?$M_RES:"NULL")." AS restantes,
+                      ".($M_TOT?$M_TOT:"NULL")." AS totales,
+                      ".($M_USE?$M_USE:"NULL")." AS usadas
+               FROM $T_MEM M
+               WHERE M.$M_CLI=$cliente_id $condGym
+                 AND (M.activa=1 OR M.activa='1' OR M.activa IS NULL)
+                 AND (".($M_VEN?$M_VEN:"NULL")." IS NULL OR ".($M_VEN?$M_VEN:"NULL")."='' OR ".($M_VEN?$M_VEN:"NULL")."='0000-00-00' OR ".($M_VEN?$M_VEN:"NULL")." >= '$hoy')
+               ORDER BY COALESCE(".($M_VEN?$M_VEN:"NULL").",'9999-12-31') DESC, M.id DESC
+               LIMIT 1
+               FOR UPDATE";
+      $rm = $conexion->query($sqlM);
+      if ($rm && $rm->num_rows>0){
+        $m = $rm->fetch_assoc();
+        $membresia_id = (int)$m['id'];
+        $plan  = $m['plan'] ?? null;
         $vence = $m['vence'] ?? null;
-        if ($M_RES){
+
+        if ($M_RES){ // caso columnas de disponibles directas
           $restantes = is_null($m['restantes']) ? null : (int)$m['restantes'];
-        } else if ($M_TOT){
+          if (!is_null($restantes) && $restantes>0){
+            $sqlU = "UPDATE $T_MEM SET $M_RES = $M_RES - 1 WHERE id=$membresia_id AND $M_RES > 0";
+            if (!$conexion->query($sqlU)) throw new Exception("Update membresía: ".$conexion->error);
+            if ($conexion->affected_rows>0){
+              $descuento_ok = true;
+              $restantes = $restantes - 1;
+            }
+          }
+        } elseif ($M_TOT && $M_USE){ // caso total/usadas
           $tot = (int)($m['totales'] ?? 0);
           $usa = (int)($m['usadas'] ?? 0);
           $restantes = max(0, $tot - $usa);
+          if ($restantes>0){
+            $sqlU = "UPDATE $T_MEM SET $M_USE = $M_USE + 1 WHERE id=$membresia_id AND ($M_TOT - $M_USE) > 0";
+            if (!$conexion->query($sqlU)) throw new Exception("Update usadas: ".$conexion->error);
+            if ($conexion->affected_rows>0){
+              $descuento_ok = true;
+              $restantes = $restantes - 1;
+            }
+          }
+        }
+
+        // Log de consumo si existe la tabla
+        if ($descuento_ok && $T_CONS){
+          $cons_fields=[]; $cons_vals=[];
+          if ($K_MEMB){ $cons_fields[]=$K_MEMB; $cons_vals[]=$membresia_id; }
+          if ($K_ACC){  $cons_fields[]=$K_ACC;  $cons_vals[]=$acceso_id; }
+          if ($K_CLI){  $cons_fields[]=$K_CLI;  $cons_vals[]=$cliente_id; }
+          if ($K_GYM){  $cons_fields[]=$K_GYM;  $cons_vals[]=$gimnasio_id; }
+          if ($K_FEC){  $cons_fields[]=$K_FEC;  $cons_vals[]="NOW()"; }
+          if ($K_MET){  $cons_fields[]=$K_MET;  $cons_vals[]="'QR'"; }
+          // formateo columnas
+          foreach($cons_fields as $i=>$c){ $cons_fields[$i]=bt($c); }
+          $vals_sql = [];
+          foreach($cons_vals as $v){ $vals_sql[] = is_numeric($v) && !str_contains((string)$v,".") ? (string)$v : ( (strtoupper($v)==='NOW()') ? 'NOW()' : $v ); }
+          $sqlL = "INSERT INTO $T_CONS (".implode(',',$cons_fields).") VALUES (".implode(',',$vals_sql).")";
+          if (!$conexion->query($sqlL)) throw new Exception("Insert consumo: ".$conexion->error);
         }
       }
     }
-  }
 
-  jexit([
-    'ok'=>true,
-    'inserted'=>$okI?true:false,
-    'msg'=>$okI ? "✅ Ingreso registrado" : "⚠️ No se pudo registrar el ingreso",
-    'cliente'=>[
-      'id'=>$cliente_id,
-      'nombre'=>trim(($cli['apellido']??'').' '.($cli['nombre']??''))
-    ],
-    'membresia'=>[
-      'plan'=>$plan,
-      'vence'=>$vence,
-      'clases_restantes'=>$restantes
-    ],
-    'debug_sql'=>$okI?null:$sqlI,
-    'sql_error'=>$okI?null:$err
-  ]);
+    $conexion->commit();
+
+    $_SESSION['qr_rate'][$dni] = time();
+
+    jexit([
+      'ok'=>true,
+      'inserted'=>true,
+      'msg'=>$descuento_ok ? "✅ Ingreso registrado y clase descontada" : "✅ Ingreso registrado",
+      'cliente'=>[
+        'id'=>$cliente_id,
+        'nombre'=>trim(($cli['apellido']??'').' '.($cli['nombre']??'')),
+      ],
+      'membresia'=>[
+        'plan'=>$plan,
+        'vence'=>$vence,
+        'clases_restantes'=>$restantes
+      ]
+    ]);
+
+  } catch (Throwable $e){
+    $conexion->rollback();
+    jexit([
+      'ok'=>false,
+      'inserted'=>false,
+      'msg'=>'❌ Error procesando ingreso',
+      'error'=>$e->getMessage()
+    ]);
+  }
 }
 
 /* ===== UI MÓVIL =====
@@ -224,7 +290,7 @@ async function marcar(dni){
   let j; try{ j = await r.json(); }catch(e){ adv.textContent = 'Error de red.'; return; }
 
   if(!j.ok && !j.no_reg){
-    adv.textContent = (j.msg||'Error.') + (j.sql_error ? ' · '+j.sql_error : '');
+    adv.textContent = (j.msg||'Error.') + (j.error ? ' · '+j.error : '') + (j.sql_error ? ' · '+j.sql_error : '');
     console.log(j); return;
   }
   if(j.no_reg){
