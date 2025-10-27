@@ -1,24 +1,24 @@
 <?php
 /* ==========================================================
-   gym_qr_checkin.php — Check-in móvil por DNI (con reglas)
-   • Tema claro (blanco), pensado para celulares.
-   • Muestra plan, clases disponibles y vencimiento.
-   • Reglas:
-       - Sin membresía / vencida / sin clases -> DENEGADO.
-       - Fuera de horario personalizado       -> DENEGADO.
-       - Caso OK -> AUTORIZADO: inserta, descuenta y loguea consumo.
-     En denegado se registra intento con metodo='QR-DENEGADO' (sin descuento).
-   Tablas requeridas:
-     - clientes(id, dni, gimnasio_id, nombre, apellido, [horario_desde TIME, horario_hasta TIME] opcional)
-     - accesos_gimnasio(id, gimnasio_id, cliente_id, metodo, fecha_ingreso)
-     - membresias(id, gimnasio_id, cliente_id, plan, clases_disponibles, activa, fecha_vencimiento)
-     - membresia_consumos(id, membresia_id, acceso_id, cliente_id, gimnasio_id, fecha_consumo, metodo)
+   gym_qr_checkin.php — Check-in móvil por DNI (con reglas robustas)
+   • Inserta consumo soportando esquemas distintos:
+       - membresia_consumos: fecha_consumo | fecha | created_at | fecha_registro (opcional)
+       - membresia_consumos: acceso_id | id_acceso
+       - membresia_consumos: gimnasio_id | id_gimnasio (opcional)
+       - membresia_consumos: metodo (opcional)
+   • Descuento de clases en membresias:
+       - Usa clases_disponibles si existe; si no, clases_restantes
+   • Membresía válida si:
+       - activa = 1 o NULL
+       - y fecha_vencimiento >= hoy (o vacía/0000-00-00)
    ========================================================== */
 if (session_status() === PHP_SESSION_NONE) session_start();
 require_once __DIR__ . '/conexion.php';
 if (!isset($conexion) || !($conexion instanceof mysqli)) { http_response_code(500); exit('❌ Sin BD'); }
 if (function_exists('mysqli_report')) { mysqli_report(MYSQLI_REPORT_OFF); }
 @$conexion->set_charset('utf8mb4');
+
+@date_default_timezone_set('America/Argentina/San_Luis');
 
 /* ==== Helpers ==== */
 function h($s){ return htmlspecialchars((string)$s, ENT_QUOTES|ENT_SUBSTITUTE,'UTF-8'); }
@@ -42,12 +42,14 @@ function pick_col(mysqli $db, string $t, array $cands, ?string $fallback=null){
   foreach($cands as $c) if (col_exists($db,$t,$c)) return $c;
   return $fallback;
 }
+function bt($c){ return '`'.str_replace('`','``',$c).'`'; }
+function qv(mysqli $db,$s){ return "'".$db->real_escape_string((string)$s)."'"; }
 
 /* ==== Parámetros base ==== */
 $gimnasio_id = (int)($_GET['g'] ?? ($_POST['g'] ?? ($_SESSION['gimnasio_id'] ?? 0)));
 if ($gimnasio_id<=0){ http_response_code(400); exit('Falta g'); }
 
-/* ==== Marca gym (logo + nombre) ==== */
+/* ==== Marca gym ==== */
 $gym_name = 'Gimnasio'; $gym_logo = null;
 if ($rs = $conexion->query("SELECT nombre, logo FROM gimnasios WHERE id={$gimnasio_id} LIMIT 1")){
   if ($rs->num_rows){ $g=$rs->fetch_assoc();
@@ -84,7 +86,7 @@ if (isset($_GET['ajax']) && $_GET['ajax']=='1'){
   }
   $cli = $rc->fetch_assoc(); $cliente_id = (int)$cli['id'];
 
-  /* === 2) (Opcional) Horario personalizado en clientes === */
+  /* === 2) Horario personalizado opcional === */
   $C_TABLE = 'clientes';
   $COL_HDESDE = pick_col($conexion, $C_TABLE, ['horario_desde','hora_desde']);
   $COL_HHASTA = pick_col($conexion, $C_TABLE, ['horario_hasta','hora_hasta']);
@@ -93,29 +95,33 @@ if (isset($_GET['ajax']) && $_GET['ajax']=='1'){
     $rsH = $conexion->query("SELECT $COL_HDESDE AS desde, $COL_HHASTA AS hasta FROM $C_TABLE WHERE id=$cliente_id LIMIT 1");
     if ($rsH && $rsH->num_rows){
       $HH = $rsH->fetch_assoc();
-      $hor_desde = trim((string)$HH['desde']);
-      $hor_hasta = trim((string)$HH['hasta']);
-      if ($hor_desde==='') $hor_desde = null;
-      if ($hor_hasta==='') $hor_hasta = null;
+      $hor_desde = trim((string)$HH['desde']) ?: null;
+      $hor_hasta = trim((string)$HH['hasta']) ?: null;
     }
   }
-
   $ahora = date('H:i:s');
   $en_horario = true; $txt_horario = null;
   if ($hor_desde && $hor_hasta){
     $txt_horario = $hor_desde.' – '.$hor_hasta;
     if ($hor_desde <= $hor_hasta){
       $en_horario = ($ahora >= $hor_desde && $ahora <= $hor_hasta);
-    } else { // rango pasa medianoche (ej. 22:00–02:00)
+    } else {
       $en_horario = ($ahora >= $hor_desde || $ahora <= $hor_hasta);
     }
   }
 
-  /* === 3) Buscar membresía activa y determinar reglas === */
+  /* === 3) Buscar membresía vigente (por gimnasio_id) === */
   $hoy = date('Y-m-d');
   $plan=null; $vence=null; $rest=null; $membresia_id=null; $activa=false; $motivo=null;
+  // Usaremos ambas columnas de clases por si tu esquema utiliza una u otra:
+  $M_TBL = 'membresias';
+  $M_COL_CD = col_exists($conexion,$M_TBL,'clases_disponibles') ? 'clases_disponibles' : null;
+  $M_COL_CR = col_exists($conexion,$M_TBL,'clases_restantes') ? 'clases_restantes' : null;
 
-  $sqlM = "SELECT id, plan, clases_disponibles, fecha_vencimiento, activa
+  $sqlM = "SELECT id, plan, plan_id, fecha_vencimiento, ".
+          ($M_COL_CD ? "$M_COL_CD AS cd," : "NULL AS cd,").
+          ($M_COL_CR ? "$M_COL_CR AS cr," : "NULL AS cr,").
+          (col_exists($conexion,$M_TBL,'activa') ? "activa" : "NULL AS activa")."
            FROM membresias
            WHERE gimnasio_id=$gimnasio_id
              AND cliente_id=$cliente_id
@@ -124,13 +130,30 @@ if (isset($_GET['ajax']) && $_GET['ajax']=='1'){
   if ($rm = $conexion->query($sqlM)){
     if ($m = $rm->fetch_assoc()){
       $membresia_id = (int)$m['id'];
-      $plan  = $m['plan'] ?? null;
+      $plan_txt  = trim((string)($m['plan'] ?? ''));
+      if ($plan_txt===''){
+        // Si hay tabla planes, traducimos plan_id -> nombre
+        if (col_exists($conexion,'planes','id') && col_exists($conexion,'planes','nombre')){
+          $pid = (int)($m['plan_id'] ?? 0); $plan_txt = $pid ? ("Plan #$pid") : 'Plan';
+          $rp = $conexion->query("SELECT nombre FROM planes WHERE id=$pid LIMIT 1");
+          if ($rp && $rp->num_rows){ $pp=$rp->fetch_assoc(); $plan_txt = $pp['nombre'] ?: $plan_txt; }
+        } else {
+          $plan_txt = 'Plan';
+        }
+      }
+      $plan  = $plan_txt;
       $vence = $m['fecha_vencimiento'] ?? null;
-      $rest  = (int)($m['clases_disponibles'] ?? 0);
-      $activa = ((string)($m['activa'] ?? '0') === '1') && (empty($vence) || $vence=='0000-00-00' || $vence >= $hoy);
+      // pick clases: priorizamos disponibles si >0, sino restantes, sino 0/NULL
+      $cd = isset($m['cd']) ? (int)$m['cd'] : null;
+      $cr = isset($m['cr']) ? (int)$m['cr'] : null;
+      if (!is_null($cd) && $cd>0) $rest = $cd; elseif(!is_null($cr)) $rest = $cr; else $rest = $cd;
+      $actflag = $m['activa'] ?? null;
+      $ok_estado = (is_null($actflag) || $actflag==='' || (string)$actflag==='1' || $actflag===1);
+      $ok_vto = (empty($vence) || $vence==='0000-00-00' || $vence >= $hoy);
+      $activa = ($ok_estado && $ok_vto);
       if (!$activa){
         $motivo = 'membresia_no_activa';
-      } elseif ($rest <= 0){
+      } elseif ((int)$rest <= 0){
         $motivo = 'sin_clases';
       }
     } else {
@@ -145,7 +168,17 @@ if (isset($_GET['ajax']) && $_GET['ajax']=='1'){
   }
 
   /* === 4) Autorizar/Denegar === */
-  $autorizado = (!$motivo); // solo si todas las reglas pasaron
+  $autorizado = (!$motivo);
+
+  // Columnas dinámicas en membresia_consumos
+  $MC_TBL = 'membresia_consumos';
+  $MC_ACC = pick_col($conexion, $MC_TBL, ['acceso_id','id_acceso'], 'acceso_id');
+  $MC_GYM = pick_col($conexion, $MC_TBL, ['gimnasio_id','id_gimnasio']); // opcional
+  $MC_FECHA = pick_col($conexion, $MC_TBL, ['fecha_consumo','fecha','created_at','fecha_registro']); // opcional
+  $MC_METODO = col_exists($conexion,$MC_TBL,'metodo') ? 'metodo' : null;
+
+  // Columnas dinámicas en membresias para descontar
+  $M_DEC_COL = $M_COL_CD ?: $M_COL_CR; // si existe cd la usamos; si no, cr
 
   $conexion->begin_transaction();
   try {
@@ -158,16 +191,38 @@ if (isset($_GET['ajax']) && $_GET['ajax']=='1'){
       $acceso_id = (int)$conexion->insert_id;
 
       if ($membresia_id){
-        // lock y descuento
-        $sqlU = "UPDATE membresias SET clases_disponibles = clases_disponibles - 1
-                 WHERE id=$membresia_id AND clases_disponibles > 0";
-        if (!$conexion->query($sqlU)) throw new Exception("Update membresía: ".$conexion->error);
-        if ($conexion->affected_rows>0){
-          $rest = max(0, (int)$rest - 1);
-          $sqlL = "INSERT INTO membresia_consumos (membresia_id, acceso_id, cliente_id, gimnasio_id, fecha_consumo, metodo)
-                   VALUES ($membresia_id, $acceso_id, $cliente_id, $gimnasio_id, NOW(), '$metodo')";
-          if (!$conexion->query($sqlL)) throw new Exception("Insert consumo: ".$conexion->error);
+        // Descuento en la columna que exista
+        if ($M_DEC_COL){
+          $sqlU = "UPDATE ".bt($M_TBL)." SET ".bt($M_DEC_COL)." = CASE
+                      WHEN ".bt($M_DEC_COL)." IS NULL THEN NULL
+                      WHEN ".bt($M_DEC_COL)." > 0 THEN ".bt($M_DEC_COL)." - 1
+                      ELSE 0 END
+                   WHERE id=$membresia_id";
+          if (!$conexion->query($sqlU)) throw new Exception("Update membresía: ".$conexion->error);
+          if ($conexion->affected_rows>0 && is_numeric($rest)){
+            $rest = max(0, (int)$rest - 1);
+          }
         }
+
+        // Armar INSERT dinámico para membresia_consumos
+        $cols = ['membresia_id', $MC_ACC, 'cliente_id'];
+        $vals = [$membresia_id, $acceso_id, $cliente_id];
+
+        if ($MC_GYM){ $cols[] = $MC_GYM; $vals[] = $gimnasio_id; }
+        if ($MC_FECHA){ $cols[] = $MC_FECHA; $vals[] = ['__RAW__'=>'NOW()']; }
+        if ($MC_METODO){ $cols[] = $MC_METODO; $vals[] = $metodo; }
+
+        // Construir listas SQL seguras
+        $cols_sql = implode(',', array_map('bt', $cols));
+        $vals_sql_parts = [];
+        foreach($vals as $v){
+          if (is_array($v) && isset($v['__RAW__'])) $vals_sql_parts[] = $v['__RAW__'];
+          else $vals_sql_parts[] = is_int($v) ? (string)$v : qv($conexion,$v);
+        }
+        $vals_sql = implode(',', $vals_sql_parts);
+
+        $sqlL = "INSERT INTO ".bt($MC_TBL)." ($cols_sql) VALUES ($vals_sql)";
+        if (!$conexion->query($sqlL)) throw new Exception("Insert consumo: ".$conexion->error);
       }
 
       $conexion->commit();
@@ -187,7 +242,6 @@ if (isset($_GET['ajax']) && $_GET['ajax']=='1'){
       $metodo = "QR-DENEGADO";
       $sqlI = "INSERT INTO accesos_gimnasio (gimnasio_id, cliente_id, metodo, fecha_ingreso)
                VALUES ($gimnasio_id, $cliente_id, '$metodo', NOW())";
-      // Si querés NO registrar intentos, comenta las 2 líneas anteriores.
       $conexion->query($sqlI); // si falla igual seguimos, no bloquea respuesta
 
       $conexion->commit();
@@ -195,10 +249,10 @@ if (isset($_GET['ajax']) && $_GET['ajax']=='1'){
 
       // Mensaje según motivo
       $msg = '❌ Ingreso denegado';
-      if ($motivo==='sin_membresia')      $msg = '❌ No tiene membresía activa. Debe cargar/renovar.';
+      if ($motivo==='sin_membresia')           $msg = '❌ No tiene membresía activa. Debe cargar/renovar.';
       elseif ($motivo==='membresia_no_activa') $msg = '❌ Membresía inactiva o vencida. Debe renovar.';
-      elseif ($motivo==='sin_clases')     $msg = '❌ No le quedan clases disponibles.';
-      elseif ($motivo==='fuera_de_horario') $msg = '❌ Fuera de su horario permitido ('.$txt_horario.').';
+      elseif ($motivo==='sin_clases')          $msg = '❌ No le quedan clases disponibles.';
+      elseif ($motivo==='fuera_de_horario')    $msg = '❌ Fuera de su horario permitido ('.$txt_horario.').';
 
       echo json_encode([
         'ok'=>true,
@@ -345,11 +399,8 @@ async function marcar(dni){
     } else {
       adv.className='adv bad';
       adv.textContent = j.msg || 'Ingreso denegado.';
-      // Mostrar botón de registro/renovación si aplica
       if (j.motivo === 'sin_membresia' || j.motivo === 'membresia_no_activa' || j.motivo === 'sin_clases'){
         reg.hidden = false;
-        // Si tuvieras una URL concreta de renovación, podés setearla aquí
-        // document.getElementById('regurl').href = 'renovar.php?...';
       }
     }
   } catch (e){

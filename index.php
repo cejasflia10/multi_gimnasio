@@ -380,164 +380,177 @@ function fetchIntoBody(url, bodyId, afterLoad){
     .catch(()=>{});
 }
 
-/* ===== ALUMNOS: agrupar por HORA en vertical ===== */
-function normalizeAlumnos(root){
-  const m = (root.textContent||'').match(/(\d+)\s+ingresos?/i);
-  if (m) {
-    const span = document.getElementById('alumnos-count');
-    if (span) span.textContent = m[1]+' ingresos';
+/* ===== ALUMNOS: agrupar por HORA en vertical (sin profesor/academia) ===== */
+/* Util: limpia nombre y lo pasa a lower para comparar */
+function _cleanName(s){
+  return (s||'')
+    .replace(/[🕒📅⏰👤🏠🏫🏡🏢🏟️👨‍🏫🧑‍🏫]/g,' ')
+    .replace(/\b(Profesor|Profe|Entrenador|Coach|Academia|Escuela|Team|Dojo|Gym|Gimnasio)\b.*$/i,'')
+    .replace(/\s+/g,' ')
+    .trim();
+}
+function _lower(s){ return _cleanName(s).toLowerCase(); }
+
+/* Construye un SET con nombres de profesores detectados en el HTML */
+function _buildProfExcludes(root){
+  const excludes = new Set();
+  const full = (root.textContent || '').replace(/\u00A0/g,' ');
+
+  // 1) “Profesor: Nombre …”
+  const reProf = /(Profesor|Profe|Entrenador|Coach)\s*:?\s*([A-Za-zÁÉÍÓÚÑñÜü'´` .-]{2,})(?=$|[,\n;|/]| - | – | — )/gi;
+  for (let m; (m = reProf.exec(full)); ){
+    const nm = _cleanName(m[2]);
+    if (nm) excludes.add(_lower(nm));
   }
 
-  // Aseguramos una colección de <li> inicial
-  let seedLis = root.querySelectorAll('li');
-  if (!seedLis.length) {
-    const ul = root.querySelector('ul');
-    if (ul) seedLis = ul.querySelectorAll('li');
+  // 2) Con emoji de profesor
+  const reEmoji = /(👨‍🏫|🧑‍🏫)\s*([A-Za-zÁÉÍÓÚÑñÜü'´` .-]{2,})(?=$|[,\n;|/]| - | – | — )/g;
+  for (let m; (m = reEmoji.exec(full)); ){
+    const nm = _cleanName(m[2]);
+    if (nm) excludes.add(_lower(nm));
   }
+
+  // 3) Pistas típicas: “🏠 Nombre” (cartel del profe/academia)
+  const reCasa = /(🏠)\s*([A-Za-zÁÉÍÓÚÑñÜü'´` .-]{2,})(?=$|[,\n;|/]| - | – | — )/g;
+  for (let m; (m = reCasa.exec(full)); ){
+    const nm = _cleanName(m[2]);
+    if (nm) excludes.add(_lower(nm));
+  }
+
+  // 4) Línea con palabra clave y un nombre detrás (profes sin emoji)
+  const reLinea = /\b(Profesor|Profe|Entrenador|Coach)\b[^A-Za-zÁÉÍÓÚÑñÜü]*([A-Za-zÁÉÍÓÚÑñÜü'´` .-]{2,})/gi;
+  for (let m; (m = reLinea.exec(full)); ){
+    const nm = _cleanName(m[2]);
+    if (nm) excludes.add(_lower(nm));
+  }
+
+  return excludes;
+}
+
+/* ===== ALUMNOS HOY — agrupar por HORA, SOLO clientes (sin profesor/academia) ===== */
+function normalizeAlumnos(root){
+  // contador si viene en el HTML
+  const m = (root.textContent||'').match(/(\d+)\s+ingresos?/i);
+  if (m) { const span = document.getElementById('alumnos-count'); if (span) span.textContent = m[1]+' ingresos'; }
+
+  // set de nombres de profesor a excluir
+  const EXC = _buildProfExcludes(root);
+
+  // recolectar items base
+  let seedLis = root.querySelectorAll('li');
+  if (!seedLis.length){ const ul = root.querySelector('ul'); if (ul) seedLis = ul.querySelectorAll('li'); }
   if (!seedLis.length) return;
 
-  // Extraemos nombre + hora y agrupamos por HH
+  // nombre + HH
   const registros = [];
   seedLis.forEach(li=>{
-    const txt = (li.textContent||'').replace(/\s+/g,' ').trim();
-    const mm = txt.match(/^(.*?)[\s\-–]*\b(\d{2}):(\d{2})(?::\d{2})?\b.*$/);
-    const nombre = (mm ? mm[1] : txt).trim();
+    let txt = (li.textContent||'').replace(/\u00A0/g,' ').replace(/\s+/g,' ').trim();
+
+    // recorta todo lo que venga después de etiquetas de profesor/academia
+    txt = txt.replace(/\b(Profesor|Profe|Entrenador|Coach)\b.*$/i,'')
+             .replace(/(🏠|🏫|👨‍🏫|🧑‍🏫).*$/,'')
+             .trim();
+
+    const mm = txt.match(/^(.*?)[\s\-–—]*\b(\d{2}):(\d{2})(?::\d{2})?\b.*$/);
+    const nombre = _cleanName(mm ? mm[1] : txt);
     const horaHH = mm ? mm[2] : null;
-    if (nombre){
-      const key = horaHH ? (horaHH.padStart(2,'0')+' hs') : '— hs';
-      registros.push({ key, nombre });
-    }
+
+    if (!nombre) return;
+    if (EXC.has(_lower(nombre))) return;     // **filtra profe**
+    if (/\b(Academia|Escuela|Team|Dojo|Gym|Gimnasio)\b/i.test(nombre)) return; // **filtra academias**
+
+    const key = horaHH ? (horaHH.padStart(2,'0')+' hs') : '— hs';
+    registros.push({ key, nombre });
   });
 
+  // agrupar y render
   const map = new Map();
-  for (const r of registros){
-    if (!map.has(r.key)) map.set(r.key, new Set());
-    map.get(r.key).add(r.nombre);
-  }
+  for (const r of registros){ if(!map.has(r.key)) map.set(r.key,new Set()); map.get(r.key).add(r.nombre); }
 
   const sorted = [...map.entries()].sort((a,b)=>{
-    if (a[0]==='— hs') return 1;
-    if (b[0]==='— hs') return -1;
-    return a[0].localeCompare(b[0]);
+    if (a[0]==='— hs') return 1; if (b[0]==='— hs') return -1; return a[0].localeCompare(b[0]);
   });
 
-  // Render vertical
   root.innerHTML = '';
-  const ul = document.createElement('ul');
-  ul.className = 'alum-list';
-
-  for (const [hora, setNombres] of sorted){
+  const ul = document.createElement('ul'); ul.className='alum-list';
+  sorted.forEach(([hora, setNombres])=>{
     const li = document.createElement('li');
-
-    const head = document.createElement('div');
-    head.className = 'alum-head';
-    head.textContent = hora;
-
-    const body = document.createElement('div');
-    [...setNombres].forEach(n=>{
-      const d = document.createElement('div');
-      d.className = 'alum-name';
-      d.textContent = n;
-      body.appendChild(d);
-    });
-
-    li.appendChild(head);
-    li.appendChild(body);
+    li.innerHTML = `<div class="alum-head">${hora}</div>` + [...setNombres].map(n=>`<div class="alum-name">${n}</div>`).join('');
     ul.appendChild(li);
-  }
-
+  });
   root.appendChild(ul);
 }
 
-/* ===== RESERVAS: SOLO hora + clientes, en vertical; sin profesor ===== */
+/* ===== RESERVAS — agrupar por HORA, SOLO clientes (sin profesor/academia) ===== */
 function normalizeReservas(root){
-  const WEEKDAYS = /\b(Lunes|Martes|Mi[eé]rcoles|Jueves|Viernes|S[áa]bado|Domingo)\b/ig;
+  const cont = document.getElementById('reservas-body') || root;
 
-  const nodos = [...root.querySelectorAll('*')].filter(e=>{
-    const t=(e.textContent||'').trim();
-    return /\b\d{2}:\d{2}(?::\d{2})?\b/.test(t);
-  });
+  // set de nombres de profesor a excluir sacados del HTML de origen
+  const EXC = _buildProfExcludes(root);
+
+  let txt = (root.textContent || '').replace(/\u00A0/g,' ').trim();
+  if (!txt) { cont.innerHTML = '<div class="mut">No hay reservas para este día.</div>'; return; }
+
+  // normaliza separadores y expone horas como líneas
+  txt = txt
+    .replace(/\s*·\s*/g, '\n')
+    .replace(/[|/]/g, '\n')
+    .replace(/\s*[-–—]\s*/g, '\n')
+    .replace(/\b(\d{2}:\d{2})(?::\d{2})?\b/g, '\n$1\n');
+
+  const lines = txt.split(/\r?\n/).map(s=>s.trim()).filter(Boolean);
+
+  const IGNORE_RE = /\b(Lunes|Martes|Mi[eé]rcoles|Jueves|Viernes|S[áa]bado|Domingo|Reserva|Turno|Clase|Horario)\b/i;
+  const PROF_WORD = /\b(Profesor|Profe|Entrenador|Coach)\b/i;
 
   const map = new Map();
+  let currentKey = '— hs';
 
-  nodos.forEach(node=>{
-    const texto = (node.textContent||'').replace(/\s+/g,' ').trim();
-    const hm = texto.match(/\b(\d{2}):(\d{2})(?::\d{2})?\b/);
-    const horaHH = hm ? hm[1] : null;
-    const key = horaHH ? (horaHH.padStart(2,'0')+' hs') : '— hs';
-    if (!map.has(key)) map.set(key, {clientes:new Set(), profesores:new Set()});
-
-    const candidatos = [];
-    node.querySelectorAll('*').forEach(n=>{
-      const tx=(n.textContent||'').trim();
-      let m;
-      if ((m = tx.match(/^(?:👤\s*)?(.+)$/)) && /👤/.test(tx)) {
-        candidatos.push(m[1].replace(/^Alumno:?\s*/i,'').trim());
-      }
-      if ((m = tx.match(/(?:Alumno|Cliente|Socio):?\s*([A-Za-zÁÉÍÓÚÑñÜü'´` .-]+)/i))) {
-        candidatos.push(m[1].trim());
-      }
-      if ((m = tx.match(/(?:Profesor|Profe|Entrenador|Coach):?\s*([A-Za-zÁÉÍÓÚÑñÜü'´` .-]+)/i))) {
-        map.get(key).profesores.add(m[1].trim());
-      }
-    });
-
-    if (!candidatos.length){
-      let t = texto;
-      t = t.replace(WEEKDAYS,'');
-      t = t.replace(/\b\d{2}:\d{2}(?::\d{2})?\b/g,' ');
-      t = t.replace(/\b(Profesor|Profe|Entrenador|Coach)\b.*$/i,' ');
-      t = t.replace(/[🕒📅⏰•·\-\–\—]/g,' ');
-      t = t.replace(/\s+/g,' ').trim();
-      t.split(/[,|\/]/).map(s=>s.trim()).filter(Boolean).forEach(nm=>candidatos.push(nm));
+  for (let line of lines){
+    const h = line.match(/\b(\d{2}):(\d{2})(?::\d{2})?\b/);
+    if (h){
+      currentKey = h[1].padStart(2,'0')+' hs';
+      if (!map.has(currentKey)) map.set(currentKey, new Set());
+      continue;
     }
 
-    candidatos.filter(Boolean).forEach(nm=>map.get(key).clientes.add(nm));
-  });
+    if (IGNORE_RE.test(line) || /^👤+$/.test(line) || line.length<2) continue;
 
-  for (const [,obj] of map.entries()){
-    for (const prof of obj.profesores){
-      if (obj.clientes.has(prof)) obj.clientes.delete(prof);
-    }
+    // corta cualquier parte “Profesor …”, “🏠 …”, etc.
+    line = line
+      .replace(/\b(Profesor|Profe|Entrenador|Coach)\b.*$/i,'')
+      .replace(/(🏠|🏫|👨‍🏫|🧑‍🏫).*$/,'')
+      .trim();
+
+    const nombre = _cleanName(line);
+    if (!nombre) continue;
+
+    // **filtros fuertes**: no profes ni academias
+    if (EXC.has(_lower(nombre))) continue;
+    if (/\b(Academia|Escuela|Team|Dojo|Gym|Gimnasio)\b/i.test(nombre)) continue;
+    if (PROF_WORD.test(line)) continue;
+
+    if (!map.has(currentKey)) map.set(currentKey, new Set());
+    map.get(currentKey).add(nombre);
   }
 
-  const sorted = [...map.entries()].sort((a,b)=>{
-    if (a[0]==='— hs') return 1;
-    if (b[0]==='— hs') return -1;
-    return a[0].localeCompare(b[0]);
-  });
-
-  const cont = document.getElementById('reservas-body') || root;
-  cont.innerHTML = '';
-  if (!sorted.length){
+  if ([...map.values()].every(set => set.size === 0)){
     cont.innerHTML = '<div class="mut">No hay reservas para este día.</div>';
     return;
   }
 
-  const ul = document.createElement('ul');
-  ul.className = 'res-list';
+  const sorted = [...map.entries()].sort((a,b)=>{
+    if (a[0]==='— hs') return 1; if (b[0]==='— hs') return -1; return a[0].localeCompare(b[0]);
+  });
 
-  for (const [hora, obj] of sorted){
+  const ul = document.createElement('ul'); ul.className='res-list';
+  sorted.forEach(([hora, setNombres])=>{
     const li = document.createElement('li');
-    const head = document.createElement('div'); head.className='res-head'; head.textContent = hora;
-    const body = document.createElement('div');
-
-    const clientes = [...obj.clientes];
-    if (!clientes.length) {
-      const empty = document.createElement('div'); empty.className='cli'; empty.textContent='—';
-      body.appendChild(empty);
-    } else {
-      clientes.forEach(n=>{
-        const d = document.createElement('div'); d.className='cli'; d.textContent = n;
-        body.appendChild(d);
-      });
-    }
-
-    li.appendChild(head);
-    li.appendChild(body);
+    li.innerHTML = `<div class="res-head">${hora}</div>` + [...setNombres].map(n=>`<div class="cli">${n}</div>`).join('');
     ul.appendChild(li);
-  }
+  });
 
+  cont.innerHTML = '';
   cont.appendChild(ul);
 }
 

@@ -1,10 +1,13 @@
 <?php
 /* ==========================================================
-   accesos_gimnasio.php — Panel de accesos (FIX zona horaria)
-   • Hora mostrada en -03:00 (San Luis/Argentina) con CONVERT_TZ.
-   • “Hoy” con CURRENT_DATE() (no depende de PHP).
-   • Rango: 00:00:00–23:59:59.
-   • Fallback: últimos 100 si el rango queda vacío.
+   accesos_gimnasio.php — Panel de accesos (membresías robusto)
+   • Hora local -03:00 con CONVERT_TZ.
+   • “Hoy” con CURRENT_DATE() (MySQL).
+   • Membresía válida si: (activa=1) ó (activa es NULL/''), y vto >= hoy (o vacío/0000-00-00).
+   • Soporta datos en gimnasio_id o id_gimnasio (OR en el WHERE).
+   • Plan: usa plan; si vacío, planes.nombre por plan_id.
+   • Clases: clases_disponibles; si nulo/0, cae a clases_restantes.
+   • Consumo: miembros en membresia_consumos por acceso_id/id_acceso.
    ========================================================== */
 
 if (session_status() === PHP_SESSION_NONE) session_start();
@@ -12,12 +15,16 @@ require_once __DIR__ . '/conexion.php';
 if (!isset($conexion) || !($conexion instanceof mysqli)) { http_response_code(500); exit('❌ Sin BD'); }
 if (function_exists('mysqli_report')) { mysqli_report(MYSQLI_REPORT_OFF); }
 @$conexion->set_charset('utf8mb4');
-
-/* Fuerzo la TZ de PHP (por si se usa date() de respaldo) */
 @date_default_timezone_set('America/Argentina/San_Luis');
 
+/* ===== Helpers ===== */
 function h($s){ return htmlspecialchars((string)$s, ENT_QUOTES|ENT_SUBSTITUTE,'UTF-8'); }
-function qv($db,$s){ return "'".$db->real_escape_string((string)$s)."'"; }
+function qv(mysqli $db,$s){ return "'".$db->real_escape_string((string)$s)."'"; }
+function bt($c){ return '`'.str_replace('`','``',$c).'`'; }
+function col_exists(mysqli $db, string $table, string $col): bool {
+  $t=$db->real_escape_string($table); $c=$db->real_escape_string($col);
+  $rs=$db->query("SHOW COLUMNS FROM `$t` LIKE '$c'"); return ($rs && $rs->num_rows>0);
+}
 function logo_url(?string $logo): ?string {
   $logo = trim((string)$logo);
   if ($logo==='') return null;
@@ -31,120 +38,142 @@ function logo_url(?string $logo): ?string {
   return $logo;
 }
 
-/* ==== Parámetros ==== */
+/* ===== Parámetros ===== */
 $gimnasio_id = (int)($_GET['g'] ?? ($_SESSION['gimnasio_id'] ?? 0));
 if ($gimnasio_id<=0){ http_response_code(400); exit('Falta g'); }
 $hoyPHP = date('Y-m-d');
 $desde  = $_GET['desde'] ?? $hoyPHP;
 $hasta  = $_GET['hasta'] ?? $hoyPHP;
-/* Modo hoy si no tocaron filtros, o eligieron hoy-hoy */
 $modo_hoy = (!isset($_GET['desde']) && !isset($_GET['hasta'])) || ($desde===$hoyPHP && $hasta===$hoyPHP);
 
-/* ==== Marca del gimnasio ==== */
-$gym_name = 'Gimnasio'; $gym_logo = null;
-if ($rs = $conexion->query("SELECT nombre, logo FROM gimnasios WHERE id={$gimnasio_id} LIMIT 1")){
-  if ($rs->num_rows){ $g=$rs->fetch_assoc();
-    if (!empty($g['nombre'])) $gym_name = $g['nombre'];
-    if (!empty($g['logo']))   $gym_logo = logo_url($g['logo']);
-  }
+/* ===== Marca ===== */
+$gym_name='Gimnasio'; $gym_logo=null;
+if ($rs=$conexion->query("SELECT nombre, logo FROM gimnasios WHERE id={$gimnasio_id} LIMIT 1")){
+  if ($rs->num_rows){ $g=$rs->fetch_assoc(); $gym_name=$g['nombre']?:$gym_name; $gym_logo=logo_url($g['logo']??''); }
 }
 
-/* ==== Query de accesos (hora en -03:00) ==== */
-$A_TABLE = 'accesos_gimnasio';
-
-if ($modo_hoy) {
-  // CURRENT_DATE() usa la TZ del servidor MySQL, pero solo afecta límites del día.
-  // La hora mostrada SIEMPRE se convierte a -03:00 con CONVERT_TZ.
+/* ===== Accesos (hora local -03:00) ===== */
+$A_TABLE='accesos_gimnasio';
+if ($modo_hoy){
   $sql = "
-    SELECT a.id,
-           a.fecha_ingreso,
+    SELECT a.id, a.fecha_ingreso,
            TIME_FORMAT(CONVERT_TZ(a.fecha_ingreso, @@session.time_zone, '-03:00'), '%H:%i') AS hora_local,
-           a.metodo,
-           a.cliente_id,
-           c.nombre, c.apellido
+           a.metodo, a.cliente_id, c.nombre, c.apellido
       FROM $A_TABLE a
       JOIN clientes c ON c.id = a.cliente_id
      WHERE a.gimnasio_id = {$gimnasio_id}
        AND a.fecha_ingreso >= CURRENT_DATE()
        AND a.fecha_ingreso <  (CURRENT_DATE() + INTERVAL 1 DAY)
-     ORDER BY a.fecha_ingreso DESC
-  ";
+     ORDER BY a.fecha_ingreso DESC";
 } else {
-  $desde_dt = $desde.' 00:00:00';
-  $hasta_dt = $hasta.' 23:59:59';
+  $desde_dt=$desde.' 00:00:00'; $hasta_dt=$hasta.' 23:59:59';
   $sql = "
-    SELECT a.id,
-           a.fecha_ingreso,
+    SELECT a.id, a.fecha_ingreso,
            TIME_FORMAT(CONVERT_TZ(a.fecha_ingreso, @@session.time_zone, '-03:00'), '%H:%i') AS hora_local,
-           a.metodo,
-           a.cliente_id,
-           c.nombre, c.apellido
+           a.metodo, a.cliente_id, c.nombre, c.apellido
       FROM $A_TABLE a
       JOIN clientes c ON c.id = a.cliente_id
      WHERE a.gimnasio_id = {$gimnasio_id}
        AND a.fecha_ingreso BETWEEN ".qv($conexion,$desde_dt)." AND ".qv($conexion,$hasta_dt)."
-     ORDER BY a.fecha_ingreso DESC
-  ";
+     ORDER BY a.fecha_ingreso DESC";
 }
+$accesos=[]; if ($rs=$conexion->query($sql)) while($r=$rs->fetch_assoc()) $accesos[]=$r;
 
-$accesos=[]; 
-if ($rs = $conexion->query($sql)) while($r=$rs->fetch_assoc()) $accesos[]=$r;
-
-/* Fallback: si no hay filas en el rango, mostrar últimos 100 */
-$fallback_used = false;
+/* Fallback últimos 100 */
+$fallback_used=false;
 if (!$accesos){
-  $sql_fb = "
-    SELECT a.id,
-           a.fecha_ingreso,
+  $sql_fb="
+    SELECT a.id, a.fecha_ingreso,
            TIME_FORMAT(CONVERT_TZ(a.fecha_ingreso, @@session.time_zone, '-03:00'), '%H:%i') AS hora_local,
-           a.metodo,
-           a.cliente_id,
-           c.nombre, c.apellido
+           a.metodo, a.cliente_id, c.nombre, c.apellido
       FROM $A_TABLE a
-      JOIN clientes c ON c.id = a.cliente_id
-     WHERE a.gimnasio_id = {$gimnasio_id}
+      JOIN clientes c ON c.id=a.cliente_id
+     WHERE a.gimnasio_id={$gimnasio_id}
      ORDER BY a.fecha_ingreso DESC
-     LIMIT 100
-  ";
-  if ($rf = $conexion->query($sql_fb)) { while($r=$rf->fetch_assoc()) $accesos[]=$r; }
-  $fallback_used = (bool)$accesos;
+     LIMIT 100";
+  if ($rf=$conexion->query($sql_fb)) while($r=$rf->fetch_assoc()) $accesos[]=$r;
+  $fallback_used=(bool)$accesos;
 }
 
-/* ===== Membresías ===== */
-function mem_is_activa_row(array $m): bool {
-  $ok_estado = true;
-  if (array_key_exists('activa',$m) && $m['activa']!==null) $ok_estado = ((string)$m['activa']==='1');
-  $ok_vto = true;
-  if (!empty($m['fecha_vencimiento']) && $m['fecha_vencimiento']!=='0000-00-00')
-    $ok_vto = ($m['fecha_vencimiento'] >= date('Y-m-d'));
+/* ===== Membresías =====
+   Forzamos a leer del gimnasio correcto: (gimnasio_id = g OR id_gimnasio = g).
+   Elegimos UNA vigente por cliente (activa nula cuenta como OK). */
+$cli_ids = array_unique(array_map(fn($x)=>(int)$x['cliente_id'],$accesos));
+
+/* cache planes (por si plan textual está vacío) */
+$planes_map=[];
+if (col_exists($conexion,'planes','id') && col_exists($conexion,'planes','nombre')){
+  if ($rp=$conexion->query("SELECT id, nombre FROM planes")){ while($p=$rp->fetch_assoc()) $planes_map[(int)$p['id']]=$p['nombre']; }
+}
+function mem_activa(array $m): bool {
+  $hoy=date('Y-m-d');
+  $act = $m['activa'] ?? null;
+  /* Si activa es NULL o '', lo consideramos “no-restringe” (true). */
+  $ok_estado = (is_null($act) || $act==='') ? true : ((string)$act==='1' || $act===1);
+  $fv = $m['fecha_vencimiento'] ?? null;
+  $ok_vto = (empty($fv) || $fv==='0000-00-00' || $fv >= $hoy);
   return $ok_estado && $ok_vto;
 }
+function pick_plan_txt(array $m, array $planes_map): string {
+  $pt = trim((string)($m['plan'] ?? ''));
+  if ($pt!=='') return $pt;
+  $pid = (int)($m['plan_id'] ?? 0);
+  return $planes_map[$pid] ?? ($pid?("Plan #".$pid):'Plan');
+}
+function pick_clases(array $m): ?int {
+  $cd = $m['clases_disponibles'] ?? null;
+  $cr = $m['clases_restantes'] ?? null;
+  if (!is_null($cd) && (int)$cd>0) return (int)$cd;
+  if (!is_null($cr)) return (int)$cr;
+  return is_null($cd) ? null : (int)$cd; // puede ser 0
+}
 
-$cli_ids = array_unique(array_map(fn($x)=>(int)$x['cliente_id'],$accesos));
-$mapMem = [];
+$mapMem=[];
 if ($cli_ids){
-  $ids = implode(',',$cli_ids);
-  $q = "SELECT id, cliente_id, gimnasio_id, plan, clases_disponibles, activa, fecha_vencimiento
-        FROM membresias
-        WHERE gimnasio_id={$gimnasio_id} AND cliente_id IN ($ids)
-        ORDER BY COALESCE(fecha_vencimiento,'9999-12-31') DESC, id DESC";
-  if ($rm = $conexion->query($q)){
+  $ids = implode(',', $cli_ids);
+  $sqlM = "
+    SELECT id, cliente_id, gimnasio_id, id_gimnasio, plan_id, plan,
+           clases_disponibles, clases_restantes,
+           fecha_vencimiento, ".(col_exists($conexion,'membresias','activa')?'activa':'NULL AS activa')."
+      FROM membresias
+     WHERE (gimnasio_id={$gimnasio_id} OR id_gimnasio={$gimnasio_id})
+       AND cliente_id IN ($ids)
+     ORDER BY COALESCE(fecha_vencimiento,'9999-12-31') DESC, id DESC";
+  if ($rm=$conexion->query($sqlM)){
     while($m=$rm->fetch_assoc()){
-      if (!isset($mapMem[(int)$m['cliente_id']]) && mem_is_activa_row($m))
-        $mapMem[(int)$m['cliente_id']] = $m;
+      $cid=(int)$m['cliente_id'];
+      if (!isset($mapMem[$cid]) && mem_activa($m)){
+        $mapMem[$cid] = [
+          'id' => (int)$m['id'],
+          'plan' => pick_plan_txt($m,$planes_map),
+          'clases_disponibles' => pick_clases($m),
+          'activa' => $m['activa'] ?? null,
+          'fecha_vencimiento' => $m['fecha_vencimiento'] ?? null,
+        ];
+      }
     }
   }
 }
 
-/* ¿Consumo aplicado? (membresia_consumos) */
+/* ===== Consumo aplicado ===== */
+$C_TBL='membresia_consumos';
+$C_ACC_COL = col_exists($conexion,$C_TBL,'acceso_id') ? 'acceso_id' : (col_exists($conexion,$C_TBL,'id_acceso')?'id_acceso':'acceso_id');
+$consumo_cache=[];
+if (!empty($accesos)){
+  $ac_ids = implode(',', array_map(fn($r)=>(int)$r['id'],$accesos));
+  $sqlC = "SELECT DISTINCT {$C_ACC_COL} AS acc FROM ".bt($C_TBL)." WHERE {$C_ACC_COL} IN ($ac_ids)";
+  if ($rc=$conexion->query($sqlC)) while($c=$rc->fetch_assoc()) $consumo_cache[(int)$c['acc']]=1;
+}
+
+/* Enriquecer filas */
 foreach ($accesos as &$A){
-  $A['mem'] = $mapMem[(int)$A['cliente_id']] ?? null;
-  $rlog = $conexion->query("SELECT id FROM membresia_consumos WHERE acceso_id=".(int)$A['id']." LIMIT 1");
-  $A['consumo_aplicado'] = ($rlog && $rlog->num_rows)?1:0;
+  $cid=(int)$A['cliente_id'];
+  $A['mem'] = $mapMem[$cid] ?? null;
+  $A['consumo_aplicado'] = !empty($consumo_cache[(int)$A['id']]) ? 1 : 0;
 }
 unset($A);
 
-/* ==== UI ==== */
+/* ===== UI ===== */
 $css = "
 body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Arial,sans-serif;background:#0f0f10;color:#e6e6e6}
 .wrap{max-width:1200px;margin:22px auto;padding:0 16px}
@@ -170,7 +199,6 @@ small{color:#aaa}
 footer{margin:12px 0;color:#7a7f87;font-size:12px;display:flex;gap:8px;align-items:center}
 footer .dot{width:6px;height:6px;border-radius:9999px;background:#3b82f6;display:inline-block}
 ";
-
 ?>
 <!doctype html>
 <html lang="es">
@@ -221,15 +249,15 @@ window.addEventListener('load', keepAlive);
         <tr><td colspan="7"><small>Sin accesos.</small></td></tr>
       <?php else: foreach($accesos as $row):
         $m = $row['mem'] ?? null;
-        $disp = is_null($m)? null : (int)$m['clases_disponibles'];
-        $badge = is_null($m)? 'warn' : ($disp>0?'ok':'danger'); ?>
+        $disp = is_null($m)? null : (int)($m['clases_disponibles'] ?? 0);
+        $badge = is_null($m)? 'danger' : ($disp>0?'ok':'warn'); ?>
         <tr<?= ($row['metodo']==='QR-DENEGADO'?' style="opacity:.7"':'') ?>>
           <td><?= h($row['hora_local'] ?: date('H:i', strtotime($row['fecha_ingreso']))) ?></td>
           <td><?= h(trim(($row['apellido']??'').' '.($row['nombre']??''))) ?></td>
           <td><span class="badge"><?= h($row['metodo']) ?></span></td>
           <td>
             <?php if ($m): ?>
-              <span class="badge ok"><?= h($m['plan'] ?? 'Plan') ?></span>
+              <span class="badge ok"><?= h($m['plan'] ?: 'Plan') ?></span>
               <?php if (!empty($m['fecha_vencimiento']) && $m['fecha_vencimiento']!=='0000-00-00'): ?>
                 <small>vto <?= h($m['fecha_vencimiento']) ?></small>
               <?php endif; ?>

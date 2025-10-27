@@ -1,8 +1,9 @@
 <?php
 /* ============================================================
    registro_online.php — Alta rápida de cliente (MultiGimnasio)
-   Acepta g ó gimnasio_id, prellena DNI, crea/actualiza cliente
-   y redirige a return (o al QR). NO marca ingreso.
+   • NO duplica DNI por gimnasio: si existe, muestra datos y usa ese registro
+   • Acepta g ó gimnasio_id, prellena DNI, crea cliente solo si no existe
+   • Redirige a return (o al QR). NO marca ingreso.
    ============================================================ */
 if (session_status() === PHP_SESSION_NONE) session_start();
 require_once __DIR__ . '/conexion.php';
@@ -12,10 +13,42 @@ if (function_exists('mysqli_report')) { mysqli_report(MYSQLI_REPORT_OFF); }
 
 function h($s){ return htmlspecialchars((string)$s, ENT_QUOTES|ENT_SUBSTITUTE,'UTF-8'); }
 function qv($db,$s){ return "'".$db->real_escape_string((string)$s)."'"; }
+function json_out($arr){ header('Content-Type: application/json; charset=utf-8'); echo json_encode($arr, JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES); exit; }
 
 $gimnasio_id = (int)($_GET['gimnasio_id'] ?? $_GET['g'] ?? 0);
 $dni_pref    = preg_replace('/\D+/','', (string)($_GET['dni'] ?? ''));
 $return_url  = (string)($_GET['return'] ?? '');
+
+/* === Helpers BD === */
+function find_client_by_dni(mysqli $db, int $gimnasio_id, string $dni): ?array {
+  if ($gimnasio_id<=0 || $dni==='') return null;
+  $q = "SELECT id, nombre, apellido, dni, telefono, email
+        FROM clientes
+        WHERE gimnasio_id={$gimnasio_id} AND dni=".qv($db,$dni)."
+        LIMIT 1";
+  if ($rs = $db->query($q)) {
+    if ($rs->num_rows) return $rs->fetch_assoc();
+  }
+  return null;
+}
+
+/* === AJAX: ver si DNI ya existe y devolver datos === */
+if (($_GET['ajax'] ?? '') === 'dni_check') {
+  $gid = (int)($_GET['gimnasio_id'] ?? 0);
+  $dni = preg_replace('/\D+/','', (string)($_GET['dni'] ?? ''));
+  $row = find_client_by_dni($conexion, $gid, $dni);
+  if ($row) {
+    json_out(['exists'=>true,'data'=>[
+      'id'=>(int)$row['id'],
+      'nombre'=>$row['nombre'] ?? '',
+      'apellido'=>$row['apellido'] ?? '',
+      'dni'=>$row['dni'] ?? '',
+      'telefono'=>$row['telefono'] ?? '',
+      'email'=>$row['email'] ?? '',
+    ]]);
+  }
+  json_out(['exists'=>false]);
+}
 
 /* Validar gimnasio (opcionalmente ofrecer selector si no vino) */
 $gym = null;
@@ -30,7 +63,7 @@ if (!$gym) {
   }
 }
 
-/* === POST: guardar alta/actualización === */
+/* === POST: guardar alta (sin duplicar DNI) === */
 if ($_SERVER['REQUEST_METHOD']==='POST') {
   $gimnasio_id = (int)($_POST['gimnasio_id'] ?? 0);
   $nombre   = trim((string)($_POST['nombre'] ?? ''));
@@ -43,19 +76,15 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
   elseif ($dni===''){   $error="Falta DNI."; }
   elseif ($nombre===''){ $error="Falta nombre."; }
   else {
-    // ¿ya existe?
-    $q = "SELECT id FROM clientes WHERE dni=".qv($conexion,$dni)." AND gimnasio_id={$gimnasio_id} LIMIT 1";
-    $rs = $conexion->query($q);
-    if ($rs && $rs->num_rows){
-      $row = $rs->fetch_assoc();
-      $cid = (int)$row['id'];
-      $conexion->query("UPDATE clientes SET
-                          nombre=".qv($conexion,$nombre).",
-                          apellido=".qv($conexion,$apellido).",
-                          telefono=".qv($conexion,$telefono).",
-                          email=".qv($conexion,$email)."
-                        WHERE id={$cid} LIMIT 1");
+    /* Si ya existe ese DNI en el gimnasio, NO insertamos ni duplicamos:
+       mostramos/aceptamos ese registro y seguimos. */
+    $exist = find_client_by_dni($conexion, $gimnasio_id, $dni);
+    if ($exist) {
+      $cid = (int)$exist['id'];
+      // (Opcional) Si el usuario cambió datos, podés habilitar actualización suave.
+      // En este fix, por defecto NO sobreescribimos para evitar confusiones.
     } else {
+      // Crear nuevo cliente sólo si no existe DNI en ese gimnasio
       $sql = "INSERT INTO clientes (nombre, apellido, dni, telefono, email, gimnasio_id)
               VALUES (".qv($conexion,$nombre).", ".qv($conexion,$apellido).",
                       ".qv($conexion,$dni).", ".qv($conexion,$telefono).",
@@ -81,7 +110,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
 
 /* ====== UI ====== */
 $css = "
-:root{--bg:#0c0c0d;--card:#141416;--ink:#eaeaea;--muted:#9aa0a6;--stroke:#222;--accent:#6ea8fe;}
+:root{--bg:#0c0c0d;--card:#141416;--ink:#eaeaea;--muted:#9aa0a6;--stroke:#222;--accent:#6ea8fe;--ok:#134e4a;--okbd:#065f46;}
 *{box-sizing:border-box}
 body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Arial,sans-serif;background:var(--bg);color:var(--ink)}
 .wrap{max-width:520px;margin:0 auto;padding:18px}
@@ -96,12 +125,14 @@ input:focus,select:focus{border-color:var(--accent)}
 .btn{width:100%;padding:14px 16px;border-radius:12px;border:0;background:var(--accent);color:#000;font-weight:800;font-size:18px;margin-top:14px;cursor:pointer}
 .flash{padding:12px 14px;border-radius:12px;margin-bottom:12px;font-size:14px}
 .err{background:#5b1111;color:#ffd3d3;border:1px solid #7f1d1d}
+.ok{background:var(--ok);border:1px solid var(--okbd);color:#d1fae5}
 .help{font-size:12px;color:var(--muted);margin-top:10px;text-align:center}
+.small{font-size:12px;color:#cbd5e1}
 ";
 
 function logo_url(?string $logo): ?string {
   if (!$logo) return null;
-  if (preg_match('#^(https?:)?//#i', $logo) || str_starts_with($logo,'data:')) return $logo;
+  if (preg_match('#^(https?:)?//#i', $logo) || (function_exists('str_starts_with') && str_starts_with($logo,'data:'))) return $logo;
   $candidatos = [
     __DIR__ . '/uploads/gimnasios/' . $logo => '/uploads/gimnasios/' . rawurlencode($logo),
     __DIR__ . '/img/' . $logo              => '/img/' . rawurlencode($logo),
@@ -139,14 +170,16 @@ if (!empty($gym)) {
         <div class="flash err">⚠️ <?= h($error) ?></div>
       <?php endif; ?>
 
-      <form method="post" novalidate>
+      <div id="existsBox" class="flash ok" style="display:none"></div>
+
+      <form id="frm" method="post" novalidate>
         <input type="hidden" name="return" value="<?= h($return_url) ?>">
         <label>Gimnasio</label>
         <?php if ($gym): ?>
-          <input type="hidden" name="gimnasio_id" value="<?= (int)$gimnasio_id ?>">
+          <input type="hidden" name="gimnasio_id" id="gimnasio_id" value="<?= (int)$gimnasio_id ?>">
           <input value="#<?= (int)$gym['id'] ?> · <?= h($nombreGym) ?>" readonly>
         <?php else: ?>
-          <select name="gimnasio_id" required>
+          <select name="gimnasio_id" id="gimnasio_id" required>
             <option value="">Seleccioná tu gimnasio…</option>
             <?php foreach(($gimnasios ?? []) as $g): ?>
               <option value="<?= (int)$g['id'] ?>" <?= ($g['id']==$gimnasio_id?'selected':'') ?>>#<?= (int)$g['id'] ?> · <?= h($g['nombre']) ?></option>
@@ -155,24 +188,79 @@ if (!empty($gym)) {
         <?php endif; ?>
 
         <label>DNI</label>
-        <input name="dni" inputmode="numeric" pattern="[0-9]*" value="<?= h($dni_pref) ?>" placeholder="Ej: 35123456" required>
+        <input name="dni" id="dni" inputmode="numeric" pattern="[0-9]*" value="<?= h($dni_pref) ?>" placeholder="Ej: 35123456" required>
 
         <label>Nombre</label>
-        <input name="nombre" placeholder="Tu nombre" required>
+        <input name="nombre" id="nombre" placeholder="Tu nombre" required>
 
         <label>Apellido</label>
-        <input name="apellido" placeholder="Tu apellido" required>
+        <input name="apellido" id="apellido" placeholder="Tu apellido" required>
 
-        <label>Teléfono (WhatsApp)</label>
-        <input name="telefono" placeholder="Ej: 2664 123456">
+        <label>Teléfono (WhatsApp) <span class="small">(opcional)</span></label>
+        <input name="telefono" id="telefono" placeholder="Ej: 2664 123456">
 
-        <label>Email</label>
-        <input type="email" name="email" placeholder="tu@correo.com">
+        <label>Email <span class="small">(opcional)</span></label>
+        <input type="email" name="email" id="email" placeholder="tu@correo.com">
 
-        <button class="btn" type="submit">Registrarme</button>
+        <button class="btn" type="submit" id="btnSubmit">Registrarme</button>
         <div class="help">Al registrarte aceptás las políticas del gimnasio.</div>
       </form>
+
+      <div class="help" style="margin-top:14px">
+        <!-- Sugerencia de protección a nivel BD:
+        Crear índice único para evitar duplicados reales:
+        ALTER TABLE clientes ADD UNIQUE KEY ux_gym_dni (gimnasio_id, dni);
+        -->
+      </div>
     </div>
   </div>
+
+<script>
+(function(){
+  const $ = sel => document.querySelector(sel);
+  const dni = $('#dni'), gid = $('#gimnasio_id');
+  const nombre = $('#nombre'), apellido = $('#apellido'), tel = $('#telefono'), email = $('#email');
+  const box = $('#existsBox'), btn = $('#btnSubmit');
+
+  function setReadonly(readonly){
+    [nombre, apellido, tel, email].forEach(i => i.readOnly = readonly);
+  }
+  function fill(data){
+    if (!data) return;
+    nombre.value = data.nombre || '';
+    apellido.value = data.apellido || '';
+    tel.value = data.telefono || '';
+    email.value = data.email || '';
+  }
+  async function check(){
+    box.style.display = 'none';
+    setReadonly(false);
+    btn.textContent = 'Registrarme';
+
+    const vgid = (gid && gid.value) ? gid.value : '0';
+    const vdni = (dni.value||'').replace(/\D+/g,'');
+    if (!vgid || !vdni) return;
+
+    try{
+      const url = `?ajax=dni_check&gimnasio_id=${encodeURIComponent(vgid)}&dni=${encodeURIComponent(vdni)}`;
+      const r = await fetch(url, {credentials:'same-origin'});
+      const j = await r.json();
+      if (j && j.exists) {
+        fill(j.data);
+        setReadonly(true);
+        box.innerHTML = '✅ <strong>DNI ya registrado.</strong> Usaremos el registro existente y te vamos a ingresar con esos datos.';
+        box.style.display = '';
+        btn.textContent = 'Continuar';
+      }
+    }catch(e){/* silencioso */}
+  }
+
+  if (dni) dni.addEventListener('blur', check);
+  if (gid) gid.addEventListener('change', check);
+
+  // Si ya vino el DNI por GET, disparar chequeo inicial:
+  if (dni && dni.value) { check(); }
+})();
+</script>
 </body>
 </html>
