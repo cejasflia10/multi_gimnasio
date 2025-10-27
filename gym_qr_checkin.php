@@ -52,6 +52,7 @@ if (empty($_SESSION['qr_rate'])) $_SESSION['qr_rate'] = [];
 if (isset($_GET['ajax']) && $_GET['ajax']=='1'){
   while(ob_get_level()) ob_end_clean();
   header('Content-Type: application/json; charset=utf-8');
+  header('Cache-Control: no-store, no-cache, must-revalidate');
 
   $dni = trim((string)($_POST['dni'] ?? $_GET['dni'] ?? ''));
   if ($dni===''){ echo json_encode(['ok'=>false,'msg'=>'Ingresá un DNI']); exit; }
@@ -169,7 +170,7 @@ $dni_qr = trim((string)($_GET['dni'] ?? ''));
 <div class="wrap">
   <div class="card">
     <div class="brand">
-      <?php if ($gym_logo): ?><img src="<?= h($gym_logo) ?>" alt="Logo"><?= endif; ?>
+      <?php if ($gym_logo): ?><img src="<?= h($gym_logo) ?>" alt="Logo"><?php endif; ?>
       <div class="name"><?= h($gym_name) ?></div>
     </div>
     <h1>Ingreso por DNI</h1>
@@ -204,50 +205,77 @@ async function marcar(dni){
   const adv = document.getElementById('adv');
   const res = document.getElementById('res');
   const reg = document.getElementById('reg');
+
   adv.textContent = 'Marcando ingreso…';
-  res.hidden = true; reg.hidden = true;
+  res.hidden = true;
+  reg.hidden = true;
 
-  const q = new URLSearchParams({ajax:'1', g:String(G), dni:String(dni)});
-  const r = await fetch(location.pathname + '?' + q.toString(), {method:'GET', cache:'no-store'});
-  let j; try{ j = await r.json(); }catch(e){ adv.textContent = 'Error de red.'; return; }
+  try {
+    const q = new URLSearchParams({ajax:'1', g:String(G), dni:String(dni)});
+    const r = await fetch(location.pathname + '?' + q.toString(), {
+      method:'GET',
+      cache:'no-store',
+      credentials:'same-origin'
+    });
 
-  if(!j.ok && !j.no_reg){
-    adv.textContent = (j.msg||'Error.') + (j.error?(' · '+j.error):'');
-    console.log(j); return;
+    let j;
+    try { j = await r.json(); }
+    catch { adv.textContent = 'Error de respuesta del servidor.'; return; }
+
+    if(!j.ok && !j.no_reg){
+      adv.textContent = (j.msg||'Error.') + (j.error?(' · '+j.error):'');
+      console.log(j);
+      return;
+    }
+
+    if(j.no_reg){
+      adv.textContent = 'No encontramos ese DNI.';
+      reg.hidden = false;
+      document.getElementById('regurl').href = j.reg_url;
+      return;
+    }
+
+    // OK
+    adv.innerHTML = '<span class="ok">☑</span> ' + (j.msg || 'Hecho.');
+    res.hidden = false;
+
+    // Completar tarjeta
+    document.getElementById('cli').textContent =
+      (j.cliente && j.cliente.nombre) ? j.cliente.nombre : 'Cliente';
+
+    const m = j.membresia || {};
+    const plan = m.plan || '—';
+    const vence = m.vence ? new Date(String(m.vence).replace(' ','T')) : null;
+    const venTxt = vence ? vence.toLocaleDateString() : '—';
+
+    document.getElementById('plan').textContent = plan;
+    document.getElementById('vence').textContent = venTxt;
+
+    const rest = (typeof m.clases_restantes === 'number') ? m.clases_restantes : null;
+    const restEl = document.getElementById('restantes');
+    if (rest===null){
+      restEl.textContent='—';
+      restEl.className='pill';
+    } else {
+      restEl.textContent=rest;
+      restEl.className='pill' + (rest<=0?' bad':(rest<=2?' warn':''));
+    }
+  } catch (e){
+    adv.textContent = 'Error de red.';
   }
-  if(j.no_reg){
-    adv.textContent = 'No encontramos ese DNI.';
-    reg.hidden = false;
-    document.getElementById('regurl').href = j.reg_url;
-    return;
-  }
-
-  adv.innerHTML = '<span class="ok">☑</span> ' + (j.msg || 'Hecho.');
-  res.hidden = false;
-
-  document.getElementById('cli').textContent =
-    (j.cliente && j.cliente.nombre) ? j.cliente.nombre : 'Cliente';
-
-  const m = j.membresia || {};
-  const plan = m.plan || '—';
-  const vence = m.vence ? new Date(String(m.vence).replace(' ','T')) : null;
-  const venTxt = vence ? vence.toLocaleDateString() : '—';
-  document.getElementById('plan').textContent = plan;
-  document.getElementById('vence').textContent = venTxt;
-
-  const rest = (typeof m.clases_restantes === 'number') ? m.clases_restantes : null;
-  const restEl = document.getElementById('restantes');
-  if (rest===null){ restEl.textContent='—'; restEl.className='pill'; }
-  else { restEl.textContent=rest; restEl.className='pill' + (rest<=0?' bad':(rest<=2?' warn':'')); }
 }
 
 async function enviar(ev){
   ev.preventDefault();
   const i = document.getElementById('dni');
   const dni = (i.value||'').trim();
-  if(!dni){ i.focus(); return; }
+  if(!dni){
+    i.focus();
+    return;
+  }
   await marcar(dni);
-  i.value=''; i.focus();
+  i.value='';
+  i.focus();
 }
 
 // Auto-marca si viene ?dni= en la URL del QR
@@ -256,7 +284,10 @@ window.addEventListener('load', ()=>{
   i.focus();
   const url = new URL(location.href);
   const dni = url.searchParams.get('dni');
-  if (dni) marcar(dni);
+  if (dni) {
+    i.value = dni;
+    marcar(dni);
+  }
 });
 </script>
 </body>
