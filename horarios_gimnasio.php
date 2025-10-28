@@ -1,6 +1,9 @@
 <?php
 /* =============================================================================
    horarios_gimnasio.php — Horarios GYM + planes fijos SIN reservas (OPTIMIZADO)
+   - DÍAS FIJOS: Lunes a Sábado (se quita Domingo en UI y cálculos)
+   - En la grilla de ocupación el día YA NO es editable (no más combobox),
+     se muestra fijo y se envía en un input hidden al guardar.
    - Batch caches por día/hora para ocupación y listado de fijos
    - Regla: si la franja base NO tiene profesor, cuentan TODOS los fijos (incluye profesor_id NULL)
             si la franja base TIENE profesor, cuentan solo los fijos de ese profesor (excluye NULL)
@@ -69,7 +72,6 @@ function traerPlanPorId($db, $plan_id) {
   $row = safe_fetch($res);
   return $row ? $row : null;
 }
-
 
 /* ===================== pagos ===================== */
 function existeTabla(mysqli $db, string $tabla): bool {
@@ -193,20 +195,9 @@ function cupoParaFechaHora(mysqli $db,int $g,int $prof=null,string $fecha,string
    - Franja base CON profesor: ocupados = solo fijos de ese profesor (excluye NULL)
 */
 
-/* Caches:
-   $occCache[dia][hora] = [
-     'SUM_ALL' => total (incluye NULL y cualquier profesor),
-     'SUM_ASSIGNED' => total solo con profesor asignado,
-     <prof_id> => count solo de ese profe
-   ]
-
-   $fijosCache[dia][hora] = [
-     'NULL'  => [ filas de fijos sin profesor ],
-     <prof_id> => [ filas de fijos de ese profe ]
-   ]
-*/
 function buildOcupacionCache(mysqli $db,int $g,string $fechaRef): array{
-  $dias = ['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado','Domingo'];
+  global $DIAS_SEM; // DÍAS FIJOS Lunes–Sábado
+  $dias = $DIAS_SEM;
   $cache = [];
   foreach($dias as $dia){
     $likeDia = '%"'.$db->real_escape_string($dia).'"%';
@@ -227,7 +218,6 @@ function buildOcupacionCache(mysqli $db,int $g,string $fechaRef): array{
               GROUP BY gp.hora";
     $res2 = run_stmt($db,$sql2,function($st) use($g,$fechaRef,$likeDia){ $st->bind_param("isss",$g,$fechaRef,$fechaRef,$likeDia); });
 
-    // Armar estructura
     $cache[$dia] = $cache[$dia] ?? [];
 
     if($res1){ while($r=$res1->fetch_assoc()){
@@ -250,7 +240,8 @@ function buildOcupacionCache(mysqli $db,int $g,string $fechaRef): array{
 }
 
 function buildFijosCache(mysqli $db,int $g,string $fechaRef): array{
-  $dias = ['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado','Domingo'];
+  global $DIAS_SEM; // DÍAS FIJOS Lunes–Sábado
+  $dias = $DIAS_SEM;
   $cache = [];
   foreach($dias as $dia){
     $likeDia = '%"'.$db->real_escape_string($dia).'"%';
@@ -285,7 +276,8 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && $accion==='alta_base'){
   $cupo        = max(1,(int)($_POST['cupo_maximo'] ?? 20));
   $profesor_id = ($_POST['profesor_id'] ?? '')!=='' ? (int)$_POST['profesor_id'] : null;
 
-  if (!$dia || !$hora_inicio || !$hora_fin || $hora_inicio>=$hora_fin){
+  $DIAS_VALIDOS = ['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'];
+  if (!in_array($dia,$DIAS_VALIDOS,true) || !$hora_inicio || !$hora_fin || $hora_inicio>=$hora_fin){
     header("Location: horarios_gimnasio.php?err=Datos%20inv%C3%A1lidos%20en%20horario%20base"); exit;
   }
 
@@ -317,6 +309,9 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && $accion==='alta_base_masiva'){
   $paso        = max(1, (int)($_POST['paso_min'] ?? 60));
   $cupo        = max(1,(int)($_POST['cupo_maximo'] ?? 20));
   $profesor_id = ($_POST['profesor_id'] ?? '')!=='' ? (int)$_POST['profesor_id'] : null;
+
+  $DIAS_VALIDOS = ['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'];
+  $dias = array_values(array_intersect($dias, $DIAS_VALIDOS));
 
   if (empty($dias) || !$hora_inicio || !$hora_fin || $hora_inicio>=$hora_fin){
     header("Location: horarios_gimnasio.php?err=Complet%C3%A1%20d%C3%ADas%2C%20rango%20de%20horario%20v%C3%A1lido%20y%20paso"); exit;
@@ -384,13 +379,14 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && ($accion==='del_base')) {
 /* ===================== 1D) Actualizar (editar) horario base ===================== */
 if ($_SERVER['REQUEST_METHOD']==='POST' && ($accion==='upd_base')) {
   $id          = (int)($_POST['id'] ?? 0);
-  $dia         = trim($_POST['dia'] ?? '');
+  $dia         = trim($_POST['dia'] ?? ''); // viene hidden (fijo)
   $hora_inicio = $_POST['hora_inicio'] ?? '';
   $hora_fin    = $_POST['hora_fin'] ?? '';
   $cupo        = max(1,(int)($_POST['cupo_maximo'] ?? 1));
   $profesor_id = ($_POST['profesor_id'] ?? '')!=='' ? (int)$_POST['profesor_id'] : null;
 
-  if ($id<=0 || !$dia || !$hora_inicio || !$hora_fin || $hora_inicio>=$hora_fin) {
+  $DIAS_VALIDOS = ['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'];
+  if ($id<=0 || !in_array($dia,$DIAS_VALIDOS,true) || !$hora_inicio || !$hora_fin || $hora_inicio>=$hora_fin) {
     header("Location: horarios_gimnasio.php?err=Datos%20inv%C3%A1lidos%20al%20editar"); exit;
   }
 
@@ -446,7 +442,8 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && $accion==='editar_cupo_base'){
   $cupo        = max(1,(int)($_POST['cupo_maximo'] ?? 1));
   $profesor_id = ($_POST['profesor_id'] ?? '')!=='' ? (int)$_POST['profesor_id'] : null;
 
-  if (!$dia || !$hora_inicio || !$hora_fin){
+  $DIAS_VALIDOS = ['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'];
+  if (!in_array($dia,$DIAS_VALIDOS,true) || !$hora_inicio || !$hora_fin){
     header("Location: horarios_gimnasio.php?err=Datos%20inv%C3%A1lidos%20(cupo%20base)"); exit;
   }
 
@@ -516,6 +513,9 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && $accion==='plan_fijo'){
   $ultimaPago = ultimaFechaPagoCliente($conexion,$cliente_id);
   [$desde, $hasta] = rangoPlanDesdePago($planRow, $ultimaPago);
 
+  $DIAS_VALIDOS = ['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'];
+  $dias = array_values(array_intersect($dias, $DIAS_VALIDOS));
+
   $dias_json = json_encode(array_values($dias), JSON_UNESCAPED_UNICODE);
   if ($profesor_id===null){
     run_stmt($conexion,
@@ -555,16 +555,15 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && $accion==='preview' && $sel_cliente>0
       $d1 = new DateTime($desde); $d2 = new DateTime($hasta);
       for ($dt = clone $d1; $dt <= $d2 && count($fechas)<8; $dt->modify('+1 day')){
         $f = $dt->format('Y-m-d');
-        if (in_array(nombreDiaEs($f), $sel_dias, true)) $fechas[] = $f;
+        $diaNombre = nombreDiaEs($f);
+        if (in_array($diaNombre, $sel_dias, true) && $diaNombre!=='Domingo') $fechas[] = $f;
       }
 
-      // Para preview: si elige profesor => cuenta solo ese; si deja vacío => cuenta TODOS (incluye NULL)
       $rows = [];
       foreach($fechas as $f){
         $cap = cupoParaFechaHora($conexion,$gimnasio_id,$sel_prof,$f,$sel_hora);
         $diaTxt = nombreDiaEs($f);
 
-        // Batch-like: una query rápida por fila (8 max), costo bajo:
         if ($sel_prof === null){
           $sql = "SELECT COUNT(*) c
                     FROM gym_clientes_plan
@@ -651,11 +650,14 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && $accion==='rep_fijo'){
     header("Location: horarios_gimnasio.php?err=Complet%C3%A1%20hora%20y%20d%C3%ADas%20en%20edici%C3%B3n%20de%20fijo"); exit;
   }
 
+  // Restringir a Lunes–Sábado
+  $DIAS_VALIDOS = ['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'];
+  $dias_new = array_values(array_intersect($dias_new, $DIAS_VALIDOS));
+
   $dias_json = json_encode($dias_new, JSON_UNESCAPED_UNICODE);
 
   if ($profesor_old===null){
     if ($profesor_new===null){
-      // setea NULL
       run_stmt($conexion,
         "UPDATE gym_clientes_plan
             SET hora=?, dias_json=?, profesor_id=NULL
@@ -704,7 +706,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && $accion==='rep_fijo'){
 }
 
 /* ===================== 5) Listas ===================== */
-$DIAS_SEM = ['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado','Domingo'];
+$DIAS_SEM = ['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado']; // DÍAS FIJOS
 $filtra_dia = $_GET['dia'] ?? '';
 if (!in_array($filtra_dia, $DIAS_SEM, true)) $filtra_dia = '';
 
@@ -730,8 +732,8 @@ if ($filtra_dia) {
     "SELECT b.*, p.apellido, p.nombre
        FROM gym_horarios_base b
        LEFT JOIN profesores p ON p.id=b.profesor_id
-      WHERE b.gimnasio_id=?
-      ORDER BY FIELD(b.dia,'Lunes','Martes','Miércoles','Jueves','Viernes','Sábado','Domingo'),
+      WHERE b.gimnasio_id=? AND b.dia IN ('Lunes','Martes','Miércoles','Jueves','Viernes','Sábado')
+      ORDER BY FIELD(b.dia,'Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'),
                b.hora_inicio, p.apellido, p.nombre",
     function($st) use($gimnasio_id){ $st->bind_param("i",$gimnasio_id); }
   );
@@ -1037,13 +1039,12 @@ $fijosCache = buildFijosCache($conexion,$gimnasio_id,$hoy);
             <input type="hidden" name="__accion" value="upd_base">
             <input type="hidden" name="id" value="<?= (int)$b['id'] ?>">
 
+            <!-- DÍA FIJO: sin combobox, se muestra y se envía hidden -->
             <td>
-              <select name="dia">
-                <?php foreach($DIAS_SEM as $dopt): ?>
-                  <option value="<?=$dopt?>" <?= $dopt===$dia?'selected':'' ?>><?=$dopt?></option>
-                <?php endforeach; ?>
-              </select>
+              <strong><?= h($dia) ?></strong>
+              <input type="hidden" name="dia" value="<?= h($dia) ?>">
             </td>
+
             <td><input type="time" name="hora_inicio" value="<?= h(toHM($b['hora_inicio'])) ?>" required></td>
             <td><input type="time" name="hora_fin" value="<?= h(toHM($b['hora_fin'])) ?>" required></td>
             <td>
