@@ -63,7 +63,7 @@ function pick_gradient($key){
   $h = _hash_str($key); $idx = $h % count($pairs);
   return $pairs[$idx];
 }
-function avatar_svg_data_uri($key, $initials, $size = 64, $rounded = true){
+function avatar_svg_data_uri($key, $initials, $size = 60, $rounded = true){
   list($c1,$c2) = pick_gradient($key);
   $rx = $rounded ? $size/2 : min(12, $size/4);
   $fontSize = (mb_strlen($initials) >= 3) ? round($size*0.34) : round($size*0.42);
@@ -153,7 +153,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && ($_POST['accion'] ?? '') === 'elimina
 }
 
 /* =========================
-   Catálogos (sin categoría de peso)
+   Catálogos
    ========================= */
 $disciplinas         = $conexion->query("SELECT id, nombre FROM disciplinas_evento ORDER BY id");
 $modalidades         = $conexion->query("SELECT id, nombre FROM modalidades_evento ORDER BY id");
@@ -161,7 +161,7 @@ $divisiones          = $conexion->query("SELECT id, nombre FROM divisiones_event
 $categorias_tecnicas = $conexion->query("SELECT id, codigo, descripcion FROM categorias_tecnicas_evento ORDER BY id");
 
 /* =========================
-   Filtros (sin cat. de peso ni inscripción)
+   Filtros
    ========================= */
 $f_disciplina_id        = (isset($_GET['disciplina_id'])        && is_numeric($_GET['disciplina_id']))        ? (int)$_GET['disciplina_id']        : null;
 $f_modalidad_id         = (isset($_GET['modalidad_id'])         && is_numeric($_GET['modalidad_id']))         ? (int)$_GET['modalidad_id']         : null;
@@ -169,7 +169,7 @@ $f_division_id          = (isset($_GET['division_id'])          && is_numeric($_
 $f_categoria_tecnica_id = (isset($_GET['categoria_tecnica_id']) && is_numeric($_GET['categoria_tecnica_id'])) ? (int)$_GET['categoria_tecnica_id'] : null;
 
 /* =========================
-   Detectar COLUMNA de PESO en competidores_evento
+   Columna de peso (opcional)
    ========================= */
 $peso_col = null;
 $colRes = $conexion->query("SHOW COLUMNS FROM competidores_evento");
@@ -182,26 +182,32 @@ if ($colRes) {
 }
 
 /* =========================
-   Consulta (sin inscripción ni categoría de peso)
+   Consulta (versión robusta, una sola vez)
    ========================= */
-$sql = "
-SELECT
-  ce.id,
-  ce.apellido,
-  ce.nombre,
-  ce.dni,
-  ce.edad,
-  ce.fecha_nacimiento,
-  ce.foto_competidor,
-  ce.escuela_logo,
-  ce.escuela_nombre,
-  d.nombre  AS disciplina,
-  m.nombre  AS modalidad,
-  dv.nombre AS division,
-  ct.codigo AS categoria_tecnica_codigo,
-  ct.descripcion AS categoria_tecnica_desc".
-  ($peso_col ? ", ce.".bt($peso_col)." AS peso_declarado" : ", NULL AS peso_declarado")."
-FROM competidores_evento ce
+$cols = [
+  'ce.id',
+  'ce.apellido',
+  'ce.nombre',
+  'ce.dni',
+  'ce.edad',
+  'ce.foto_competidor',
+  'ce.escuela_logo',
+  'ce.escuela_nombre',
+  'd.nombre  AS disciplina',
+  'm.nombre  AS modalidad',
+  'dv.nombre AS division',
+  'ct.codigo AS categoria_tecnica_codigo',
+  'ct.descripcion AS categoria_tecnica_desc'
+];
+
+if (!empty($peso_col)) {
+  $cols[] = 'ce.' . bt($peso_col) . ' AS peso_declarado';
+} else {
+  $cols[] = 'NULL AS peso_declarado';
+}
+
+$sql  = "SELECT \n  " . implode(",\n  ", $cols) . "\n";
+$sql .= "FROM competidores_evento ce
 LEFT JOIN disciplinas_evento         d  ON d.id  = ce.disciplina_id
 LEFT JOIN modalidades_evento         m  ON m.id  = ce.modalidad_id
 LEFT JOIN divisiones_evento          dv ON dv.id = ce.division_id
@@ -209,7 +215,7 @@ LEFT JOIN categorias_tecnicas_evento ct ON ct.id = ce.categoria_tecnica_id
 WHERE ce.evento_id = ?
 ";
 
-$types = 'i';
+$types  = 'i';
 $params = [$evento_id];
 
 if (!is_null($f_disciplina_id))        { $sql .= " AND ce.disciplina_id = ?";        $types.='i'; $params[]=$f_disciplina_id; }
@@ -220,7 +226,10 @@ if (!is_null($f_categoria_tecnica_id)) { $sql .= " AND ce.categoria_tecnica_id =
 $sql .= " ORDER BY ce.apellido, ce.nombre";
 
 $st = $conexion->prepare($sql);
-if (!$st) { http_response_code(500); exit('❌ SQL prepare: '.$conexion->error); }
+if (!$st) {
+  http_response_code(500);
+  exit('❌ SQL prepare: '.$conexion->error."\n\nSQL:\n".$sql);
+}
 
 /* bind dinámico */
 $refs = []; $refs[] = &$types; foreach ($params as $k => &$v) { $refs[] = &$v; }
@@ -251,7 +260,7 @@ $st->close();
     @media (max-width:900px){ form .filters{ grid-template-columns:repeat(2,1fr);} }
     @media (max-width:600px){ form .filters{ grid-template-columns:1fr; } form button{ padding:12px; } }
     .table-wrap { width:100%; overflow-x:auto; }
-    .tabla { width:100%; border-collapse:collapse; min-width:900px; }
+    .tabla { width:100%; border-collapse:collapse; min-width:1040px; }
     .tabla th, .tabla td { border:1px solid #e7e7e7; padding:8px 10px; vertical-align:middle; }
     .tabla th { background:#f6f7f9; text-align:left; }
     .avatar { width:60px; height:60px; object-fit:cover; border-radius:50%; }
@@ -272,7 +281,7 @@ $st->close();
     .btn-primary:hover { background:#166fbe; }
     .btn-danger { background:#dc2626; color:#fff; border:0; }
     form.inline { display:inline; }
-    .actions a, .actions button { margin-right:6px; }
+    .actions a, .actions button { margin-right:6px; margin-bottom:6px; }
   </style>
 </head>
 <body>
@@ -360,6 +369,7 @@ $st->close();
             <th>División</th>
             <th>Escuela</th>
             <th>Logo</th>
+            <th>Deslinde</th>
             <th>Acciones</th>
           </tr>
         </thead>
@@ -398,6 +408,11 @@ $st->close();
               <td data-label="División"><?= h($c['division'] ?? '-') ?></td>
               <td data-label="Escuela"><?= h($c['escuela_nombre'] ?? '-') ?></td>
               <td data-label="Logo"><img class="logo" src="<?= h($srcLogo) ?>" alt="Logo"></td>
+
+              <td data-label="Deslinde">
+                <a class="btn btn-primary" href="waiver_print_competidor.php?id=<?= (int)$c['id'] ?>&evento_id=<?= (int)$evento_id ?>" target="_blank">🧾 PDF</a>
+              </td>
+
               <td class="actions" data-label="Acciones">
                 <a class="btn" href="editar_competidor_evento.php?evento_id=<?= (int)$evento_id ?>&id=<?= (int)$c['id'] ?>">✏️ Editar</a>
                 <form method="POST" class="inline" onsubmit="return confirm('¿Eliminar a <?= h($c['apellido'].' '.$c['nombre']) ?> del evento?');">
