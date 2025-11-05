@@ -1,6 +1,6 @@
 <?php
 /* ============================================================================
-   renovar_membresia.php — ÚNICO archivo (muestra + guarda)
+   renovar_membresia.php — ÚNICO archivo (muestra + guarda) [FIX parseo numérico]
    - GET: muestra cliente fijo y planes/adicionales del gimnasio
    - POST: inserta membresía (alineado a ver_membresias) y redirige a ver_membresias.php?ok=1
    - Debug: agregar ?debug=1 para ver pasos y errores
@@ -16,7 +16,34 @@ $DEBUG = isset($_GET['debug']);
 function out($s){ global $DEBUG; if ($DEBUG) echo $s; }
 function h($s){ return htmlspecialchars((string)$s, ENT_QUOTES|ENT_SUBSTITUTE, 'UTF-8'); }
 function qv(mysqli $db,$s){ return "'".$db->real_escape_string((string)$s)."'"; }
-function toF($v){ $s=(string)$v; $s=str_replace(["\xC2\xA0",' '],'',$s); if (strpos($s,',')!==false && strpos($s,'.')!==false){$s=str_replace('.','',$s);$s=str_replace(',','.',$s);} elseif (strpos($s,',')!==false){$s=str_replace(',','.',$s);} return (float)$s; }
+
+/* === Parseo numérico ROBUSTO (18.000,50 | 18,000.50 | 18000) === */
+function toF($v){
+  $s = trim((string)$v);
+  if ($s === '') return 0.0;
+  // quitar espacios (incl. NBSP)
+  $s = str_replace(["\xC2\xA0",' '], '', $s);
+  $posDot = strrpos($s, '.');
+  $posCom = strrpos($s, ',');
+  if ($posDot === false && $posCom === false) {
+    // sólo dígitos
+    return (float)$s;
+  }
+  // Determinar separador decimal como el ÚLTIMO que aparece
+  $decSep = null; $thouSep = null;
+  if ($posDot !== false && $posCom !== false) {
+    $decSep  = ($posDot > $posCom) ? '.' : ',';
+    $thouSep = ($decSep === '.') ? ',' : '.';
+  } elseif ($posDot !== false) {
+    $decSep = '.';
+  } else {
+    $decSep = ',';
+  }
+  if ($thouSep) { $s = str_replace($thouSep, '', $s); }        // quitar miles
+  if ($decSep !== '.') { $s = str_replace($decSep, '.', $s); } // decimal a "."
+  return (float)$s;
+}
+
 function table_has(mysqli $db,string $t){ $t=$db->real_escape_string($t); $r=$db->query("SHOW TABLES LIKE '$t'"); return $r && $r->num_rows>0; }
 function col_has(mysqli $db,string $t,string $c){ $t=$db->real_escape_string($t); $c=$db->real_escape_string($c); $r=$db->query("SHOW COLUMNS FROM `$t` LIKE '$c'"); return $r && $r->num_rows>0; }
 function gym_col(mysqli $db,string $t){ if (col_has($db,$t,'gimnasio_id')) return 'gimnasio_id'; if (col_has($db,$t,'id_gimnasio')) return 'id_gimnasio'; return null; }
@@ -262,7 +289,7 @@ if (table_has($conexion,'planes_adicionales')){
       <div class="fila-3">
         <div>
           <label>Otros Pagos</label>
-          <input type="number" name="otros_pagos" id="otros_pagos" value="0" step="0.01" oninput="calcularTotal()">
+          <input type="text" inputmode="decimal" name="otros_pagos" id="otros_pagos" value="0" oninput="calcularTotal()">
         </div>
         <div>
           <label>Descuento</label>
@@ -283,13 +310,13 @@ if (table_has($conexion,'planes_adicionales')){
 
       <h3>💳 Formas de Pago</h3>
       <div class="fila-3">
-        <div><label>💵 Efectivo</label><input type="number" step="0.01" min="0" name="pago_efectivo" value="0"></div>
-        <div><label>🏦 Transferencia</label><input type="number" step="0.01" min="0" name="pago_transferencia" value="0"></div>
-        <div><label>💳 Débito</label><input type="number" step="0.01" min="0" name="pago_debito" value="0"></div>
+        <div><label>💵 Efectivo</label><input type="text" inputmode="decimal" name="pago_efectivo" value="0" oninput="actualizarTotalAbonadoLive()"></div>
+        <div><label>🏦 Transferencia</label><input type="text" inputmode="decimal" name="pago_transferencia" value="0" oninput="actualizarTotalAbonadoLive()"></div>
+        <div><label>💳 Débito</label><input type="text" inputmode="decimal" name="pago_debito" value="0" oninput="actualizarTotalAbonadoLive()"></div>
       </div>
       <div class="fila-3">
-        <div><label>💳 Crédito</label><input type="number" step="0.01" min="0" name="pago_credito" value="0"></div>
-        <div><label>📒 Cuenta Corriente (Deuda)</label><input type="number" step="0.01" min="0" name="pago_cuenta_corriente" value="0"></div>
+        <div><label>💳 Crédito</label><input type="text" inputmode="decimal" name="pago_credito" value="0" oninput="actualizarTotalAbonadoLive()"></div>
+        <div><label>📒 Cuenta Corriente (Deuda)</label><input type="text" inputmode="decimal" name="pago_cuenta_corriente" value="0" oninput="actualizarTotalAbonadoLive()"></div>
         <div class="total-abonado">Total abonado: $<span id="total_abonado">0.00</span></div>
       </div>
 
@@ -302,11 +329,34 @@ if (table_has($conexion,'planes_adicionales')){
 </div>
 
 <script>
+/* Parseo numérico ROBUSTO en el front */
+function toNum(raw){
+  if (raw === undefined || raw === null) return 0;
+  let s = String(raw).trim().replace(/\u00A0|\s/g, '');
+  if (!s) return 0;
+  const lastDot = s.lastIndexOf('.');
+  const lastCom = s.lastIndexOf(',');
+  if (lastDot === -1 && lastCom === -1) return Number(s)||0;
+
+  let decSep, thouSep;
+  if (lastDot !== -1 && lastCom !== -1) {
+    decSep  = (lastDot > lastCom) ? '.' : ',';
+    thouSep = (decSep === '.') ? ',' : '.';
+  } else if (lastDot !== -1) {
+    decSep = '.';
+  } else {
+    decSep = ',';
+  }
+  if (thouSep) s = s.split(thouSep).join('');   // quitar miles
+  if (decSep !== '.') s = s.replace(decSep, '.'); // decimal a '.'
+  const n = Number(s);
+  return isNaN(n) ? 0 : n;
+}
+
 function cargarDatosPlan(){
   const opt = document.querySelector('#plan option:checked');
   const precio = opt?.getAttribute('data-precio') || '0';
   const clases = opt?.getAttribute('data-clases') || '0';
-  const dur    = parseInt(opt?.getAttribute('data-duracion') || '0', 10);
   document.getElementById('precio').value = precio;
   document.getElementById('clases_disponibles').value = clases;
   calcularVencimiento();
@@ -321,7 +371,6 @@ function calcularVencimiento(){
   const y=d.getFullYear(), m=String(d.getMonth()+1).padStart(2,'0'), da=String(d.getDate()).padStart(2,'0');
   document.getElementById('fecha_vencimiento').value = `${y}-${m}-${da}`;
 }
-function toNum(s){ if(!s) return 0; s=String(s).replace(/\./g,'').replace(',', '.'); return parseFloat(s)||0; }
 function calcularTotal(){
   const precio = toNum(document.getElementById('precio').value);
   const otros  = toNum(document.getElementById('otros_pagos').value);
@@ -337,17 +386,17 @@ function calcularTotal(){
   actualizarTotalAbonadoLive();
 }
 function actualizarTotalAbonadoLive(){
-  const n = name => parseFloat(document.querySelector(`[name=${name}]`)?.value) || 0;
+  const n = name => toNum(document.querySelector(`[name=${name}]`)?.value);
   const t = n('pago_efectivo')+n('pago_transferencia')+n('pago_debito')+n('pago_credito')+n('pago_cuenta_corriente');
   const tgt = document.getElementById('total_abonado'); if (tgt) tgt.textContent = t.toFixed(2);
 }
-document.addEventListener('input', (ev)=>{ if (ev.target && (ev.target.matches('input[type=number], select'))) actualizarTotalAbonadoLive(); });
 function validarPagos(){
-  const total = parseFloat(document.getElementById('total_pagar').value)||0;
-  const n = name => parseFloat(document.querySelector(`[name=${name}]`)?.value)||0;
+  const total = toNum(document.getElementById('total_pagar').value);
+  const n = name => toNum(document.querySelector(`[name=${name}]`)?.value);
   const pagado = n('pago_efectivo')+n('pago_transferencia')+n('pago_debito')+n('pago_credito')+n('pago_cuenta_corriente');
-  if (pagado > total){ alert(`❌ El abonado (${pagado.toFixed(2)}) supera el total (${total.toFixed(2)}).`); return false; }
-  if (pagado < total){ const dif = total - pagado; return confirm(`⚠️ Se registrará deuda de $${dif.toFixed(2)}. ¿Continuar?`); }
+  const T = Math.round(total*100)/100, P = Math.round(pagado*100)/100;
+  if (P > T){ alert(`❌ El abonado (${P.toFixed(2)}) supera el total (${T.toFixed(2)}).`); return false; }
+  if (P < T){ const dif = T - P; return confirm(`⚠️ Se registrará deuda por $${dif.toFixed(2)}. ¿Continuar?`); }
   return true;
 }
 function prepararEnvio(){ calcularTotal(); return validarPagos(); }
