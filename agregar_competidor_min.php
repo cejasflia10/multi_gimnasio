@@ -1,5 +1,5 @@
 <?php
-/* agregar_competidor_min.php — Interno + Público por token en el mismo archivo */
+/* agregar_competidor_min.php — Interno + Público por token con detección de columna de evento y técnica por peleas (Clase D/C/B/A) */
 if (session_status() === PHP_SESSION_NONE) session_start();
 require_once __DIR__.'/conexion.php';
 if (!isset($conexion) || !($conexion instanceof mysqli)) { http_response_code(500); exit('❌ Sin conexión a BD.'); }
@@ -52,6 +52,14 @@ function table_exists(mysqli $db, string $t): bool {
   $q = $db->query("SHOW TABLES LIKE '{$t}'");
   $ok = ($q && $q->num_rows>0); if($q) $q->close(); return $ok;
 }
+
+/* === Detección de columnas variables === */
+function pick_event_col(mysqli $db): ?string {
+  foreach (['evento_id','id_evento','evento','evento_deportivo_id','id_evento_deportivo'] as $c){
+    if (has_col($db,'competidores_evento',$c)) return $c;
+  }
+  return null;
+}
 function pick_sexo_col(mysqli $db): ?string {
   foreach (['sexo','genero'] as $c) if (has_col($db,'competidores_evento',$c)) return $c;
   return null;
@@ -61,16 +69,17 @@ function pick_catpeso_col(mysqli $db): ?string {
   return null;
 }
 
-/* ===== Verificaciones duplicados ===== */
-function existe_dni_evento(mysqli $db, int $evento_id, string $dni): bool {
-  $st = $db->prepare("SELECT 1 FROM competidores_evento WHERE evento_id=? AND dni=? LIMIT 1");
+/* ===== Verificaciones duplicados (usando columna evento detectada) ===== */
+function existe_dni_evento(mysqli $db, string $evento_col, int $evento_id, string $dni): bool {
+  $sql = "SELECT 1 FROM competidores_evento WHERE `$evento_col`=? AND dni=? LIMIT 1";
+  $st = $db->prepare($sql);
   if(!$st) return false;
   $st->bind_param('is',$evento_id,$dni);
   $st->execute(); $r=$st->get_result(); $ok=($r && $r->num_rows>0); $st->close(); return $ok;
 }
-function existe_nombre_apellido_evento(mysqli $db, int $evento_id, string $nombre, string $apellido): bool {
+function existe_nombre_apellido_evento(mysqli $db, string $evento_col, int $evento_id, string $nombre, string $apellido): bool {
   $sql = "SELECT 1 FROM competidores_evento 
-          WHERE evento_id=? 
+          WHERE `$evento_col`=? 
             AND TRIM(LOWER(apellido))=TRIM(LOWER(?)) 
             AND TRIM(LOWER(nombre))=TRIM(LOWER(?))
           LIMIT 1";
@@ -167,39 +176,6 @@ function upsert_ranking_basico(mysqli $db, array $in): void {
   }
 }
 
-/* ===== Técnica por peleas ===== */
-function get_categoria_tecnica_por_peleas(mysqli $db, int $peleas): ?int {
-  $rows = [];
-  if ($rs = $db->query("SELECT id, UPPER(COALESCE(codigo,'')) AS codigo, UPPER(COALESCE(descripcion,'')) AS descripcion FROM categorias_tecnicas_evento ORDER BY id ASC")) {
-    while($r=$rs->fetch_assoc()){ $rows[]=$r; }
-    $rs->close();
-  }
-  $kw = function(array $keys) use($rows): ?int {
-    foreach($rows as $r){
-      $txt = ($r['codigo'].' '.$r['descripcion']);
-      foreach($keys as $k){ if (strpos($txt, strtoupper($k))!==false) return (int)$r['id']; }
-    }
-    return null;
-  };
-  if ($peleas <= 1)  { return $kw(['NOVATO','INICIAL','DEBUT','PRINCIPIANTE']) ?? ($rows[0]['id']??null); }
-  if ($peleas <= 5)  { return $kw(['INTERMEDIO','AMATEUR']) ?? ($rows[0]['id']??null); }
-  if ($peleas <= 10) { return $kw(['AVANZADO','PROAM','SEMI']) ?? ($rows[0]['id']??null); }
-  return $kw(['PROFESIONAL','ELITE','ÉLITE','PRO']) ?? ($rows ? $rows[count($rows)-1]['id'] : null);
-}
-
-/* ===== Match categoría por edad+sexo ===== */
-function match_categoria_edad_sexo(array $cats, int $edad, string $sexo): ?array {
-  $sexo = strtolower($sexo);
-  usort($cats, fn($a,$b)=>($a['peso_min']<=>$b['peso_min']) ?: ($a['id']<=>$b['id']));
-  foreach ($cats as $c) {
-    $gen = strtolower($c['genero'] ?? 'mixto');
-    $okGenero = ($gen==='mixto') || ($sexo && $gen===$sexo);
-    $okEdad = ($edad >= (int)$c['edad_min'] && $edad <= (int)$c['edad_max']);
-    if ($okGenero && $okEdad) return $c;
-  }
-  return null;
-}
-
 /* ==========================
    Determinar modo y evento
    ========================== */
@@ -214,6 +190,9 @@ if ($is_public) {
   $evento_id = (int)($_POST['evento_id'] ?? $_GET['evento_id'] ?? $_SESSION['evento_id_actual'] ?? 0);
   $_SESSION['evento_id_actual'] = $evento_id;
 }
+
+/* ========= Columna de evento detectada ========= */
+$EVENT_COL = pick_event_col($conexion);
 
 /* ========= Datos auxiliares ========= */
 $escuelas = [];
@@ -237,6 +216,47 @@ if ($rs = $conexion->query($sqlCat)) {
   $rs->close();
 }
 $categorias_tecnicas = $conexion->query("SELECT id, codigo, descripcion FROM categorias_tecnicas_evento ORDER BY id");
+
+/* ===== Detectar IDs de técnica por palabras clave (Clase A/B/C/D) ===== */
+function detectar_tecnica_ids(mysqli $db): array {
+  $rows = [];
+  if ($rs = $db->query("SELECT id, UPPER(COALESCE(codigo,'')) AS codigo, UPPER(COALESCE(descripcion,'')) AS descripcion FROM categorias_tecnicas_evento")) {
+    while($r=$rs->fetch_assoc()){ $rows[]=$r; }
+    $rs->close();
+  }
+  $matchId = function(array $kws) use($rows): ?int {
+    foreach ($rows as $r) {
+      $txt = trim(($r['codigo'] ?? '').' '.($r['descripcion'] ?? ''));
+      $txt = strtoupper($txt);
+      foreach ($kws as $k) {
+        if (strpos($txt, strtoupper($k)) !== false) return (int)$r['id'];
+      }
+    }
+    return null;
+  };
+  return [
+    // Ajustá/añadí sinónimos si tus textos son distintos
+    'A' => $matchId(['CLASE A','PROFESIONAL','ELITE','ÉLITE','PRO']),
+    'B' => $matchId(['CLASE B','AVANZADO','PROAM','AMATEUR AVANZADO']),
+    'C' => $matchId(['CLASE C','INTERMEDIO','AMATEUR INICIAL']),
+    'D' => $matchId(['CLASE D','DEBUT','NOVATO','INICIAL']),
+  ];
+}
+$TEC_IDS = detectar_tecnica_ids($conexion);
+
+/* ===== Técnica por peleas (servidor) usando TEC_IDS ===== */
+function get_categoria_tecnica_por_peleas(mysqli $db, int $peleas): ?int {
+  global $TEC_IDS;
+
+  $pick = function(string $cls) use ($TEC_IDS): ?int {
+    return isset($TEC_IDS[$cls]) && $TEC_IDS[$cls] ? (int)$TEC_IDS[$cls] : null;
+  };
+
+  if ($peleas <= 0)              return $pick('D');
+  if ($peleas >= 1 && $peleas <= 3)  return $pick('C');
+  if ($peleas >= 4 && $peleas <= 10) return $pick('B');
+  return $pick('A');
+}
 
 /* ===================== POST: guardar ===================== */
 if ($_SERVER['REQUEST_METHOD']==='POST'){
@@ -269,16 +289,19 @@ if ($_SERVER['REQUEST_METHOD']==='POST'){
     header('Location: '.($_SERVER['REQUEST_URI'] ?? '')); exit;
   }
 
-  if (existe_dni_evento($conexion,$evento_id,$dni)){
-    $_SESSION['flash_error']='El DNI ya está registrado en este evento.';
-    header('Location: '.($_SERVER['REQUEST_URI'] ?? '')); exit;
-  }
-  if (existe_nombre_apellido_evento($conexion,$evento_id,$nombre,$apellido)){
-    $_SESSION['flash_error']='Ya existe un competidor con ese nombre y apellido en este evento.';
-    header('Location: '.($_SERVER['REQUEST_URI'] ?? '')); exit;
+  // Duplicados por evento (si la tabla tiene columna de evento)
+  if ($EVENT_COL) {
+    if (existe_dni_evento($conexion,$EVENT_COL,$evento_id,$dni)){
+      $_SESSION['flash_error']='El DNI ya está registrado en este evento.';
+      header('Location: '.($_SERVER['REQUEST_URI'] ?? '')); exit;
+    }
+    if (existe_nombre_apellido_evento($conexion,$EVENT_COL,$evento_id,$nombre,$apellido)){
+      $_SESSION['flash_error']='Ya existe un competidor con ese nombre y apellido en este evento.';
+      header('Location: '.($_SERVER['REQUEST_URI'] ?? '')); exit;
+    }
   }
 
-  // Auto técnica por peleas
+  // Auto técnica por peleas (Clase D/C/B/A) si no vino marcada
   if (!$categoria_tecnica_id) {
     $autoTec = get_categoria_tecnica_por_peleas($conexion, (int)$peleas_previas);
     if ($autoTec) $categoria_tecnica_id = $autoTec;
@@ -295,8 +318,14 @@ if ($_SERVER['REQUEST_METHOD']==='POST'){
     }
   }
   if (!$seleccion){
-    $seleccion = match_categoria_edad_sexo($categorias, (int)$edad, (string)$sexo_in);
-    if ($seleccion) $categoria_evento_id = (int)$seleccion['id'];
+    // Match por edad/sexo (primera que encaje)
+    usort($categorias, fn($a,$b)=> ($a['peso_min']<=>$b['peso_min']) ?: ($a['id']<=>$b['id']));
+    foreach ($categorias as $c) {
+      $gen = strtolower($c['genero'] ?? 'mixto');
+      $okGenero = ($gen==='mixto') || ($sexo_in && $gen===$sexo_in);
+      $okEdad   = ($edad >= (int)$c['edad_min'] && $edad <= (int)$c['edad_max']);
+      if ($okGenero && $okEdad) { $seleccion = $c; $categoria_evento_id = (int)$c['id']; break; }
+    }
   }
   if (!$seleccion){
     $_SESSION['flash_error']='No se encontró una categoría válida (edad/sexo). Revisá los datos.';
@@ -306,8 +335,8 @@ if ($_SERVER['REQUEST_METHOD']==='POST'){
   $sexoCol = pick_sexo_col($conexion);
   $catCol  = pick_catpeso_col($conexion);
 
+  /* Data a insertar, mapeando la columna real del evento */
   $data = [
-    'evento_id'=>$evento_id,
     'apellido'=>$apellido,
     'nombre'=>$nombre,
     'dni'=>$dni,
@@ -319,15 +348,18 @@ if ($_SERVER['REQUEST_METHOD']==='POST'){
     'categoria_tecnica_id'=>$categoria_tecnica_id,
     'peleas_previas'=>$peleas_previas
   ];
-  if ($sexoCol) $data[$sexoCol]=$sexo_in;
-  if ($catCol)  $data[$catCol]=$categoria_evento_id;
+  if ($EVENT_COL) $data[$EVENT_COL] = $evento_id; // ← usar la columna detectada
+  if ($sexoCol)  $data[$sexoCol]   = $sexo_in;
+  if ($catCol)   $data[$catCol]    = $categoria_evento_id;
 
   try{
     $id = insert_min($conexion,$data);
-    // eRanking solo tiene sentido en modo interno, pero no perjudica en público
+
+    // eRanking: actualiza o crea si no existe
     upsert_ranking_basico($conexion, [
       'apellido'=>$apellido,'nombre'=>$nombre,'dni'=>$dni,'edad'=>$edad,'escuela_nombre'=>$escuela
     ]);
+
     $_SESSION['flash_ok'] =
       ($is_public ? '✅ ¡Inscripción enviada!' : '✅ Competidor cargado').' '.
       '#'.$id.' • Categoría: '.$seleccion['nombre'].
@@ -524,6 +556,11 @@ $share_url = current_base_url().'/'.basename(__FILE__).'?t='.$token_for_share;
 </div>
 
 <script>
+  // IDs detectados en servidor para Clase A/B/C/D
+  const TEC_IDS = <?= json_encode($TEC_IDS, JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES) ?>;
+</script>
+
+<script>
   // ===== Config (endpoint ranking solo interno) =====
   const ENABLE_RANKING = <?= $enable_ranking_ac ? 'true':'false' ?>;
   const RANKING_ENDPOINT = 'api_ranking_buscar.php'; // cambiá si está en otra ruta
@@ -592,33 +629,70 @@ $share_url = current_base_url().'/'.basename(__FILE__).'?t='.$token_for_share;
   sexoEl.addEventListener('change', filtrarCategorias);
   window.addEventListener('DOMContentLoaded', ()=>{ autoDivisionPorEdad(); filtrarCategorias(); });
 
-  // Auto categoría técnica por Cant. de peleas
+  // ===== Auto categoría técnica por Cant. de peleas (Clase D/C/B/A) — sin depender del texto =====
   const peleasEl = document.getElementById('peleas_previas');
-  const tecSel = document.getElementById('categoria_tecnica_id');
+  const tecSel   = document.getElementById('categoria_tecnica_id');
+
+  function optionExistsByValue(val){
+    if (!tecSel || !val) return false;
+    return Array.from(tecSel.options).some(o => String(o.value) === String(val));
+  }
+  function setTecById(val){
+    if (!tecSel || !val) return false;
+    if (optionExistsByValue(val)) {
+      tecSel.value = String(val);
+      return true;
+    }
+    return false;
+  }
+
   function autoTecnicaPorPeleas(){
-    const n = +peleasEl.value || 0;
-    const opts = [...tecSel.options].filter(o=>o.value);
-    const pickByKw = kws => {
-      const up = s=> (s||'').toUpperCase();
-      for (const o of opts){
+    const n = +(peleasEl?.value ?? 0) || 0;
+
+    // 0 → D, 1–3 → C, 4–10 → B, 11+ → A
+    let prefer = null;
+    if (n <= 0)              prefer = TEC_IDS?.D || null;
+    else if (n <= 3)         prefer = TEC_IDS?.C || null;
+    else if (n <= 10)        prefer = TEC_IDS?.B || null;
+    else                     prefer = TEC_IDS?.A || null;
+
+    // Intento principal: por ID detectado
+    if (setTecById(prefer)) return;
+
+    // Fallbacks: si no hay ID detectado, intentá por palabras clave
+    function pickByKeywords(kws){
+      const up = s => (s||'').toUpperCase();
+      for (const o of Array.from(tecSel.options).filter(o=>o.value)){
         const t = up(o.text);
-        if (kws.some(k=> t.includes(up(k)))) return o.value;
+        if (kws.some(k => t.includes(up(k)))) return o.value;
       }
       return null;
-    };
-    let val = null;
-    if (n <= 1)      val = pickByKw(['NOVATO','INICIAL','DEBUT','PRINCIPIANTE']);
-    else if (n <= 5) val = pickByKw(['INTERMEDIO','AMATEUR']);
-    else if (n <= 10)val = pickByKw(['AVANZADO','PROAM','SEMI']);
-    else             val = pickByKw(['PROFESIONAL','ELITE','ÉLITE','PRO']);
-    if (!val && opts.length) val = n <= 1 ? opts[0].value : opts[opts.length-1].value;
-    if (val) tecSel.value = val;
-  }
-  peleasEl.addEventListener('input', autoTecnicaPorPeleas);
-  window.addEventListener('DOMContentLoaded', autoTecnicaPorPeleas);
+    }
 
-  // Autocomplete Ranking (solo interno)
-  if (ENABLE_RANKING) (function(){
+    let alt = null;
+    if (n <= 0)              alt = pickByKeywords(['CLASE D','DEBUT','NOVATO','INICIAL']);
+    else if (n <= 3)         alt = pickByKeywords(['CLASE C','INTERMEDIO','AMATEUR INICIAL']);
+    else if (n <= 10)        alt = pickByKeywords(['CLASE B','AVANZADO','PROAM','AMATEUR AVANZADO']);
+    else                     alt = pickByKeywords(['CLASE A','PROFESIONAL','ELITE','ÉLITE','PRO']);
+
+    if (alt && setTecById(alt)) return;
+
+    // Último recurso (sin mandar siempre a la última)
+    const vals = Array.from(tecSel.options).filter(o=>o.value).map(o=>o.value);
+    if (!vals.length) return;
+    if (n <= 0)       tecSel.value = vals[0];
+    else if (n <= 3)  tecSel.value = vals[Math.min(1, vals.length-1)];
+    else if (n <= 10) tecSel.value = vals[Math.min(2, vals.length-1)];
+    else              tecSel.value = vals[vals.length-1];
+  }
+
+  if (peleasEl) {
+    peleasEl.addEventListener('input', autoTecnicaPorPeleas);
+    window.addEventListener('DOMContentLoaded', autoTecnicaPorPeleas);
+  }
+
+  // ===== Autocomplete Ranking (solo interno) =====
+  if (<?= $enable_ranking_ac ? 'true':'false' ?>) (function(){
     const apeIn  = document.getElementById('apellido');
     const nomIn  = document.getElementById('nombre');
     const escIn  = document.getElementById('escuela_nombre');
