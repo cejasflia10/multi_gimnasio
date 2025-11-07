@@ -1,6 +1,6 @@
 <?php
-// overlay_obs.php — Overlay ESPN/UFC para OBS (barra inferior)
-// Robusto: prueba varios endpoints de estado y mapea distintos nombres de campos.
+// overlay_obs.php — Overlay ESPN/UFC para OBS con animación local del timer.
+// Funciona aunque el endpoint no actualice remaining en cada request.
 if (session_status() === PHP_SESSION_NONE) session_start();
 header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
 header('Pragma: no-cache');
@@ -29,9 +29,8 @@ if ($pelea_id <= 0) { http_response_code(400); echo 'Falta pelea_id'; exit; }
   .center{display:flex;align-items:center;justify-content:center;flex-direction:column;gap:4px;min-width:min(20vw,380px)}
   .time{font-weight:900;line-height:1;font-size:clamp(38px,6.6vw,110px);letter-spacing:1px;text-shadow:0 6px 22px #000c}
   .round{font-size:clamp(12px,1.1vw,16px);letter-spacing:.3px;padding:4px 10px;border-radius:999px;border:1px solid #ffffff22;background:#0b1020cc}
-  .status{position:absolute;left:min(2.2vw,42px);top:min(2.2vh,42px);font-weight:800;font-size:clamp(12px,1vw,16px);padding:6px 12px;border-radius:999px;border:1px solid #ffffff22;background:#0b1020cc;backdrop-filter:blur(6px)}
+  .status{position:absolute;right:min(2.2vw,42px);top:min(2.2vh,42px);font-weight:800;font-size:clamp(12px,1vw,16px);padding:6px 12px;border-radius:999px;border:1px solid #ffffff22;background:#0b1020cc;backdrop-filter:blur(6px)}
   .paused{color:#ffd36b}.rest{color:#7abbff}.live{color:#7dffa3}.err{color:#ff7d7d}.wait{color:#ffd36b}
-  .debug{position:absolute;right:min(2.2vw,42px);top:min(2.2vh,42px);font-size:12px;opacity:.75;background:#0b1020cc;border:1px solid #ffffff22;border-radius:10px;padding:6px 10px;max-width:min(40vw,520px)}
   .logo{width:min(7vh,64px);height:min(7vh,64px);object-fit:contain;border-radius:8px;background:#0006;display:none}
   .has-logo .logo{display:block}
 </style>
@@ -39,7 +38,6 @@ if ($pelea_id <= 0) { http_response_code(400); echo 'Falta pelea_id'; exit; }
 <body>
 <div class="wrap">
   <div id="status" class="status">CONECTANDO…</div>
-  <div id="dbg" class="debug"></div>
 
   <div class="bar">
     <!-- ROJO -->
@@ -73,9 +71,9 @@ if ($pelea_id <= 0) { http_response_code(400); echo 'Falta pelea_id'; exit; }
 <script>
 const peleaId = <?= (int)$pelea_id ?>;
 
+// UI refs
 const UI = {
   status:document.getElementById('status'),
-  dbg:document.getElementById('dbg'),
   time:document.getElementById('time'),
   round:document.getElementById('round'),
   left:document.getElementById('left'),
@@ -90,34 +88,27 @@ const UI = {
   blueTags:document.getElementById('blueTags'),
 };
 
-let last=null, errCount=0;
+// snapshot del server para animar local
+let lastPayload=null;
+let snap = {
+  serverAt: 0,      // epoch ms de última lectura
+  remainAt: 180,    // segundos que reportó el server
+  running: false,
+  rest: false,
+  paused: false,
+  durRound: 180,
+  durRest: 60,
+  round: 1
+};
 
 function fmt(sec){sec=Math.max(0,Math.floor(sec||0));const m=Math.floor(sec/60),s=String(sec%60).padStart(2,'0');return `${m}:${s}`;}
 function textOrHide(el,val){ if(!el)return; if(val&&String(val).trim()!==''){el.textContent=val;el.style.display='';}else{el.textContent='';el.style.display='none';} }
+function flag(o,...k){ for(const x of k){ if(o && Object.prototype.hasOwnProperty.call(o,x)) return !!o[x]; } return false; }
+function num(o,...k){ for(const x of k){ if(o && o[x]!=null && !isNaN(o[x])) return Number(o[x]); } return null; }
 
-// Flags tolerantes a distintos nombres
-function flag(obj, ...keys){
-  for (const k of keys){ if (obj && Object.prototype.hasOwnProperty.call(obj,k)) return !!obj[k]; }
-  return false;
-}
-function num(obj, ...keys){
-  for (const k of keys){ if (obj && obj[k]!=null && !isNaN(obj[k])) return Number(obj[k]); }
-  return null;
-}
-
-function computeFlags(tm){
-  const running = flag(tm,'running','activo','en_juego');
-  const rest    = flag(tm,'en_descanso','descanso');
-  // si viene paused=1 pero hay running o rest, NO mostramos pausado
-  const paused  = flag(tm,'paused','pausado') && !running && !rest;
-  return { running, rest, paused };
-}
-
-function paint(){
-  if(!last) return;
-  const A=last.azul||{}, R=last.rojo||{}, tm=last.timer||{};
-  const flags = computeFlags(tm);
-
+// pinta nombres/logos y estado textual
+function paintStatic(data){
+  const A=data.azul||{}, R=data.rojo||{};
   UI.redName.textContent=R.nombre||'ROJO';
   UI.blueName.textContent=A.nombre||'AZUL';
   textOrHide(UI.redEsc,R.escuela); textOrHide(UI.blueEsc,A.escuela);
@@ -128,60 +119,72 @@ function paint(){
   const rTags=[R.division,R.peso,R.modalidad].filter(Boolean).join(' • ');
   const aTags=[A.division,A.peso,A.modalidad].filter(Boolean).join(' • ');
   textOrHide(UI.redTags,rTags); textOrHide(UI.blueTags,aTags);
+}
 
-  // Tiempo restante
-  let remain = null;
-  const dur = flags.rest ? (num(tm,'dur_descanso','descanso') ?? 60) : (num(tm,'dur_round','duracion') ?? 180);
-  const remaining = num(tm,'remaining','restante');
-  const elapsed   = num(tm,'elapsed','transcurrido');
-  const epoch     = num(tm,'epoch_inicio','epoch');
+// calcula snapshot desde payload del server (tolerante a claves)
+function updateSnapshot(data){
+  const tm = data.timer || {};
+  const running = flag(tm,'running','activo','en_juego');
+  const rest    = flag(tm,'en_descanso','descanso');
+  const paused  = flag(tm,'paused','pausado') && !running && !rest;
 
-  if (remaining != null) {
-    remain = remaining;
-  } else if (elapsed != null) {
-    remain = Math.max(0, dur - elapsed);
-  } else if (epoch != null && epoch > 0) {
-    if (flags.paused && num(tm,'remaining_at_pause','restante_pausa') != null){
-      remain = num(tm,'remaining_at_pause','restante_pausa');
-    } else {
-      const now = Math.floor(Date.now()/1000);
-      remain = Math.max(0, dur - Math.max(0, now - epoch));
-    }
-  } else {
-    remain = dur; // fallback
+  const durRound = num(tm,'dur_round','duracion') ?? 180;
+  const durRest  = num(tm,'dur_descanso','descanso') ?? 60;
+  const roundN   = num(tm,'ronda','ronda_actual') ?? 1;
+
+  // de dónde saco remaining “base”
+  let remain = num(tm,'remaining','restante');
+  const elapsed = num(tm,'elapsed','transcurrido');
+  const epoch   = num(tm,'epoch_inicio','epoch');
+
+  if (remain == null && elapsed != null){
+    remain = Math.max(0, (rest?durRest:durRound) - elapsed);
+  } else if (remain == null && epoch){
+    const now = Math.floor(Date.now()/1000);
+    remain = Math.max(0, (rest?durRest:durRound) - Math.max(0, now - epoch));
   }
+  if (remain == null) remain = rest?durRest:durRound;
 
-  UI.time.textContent = fmt(remain);
-  UI.round.textContent = 'Round ' + (num(tm,'ronda','ronda_actual') ?? 1);
+  snap.serverAt = performance.now();  // alta precisión
+  snap.remainAt = remain;
+  snap.running  = running;
+  snap.rest     = rest;
+  snap.paused   = paused;
+  snap.durRound = durRound;
+  snap.durRest  = durRest;
+  snap.round    = roundN;
 
-  // Estado
+  // Estado visual
   let lbl='EN VIVO', cls='live';
-  if (flags.rest){ lbl='DESCANSO'; cls='rest'; }
-  else if (flags.paused){ lbl='PAUSADO'; cls='paused'; }
-  else if (!flags.running){ lbl='LISTO'; cls='wait'; }
+  if (snap.rest){ lbl='DESCANSO'; cls='rest'; }
+  else if (snap.paused){ lbl='PAUSADO'; cls='paused'; }
+  else if (!snap.running){ lbl='LISTO'; cls='wait'; }
   UI.status.className='status '+cls;
   UI.status.textContent=lbl;
 
-  if (UI.dbg){
-    UI.dbg.textContent =
-      `running:${flags.running?1:0} paused:${flag(tm,'paused','pausado')?1:0} descanso:${flags.rest?1:0} `+
-      `rem:${remain} dur:${dur} epoch:${epoch??'-'} pull:${new Date().toLocaleTimeString()}`;
-  }
+  UI.round.textContent = 'Round ' + snap.round;
 }
 
-// URLs a probar (en este orden)
+// anima el cronómetro localmente
+function paintClock(){
+  let remain = snap.remainAt;
+  if (snap.running && !snap.paused){
+    const elapsedMs = Math.max(0, performance.now() - snap.serverAt);
+    remain = Math.max(0, snap.remainAt - Math.floor(elapsedMs/1000));
+  }
+  UI.time.textContent = fmt(remain);
+}
+
+// endpoints a probar (ajax viejo y API estado)
 function endpoints(){
   const base = new URL(location.href);
   const list = [];
-
-  // 1) ajax interno del panel
   const u1 = new URL('combate_en_vivo.php', base);
   u1.searchParams.set('ajax','estado');
   u1.searchParams.set('pelea_id', String(peleaId));
   u1.searchParams.set('_', String(Date.now()));
   list.push(u1.toString());
 
-  // 2) API dedicada a estado
   const u2 = new URL('api_combate_estado.php', base);
   u2.searchParams.set('pelea_id', String(peleaId));
   u2.searchParams.set('_', String(Date.now()));
@@ -192,35 +195,31 @@ function endpoints(){
 
 async function pull(){
   const urls = endpoints();
-  let ok = false, data = null, raw = null;
-
   for (const url of urls){
     try{
       const r = await fetch(url, {cache:'no-store', credentials:'same-origin'});
       if(!r.ok) continue;
-      raw = await r.json();
-      // adaptamos posibles formatos
-      if (raw && raw.ok && raw.data){ data = raw.data; ok = true; break; }
-      if (raw && (raw.timer || raw.azul || raw.rojo)){ data = raw; ok = true; break; }
-    }catch(e){ /* intenta el siguiente */ }
-  }
+      const raw = await r.json();
+      const data = (raw && raw.ok && raw.data) ? raw.data
+                   : (raw && (raw.timer || raw.azul || raw.rojo)) ? raw
+                   : null;
+      if (!data) continue;
 
-  if (ok){
-    last = data; errCount = 0;
-    if(UI.status && (UI.status.textContent==='CONECTANDO…' || UI.status.classList.contains('err'))){
-      UI.status.textContent='EN VIVO'; UI.status.className='status live';
-    }
-    paint();
-  } else {
-    errCount++;
-    if(UI.status){ UI.status.textContent='ERROR ('+errCount+')'; UI.status.className='status err'; }
-    if(UI.dbg){ UI.dbg.textContent='Sin estado válido • '+ new Date().toLocaleTimeString(); }
+      lastPayload = data;
+      paintStatic(data);
+      updateSnapshot(data);
+      return; // listo
+    }catch(e){ /* probar siguiente */ }
   }
+  // si nada respondió:
+  UI.status.className='status err';
+  UI.status.textContent='ERROR';
 }
 
+// ciclos: poll al server + animación local a 4 Hz
 pull();
-setInterval(pull, 1000);   // 1s
-setInterval(paint, 250);   // seguridad
+setInterval(pull, 1000);
+setInterval(paintClock, 250);
 </script>
 </body>
 </html>
