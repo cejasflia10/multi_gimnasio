@@ -32,3 +32,14 @@ EXPOSE 80
 
 # Arranque (Render usa este CMD)
 CMD ["start.sh"]
+# NGINX + RTMP + HLS (latencia baja)
+FROM alfg/nginx-rtmp:latest
+
+# Copiamos nuestra config
+COPY nginx.conf /etc/nginx/nginx.conf
+
+# Archivos HLS (segmentos) irán a /mnt/hls (persistente en Render si activás disk)
+RUN mkdir -p /mnt/hls && chown -R nginx:nginx /mnt/hls
+
+EXPOSE 8080 1935
+CMD ["nginx", "-g", "daemon off;"]

@@ -1,10 +1,10 @@
 <?php
 /* =========================================================================
-   ver_evento_publico.php — Cartelera pública de un evento (todas las peleas)
-   - Muestra cada pelea con RINCÓN ROJO / AZUL + escuela/logo + división + peso + modalidad
-   - Resalta estado y ganador (si finalizada)
-   - Soporta distintos nombres de columnas (instalaciones previas)
-   - Link rápido al overlay: en_vivo.php?overlay=1&pelea_id=XX
+   ver_evento_publico.php — Cartelera pública + PLAYER HLS/LL-HLS (overlay-ready)
+   - Encabezado: video del evento (HLS/LL-HLS). Fuente: eventos_deportivos.video|stream_url
+   - Fallbacks: evento_transmision.stream_url | eventos.video | youtube_live_id (embed)
+   - Debajo: todas las peleas con datos completos (rojo/azul, escuela, división, peso, modalidad)
+   - Accesos rápidos: Control en vivo + Overlay OBS por pelea
    ========================================================================== */
 if (session_status() === PHP_SESSION_NONE) session_start();
 require_once __DIR__ . '/conexion.php';
@@ -20,7 +20,7 @@ if (function_exists('mysqli_report')) { mysqli_report(MYSQLI_REPORT_OFF); }
 @$conexion->set_charset('utf8mb4');
 
 /* ===== Helpers ===== */
-function h($s){ return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); }
+function h($s){ return htmlspecialchars((string)$s, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'); }
 function bt($c){ return '`'.str_replace('`','``',(string)$c).'`'; }
 function table_exists(mysqli $db, string $name): bool {
   $name = $db->real_escape_string($name);
@@ -50,14 +50,15 @@ if (is_null($evento_id) || $evento_id <= 0) {
   exit;
 }
 
-/* ===== Título del evento (soporta 'eventos_deportivos' o 'eventos') ===== */
+/* ===== Datos del evento + URL de stream ===== */
 $evento_titulo = 'Evento #' . (int)$evento_id;
 $evento_fecha = null; $evento_lugar = null;
+$stream_url = null; $yt_live_id = null;
 
 if (table_exists($conexion, 'eventos_deportivos')) {
-  $cols = ['titulo','fecha','lugar'];
+  $cand = ['titulo','fecha','lugar','video','stream_url','youtube_live_id'];
   $pres = [];
-  foreach ($cols as $c) if (has_col($conexion, 'eventos_deportivos', $c)) $pres[] = $c;
+  foreach ($cand as $c) if (has_col($conexion, 'eventos_deportivos', $c)) $pres[] = $c;
   if ($pres) {
     $sql = "SELECT ".implode(',', array_map('bt',$pres))." FROM eventos_deportivos WHERE id=? LIMIT 1";
     if ($st = $conexion->prepare($sql)) {
@@ -67,40 +68,49 @@ if (table_exists($conexion, 'eventos_deportivos')) {
         if (!empty($row['titulo'])) $evento_titulo = (string)$row['titulo'];
         if (!empty($row['fecha']))  $evento_fecha  = (string)$row['fecha'];
         if (!empty($row['lugar']))  $evento_lugar  = (string)$row['lugar'];
-      }
-      $st->close();
-    }
-  }
-} elseif (table_exists($conexion, 'eventos')) {
-  $cand = ['titulo','nombre','fecha','lugar'];
-  $pres = [];
-  foreach ($cand as $c) if (has_col($conexion,'eventos',$c)) $pres[] = $c;
-  if ($pres) {
-    $sql = "SELECT ".implode(',', array_map('bt',$pres))." FROM eventos WHERE id=? LIMIT 1";
-    if ($st = $conexion->prepare($sql)) {
-      $st->bind_param('i', $evento_id);
-      $st->execute(); $r = $st->get_result();
-      if ($row = $r->fetch_assoc()) {
-        if (!empty($row['titulo'])) $evento_titulo = (string)$row['titulo'];
-        elseif (!empty($row['nombre'])) $evento_titulo = (string)$row['nombre'];
-        if (!empty($row['fecha']))  $evento_fecha  = (string)$row['fecha'];
-        if (!empty($row['lugar']))  $evento_lugar  = (string)$row['lugar'];
+        if (!empty($row['stream_url'])) $stream_url = (string)$row['stream_url'];
+        elseif (!empty($row['video']))  $stream_url = (string)$row['video']; // a veces guardan acá el .m3u8
+        if (!empty($row['youtube_live_id'])) $yt_live_id = (string)$row['youtube_live_id'];
       }
       $st->close();
     }
   }
 }
 
-/* ===== Listado de peleas del evento ===== */
-$peleas = [];  // cada item: [id, numero?, estado?, ganador_color?, azul_id?, rojo_id?]
-$C_NUM = null; $C_ESTADO = null; $C_GCOL = null; $C_AZ = null; $C_RO = null;
+/* Fallbacks de stream en otras tablas */
+if (!$stream_url && table_exists($conexion, 'evento_transmision')) {
+  // columnas típicas: evento_id, stream_url
+  if (has_col($conexion,'evento_transmision','stream_url') && has_col($conexion,'evento_transmision','evento_id')) {
+    if ($st=$conexion->prepare("SELECT stream_url FROM evento_transmision WHERE evento_id=? ORDER BY id DESC LIMIT 1")){
+      $st->bind_param('i',$evento_id); $st->execute(); $st->bind_result($su); if($st->fetch()){ $stream_url=(string)$su; } $st->close();
+    }
+  }
+}
+if (!$stream_url && table_exists($conexion, 'eventos')) {
+  $cand = ['video','stream_url','youtube_live_id'];
+  $pres = [];
+  foreach ($cand as $c) if (has_col($conexion,'eventos',$c)) $pres[]=$c;
+  if ($pres){
+    $sql="SELECT ".implode(',', array_map('bt',$pres))." FROM eventos WHERE id=? LIMIT 1";
+    if ($st=$conexion->prepare($sql)){
+      $st->bind_param('i',$evento_id); $st->execute(); $r=$st->get_result();
+      if($row=$r->fetch_assoc()){
+        if(!$stream_url){
+          if (!empty($row['stream_url'])) $stream_url=(string)$row['stream_url'];
+          elseif (!empty($row['video']))  $stream_url=(string)$row['video'];
+        }
+        if(!$yt_live_id && !empty($row['youtube_live_id'])) $yt_live_id=(string)$row['youtube_live_id'];
+      }
+      $st->close();
+    }
+  }
+}
 
+/* ===== Listado de peleas ===== */
 if (!table_exists($conexion,'peleas_evento')) {
   echo '<div style="max-width:900px;margin:18px auto;padding:14px;border:1px solid #f5c6cb;background:#fdecea;color:#b71c1c;border-radius:10px;">No existe la tabla <b>peleas_evento</b>.</div>';
   exit;
 }
-
-/* Columnas variables que buscamos */
 $C_NUM = null; foreach(['numero','nro','orden','n_orden','num'] as $c) { if (has_col($conexion,'peleas_evento',$c)) { $C_NUM=$c; break; } }
 $C_ESTADO = has_col($conexion,'peleas_evento','estado') ? 'estado' : null;
 $C_GCOL   = has_col($conexion,'peleas_evento','ganador_color') ? 'ganador_color' : (has_col($conexion,'peleas_evento','ganador')?'ganador':null);
@@ -108,36 +118,33 @@ $C_AZ     = has_col($conexion,'peleas_evento','competidor_azul_id') ? 'competido
 $C_RO     = has_col($conexion,'peleas_evento','competidor_rojo_id') ? 'competidor_rojo_id' : (has_col($conexion,'peleas_evento','rojo_id')?'rojo_id':null);
 
 $cols = ['id'];
-if ($C_NUM) $cols[] = bt($C_NUM).' AS num';
-if ($C_ESTADO) $cols[] = bt($C_ESTADO).' AS estado';
-if ($C_GCOL)   $cols[] = bt($C_GCOL).'   AS ganador_color';
-if ($C_AZ)     $cols[] = bt($C_AZ).'     AS az';
-if ($C_RO)     $cols[] = bt($C_RO).'     AS ro';
+if ($C_NUM)   $cols[] = bt($C_NUM).' AS num';
+if ($C_ESTADO)$cols[] = bt($C_ESTADO).' AS estado';
+if ($C_GCOL)  $cols[] = bt($C_GCOL).'   AS ganador_color';
+if ($C_AZ)    $cols[] = bt($C_AZ).'     AS az';
+if ($C_RO)    $cols[] = bt($C_RO).'     AS ro';
 
 $sql = "SELECT ".implode(',', $cols)." FROM peleas_evento WHERE ";
-if (has_col($conexion,'peleas_evento','evento_id')) {
-  $sql .= "evento_id=? ";
-} else {
-  // fallback: por si tuvieran otra columna (improbable)
-  $sql .= "1=1 AND 0=1 ";
-}
-$order = $C_NUM ? " ORDER BY ".bt($C_NUM)." ASC, id ASC" : " ORDER BY id ASC";
+if (has_col($conexion,'peleas_evento','evento_id')) { $sql .= "evento_id=? "; }
+else { $sql .= "1=0 "; }
+$order = $C_NUM ? " ORDER BY ".bt($C_NUM)." IS NULL, ".bt($C_NUM)." ASC, id ASC" : " ORDER BY id ASC";
 $sql .= $order;
 
-$ids_comp = [];
+$peleas = []; $ids_comp = [];
 if ($st=$conexion->prepare($sql)) {
   $st->bind_param('i',$evento_id);
   $st->execute(); $res=$st->get_result();
-  while($row = $res->fetch_assoc()){
-    $peleas[] = $row;
-    if (!empty($row['az'])) $ids_comp[] = (int)$row['az'];
-    if (!empty($row['ro'])) $ids_comp[] = (int)$row['ro'];
+  while($row=$res->fetch_assoc()){
+    $peleas[]=$row;
+    if (!empty($row['az'])) $ids_comp[]=(int)$row['az'];
+    if (!empty($row['ro'])) $ids_comp[]=(int)$row['ro'];
   }
   $st->close();
 }
 
 /* ===== Datos de competidores_evento (batch) ===== */
-$mapComp = []; // id_comp => [nom, escuela, logo, division, peso, modalidad]
+$mapComp = [];
+$ids_comp = array_values(array_unique(array_filter($ids_comp)));
 if ($ids_comp && table_exists($conexion, 'competidores_evento')) {
   $C_ESCUELA = has_col($conexion,'competidores_evento','escuela') ? 'escuela'
               : (has_col($conexion,'competidores_evento','escuela_nombre') ? 'escuela_nombre'
@@ -182,10 +189,10 @@ if ($ids_comp && table_exists($conexion, 'competidores_evento')) {
   $ph = implode(',', array_fill(0, count($ids_comp), '?'));
   $typ = str_repeat('i', count($ids_comp));
   $sqlC = "SELECT $sel FROM competidores_evento ce $joins WHERE ce.id IN ($ph)";
+
   if ($st = $conexion->prepare($sqlC)) {
     $st->bind_param($typ, ...$ids_comp);
-    $st->execute(); $st->store_result();
-    $st->bind_result($cid,$nom,$esc,$logo,$division,$peso,$modalidad);
+    $st->execute(); $st->bind_result($cid,$nom,$esc,$logo,$division,$peso,$modalidad);
     while($st->fetch()){
       $mapComp[(int)$cid] = [
         'nom' => (string)($nom??''),
@@ -201,7 +208,8 @@ if ($ids_comp && table_exists($conexion, 'competidores_evento')) {
 }
 
 /* ===== HTML ===== */
-?><!DOCTYPE html>
+?>
+<!DOCTYPE html>
 <html lang="es">
 <head>
 <meta charset="UTF-8">
@@ -211,15 +219,24 @@ if ($ids_comp && table_exists($conexion, 'competidores_evento')) {
   :root{ --bg:#0b0e12; --panel:#0F1216; --br:#1f2a35; --muted:#a9bacb; --gold:#ffd600; }
   body{background:var(--bg);color:#eaf2fb;font-family:system-ui,Segoe UI,Roboto,Arial,sans-serif;margin:0}
   .wrap{max-width:1200px;margin:0 auto;padding:16px}
-  h1{margin:0 0 4px;font-size:28px}
+  h1{margin:0 0 8px;font-size:28px}
   .sub{color:var(--muted);font-size:14px}
+
+  /* Player */
+  .player-wrap{margin:10px 0 16px;border-radius:14px;overflow:hidden;border:1px solid var(--br);background:#000}
+  .video-box{position:relative; width:100%; aspect-ratio:16/9; background:#000}
+  .video-box video, .video-box iframe{position:absolute; inset:0; width:100%; height:100%; border:0}
+  .vid-toolbar{display:flex; gap:10px; align-items:center; padding:8px 10px; background:#0c1116; border-top:1px solid var(--br); font-size:13px}
+  .pill{padding:3px 8px; border-radius:999px; border:1px solid #2a3a4a; background:#121a1f}
+  .ok{color:#7dffa3} .warn{color:#ffd36b} .bad{color:#ff9aa2}
+
   .grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:14px}
   @media (max-width:1000px){ .grid{grid-template-columns:1fr} }
 
   .fight{background:var(--panel);border:1px solid var(--br);border-radius:14px;overflow:hidden}
   .hdr{display:flex;align-items:center;justify-content:space-between;padding:10px 12px;border-bottom:1px solid var(--br);background:#0c1116}
   .hdr .nro{font-weight:900;letter-spacing:.5px}
-  .hdr .estado{font-size:12px;color:#cfe2ff;padding:4px 8px;border:1px solid #29445b;border-radius:999px;background:#11202c}
+  .hdr .estado{font-size:12px;color:#cfe2ff;padding:4px 8px;border:1px solid #29445b;border-radius:999px;background:#11202c;text-transform:capitalize}
   .hdr .estado.fin{background:#23151a;color:#ffd7dd;border-color:#4e1b29}
   .hdr .estado.juego{background:#112317;color:#d9ffdf;border-color:#224a2d}
 
@@ -249,6 +266,42 @@ if ($ids_comp && table_exists($conexion, 'competidores_evento')) {
     <?php if ($evento_lugar): ?>📍 <?= h($evento_lugar) ?><?php endif; ?>
   </div>
 
+  <!-- ===== PLAYER (HLS/LL-HLS o YouTube) ===== -->
+  <div class="player-wrap">
+    <div class="video-box" id="vbox">
+      <?php
+      $is_youtube = false;
+      if ($stream_url) {
+        $su = trim((string)$stream_url);
+        $is_youtube = (strpos($su,'youtube.com')!==false) || (strpos($su,'youtu.be')!==false);
+      }
+      if ($stream_url && !$is_youtube):
+      ?>
+        <video id="video" playsinline muted <?= isset($_GET['autoplay']) && $_GET['autoplay']=='1' ? 'autoplay' : '' ?> controls></video>
+      <?php elseif ($yt_live_id || $is_youtube): 
+        $ytid = $yt_live_id ?: '';
+        if (!$ytid && preg_match('~(?:v=|/)([0-9A-Za-z_-]{11})~', (string)$stream_url, $m)) $ytid=$m[1];
+        ?>
+        <iframe id="ytframe"
+          src="https://www.youtube.com/embed/<?= h($ytid) ?>?autoplay=1&mute=1&modestbranding=1&rel=0&playsinline=1"
+          allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen></iframe>
+      <?php else: ?>
+        <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#9fb3c7">
+          <div style="text-align:center;padding:16px">
+            <div style="font-weight:800;font-size:18px;margin-bottom:6px">Sin fuente de video</div>
+            <div class="sub">Cargá una URL .m3u8 en <b>eventos_deportivos.video</b> (o stream_url), o el <b>youtube_live_id</b>.</div>
+          </div>
+        </div>
+      <?php endif; ?>
+    </div>
+    <div class="vid-toolbar">
+      <span class="pill">Fuente: <?= $stream_url ? ( $is_youtube ? 'YouTube' : (substr($stream_url,-5)==='.m3u8'?'HLS/LL-HLS':'Otro') ) : ($yt_live_id?'YouTube':'—') ?></span>
+      <span id="lat" class="pill">Latencia: —</span>
+      <span id="stat" class="pill">Estado: —</span>
+      <span class="pill">Autoplay: <?= (isset($_GET['autoplay']) && $_GET['autoplay']=='1')?'ON':'OFF' ?> (agregá <code>?autoplay=1</code>)</span>
+    </div>
+  </div>
+
   <?php if (!$peleas): ?>
     <div class="sub" style="margin-top:12px">No hay peleas cargadas todavía.</div>
   <?php else: ?>
@@ -256,8 +309,8 @@ if ($ids_comp && table_exists($conexion, 'competidores_evento')) {
       <?php foreach ($peleas as $p):
         $pid = (int)$p['id'];
         $num = isset($p['num']) && $p['num']!=='' ? (int)$p['num'] : null;
-        $estado = strtolower((string)($p['estado'] ?? ''));
-        $gcol = strtolower((string)($p['ganador_color'] ?? ''));
+        $estado = strtolower(trim((string)($p['estado'] ?? '')));
+        $gcol = strtolower(trim((string)($p['ganador_color'] ?? '')));
 
         $az = isset($p['az']) ? (int)$p['az'] : null;
         $ro = isset($p['ro']) ? (int)$p['ro'] : null;
@@ -265,7 +318,13 @@ if ($ids_comp && table_exists($conexion, 'competidores_evento')) {
         $azD = $az && isset($mapComp[$az]) ? $mapComp[$az] : ['nom'=>'Azul','esc'=>'','logo'=>'','division'=>'','peso'=>'','modalidad'=>''];
         $roD = $ro && isset($mapComp[$ro]) ? $mapComp[$ro] : ['nom'=>'Rojo','esc'=>'','logo'=>'','division'=>'','peso'=>'','modalidad'=>''];
 
-        $clsEstado = ($estado==='finalizada' || $estado==='finalizado') ? 'estado fin' : (($estado==='en juego' || $estado==='en_juego' || $estado==='activo') ? 'estado juego' : 'estado');
+        $clsEstado = ($estado==='finalizada' || $estado==='finalizado') ? 'estado fin'
+                    : (($estado==='en juego' || $estado==='en_juego' || $estado==='activo') ? 'estado juego' : 'estado');
+
+        $pesoRo = trim((string)$roD['peso']);
+        $pesoAz = trim((string)$azD['peso']);
+        if ($pesoRo !== '' && is_numeric($pesoRo)) $pesoRo = (0 + $pesoRo).' kg';
+        if ($pesoAz !== '' && is_numeric($pesoAz)) $pesoAz = (0 + $pesoAz).' kg';
       ?>
       <article class="fight">
         <div class="hdr">
@@ -286,9 +345,7 @@ if ($ids_comp && table_exists($conexion, 'competidores_evento')) {
             <?php endif; ?>
             <div class="tags">
               <?php if ($roD['division']): ?><span class="tag">División: <?= h($roD['division']) ?></span><?php endif; ?>
-              <?php if ($roD['peso']!==''): ?>
-                <span class="tag">Peso: <?= h(is_numeric($roD['peso'])?(0+$roD['peso']).' kg':$roD['peso']) ?></span>
-              <?php endif; ?>
+              <?php if ($pesoRo!==''): ?><span class="tag">Peso: <?= h($pesoRo) ?></span><?php endif; ?>
               <?php if ($roD['modalidad']): ?><span class="tag">Modalidad: <?= h($roD['modalidad']) ?></span><?php endif; ?>
             </div>
           </div>
@@ -305,9 +362,7 @@ if ($ids_comp && table_exists($conexion, 'competidores_evento')) {
             <?php endif; ?>
             <div class="tags">
               <?php if ($azD['division']): ?><span class="tag">División: <?= h($azD['division']) ?></span><?php endif; ?>
-              <?php if ($azD['peso']!==''): ?>
-                <span class="tag">Peso: <?= h(is_numeric($azD['peso'])?(0+$azD['peso']).' kg':$azD['peso']) ?></span>
-              <?php endif; ?>
+              <?php if ($pesoAz!==''): ?><span class="tag">Peso: <?= h($pesoAz) ?></span><?php endif; ?>
               <?php if ($azD['modalidad']): ?><span class="tag">Modalidad: <?= h($azD['modalidad']) ?></span><?php endif; ?>
             </div>
           </div>
@@ -325,8 +380,9 @@ if ($ids_comp && table_exists($conexion, 'competidores_evento')) {
               <span class="gan">Ganador: —</span>
             <?php endif; ?>
           </div>
-          <div>
-            <a class="link" href="en_vivo.php?overlay=1&pelea_id=<?= (int)$pid ?>" target="_blank">Abrir overlay de esta pelea</a>
+          <div style="display:flex; gap:12px; align-items:center;">
+            <a class="link" href="combate_en_vivo.php?pelea_id=<?= (int)$pid ?>" target="_blank">Abrir control en vivo</a>
+            <a class="link" href="overlay_obs.php?pelea_id=<?= (int)$pid ?>" target="_blank">Abrir overlay OBS</a>
           </div>
         </div>
       </article>
@@ -334,5 +390,108 @@ if ($ids_comp && table_exists($conexion, 'competidores_evento')) {
     </div>
   <?php endif; ?>
 </div>
+
+<?php
+// Pasamos stream_url al front
+$stream_js = $stream_url ? json_encode($stream_url, JSON_UNESCAPED_SLASHES|JSON_UNESCAPED_UNICODE) : 'null';
+?>
+<script>
+(function(){
+  const STREAM_URL = <?= $stream_js ?>;
+  const latLbl = document.getElementById('lat');
+  const stLbl  = document.getElementById('stat');
+
+  function setStat(txt, cls){
+    stLbl.textContent = 'Estado: ' + txt;
+    stLbl.classList.remove('ok','warn','bad'); if (cls) stLbl.classList.add(cls);
+  }
+  function setLat(ms){
+    if (ms==null){ latLbl.textContent = 'Latencia: —'; return; }
+    const s = (ms/1000).toFixed(1);
+    latLbl.textContent = 'Latencia: ' + s + 's';
+    latLbl.classList.remove('ok','warn','bad');
+    if (ms <= 3500) latLbl.classList.add('ok'); else if (ms <= 7000) latLbl.classList.add('warn'); else latLbl.classList.add('bad');
+  }
+
+  // Si no es HLS, no hay nada que hacer aquí (YouTube ya está embebido)
+  if (!STREAM_URL || /youtube\.com|youtu\.be/i.test(STREAM_URL)) { setStat('YouTube', 'warn'); return; }
+
+  // Carga hls.js on-demand
+  const s = document.createElement('script');
+  s.src = "https://cdn.jsdelivr.net/npm/hls.js@latest";
+  s.onload = initPlayer;
+  s.onerror = () => setStat('Error cargando hls.js','bad');
+  document.head.appendChild(s);
+
+  function initPlayer(){
+    const video = document.getElementById('video');
+    if (!video){ setStat('Sin elemento <video>','bad'); return; }
+
+    // Autoplay silencioso
+    video.muted = true;
+
+    // Soporte nativo (Safari / algunos SmartTV)
+    if (video.canPlayType('application/vnd.apple.mpegurl')) {
+      video.src = STREAM_URL;
+      bindNative(video);
+      return;
+    }
+
+    if (window.Hls && Hls.isSupported()){
+      const hls = new Hls({
+        // Ajustes amigables para LL-HLS si tu servidor lo soporta
+        lowLatencyMode: true,
+        backBufferLength: 60,
+        maxLiveSyncPlaybackRate: 1.5,
+      });
+      hls.attachMedia(video);
+      hls.on(Hls.Events.MEDIA_ATTACHED, () => {
+        hls.loadSource(STREAM_URL);
+      });
+      hls.on(Hls.Events.MANIFEST_PARSED, () => {
+        setStat('Cargando…','warn');
+        const wantAuto = new URLSearchParams(location.search).get('autoplay')==='1';
+        if (wantAuto) { video.play().catch(()=>{}); }
+      });
+      hls.on(Hls.Events.LEVEL_UPDATED, (evt, data) => {
+        // Estimación de latencia ≈ liveSyncPosition - currentTime
+        try{
+          const live = hls.liveSyncPosition; // tiempo en segundos
+          if (Number.isFinite(live)){
+            const diff = Math.max(0, (live - video.currentTime) * 1000);
+            setLat(diff);
+          }
+        }catch(e){}
+      });
+      hls.on(Hls.Events.ERROR, (evt, data) => {
+        if (data.fatal) {
+          setStat('Reconectando…','warn');
+          hls.destroy();
+          setTimeout(initPlayer, 1200);
+        }
+      });
+      // Estado de reproducción
+      video.addEventListener('playing', ()=> setStat('Reproduciendo','ok'));
+      video.addEventListener('waiting', ()=> setStat('Buffering…','warn'));
+      video.addEventListener('pause',   ()=> setStat('Pausado','warn'));
+    } else {
+      setStat('HLS no soportado','bad');
+    }
+  }
+
+  function bindNative(video){
+    const startPlay = ()=> {
+      const wantAuto = new URLSearchParams(location.search).get('autoplay')==='1';
+      if (wantAuto) video.play().catch(()=>{});
+    };
+    video.addEventListener('loadedmetadata', startPlay, {once:true});
+    video.addEventListener('playing', ()=> setStat('Reproduciendo','ok'));
+    video.addEventListener('waiting', ()=> setStat('Buffering…','warn'));
+    video.addEventListener('pause',   ()=> setStat('Pausado','warn'));
+    // No tenemos liveSyncPosition nativo; mostramos “—”
+    setLat(null);
+  }
+})();
+</script>
 </body>
 </html>

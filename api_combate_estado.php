@@ -1,96 +1,88 @@
 <?php
-/* ==========================================================
-   api_combate_estado.php — Estado actual del combate (JSON)
-   Params (GET):
-     - pelea_id (int)  -> prioridad 1
-     - evento_id (int) -> si no hay pelea_id, toma pelea_actual_id de combate_estado
-   Respuesta:
-     { ok, evento_id, pelea_id, numero, categoria{nombre,rango}, modalidad, division,
-       total_rondas, estado{running,paused,ronda,duracion,descanso,remaining,activo},
-       rojo{nombre,escuela}, azul{nombre,escuela}, ganador, ts }
-   ========================================================== */
+// api_combate_estado.php — Publicador de estado/timer para overlay
+// Recibe POST desde combate_en_vivo.js (publishTimer/marcar/pausar) y guarda en combate_estado.
+//
+// Campos esperados (POST):
+//   evento_id (int)          — requerido
+//   pelea_actual_id (int)    — opcional (id de pelea en juego)
+//   activo (0|1)             — opcional (1 si el timer está en marcha)
+//   ronda_actual (int)       — opcional
+//   en_descanso (0|1)        — opcional
+//   epoch_inicio (int, unix) — opcional (inicio de la fase actual round/descanso)
+//   dur_round (int)          — opcional (segundos)
+//   dur_descanso (int)       — opcional (segundos)
+
 if (session_status() === PHP_SESSION_NONE) session_start();
 require_once __DIR__ . '/conexion.php';
-if (function_exists('mysqli_report')) mysqli_report(MYSQLI_REPORT_OFF);
-@$conexion->set_charset('utf8mb4');
 
 header('Content-Type: application/json; charset=utf-8');
-function out($a){ echo json_encode($a, JSON_UNESCAPED_UNICODE); exit; }
-function row($r){ return $r ? $r->fetch_assoc() : null; }
+header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+header('Pragma: no-cache');
 
-$pelea_id  = isset($_GET['pelea_id'])  ? (int)$_GET['pelea_id']  : 0;
-$evento_id = isset($_GET['evento_id']) ? (int)$_GET['evento_id'] : 0;
+if (!isset($conexion) || !($conexion instanceof mysqli)) {
+  http_response_code(500);
+  echo json_encode(['ok'=>false,'error'=>'db']);
+  exit;
+}
+if (function_exists('mysqli_report')) { mysqli_report(MYSQLI_REPORT_OFF); }
+@$conexion->set_charset('utf8mb4');
 
-/* === Resolver pelea activa si no viene pelea_id === */
-if ($pelea_id === 0) {
-  if ($evento_id === 0) {
-    $r = row($conexion->query("SELECT id FROM eventos_deportivos ORDER BY id DESC LIMIT 1"));
-    $evento_id = (int)($r['id'] ?? 0);
-  }
-  if ($evento_id > 0) {
-    $st = row($conexion->query("SELECT pelea_actual_id FROM combate_estado WHERE evento_id={$evento_id} AND activo=1 ORDER BY id DESC LIMIT 1"));
-    $pelea_id = (int)($st['pelea_actual_id'] ?? 0);
-  }
+function gi($k,$def=null){ if(!isset($_POST[$k])) return $def; $v=trim((string)$_POST[$k]); return ($v===''? $def : (int)$v); }
+
+// Asegurar tabla
+$conexion->query("
+  CREATE TABLE IF NOT EXISTS combate_estado (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    evento_id INT NOT NULL UNIQUE,
+    pelea_actual_id INT DEFAULT NULL,
+    activo TINYINT(1) NOT NULL DEFAULT 0,
+    ronda_actual INT DEFAULT 1,
+    en_descanso TINYINT(1) NOT NULL DEFAULT 0,
+    epoch_inicio INT DEFAULT NULL,
+    dur_round INT DEFAULT 180,
+    dur_descanso INT DEFAULT 60,
+    actualizado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+");
+
+$evento_id      = gi('evento_id', 0);
+if ($evento_id <= 0) { echo json_encode(['ok'=>false,'error'=>'evento_id']); exit; }
+
+$pelea_actual_id= gi('pelea_actual_id', null);
+$activo         = gi('activo', null);
+$ronda_actual   = gi('ronda_actual', null);
+$en_descanso    = gi('en_descanso', null);
+$epoch_inicio   = gi('epoch_inicio', null);
+$dur_round      = gi('dur_round', null);
+$dur_descanso   = gi('dur_descanso', null);
+
+// Build dinámico
+$cols = ['evento_id']; $ph=['?']; $types='i'; $vals=[ $evento_id ];
+
+$upd = [];
+
+if (!is_null($pelea_actual_id)){ $cols[]='pelea_actual_id'; $ph[]='?'; $types.='i'; $vals[]=$pelea_actual_id; $upd[]='pelea_actual_id=VALUES(pelea_actual_id)'; }
+if (!is_null($activo))        { $cols[]='activo';         $ph[]='?'; $types.='i'; $vals[]=$activo?1:0;       $upd[]='activo=VALUES(activo)'; }
+if (!is_null($ronda_actual))  { $cols[]='ronda_actual';   $ph[]='?'; $types.='i'; $vals[]=$ronda_actual;      $upd[]='ronda_actual=VALUES(ronda_actual)'; }
+if (!is_null($en_descanso))   { $cols[]='en_descanso';    $ph[]='?'; $types.='i'; $vals[]=$en_descanso?1:0;   $upd[]='en_descanso=VALUES(en_descanso)'; }
+if (!is_null($epoch_inicio))  { $cols[]='epoch_inicio';   $ph[]='?'; $types.='i'; $vals[]=$epoch_inicio;      $upd[]='epoch_inicio=VALUES(epoch_inicio)'; }
+if (!is_null($dur_round))     { $cols[]='dur_round';      $ph[]='?'; $types.='i'; $vals[]=$dur_round;         $upd[]='dur_round=VALUES(dur_round)'; }
+if (!is_null($dur_descanso))  { $cols[]='dur_descanso';   $ph[]='?'; $types.='i'; $vals[]=$dur_descanso;      $upd[]='dur_descanso=VALUES(dur_descanso)'; }
+
+if (count($cols)===1){
+  // Solo vino evento_id y nada para actualizar
+  echo json_encode(['ok'=>true,'noop'=>1]); exit;
 }
 
-if ($pelea_id === 0) out(['ok'=>false,'error'=>'Sin pelea activa','evento_id'=>$evento_id,'pelea_id'=>0]);
+$sql = "INSERT INTO combate_estado (".implode(',',$cols).")
+        VALUES (".implode(',',$ph).")
+        ON DUPLICATE KEY UPDATE ".implode(',', $upd).", actualizado_en=CURRENT_TIMESTAMP";
 
-/* === Datos de pelea + competidores + categoría === */
-$sql = "
-SELECT p.id AS pelea_id, p.evento_id, p.numero, p.total_rondas, p.modalidad, p.division, p.categoria_id, p.ganador,
-       cr.id   AS rojo_id,  CONCAT(COALESCE(cr.apellido,''),' ',COALESCE(cr.nombre,'')) AS rojo_nom,
-       cr.escuela AS rojo_escuela,
-       ca.id   AS azul_id,  CONCAT(COALESCE(ca.apellido,''),' ',COALESCE(ca.nombre,'')) AS azul_nom,
-       ca.escuela AS azul_escuela,
-       cat.nombre AS categoria_nombre, cat.peso_min, cat.peso_max
-FROM peleas_evento p
-LEFT JOIN competidores_evento cr ON cr.id = p.rojo_competidor_id
-LEFT JOIN competidores_evento ca ON ca.id = p.azul_competidor_id
-LEFT JOIN categorias_evento   cat ON cat.id = p.categoria_id
-WHERE p.id={$pelea_id}
-LIMIT 1";
-$pelea = row($conexion->query($sql));
-if (!$pelea) out(['ok'=>false,'error'=>'Pelea inexistente','pelea_id'=>$pelea_id]);
-
-$evento_id = (int)$pelea['evento_id'];
-
-/* === Estado crono (desde TU tabla combate_estado) === */
-$st = row($conexion->query("
-  SELECT ronda, running, paused, duracion, descanso, remaining, activo, UNIX_TIMESTAMP(actualizado_en) AS uts
-  FROM combate_estado
-  WHERE evento_id={$evento_id}
-  ORDER BY id DESC
-  LIMIT 1
-"));
-
-$estado = [
-  'ronda'    => (int)($st['ronda'] ?? 1),
-  'running'  => (int)($st['running'] ?? 0),
-  'paused'   => (int)($st['paused']  ?? 1),
-  'duracion' => (int)($st['duracion']?? 180),
-  'descanso' => (int)($st['descanso']?? 60),
-  'remaining'=> (int)($st['remaining']?? 180),
-  'activo'   => (int)($st['activo']   ?? 0),
-];
-
-$out = [
-  'ok'        => true,
-  'evento_id' => $evento_id,
-  'pelea_id'  => (int)$pelea['pelea_id'],
-  'numero'    => (int)($pelea['numero'] ?? 0),
-  'categoria' => [
-    'nombre' => (string)($pelea['categoria_nombre'] ?? ''),
-    'rango'  => ($pelea['peso_min']!==null && $pelea['peso_max']!==null)
-                ? ((float)$pelea['peso_min']).'–'.((float)$pelea['peso_max']).' kg' : '',
-  ],
-  'modalidad'    => (string)($pelea['modalidad'] ?? ''),
-  'division'     => (string)($pelea['division']  ?? ''),
-  'total_rondas' => (int)($pelea['total_rondas'] ?? 3),
-  'estado'       => $estado,
-  'rojo'         => ['nombre'=>(string)($pelea['rojo_nom'] ?? '—'), 'escuela'=>(string)($pelea['rojo_escuela'] ?? '')],
-  'azul'         => ['nombre'=>(string)($pelea['azul_nom'] ?? '—'), 'escuela'=>(string)($pelea['azul_escuela'] ?? '')],
-  'ganador'      => (string)($pelea['ganador'] ?? ''),
-  'ts'           => (int)($st['uts'] ?? time())
-];
-
-out($out);
+if ($st=$conexion->prepare($sql)){
+  $st->bind_param($types, ...$vals);
+  $st->execute();
+  $st->close();
+  echo json_encode(['ok'=>true]);
+} else {
+  echo json_encode(['ok'=>false,'error'=>'prepare']);
+}
