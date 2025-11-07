@@ -1,6 +1,6 @@
 <?php
 // overlay_obs.php — Overlay ESPN/UFC para OBS (barra inferior)
-// Lee estado de combate_en_vivo.php?ajax=estado&pelea_id=...
+// Robusto: prueba varios endpoints de estado y mapea distintos nombres de campos.
 if (session_status() === PHP_SESSION_NONE) session_start();
 header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
 header('Pragma: no-cache');
@@ -42,6 +42,7 @@ if ($pelea_id <= 0) { http_response_code(400); echo 'Falta pelea_id'; exit; }
   <div id="dbg" class="debug"></div>
 
   <div class="bar">
+    <!-- ROJO -->
     <div id="left" class="plate">
       <img id="redLogo" class="logo" alt="">
       <div>
@@ -51,11 +52,13 @@ if ($pelea_id <= 0) { http_response_code(400); echo 'Falta pelea_id'; exit; }
       </div>
     </div>
 
+    <!-- Centro -->
     <div class="center">
       <div id="time" class="time">3:00</div>
       <div id="round" class="round">Round 1</div>
     </div>
 
+    <!-- AZUL -->
     <div id="right" class="plate right">
       <div>
         <div class="corner blue" style="text-align:right">RINCÓN AZUL</div>
@@ -92,12 +95,21 @@ let last=null, errCount=0;
 function fmt(sec){sec=Math.max(0,Math.floor(sec||0));const m=Math.floor(sec/60),s=String(sec%60).padStart(2,'0');return `${m}:${s}`;}
 function textOrHide(el,val){ if(!el)return; if(val&&String(val).trim()!==''){el.textContent=val;el.style.display='';}else{el.textContent='';el.style.display='none';} }
 
-// ——— Estado amigable (prioriza running/activo sobre paused) ———
+// Flags tolerantes a distintos nombres
+function flag(obj, ...keys){
+  for (const k of keys){ if (obj && Object.prototype.hasOwnProperty.call(obj,k)) return !!obj[k]; }
+  return false;
+}
+function num(obj, ...keys){
+  for (const k of keys){ if (obj && obj[k]!=null && !isNaN(obj[k])) return Number(obj[k]); }
+  return null;
+}
+
 function computeFlags(tm){
-  const running = !!(tm.running ?? tm.activo ?? 0);
-  const rest    = !!tm.en_descanso;
-  // si viene paused=1 pero running=1, lo tomamos como EN VIVO
-  const paused  = !!tm.paused && !running && !rest;
+  const running = flag(tm,'running','activo','en_juego');
+  const rest    = flag(tm,'en_descanso','descanso');
+  // si viene paused=1 pero hay running o rest, NO mostramos pausado
+  const paused  = flag(tm,'paused','pausado') && !running && !rest;
   return { running, rest, paused };
 }
 
@@ -117,34 +129,32 @@ function paint(){
   const aTags=[A.division,A.peso,A.modalidad].filter(Boolean).join(' • ');
   textOrHide(UI.redTags,rTags); textOrHide(UI.blueTags,aTags);
 
-  // —— Tiempo restante ——
-  let remain=null;
-  if (typeof tm.remaining === 'number') {
-    // servidor ya lo calcula
-    remain = tm.remaining;
-  } else {
-    const dur = flags.rest ? (tm.dur_descanso||tm.descanso||60) : (tm.dur_round||tm.duracion||180);
-    if (typeof tm.elapsed === 'number') {
-      // si el servidor da elapsed, lo usamos
-      remain = Math.max(0, dur - tm.elapsed);
-    } else if (tm.epoch_inicio) {
-      const now = Math.floor(Date.now()/1000);
-      const elapsed = Math.max(0, now - (tm.epoch_inicio||0));
-      // si está pausado y hay remaining_at_pause, lo congelamos ahí
-      if (flags.paused && typeof tm.remaining_at_pause === 'number') {
-        remain = tm.remaining_at_pause;
-      } else {
-        remain = Math.max(0, dur - elapsed);
-      }
+  // Tiempo restante
+  let remain = null;
+  const dur = flags.rest ? (num(tm,'dur_descanso','descanso') ?? 60) : (num(tm,'dur_round','duracion') ?? 180);
+  const remaining = num(tm,'remaining','restante');
+  const elapsed   = num(tm,'elapsed','transcurrido');
+  const epoch     = num(tm,'epoch_inicio','epoch');
+
+  if (remaining != null) {
+    remain = remaining;
+  } else if (elapsed != null) {
+    remain = Math.max(0, dur - elapsed);
+  } else if (epoch != null && epoch > 0) {
+    if (flags.paused && num(tm,'remaining_at_pause','restante_pausa') != null){
+      remain = num(tm,'remaining_at_pause','restante_pausa');
     } else {
-      remain = dur; // fallback
+      const now = Math.floor(Date.now()/1000);
+      remain = Math.max(0, dur - Math.max(0, now - epoch));
     }
+  } else {
+    remain = dur; // fallback
   }
 
   UI.time.textContent = fmt(remain);
-  UI.round.textContent = 'Round ' + (tm.ronda || tm.ronda_actual || 1);
+  UI.round.textContent = 'Round ' + (num(tm,'ronda','ronda_actual') ?? 1);
 
-  // —— Etiqueta de estado ——
+  // Estado
   let lbl='EN VIVO', cls='live';
   if (flags.rest){ lbl='DESCANSO'; cls='rest'; }
   else if (flags.paused){ lbl='PAUSADO'; cls='paused'; }
@@ -152,39 +162,59 @@ function paint(){
   UI.status.className='status '+cls;
   UI.status.textContent=lbl;
 
-  // Debug visible para diagnosticar
   if (UI.dbg){
     UI.dbg.textContent =
-      `running:${flags.running?'1':'0'}  paused:${tm.paused?'1':'0'}  descanso:${flags.rest?'1':'0'}  `+
-      `rem:${typeof remain==='number'?remain:'?'}  dur:${tm.dur_round||tm.duracion||180}  `+
-      `epoch:${tm.epoch_inicio||'-'}  pull:${new Date().toLocaleTimeString()}`;
+      `running:${flags.running?1:0} paused:${flag(tm,'paused','pausado')?1:0} descanso:${flags.rest?1:0} `+
+      `rem:${remain} dur:${dur} epoch:${epoch??'-'} pull:${new Date().toLocaleTimeString()}`;
   }
 }
 
-// ——— Polling a la API (URL relativa a esta misma carpeta) ———
-function apiUrl(){
-  const u = new URL('combate_en_vivo.php', location.href);
-  u.searchParams.set('ajax','estado');
-  u.searchParams.set('pelea_id', String(peleaId));
-  u.searchParams.set('_', String(Date.now()));
-  return u.toString();
+// URLs a probar (en este orden)
+function endpoints(){
+  const base = new URL(location.href);
+  const list = [];
+
+  // 1) ajax interno del panel
+  const u1 = new URL('combate_en_vivo.php', base);
+  u1.searchParams.set('ajax','estado');
+  u1.searchParams.set('pelea_id', String(peleaId));
+  u1.searchParams.set('_', String(Date.now()));
+  list.push(u1.toString());
+
+  // 2) API dedicada a estado
+  const u2 = new URL('api_combate_estado.php', base);
+  u2.searchParams.set('pelea_id', String(peleaId));
+  u2.searchParams.set('_', String(Date.now()));
+  list.push(u2.toString());
+
+  return list;
 }
 
 async function pull(){
-  try{
-    const r = await fetch(apiUrl(), {cache:'no-store', credentials:'same-origin'});
-    if(!r.ok) throw new Error('HTTP '+r.status);
-    const j = await r.json();
-    if(!j || !j.ok) throw new Error('payload');
-    last = j.data; errCount = 0;
+  const urls = endpoints();
+  let ok = false, data = null, raw = null;
+
+  for (const url of urls){
+    try{
+      const r = await fetch(url, {cache:'no-store', credentials:'same-origin'});
+      if(!r.ok) continue;
+      raw = await r.json();
+      // adaptamos posibles formatos
+      if (raw && raw.ok && raw.data){ data = raw.data; ok = true; break; }
+      if (raw && (raw.timer || raw.azul || raw.rojo)){ data = raw; ok = true; break; }
+    }catch(e){ /* intenta el siguiente */ }
+  }
+
+  if (ok){
+    last = data; errCount = 0;
     if(UI.status && (UI.status.textContent==='CONECTANDO…' || UI.status.classList.contains('err'))){
       UI.status.textContent='EN VIVO'; UI.status.className='status live';
     }
     paint();
-  }catch(e){
+  } else {
     errCount++;
     if(UI.status){ UI.status.textContent='ERROR ('+errCount+')'; UI.status.className='status err'; }
-    if(UI.dbg){ UI.dbg.textContent='API ERROR • '+ new Date().toLocaleTimeString(); }
+    if(UI.dbg){ UI.dbg.textContent='Sin estado válido • '+ new Date().toLocaleTimeString(); }
   }
 }
 
