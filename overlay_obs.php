@@ -124,32 +124,56 @@ function paintStatic(data){
 // calcula snapshot desde payload del server (tolerante a claves)
 function updateSnapshot(data){
   const tm = data.timer || {};
-  const running = flag(tm,'running','activo','en_juego');
-  const rest    = flag(tm,'en_descanso','descanso');
-  const paused  = flag(tm,'paused','pausado') && !running && !rest;
+  const estadoTxt = (tm.estado || data.estado || '').toString().toLowerCase();
 
-  const durRound = num(tm,'dur_round','duracion') ?? 180;
-  const durRest  = num(tm,'dur_descanso','descanso') ?? 60;
-  const roundN   = num(tm,'ronda','ronda_actual') ?? 1;
+  // señales conocidas
+  let runningFlag = ['running','activo','en_juego','enJuego','en-curso','en_curso','activo_flag']
+      .some(k => !!tm[k]);
+  const restFlag    = ['en_descanso','descanso'].some(k => !!tm[k]);
+  const pausedFlag  = ['paused','pausado'].some(k => !!tm[k]);
 
-  // de dónde saco remaining “base”
-  let remain = num(tm,'remaining','restante');
-  const elapsed = num(tm,'elapsed','transcurrido');
-  const epoch   = num(tm,'epoch_inicio','epoch');
+  const durRound = Number(tm.dur_round ?? tm.duracion ?? 180) || 180;
+  const durRest  = Number(tm.dur_descanso ?? tm.descanso ?? 60) || 60;
+  const roundN   = Number(tm.ronda ?? tm.ronda_actual ?? 1) || 1;
 
-  if (remain == null && elapsed != null){
-    remain = Math.max(0, (rest?durRest:durRound) - elapsed);
-  } else if (remain == null && epoch){
-    const now = Math.floor(Date.now()/1000);
-    remain = Math.max(0, (rest?durRest:durRound) - Math.max(0, now - epoch));
+  // señales de tiempo
+  const epoch   = (tm.epoch_inicio!=null) ? Number(tm.epoch_inicio) : null;
+  const elapsed = (tm.elapsed!=null) ? Number(tm.elapsed) : (tm.transcurrido!=null ? Number(tm.transcurrido) : null);
+  let   remain  = (tm.remaining!=null) ? Number(tm.remaining) : (tm.restante!=null ? Number(tm.restante) : null);
+
+  // si falta remaining, lo reconstruyo
+  if (remain == null) {
+    const baseDur = restFlag ? durRest : durRound;
+    if (elapsed != null) {
+      remain = Math.max(0, baseDur - Math.max(0, Math.floor(elapsed)));
+    } else if (epoch) {
+      const now = Math.floor(Date.now()/1000);
+      remain = Math.max(0, baseDur - Math.max(0, now - epoch));
+    } else {
+      remain = baseDur; // sin datos, muestro full
+    }
   }
-  if (remain == null) remain = rest?durRest:durRound;
 
-  snap.serverAt = performance.now();  // alta precisión
+  // HEURÍSTICAS para "running"
+  // 1) Texto de estado
+  if (['en juego','enjuego','activo','activa','en curso','en_curso'].includes(estadoTxt)) {
+    runningFlag = true;
+  }
+  // 2) Si hay epoch_inicio y NO está explícitamente pausado => está corriendo
+  if (epoch && !pausedFlag && !restFlag) runningFlag = true;
+  // 3) Si remain < duración y >0 => está corriendo
+  const baseDur = restFlag ? durRest : durRound;
+  if (remain > 0 && remain < baseDur && !restFlag) runningFlag = true;
+
+  // El overlay sólo mostrará "PAUSADO" si realmente vemos pausa clara
+  const isPaused = pausedFlag && !runningFlag && !restFlag;
+
+  // Guardar snapshot
+  snap.serverAt = performance.now();
   snap.remainAt = remain;
-  snap.running  = running;
-  snap.rest     = rest;
-  snap.paused   = paused;
+  snap.running  = runningFlag;
+  snap.rest     = restFlag;
+  snap.paused   = isPaused;
   snap.durRound = durRound;
   snap.durRest  = durRest;
   snap.round    = roundN;
