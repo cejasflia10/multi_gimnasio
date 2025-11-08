@@ -1,6 +1,5 @@
 <?php
-// overlay_obs.php — Overlay ESPN/UFC para OBS con animación local del timer.
-// Funciona aunque el endpoint no actualice remaining en cada request.
+// overlay_obs.php — Overlay OBS (UFC/ESPN style) con normalización de flags y timer suave
 if (session_status() === PHP_SESSION_NONE) session_start();
 header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
 header('Pragma: no-cache');
@@ -11,8 +10,8 @@ if ($pelea_id <= 0) { http_response_code(400); echo 'Falta pelea_id'; exit; }
 <!doctype html>
 <html lang="es">
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1" />
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
 <title>Overlay ESPN</title>
 <style>
   html,body{margin:0;padding:0;background:transparent;overflow:hidden}
@@ -38,9 +37,7 @@ if ($pelea_id <= 0) { http_response_code(400); echo 'Falta pelea_id'; exit; }
 <body>
 <div class="wrap">
   <div id="status" class="status">CONECTANDO…</div>
-
   <div class="bar">
-    <!-- ROJO -->
     <div id="left" class="plate">
       <img id="redLogo" class="logo" alt="">
       <div>
@@ -49,14 +46,10 @@ if ($pelea_id <= 0) { http_response_code(400); echo 'Falta pelea_id'; exit; }
         <div class="meta"><span id="redEsc" class="pill" style="display:none"></span><span id="redTags" class="pill" style="display:none"></span></div>
       </div>
     </div>
-
-    <!-- Centro -->
     <div class="center">
       <div id="time" class="time">3:00</div>
       <div id="round" class="round">Round 1</div>
     </div>
-
-    <!-- AZUL -->
     <div id="right" class="plate right">
       <div>
         <div class="corner blue" style="text-align:right">RINCÓN AZUL</div>
@@ -71,7 +64,6 @@ if ($pelea_id <= 0) { http_response_code(400); echo 'Falta pelea_id'; exit; }
 <script>
 const peleaId = <?= (int)$pelea_id ?>;
 
-// UI refs
 const UI = {
   status:document.getElementById('status'),
   time:document.getElementById('time'),
@@ -88,162 +80,126 @@ const UI = {
   blueTags:document.getElementById('blueTags'),
 };
 
-// snapshot del server para animar local
-let lastPayload=null;
-let snap = {
-  serverAt: 0,      // epoch ms de última lectura
-  remainAt: 180,    // segundos que reportó el server
-  running: false,
-  rest: false,
-  paused: false,
-  durRound: 180,
-  durRest: 60,
-  round: 1
-};
+let last=null;           // último payload del server
+let errCount=0;
+let clientRemain=null;   // cuenta local en segundos
+let lastTick=Date.now(); // para descontar suave
+let enDesc=false, paused=false, activo=false;
 
-function fmt(sec){sec=Math.max(0,Math.floor(sec||0));const m=Math.floor(sec/60),s=String(sec%60).padStart(2,'0');return `${m}:${s}`;}
-function textOrHide(el,val){ if(!el)return; if(val&&String(val).trim()!==''){el.textContent=val;el.style.display='';}else{el.textContent='';el.style.display='none';} }
-function flag(o,...k){ for(const x of k){ if(o && Object.prototype.hasOwnProperty.call(o,x)) return !!o[x]; } return false; }
-function num(o,...k){ for(const x of k){ if(o && o[x]!=null && !isNaN(o[x])) return Number(o[x]); } return null; }
+function asBool(v){
+  // 1/0, "1"/"0", true/false
+  return v===true || v===1 || v==="1";
+}
+function asNum(v, def=0){
+  const n = Number(v);
+  return Number.isFinite(n) ? n : def;
+}
+function fmt(sec){
+  sec = Math.max(0, Math.floor(sec||0));
+  const m = Math.floor(sec/60);
+  const s = String(sec%60).padStart(2,'0');
+  return `${m}:${s}`;
+}
+function textOrHide(el,val){
+  if(!el) return;
+  if(val && String(val).trim()!==''){el.textContent=val; el.style.display='';}
+  else {el.textContent=''; el.style.display='none';}
+}
 
-// pinta nombres/logos y estado textual
-function paintStatic(data){
-  const A=data.azul||{}, R=data.rojo||{};
-  UI.redName.textContent=R.nombre||'ROJO';
-  UI.blueName.textContent=A.nombre||'AZUL';
-  textOrHide(UI.redEsc,R.escuela); textOrHide(UI.blueEsc,A.escuela);
+function paintStatic(){
+  if(!last) return;
+  const A=last.azul||{}, R=last.rojo||{}, tm=last.timer||{};
+
+  UI.redName.textContent = R.nombre || 'ROJO';
+  UI.blueName.textContent= A.nombre || 'AZUL';
+  textOrHide(UI.redEsc, R.escuela);
+  textOrHide(UI.blueEsc,A.escuela);
 
   if(R.logo){ UI.redLogo.src=R.logo; UI.left.classList.add('has-logo'); } else { UI.left.classList.remove('has-logo'); }
   if(A.logo){ UI.blueLogo.src=A.logo; UI.right.classList.add('has-logo'); } else { UI.right.classList.remove('has-logo'); }
 
-  const rTags=[R.division,R.peso,R.modalidad].filter(Boolean).join(' • ');
-  const aTags=[A.division,A.peso,A.modalidad].filter(Boolean).join(' • ');
-  textOrHide(UI.redTags,rTags); textOrHide(UI.blueTags,aTags);
+  const rTags = [R.division,R.peso,R.modalidad].filter(Boolean).join(' • ');
+  const aTags = [A.division,A.peso,A.modalidad].filter(Boolean).join(' • ');
+  textOrHide(UI.redTags,rTags);
+  textOrHide(UI.blueTags,aTags);
+
+  UI.round.textContent = 'Round ' + (tm.ronda || tm.ronda_actual || 1);
 }
 
-// calcula snapshot desde payload del server (tolerante a claves)
-function updateSnapshot(data){
-  const tm = data.timer || {};
-  const estadoTxt = (tm.estado || data.estado || '').toString().toLowerCase();
-
-  // señales conocidas
-  let runningFlag = ['running','activo','en_juego','enJuego','en-curso','en_curso','activo_flag']
-      .some(k => !!tm[k]);
-  const restFlag    = ['en_descanso','descanso'].some(k => !!tm[k]);
-  const pausedFlag  = ['paused','pausado'].some(k => !!tm[k]);
-
-  const durRound = Number(tm.dur_round ?? tm.duracion ?? 180) || 180;
-  const durRest  = Number(tm.dur_descanso ?? tm.descanso ?? 60) || 60;
-  const roundN   = Number(tm.ronda ?? tm.ronda_actual ?? 1) || 1;
-
-  // señales de tiempo
-  const epoch   = (tm.epoch_inicio!=null) ? Number(tm.epoch_inicio) : null;
-  const elapsed = (tm.elapsed!=null) ? Number(tm.elapsed) : (tm.transcurrido!=null ? Number(tm.transcurrido) : null);
-  let   remain  = (tm.remaining!=null) ? Number(tm.remaining) : (tm.restante!=null ? Number(tm.restante) : null);
-
-  // si falta remaining, lo reconstruyo
-  if (remain == null) {
-    const baseDur = restFlag ? durRest : durRound;
-    if (elapsed != null) {
-      remain = Math.max(0, baseDur - Math.max(0, Math.floor(elapsed)));
-    } else if (epoch) {
-      const now = Math.floor(Date.now()/1000);
-      remain = Math.max(0, baseDur - Math.max(0, now - epoch));
-    } else {
-      remain = baseDur; // sin datos, muestro full
-    }
-  }
-
-  // HEURÍSTICAS para "running"
-  // 1) Texto de estado
-  if (['en juego','enjuego','activo','activa','en curso','en_curso'].includes(estadoTxt)) {
-    runningFlag = true;
-  }
-  // 2) Si hay epoch_inicio y NO está explícitamente pausado => está corriendo
-  if (epoch && !pausedFlag && !restFlag) runningFlag = true;
-  // 3) Si remain < duración y >0 => está corriendo
-  const baseDur = restFlag ? durRest : durRound;
-  if (remain > 0 && remain < baseDur && !restFlag) runningFlag = true;
-
-  // El overlay sólo mostrará "PAUSADO" si realmente vemos pausa clara
-  const isPaused = pausedFlag && !runningFlag && !restFlag;
-
-  // Guardar snapshot
-  snap.serverAt = performance.now();
-  snap.remainAt = remain;
-  snap.running  = runningFlag;
-  snap.rest     = restFlag;
-  snap.paused   = isPaused;
-  snap.durRound = durRound;
-  snap.durRest  = durRest;
-  snap.round    = roundN;
-
-  // Estado visual
+function updateStatus(){
   let lbl='EN VIVO', cls='live';
-  if (snap.rest){ lbl='DESCANSO'; cls='rest'; }
-  else if (snap.paused){ lbl='PAUSADO'; cls='paused'; }
-  else if (!snap.running){ lbl='LISTO'; cls='wait'; }
-  UI.status.className='status '+cls;
-  UI.status.textContent=lbl;
-
-  UI.round.textContent = 'Round ' + snap.round;
-}
-
-// anima el cronómetro localmente
-function paintClock(){
-  let remain = snap.remainAt;
-  if (snap.running && !snap.paused){
-    const elapsedMs = Math.max(0, performance.now() - snap.serverAt);
-    remain = Math.max(0, snap.remainAt - Math.floor(elapsedMs/1000));
-  }
-  UI.time.textContent = fmt(remain);
-}
-
-// endpoints a probar (ajax viejo y API estado)
-function endpoints(){
-  const base = new URL(location.href);
-  const list = [];
-  const u1 = new URL('combate_en_vivo.php', base);
-  u1.searchParams.set('ajax','estado');
-  u1.searchParams.set('pelea_id', String(peleaId));
-  u1.searchParams.set('_', String(Date.now()));
-  list.push(u1.toString());
-
-  const u2 = new URL('api_combate_estado.php', base);
-  u2.searchParams.set('pelea_id', String(peleaId));
-  u2.searchParams.set('_', String(Date.now()));
-  list.push(u2.toString());
-
-  return list;
+  if(enDesc){ lbl='DESCANSO'; cls='rest'; }
+  if(paused){ lbl='PAUSADO'; cls='paused'; }
+  if(!activo){ lbl='LISTO'; cls='wait'; }
+  UI.status.className = 'status '+cls;
+  UI.status.textContent = lbl;
 }
 
 async function pull(){
-  const urls = endpoints();
-  for (const url of urls){
-    try{
-      const r = await fetch(url, {cache:'no-store', credentials:'same-origin'});
-      if(!r.ok) continue;
-      const raw = await r.json();
-      const data = (raw && raw.ok && raw.data) ? raw.data
-                   : (raw && (raw.timer || raw.azul || raw.rojo)) ? raw
-                   : null;
-      if (!data) continue;
+  // MISMO HOST: evita CORS y proxies que cacheen
+  const base = location.origin;
+  const url  = `${base}/combate_en_vivo.php?ajax=estado&pelea_id=${peleaId}&_=${Date.now()}`;
+  try{
+    const r = await fetch(url, {cache:'no-store', credentials:'omit'});
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    const j = await r.json();
+    if(!j || !j.ok) throw new Error('payload');
 
-      lastPayload = data;
-      paintStatic(data);
-      updateSnapshot(data);
-      return; // listo
-    }catch(e){ /* probar siguiente */ }
+    last = j.data || {};
+    const tm = last.timer || {};
+
+    // Normalizar flags
+    enDesc = asBool(tm.en_descanso);
+    paused = asBool(tm.paused);
+    // "activo" puede venir como 'activo' o 'running'
+    activo = asBool(tm.activo) || asBool(tm.running);
+
+    // Calcular remaining base
+    if (typeof tm.remaining === 'number') {
+      clientRemain = tm.remaining;
+    } else {
+      const durRound = asNum(tm.dur_round || tm.duracion, 180);
+      const durDesc  = asNum(tm.dur_descanso || tm.descanso, 60);
+      const epoch    = asNum(tm.epoch_inicio, 0); // segundos desde 1970
+      if (epoch > 0 && activo && !paused) {
+        const now = Math.floor(Date.now()/1000);
+        const dur = enDesc ? durDesc : durRound;
+        clientRemain = Math.max(0, dur - Math.max(0, now - epoch));
+      } else {
+        // Fallback si está pausado o sin epoch: mostrar tope del período actual
+        clientRemain = enDesc ? durDesc : (asNum(tm.remaining, durRound));
+      }
+    }
+
+    lastTick = Date.now();
+    paintStatic();
+    updateStatus();
+    errCount = 0;
+  }catch(e){
+    errCount++;
+    UI.status.className = 'status err';
+    UI.status.textContent = 'ERROR ('+errCount+')';
   }
-  // si nada respondió:
-  UI.status.className='status err';
-  UI.status.textContent='ERROR';
 }
 
-// ciclos: poll al server + animación local a 4 Hz
+// Ticker local de 60 FPS aprox para que el número corra suave
+function tick(){
+  const now = Date.now();
+  const dt = (now - lastTick)/1000; // segundos
+  lastTick = now;
+
+  if (clientRemain != null && activo && !paused) {
+    clientRemain = Math.max(0, clientRemain - dt);
+  }
+  UI.time.textContent = fmt(clientRemain==null?0:clientRemain);
+
+  requestAnimationFrame(tick);
+}
+
+// Primeros disparos
 pull();
-setInterval(pull, 1000);
-setInterval(paintClock, 250);
+setInterval(pull, 1000); // actualizar desde servidor cada 1s (con cache-buster)
+requestAnimationFrame(tick);
 </script>
 </body>
 </html>
