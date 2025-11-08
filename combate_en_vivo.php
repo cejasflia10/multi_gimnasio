@@ -17,8 +17,8 @@ require_once __DIR__ . '/conexion.php';
 error_reporting(E_ALL);
 ini_set('display_errors', '1');
 header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
-header('Pragma: no-cache');        // ✅ corregido
-header('Expires: 0');
+header('Pragma', 'no-cache');
+header('Expires', '0');
 if (function_exists('opcache_invalidate')) { @opcache_invalidate(__FILE__, true); }
 $__BUILD = @filemtime(__FILE__) ?: time();
 
@@ -47,11 +47,11 @@ function get_int_qs(array $src, string $key, ?int $def=null): ?int {
   return (int)$v;
 }
 function json_clean_headers(){
-  while (ob_get_level()) { ob_end_clean(); }
-  header_remove('Set-Cookie');
+  while (ob_get_level()) { @ob_end_clean(); }
+  @header_remove('Set-Cookie');
   header('Content-Type: application/json; charset=utf-8');
   header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
-  header('Pragma: no-cache');
+  header('Pragma', 'no-cache');
 }
 
 /* ====== Tabla combate_estado: crear y asegurar columnas ====== */
@@ -96,7 +96,7 @@ ensure_combate_estado($conexion);
 $RESULTADOS_RUTA = 'resultados_combates.php';
 
 /* ===== Sonidos ===== */
-$WEB_SND_BASE  = '/multi_gimnasio/assets/sounds/';
+$WEB_SND_BASE  = '/multi_gimnasio/assets/sounds/'; // ajustá si tu raíz es otra
 $DOC_ROOT      = rtrim($_SERVER['DOCUMENT_ROOT'] ?? '', '/');
 $LOCAL_SND_DIR = $DOC_ROOT . $WEB_SND_BASE;
 function pickSoundFile(string $localDir, string $webBase, array $candidates): string {
@@ -133,8 +133,7 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'estado') {
       'running'=>0, 'paused'=>1,
       'en_descanso'=>0, 'remaining'=>180,
       'epoch_inicio'=>null, 'duracion'=>180, 'dur_round'=>180,
-      'descanso'=>60, 'dur_descanso'=>60,
-      'pelea_actual_id'=>null       // ✅ expuesto para el overlay
+      'descanso'=>60, 'dur_descanso'=>60
     ]
   ];
 
@@ -183,7 +182,6 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'estado') {
               $data['timer']['epoch_inicio'] = $epoch ? (int)$epoch : null;
               $data['timer']['dur_round']    = (int)($dR ?: $data['timer']['duracion']);
               $data['timer']['dur_descanso'] = (int)($dD ?: $data['timer']['descanso']);
-              $data['timer']['pelea_actual_id'] = $pid ? (int)$pid : null;   // ✅ NUEVO
             }
             $st2->close();
           }
@@ -556,7 +554,7 @@ $return_to = 'ver_peleas_evento.php'.($evento_id?('?evento_id='.(int)$evento_id)
 
 $__t_init = isset($timerDur) ? (int)$timerDur : 120;
 $__m_init = (int)floor($__t_init/60);
-$__s_init = str_pad((string)$__t_init%60, 2, '0', STR_PAD_LEFT);
+$__s_init = str_pad((string)($__t_init % 60), 2, '0', STR_PAD_LEFT);
 
 ?>
 <!DOCTYPE html>
@@ -726,11 +724,28 @@ $__s_init = str_pad((string)$__t_init%60, 2, '0', STR_PAD_LEFT);
 <script>
 (function(){
   /* ====== Timer ====== */
-  let duration=<?= (int)$timerDur ?>, rest=<?= (int)$timerRest ?>, remain=<?= (int)$timerDur ?>, round=1, t=null, inRest=false;
-  const timer=document.getElementById('timer'), rnd=document.getElementById('round');
-  const selDur=document.getElementById('selDur'), selRest=document.getElementById('selRest');
-  const btnStart=document.getElementById('btnStart'), btnPause=document.getElementById('btnPause'),
-        btnReset=document.getElementById('btnReset'), btnNext=document.getElementById('btnNext']);
+  let duration = <?= (int)$timerDur ?>;
+  let rest     = <?= (int)$timerRest ?>;
+  let remain   = duration;
+  let round    = 1;
+  let t        = null;
+  let inRest   = false;
+  let running  = false;
+
+  const timer   = document.getElementById('timer');
+  const rnd     = document.getElementById('round');
+  const selDur  = document.getElementById('selDur');
+  const selRest = document.getElementById('selRest');
+  const btnStart= document.getElementById('btnStart');
+  const btnPause= document.getElementById('btnPause');
+  const btnReset= document.getElementById('btnReset');
+  const btnNext = document.getElementById('btnNext');
+
+  function setRunning(state){
+    running = !!state;
+    btnStart.disabled = running;
+    btnPause.disabled = !running;
+  }
 
   // ======= PUBLICACIÓN DE TIMER AL VIVO =======
   const eventoId = <?= $evento_id ? (int)$evento_id : 0 ?>;
@@ -752,11 +767,11 @@ $__s_init = str_pad((string)$__t_init%60, 2, '0', STR_PAD_LEFT);
     fd.append('activo',    '1');
 
     fd.append('ronda',     String(round));
-    fd.append('running',   t ? '1' : '0');
-    fd.append('paused',    t ? '0' : '1');
+    fd.append('running',   running ? '1' : '0');
+    fd.append('paused',    running ? '0' : '1');
     fd.append('duracion',  String(duration));
     fd.append('descanso',  String(rest));
-    fd.append('remaining', String(Math.max(0,remain)));
+    fd.append('remaining', String(Math.max(0, remain)));
 
     // Compat
     fd.append('ronda_actual', String(round));
@@ -779,55 +794,97 @@ $__s_init = str_pad((string)$__t_init%60, 2, '0', STR_PAD_LEFT);
     try{ await fetch('combate_en_vivo.php?ajax=pausar_actual', {method:'POST', body:fd, cache:'no-store'}); }catch(e){}
   }
 
-  function clamp(n,min,max){n=parseInt(n,10);if(isNaN(n))return min;return Math.max(min,Math.min(max,n));}
-  function fmt(s){const m=Math.floor(s/60), ss=String(s%60).padStart(2,'0'); return `${m}:${ss}`;}
-  function paint(){ timer.textContent=fmt(remain); rnd.textContent=round; }
+  function clamp(n,min,max){
+    const x = parseInt(n,10);
+    if (Number.isNaN(x)) return min;
+    return Math.max(min, Math.min(max, x));
+  }
+  function fmt(s){
+    s = Math.max(0, s|0);
+    const m = Math.floor(s/60);
+    const ss = String(s%60).padStart(2,'0');
+    return `${m}:${ss}`;
+  }
+  function paint(){
+    timer.textContent = fmt(remain);
+    rnd.textContent   = String(round);
+  }
+  function stopTick(){
+    if (t){ clearInterval(t); t=null; }
+    setRunning(false);
+  }
+  function startTick(){
+    if (t) return;
+    setRunning(true);
+    t = setInterval(tick, 1000);
+  }
   function tick(){
-    if(remain>0){
+    if (remain > 0){
       remain--;
-      if(remain===10){ try{document.getElementById('snd-10').play().catch(()=>{});}catch(e){} }
+      if (remain === 10){
+        try{document.getElementById('snd-10').play().catch(()=>{});}catch(e){}
+      }
       paint();
       publishTimer(false);
       return;
     }
-    if(!inRest){
+    // Cambio de fase
+    if (!inRest){
       try{document.getElementById('snd-roundend').play().catch(()=>{});}catch(e){}
-      inRest=true; remain=rest;
+      inRest = true;
+      remain = rest;
     } else {
       try{document.getElementById('snd-restend').play().catch(()=>{});}catch(e){}
-      inRest=false; round++; remain=duration;
+      inRest = false;
+      round++;
+      remain = duration;
     }
     paint();
     publishTimer(true);
   }
-  btnStart.onclick=async ()=>{
-    if(!t){
-      t=setInterval(tick,1000);
+
+  btnStart.onclick = async ()=>{
+    if (!t){
+      startTick();
       try{document.getElementById('snd-start').play().catch(()=>{});}catch(e){}
       await marcarActual();
       publishTimer(true);
     }
   };
-  btnPause.onclick=async ()=>{
-    if(t){clearInterval(t); t=null;}
+  btnPause.onclick = async ()=>{
+    stopTick();
     await pausarActual();
     publishTimer(true);
   };
-  btnReset.onclick=async ()=>{
-    if(t){clearInterval(t); t=null;}
-    inRest=false; round=1; remain=duration; paint();
+  btnReset.onclick = async ()=>{
+    stopTick();
+    inRest = false; round = 1; remain = duration;
+    paint();
     await pausarActual();
     publishTimer(true);
   };
-  btnNext.onclick =async ()=>{
-    if(t){clearInterval(t); t=null;}
-    inRest=false; round++; remain=duration; paint();
+  btnNext.onclick = async ()=>{
+    stopTick();
+    inRest = false; round++; remain = duration;
+    paint();
     await marcarActual();
     publishTimer(true);
   };
 
-  selDur.onchange =()=>{ duration=clamp(selDur.value,30,900); selDur.value=duration; if(!inRest&&remain>duration) remain=duration; paint(); publishTimer(true); };
-  selRest.onchange=()=>{ rest=clamp(selRest.value,10,600); selRest.value=rest; if(inRest&&remain>rest) remain=rest; paint(); publishTimer(true); };
+  selDur.onchange = ()=>{
+    duration = clamp(selDur.value, 30, 900);
+    selDur.value = String(duration);
+    if (!inRest && remain > duration) remain = duration;
+    paint();
+    publishTimer(true);
+  };
+  selRest.onchange = ()=>{
+    rest = clamp(selRest.value, 10, 600);
+    selRest.value = String(rest);
+    if (inRest && remain > rest) remain = rest;
+    paint();
+    publishTimer(true);
+  };
 
   /* ====== Rondas con botones ====== */
   const MAX_ROUNDS = 12;
@@ -845,7 +902,7 @@ $__s_init = str_pad((string)$__t_init%60, 2, '0', STR_PAD_LEFT);
   function renderRows(){
     let html = '';
     for(let r=1; r<=rondasEnJuego; r++){
-      const val = (roundResults[r-1]?.v) || null;
+      const val = (roundResults[r-1] && roundResults[r-1].v) ? roundResults[r-1].v : null;
       const isExtra = r > rondasConfig;
       html += `<tr ${isExtra?'class="r-extra"':''}>
         <td>R${r}${isExtra?' <small>(extra)</small>':''}</td>
@@ -895,8 +952,8 @@ $__s_init = str_pad((string)$__t_init%60, 2, '0', STR_PAD_LEFT);
   function isGlobalTie(){
     let az=0, ro=0;
     roundResults.forEach(rr=>{
-      if (rr?.v==='azul') az++;
-      else if (rr?.v==='rojo') ro++;
+      if (rr && rr.v==='azul') az++;
+      else if (rr && rr.v==='rojo') ro++;
     });
     return az===ro;
   }
@@ -916,7 +973,7 @@ $__s_init = str_pad((string)$__t_init%60, 2, '0', STR_PAD_LEFT);
   function collectManualScoresAsPoints(){
     const out = [];
     for (let r=1; r<=roundResults.length; r++){
-      const v = roundResults[r-1]?.v || null;
+      const v = (roundResults[r-1] && roundResults[r-1].v) ? roundResults[r-1].v : null;
       if (!v){
         out.push({round:r, azul:10, rojo:10});
       } else if (v==='azul'){
@@ -933,8 +990,8 @@ $__s_init = str_pad((string)$__t_init%60, 2, '0', STR_PAD_LEFT);
   function autoWinnerFromResults(){
     let az=0, ro=0;
     roundResults.forEach(rr=>{
-      if (rr?.v==='azul') az++;
-      else if (rr?.v==='rojo') ro++;
+      if (rr && rr.v==='azul') az++;
+      else if (rr && rr.v==='rojo') ro++;
     });
     if (az>ro) return 'azul';
     if (ro>az) return 'rojo';
@@ -959,7 +1016,7 @@ $__s_init = str_pad((string)$__t_init%60, 2, '0', STR_PAD_LEFT);
     }
 
     if(!confirm('¿Finalizar el combate y enviar a resultados?')) return;
-    if(t){ clearInterval(t); t=null; }
+    stopTick();
     try{document.getElementById('snd-fightend').play().catch(()=>{});}catch(e){}
 
     if (!selWin.value){
@@ -990,11 +1047,13 @@ $__s_init = str_pad((string)$__t_init%60, 2, '0', STR_PAD_LEFT);
 
   // Autostart con QS start=1
   const autoStart = <?= $autoQS ? 'true' : 'false' ?>;
-  function paintInit(){ remain=duration; paint(); }
+  function paintInit(){ remain = duration; paint(); setRunning(false); }
   paintInit();
   if (autoStart){ setTimeout(()=>{ btnStart.click(); }, 150); }
 
   publishTimer(true);
+
+  window.addEventListener('beforeunload', ()=>{ if (t) clearInterval(t); });
 })();
 </script>
 </body>
