@@ -1,9 +1,16 @@
 <?php
 /* ===========================================================
    vivo.php — Página pública para compartir el “Vivo” del evento
-   Parámetros requeridos:
-     - ?evento_id=XX → ID del evento deportivo
-   Funciona con HLS o con youtube_live_id (fallback)
+   Prioridad del player:
+     1) HLS local (/hls/stream_{evento_id}.m3u8) si existe
+     2) EMBED directo (StreamYard u otros dominios permitidos)
+     3) YouTube por youtube_live_id (BD) o ?ytid=...
+   Parámetros:
+     - ?evento_id=XX  (requerido)
+     - ?embed=URL_EMBED (opcional, ej: https://streamyard.com/watch/XXXX)
+     - ?ytid=VIDEO_ID  (opcional)
+     - ?autoplay=0|1   (opcional, default 1)
+     - ?mute=0|1       (opcional, default 1)
    =========================================================== */
 
 if (session_status() === PHP_SESSION_NONE) session_start();
@@ -19,8 +26,7 @@ if (!isset($conexion) || !($conexion instanceof mysqli)) { http_response_code(50
 @$conexion->set_charset('utf8mb4');
 
 /* Helpers */
-function h($s){ return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); }
-function bt($c){ return '`'.str_replace('`','``',(string)$c).'`'; }
+function h($s){ return htmlspecialchars((string)$s, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'); }
 function table_exists(mysqli $db, string $name): bool {
   $name = $db->real_escape_string($name);
   if ($r = $db->query("SHOW TABLES LIKE '$name'")) { $ok = (bool)$r->num_rows; $r->close(); return $ok; }
@@ -28,25 +34,48 @@ function table_exists(mysqli $db, string $name): bool {
 }
 function has_col(mysqli $db, string $table, string $col): bool {
   $t=$db->real_escape_string($table); $c=$db->real_escape_string($col);
-  $sql="SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='$t' AND COLUMN_NAME='$c' LIMIT 1";
+  $sql="SELECT 1 FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='$t' AND column_name='$c' LIMIT 1";
   if ($r=$db->query($sql)) { $ok=(bool)$r->num_rows; $r->close(); return $ok; }
   return false;
+}
+/* Valida que el embed apunte a dominios permitidos */
+function allowed_embed_src(?string $url): ?string {
+  $u = trim((string)$url);
+  if ($u==='') return null;
+  $parts = @parse_url($u);
+  if (!$parts || empty($parts['scheme']) || empty($parts['host'])) return null;
+  $host = strtolower($parts['host']);
+  $allowed = [
+    'streamyard.com','www.streamyard.com',
+    'youtube.com','www.youtube.com','youtube-nocookie.com','www.youtube-nocookie.com',
+    'youtu.be',
+    'player.twitch.tv','twitch.tv','www.twitch.tv',
+    'player.vimeo.com','vimeo.com','www.vimeo.com'
+  ];
+  foreach ($allowed as $ok) {
+    if ($host === $ok || str_ends_with('.'.$host, '.'.$ok) || str_ends_with($host, '.'.$ok)) return $u;
+  }
+  return null;
 }
 
 /* Input */
 $evento_id = isset($_GET['evento_id']) ? (int)$_GET['evento_id'] : 0;
-if ($evento_id <= 0) {
-  echo '<div style="padding:20px;background:#ffebee;color:#b71c1c;border-radius:8px">Falta <b>evento_id</b> en la URL.</div>';
-  exit;
-}
+if ($evento_id <= 0) { echo '<div style="padding:20px;background:#ffebee;color:#b71c1c;border-radius:8px">Falta <b>evento_id</b> en la URL.</div>'; exit; }
+
+$forceYtId = isset($_GET['ytid']) ? preg_replace('~[^A-Za-z0-9_-]~','', (string)$_GET['ytid']) : null;
+$forceEmbed = isset($_GET['embed']) ? allowed_embed_src($_GET['embed']) : null;
+$autoplay = isset($_GET['autoplay']) ? (int)($_GET['autoplay']) : 1;
+$mute     = isset($_GET['mute'])     ? (int)($_GET['mute'])     : 1;
 
 /* Datos del evento */
 $evt = null;
 $youtube_id = null;
-$hls_url = null;
+$embed_src  = $forceEmbed; // prioridad a ?embed
+$hls_url    = null;
 
 if (table_exists($conexion,'eventos_deportivos')) {
-  $sql = "SELECT id, titulo, fecha, lugar, youtube_live_id FROM eventos_deportivos WHERE id=? LIMIT 1";
+  $colStreamyard = has_col($conexion,'eventos_deportivos','streamyard_embed');
+  $sql = "SELECT id, titulo, fecha, lugar, youtube_live_id".($colStreamyard?", streamyard_embed":"")." FROM eventos_deportivos WHERE id=? LIMIT 1";
   if ($st = $conexion->prepare($sql)){
     $st->bind_param('i', $evento_id);
     $st->execute(); $r = $st->get_result();
@@ -55,21 +84,26 @@ if (table_exists($conexion,'eventos_deportivos')) {
   }
 }
 
-if (!$evt) {
-  echo '<div style="padding:20px;background:#ffebee;color:#b71c1c;border-radius:8px">Evento no encontrado.</div>';
-  exit;
+if (!$evt) { echo '<div style="padding:20px;background:#ffebee;color:#b71c1c;border-radius:8px">Evento no encontrado.</div>'; exit; }
+
+/* Completar fuentes posibles */
+if (!$embed_src && !empty($evt['streamyard_embed'] ?? '')) {
+  $embed_src = allowed_embed_src($evt['streamyard_embed']);
 }
+$youtube_id = $forceYtId ?: ($evt['youtube_live_id'] ?? null);
+if ($youtube_id) { $youtube_id = preg_replace('~[^A-Za-z0-9_-]~','', (string)$youtube_id); }
 
-$youtube_id = $evt['youtube_live_id'] ?? null;
-
-/* Primero intentar HLS si existe el archivo del stream */
+/* HLS si existe archivo */
 $hls_path = $_SERVER['DOCUMENT_ROOT'] . "/hls/stream_{$evento_id}.m3u8";
 if (file_exists($hls_path)) {
   $hls_url = "/hls/stream_{$evento_id}.m3u8";
-} elseif ($youtube_id) {
-  $hls_url = null; // usar YouTube como fallback
 }
 
+/* Decide player */
+$PLAYER = 'none'; // hls|embed|youtube|none
+if ($hls_url)        { $PLAYER='hls'; }
+elseif ($embed_src)  { $PLAYER='embed'; }
+elseif ($youtube_id) { $PLAYER='youtube'; }
 ?>
 <!DOCTYPE html>
 <html lang="es">
@@ -79,19 +113,23 @@ if (file_exists($hls_path)) {
 <title>🔴 Vivo — <?= h($evt['titulo'] ?? 'Evento') ?></title>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
 <style>
-  body{margin:0;background:#0d0f13;color:#fff;font-family:system-ui,Segoe UI,Roboto,Arial,sans-serif}
+  :root { --bg:#0d0f13; --card:#141a22; --muted:#9bb3c9; --txt:#fff; --red:#c62828; --blue:#1565c0; }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--txt);font-family:system-ui,Segoe UI,Roboto,Arial,sans-serif}
   .wrap{max-width:1200px;margin:0 auto;padding:16px}
   .player{position:relative;padding-top:56.25%;background:#000;border-radius:12px;overflow:hidden}
   .player iframe,.player video{position:absolute;top:0;left:0;width:100%;height:100%}
   h1{font-size:24px;margin:16px 0 8px}
-  .sub{color:#9bb3c9;font-size:14px;margin-bottom:8px}
+  .sub{color:var(--muted);font-size:14px;margin-bottom:8px}
   .flex{display:flex;gap:12px;flex-wrap:wrap;margin-top:12px}
-  #peleaActual{padding:12px;border-radius:10px;background:#141a22;margin-top:16px}
-  .red{border-left:5px solid #c62828;padding-left:10px}
-  .blue{border-left:5px solid #1565c0;padding-left:10px}
-  .share{margin:14px 0;display:flex;justify-content:flex-end;gap:10px}
-  .btn-share{background:#263238;border:none;color:#fff;padding:10px 14px;border-radius:8px;cursor:pointer}
-  .btn-share:hover{background:#37474f}
+  #peleaActual{padding:12px;border-radius:10px;background:var(--card);margin-top:16px}
+  .red{border-left:5px solid var(--red);padding-left:10px}
+  .blue{border-left:5px solid var(--blue);padding-left:10px}
+  .share{margin:14px 0;display:flex;flex-wrap:wrap;justify-content:flex-end;gap:10px}
+  .btn{background:#263238;border:none;color:#fff;padding:10px 14px;border-radius:8px;cursor:pointer}
+  .btn:hover{background:#37474f}
+  .hint{color:#cdd7e1;font-size:12px;margin-top:8px}
+  .badge{display:inline-block;padding:.25rem .6rem;border:1px solid #415269;border-radius:999px;color:#cde;}
 </style>
 </head>
 <body>
@@ -100,19 +138,32 @@ if (file_exists($hls_path)) {
   <div class="sub">📅 <?= h($evt['fecha']) ?> · 📍 <?= h($evt['lugar']) ?></div>
 
   <div class="player" id="player">
-    <?php if ($hls_url): ?>
-      <video id="hlsPlayer" controls autoplay muted></video>
-    <?php elseif ($youtube_id): ?>
-      <iframe src="https://www.youtube.com/embed/<?= h($youtube_id) ?>?autoplay=1&mute=1"
-              frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe>
+    <?php if ($PLAYER==='hls'): ?>
+      <video id="hlsPlayer" controls <?= $autoplay? 'autoplay':'' ?> <?= $mute? 'muted':'' ?> playsinline></video>
+    <?php elseif ($PLAYER==='embed'): ?>
+      <iframe src="<?= h($embed_src) ?>" frameborder="0" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen></iframe>
+    <?php elseif ($PLAYER==='youtube'): ?>
+      <iframe
+        src="https://www.youtube.com/embed/<?= h($youtube_id) ?>?autoplay=<?= (int)$autoplay ?>&mute=<?= (int)$mute ?>"
+        frameborder="0" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen></iframe>
     <?php else: ?>
       <div style="color:#ccc;font-size:14px;padding:12px;text-align:center">No hay transmisión activa.</div>
     <?php endif; ?>
   </div>
 
   <div class="share">
-    <button class="btn-share" onclick="navigator.clipboard.writeText(location.href)">📋 Copiar link</button>
-    <button class="btn-share" onclick="window.open('https://api.qrserver.com/v1/create-qr-code/?data='+encodeURIComponent(location.href), '_blank')">📱 QR</button>
+    <button class="btn" onclick="navigator.clipboard.writeText(location.href)">📋 Copiar link</button>
+    <button class="btn" onclick="window.open('https://api.qrserver.com/v1/create-qr-code/?data='+encodeURIComponent(location.href), '_blank')">📱 QR</button>
+    <?php if ($youtube_id): ?>
+      <a class="btn" href="<?= h('https://www.youtube.com/watch?v='.$youtube_id) ?>" target="_blank" rel="noopener">▶️ Ver en YouTube</a>
+    <?php endif; ?>
+    <?php if ($PLAYER==='hls'): ?>
+      <span class="badge">HLS local</span>
+    <?php elseif ($PLAYER==='embed'): ?>
+      <span class="badge">Embed</span>
+    <?php elseif ($PLAYER==='youtube'): ?>
+      <span class="badge">YouTube</span>
+    <?php endif; ?>
   </div>
 
   <h2>Pelea actual</h2>
@@ -120,49 +171,64 @@ if (file_exists($hls_path)) {
 
   <h3 style="margin-top:24px">Peleas del evento</h3>
   <div id="listpeleas">Cargando...</div>
+
+  <div class="hint">
+    Sugerencia: Para usar StreamYard sin tocar la BD, añadí <code>?embed=URL_DEL_EMBED</code> a este enlace.
+    Si transmitís a YouTube desde StreamYard, guardá el <code>youtube_live_id</code> en el evento o pasá <code>?ytid=...</code>.
+  </div>
 </div>
 
 <script>
-// Lee estado de pelea actual cada 1s
+// ====== Estado de pelea actual (pull cada 1s) ======
 const eventoId = <?= (int)$evento_id ?>;
 async function loadPeleaActual(){
   try{
-    const r = await fetch(`combate_en_vivo.php?ajax=estado_evento&evento_id=${eventoId}`);
+    const r = await fetch(`combate_en_vivo.php?ajax=estado_evento&evento_id=${eventoId}`, {cache:'no-store'});
     const j = await r.json();
     if (j.ok && j.data && j.data.pelea){
-      const p = j.data.pelea;
+      const p  = j.data.pelea;
       const az = j.data.azul || {}, ro = j.data.rojo || {};
+      const rem = Math.max(0, parseInt(j.data.timer?.remaining ?? 0, 10));
+      const mm = Math.floor(rem/60);
+      const ss = String(rem%60).padStart(2,'0');
       document.getElementById('peleaActual').innerHTML = `
-        <div class="flex" style="justify-content:space-between">
+        <div class="flex" style="justify-content:space-between;align-items:center">
           <div class="red">
-            <strong>${ro.nombre||'Rojo'}</strong><br>
-            <small>${ro.escuela||''}</small>
+            <strong>${(ro.nombre||'Rojo')}</strong><br>
+            <small>${(ro.escuela||'')}</small>
           </div>
           <div style="text-align:center">
             <div><b>Round:</b> ${j.data.timer?.ronda || 1}</div>
-            <div><b>Tiempo:</b> ${Math.floor((j.data.timer?.remaining||0)/60)}:${String((j.data.timer?.remaining||0)%60).padStart(2,'0')}</div>
+            <div><b>Tiempo:</b> ${mm}:${ss}</div>
+            <div><small>${p.modalidad || ''} ${p.categoria || ''}</small></div>
           </div>
           <div class="blue">
-            <strong>${az.nombre||'Azul'}</strong><br>
-            <small>${az.escuela||''}</small>
+            <strong>${(az.nombre||'Azul')}</strong><br>
+            <small>${(az.escuela||'')}</small>
           </div>
         </div>`;
+    } else {
+      document.getElementById('peleaActual').textContent = 'A la espera de iniciar la próxima pelea…';
     }
-  }catch(e){ console.log(e); }
+  }catch(e){
+    console.log(e);
+  }
 }
 setInterval(loadPeleaActual,1000);
 loadPeleaActual();
 
-// Lista de peleas
+// ====== Lista de peleas (toma del público del evento) ======
 async function loadPeleas(){
   try{
-    const r = await fetch(`ver_evento_publico.php?evento_id=${eventoId}`);
+    const r = await fetch(`ver_evento_publico.php?evento_id=${eventoId}`, {cache:'no-store'});
     const txt = await r.text();
     const parser=new DOMParser();
     const dom=parser.parseFromString(txt,'text/html');
     const fights = dom.querySelectorAll('.fight');
     const list=document.getElementById('listpeleas');
+    list.innerHTML='';
     fights.forEach(f=> list.appendChild(f.cloneNode(true)) );
+    if (fights.length===0) list.innerHTML='<div style="padding:8px;color:#ccc">Sin peleas publicadas.</div>';
   }catch(e){
     document.getElementById('listpeleas').innerHTML='<div style="padding:8px;color:#ccc">No se pudieron cargar las peleas.</div>';
   }
@@ -170,18 +236,20 @@ async function loadPeleas(){
 loadPeleas();
 </script>
 
-<?php if ($hls_url): ?>
+<?php if ($PLAYER==='hls'): ?>
 <!-- HLS.js player -->
 <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
 <script>
 document.addEventListener('DOMContentLoaded', function(){
   const video = document.getElementById('hlsPlayer');
+  if (!video) return;
+  const src = <?= json_encode((string)$hls_url) ?>;
   if (Hls.isSupported()) {
-    const hls = new Hls();
-    hls.loadSource('<?= h($hls_url) ?>');
+    const hls = new Hls({liveDurationInfinity:true});
+    hls.loadSource(src);
     hls.attachMedia(video);
   } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-    video.src = '<?= h($hls_url) ?>';
+    video.src = src;
   }
 });
 </script>
