@@ -3,7 +3,7 @@
    vivo.php — Página pública para compartir el “Vivo” del evento
    Parámetros requeridos:
      - ?evento_id=XX → ID del evento deportivo
-   Funciona con youtube_live_id o en modo interno HLS (si lo hay)
+   Funciona con HLS o con youtube_live_id (fallback)
    =========================================================== */
 
 if (session_status() === PHP_SESSION_NONE) session_start();
@@ -62,8 +62,13 @@ if (!$evt) {
 
 $youtube_id = $evt['youtube_live_id'] ?? null;
 
-/* Opcional: URL HLS si estás usando tu propio servidor RTMP+HLS */
-$hls_url = "/hls/stream_{$evento_id}.m3u8"; // cambia si lo generás distinto
+/* Primero intentar HLS si existe el archivo del stream */
+$hls_path = $_SERVER['DOCUMENT_ROOT'] . "/hls/stream_{$evento_id}.m3u8";
+if (file_exists($hls_path)) {
+  $hls_url = "/hls/stream_{$evento_id}.m3u8";
+} elseif ($youtube_id) {
+  $hls_url = null; // usar YouTube como fallback
+}
 
 ?>
 <!DOCTYPE html>
@@ -80,13 +85,10 @@ $hls_url = "/hls/stream_{$evento_id}.m3u8"; // cambia si lo generás distinto
   .player iframe,.player video{position:absolute;top:0;left:0;width:100%;height:100%}
   h1{font-size:24px;margin:16px 0 8px}
   .sub{color:#9bb3c9;font-size:14px;margin-bottom:8px}
-  .corner{display:flex;flex-direction:column;padding:12px;border-radius:10px;background:#141a22;gap:4px}
-  .red{border-left:5px solid #c62828}.blue{border-left:5px solid #1565c0}
   .flex{display:flex;gap:12px;flex-wrap:wrap;margin-top:12px}
-  #listpeleas{margin-top:16px}
-  .pelea{padding:10px;border:1px solid #202a36;border-radius:8px;margin-bottom:10px;background:#11161d}
-  .pelea .hdr{font-weight:600;display:flex;justify-content:space-between}
-  .estado{font-size:12px;color:#b0bec5}
+  #peleaActual{padding:12px;border-radius:10px;background:#141a22;margin-top:16px}
+  .red{border-left:5px solid #c62828;padding-left:10px}
+  .blue{border-left:5px solid #1565c0;padding-left:10px}
   .share{margin:14px 0;display:flex;justify-content:flex-end;gap:10px}
   .btn-share{background:#263238;border:none;color:#fff;padding:10px 14px;border-radius:8px;cursor:pointer}
   .btn-share:hover{background:#37474f}
@@ -98,11 +100,11 @@ $hls_url = "/hls/stream_{$evento_id}.m3u8"; // cambia si lo generás distinto
   <div class="sub">📅 <?= h($evt['fecha']) ?> · 📍 <?= h($evt['lugar']) ?></div>
 
   <div class="player" id="player">
-    <?php if ($youtube_id): ?>
+    <?php if ($hls_url): ?>
+      <video id="hlsPlayer" controls autoplay muted></video>
+    <?php elseif ($youtube_id): ?>
       <iframe src="https://www.youtube.com/embed/<?= h($youtube_id) ?>?autoplay=1&mute=1"
               frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe>
-    <?php elseif ($hls_url): ?>
-      <video id="hlsPlayer" controls autoplay></video>
     <?php else: ?>
       <div style="color:#ccc;font-size:14px;padding:12px;text-align:center">No hay transmisión activa.</div>
     <?php endif; ?>
@@ -121,7 +123,7 @@ $hls_url = "/hls/stream_{$evento_id}.m3u8"; // cambia si lo generás distinto
 </div>
 
 <script>
-// Lee pelea actual cada 1s
+// Lee estado de pelea actual cada 1s
 const eventoId = <?= (int)$evento_id ?>;
 async function loadPeleaActual(){
   try{
@@ -131,27 +133,27 @@ async function loadPeleaActual(){
       const p = j.data.pelea;
       const az = j.data.azul || {}, ro = j.data.rojo || {};
       document.getElementById('peleaActual').innerHTML = `
-        <div class="flex">
-          <div class="corner red">
-            <strong>${ro.nombre||'Rojo'}</strong>
+        <div class="flex" style="justify-content:space-between">
+          <div class="red">
+            <strong>${ro.nombre||'Rojo'}</strong><br>
             <small>${ro.escuela||''}</small>
           </div>
-          <div style="text-align:center;align-self:center">
-            <div><b>Round actual:</b> ${j.data.timer?.ronda || 1}</div>
+          <div style="text-align:center">
+            <div><b>Round:</b> ${j.data.timer?.ronda || 1}</div>
             <div><b>Tiempo:</b> ${Math.floor((j.data.timer?.remaining||0)/60)}:${String((j.data.timer?.remaining||0)%60).padStart(2,'0')}</div>
           </div>
-          <div class="corner blue">
-            <strong>${az.nombre||'Azul'}</strong>
+          <div class="blue">
+            <strong>${az.nombre||'Azul'}</strong><br>
             <small>${az.escuela||''}</small>
           </div>
         </div>`;
     }
-  }catch(e){}
+  }catch(e){ console.log(e); }
 }
 setInterval(loadPeleaActual,1000);
 loadPeleaActual();
 
-// Lista de peleas una vez
+// Lista de peleas
 async function loadPeleas(){
   try{
     const r = await fetch(`ver_evento_publico.php?evento_id=${eventoId}`);
@@ -159,16 +161,17 @@ async function loadPeleas(){
     const parser=new DOMParser();
     const dom=parser.parseFromString(txt,'text/html');
     const fights = dom.querySelectorAll('.fight');
-    const list = document.getElementById('listpeleas');
+    const list=document.getElementById('listpeleas');
     fights.forEach(f=> list.appendChild(f.cloneNode(true)) );
   }catch(e){
-    document.getElementById('listpeleas').innerHTML = '<div style="padding:8px;color:#ccc">No se pudieron cargar las peleas.</div>';
+    document.getElementById('listpeleas').innerHTML='<div style="padding:8px;color:#ccc">No se pudieron cargar las peleas.</div>';
   }
 }
 loadPeleas();
 </script>
 
-<?php if ($hls_url && !$youtube_id): ?>
+<?php if ($hls_url): ?>
+<!-- HLS.js player -->
 <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
 <script>
 document.addEventListener('DOMContentLoaded', function(){
