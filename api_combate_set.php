@@ -1,68 +1,84 @@
 <?php
-/* ==========================================================
-   api_combate_set.php — Actualiza estado del cronómetro
-   Método: POST (o GET para pruebas)
-   Campos mínimos:
-     - evento_id (int)
-     - pelea_id  (int) -> guarda en pelea_actual_id
-     - ronda, running, paused, duracion, descanso, remaining, activo
-   Devuelve: {ok:true}
-   ========================================================== */
+/* ============================================================
+   api_combate_set.php — Guarda el estado en vivo de una pelea
+   Body: JSON
+   {
+     "pelea_id": 32,
+     "evento_id": 9,          // opcional (si lo mandás, actualiza overlay_now)
+     "estado": {
+        "ronda": 1,
+        "dur_round": 180,
+        "remaining": 152,
+        "paused": false,
+        "en_descanso": false,
+        "activo": true,
+        "epoch_inicio": 1731009902,
+        "ronda_actual": 1
+        // ... cualquier otro dato que quieras mostrar en el overlay
+     }
+   }
+============================================================ */
 if (session_status() === PHP_SESSION_NONE) session_start();
+header('Content-Type: application/json; charset=utf-8');
+header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+header('Pragma: no-cache');
+
 require_once __DIR__ . '/conexion.php';
-if (function_exists('mysqli_report')) mysqli_report(MYSQLI_REPORT_OFF);
+if (!isset($conexion) || !($conexion instanceof mysqli)) { http_response_code(500); echo json_encode(['ok'=>false,'error'=>'Sin BD']); exit; }
+if (function_exists('mysqli_report')) { mysqli_report(MYSQLI_REPORT_OFF); }
 @$conexion->set_charset('utf8mb4');
 
-header('Content-Type: application/json; charset=utf-8');
-function out($a){ echo json_encode($a, JSON_UNESCAPED_UNICODE); exit; }
+function jfail($msg,$code=400){ http_response_code($code); echo json_encode(['ok'=>false,'error'=>$msg]); exit; }
 
-$evento_id = (int)($_POST['evento_id'] ?? $_GET['evento_id'] ?? 0);
-$pelea_id  = (int)($_POST['pelea_id']  ?? $_GET['pelea_id']  ?? 0);
+$raw = file_get_contents('php://input');
+$data = json_decode($raw, true);
+if (!$data) jfail('JSON inválido');
 
-if ($evento_id===0 || $pelea_id===0) out(['ok'=>false,'error'=>'evento_id/pelea_id requerido']);
+$pelea_id  = isset($data['pelea_id']) ? (int)$data['pelea_id'] : 0;
+$estado    = isset($data['estado']) && is_array($data['estado']) ? $data['estado'] : null;
+$evento_id = isset($data['evento_id']) ? (int)$data['evento_id'] : 0;
 
-$ronda    = (int)($_POST['ronda']    ?? $_GET['ronda']    ?? 1);
-$running  = (int)($_POST['running']  ?? $_GET['running']  ?? 0);
-$paused   = (int)($_POST['paused']   ?? $_GET['paused']   ?? 1);
-$duracion = (int)($_POST['duracion'] ?? $_GET['duracion'] ?? 180);
-$descanso = (int)($_POST['descanso'] ?? $_GET['descanso'] ?? 60);
-$remaining= (int)($_POST['remaining']?? $_GET['remaining']?? 180);
-$activo   = (int)($_POST['activo']   ?? $_GET['activo']   ?? 1);
+if ($pelea_id <= 0) jfail('pelea_id requerido');
+if (!$estado) jfail('estado requerido (objeto)');
 
-/* Upsert simple: insert una fila por evento, o actualiza la última */
-$ok = $conexion->query(sprintf(
-  "INSERT INTO combate_estado (evento_id, pelea_actual_id, ronda, running, paused, duracion, descanso, remaining, activo, actualizado_en)
-   VALUES (%d,%d,%d,%d,%d,%d,%d,%d,%d, NOW())
-   ON DUPLICATE KEY UPDATE
-     pelea_actual_id=VALUES(pelea_actual_id),
-     ronda=VALUES(ronda),
-     running=VALUES(running),
-     paused=VALUES(paused),
-     duracion=VALUES(duracion),
-     descanso=VALUES(descanso),
-     remaining=VALUES(remaining),
-     activo=VALUES(activo),
-     actualizado_en=NOW()",
-   $evento_id,$pelea_id,$ronda,$running,$paused,$duracion,$descanso,$remaining,$activo
-));
+// Normalizamos algunas banderas para el overlay
+$estado_norm = [
+  'ronda'        => (int)($estado['ronda'] ?? $estado['ronda_actual'] ?? 1),
+  'dur_round'    => (int)($estado['dur_round'] ?? $estado['duracion'] ?? 180),
+  'remaining'    => (int)($estado['remaining'] ?? 0),
+  'paused'       => (bool)($estado['paused'] ?? false),
+  'en_descanso'  => (bool)($estado['en_descanso'] ?? false),
+  'activo'       => (bool)($estado['activo'] ?? true),
+  'epoch_inicio' => (int)($estado['epoch_inicio'] ?? 0),
+  // extras opcionales que quieras mostrar:
+  'ronda_actual' => (int)($estado['ronda_actual'] ?? 1),
+  'estado'       => (string)($estado['estado'] ?? ''), // "pausado", "descanso", etc.
+];
 
-if (!$ok) {
-  // Si no hay UNIQUE en evento_id, hacemos UPDATE por evento_id (última fila)
-  $ok = $conexion->query("
-    UPDATE combate_estado
-    SET pelea_actual_id={$pelea_id}, ronda={$ronda}, running={$running}, paused={$paused},
-        duracion={$duracion}, descanso={$descanso}, remaining={$remaining}, activo={$activo},
-        actualizado_en=NOW()
-    WHERE evento_id={$evento_id}
-    ORDER BY id DESC
-    LIMIT 1
-  ");
-  if ($conexion->affected_rows===0) {
-    $ok = $conexion->query("
-      INSERT INTO combate_estado (evento_id, pelea_actual_id, ronda, running, paused, duracion, descanso, remaining, activo, actualizado_en)
-      VALUES ({$evento_id}, {$pelea_id}, {$ronda}, {$running}, {$paused}, {$duracion}, {$descanso}, {$remaining}, {$activo}, NOW())
-    ");
+// Upsert del estado de la pelea
+$json = json_encode($estado_norm, JSON_UNESCAPED_UNICODE);
+$sql  = "INSERT INTO combate_estado_live (pelea_id, estado_json, updated_at)
+         VALUES (?, ?, NOW())
+         ON DUPLICATE KEY UPDATE estado_json=VALUES(estado_json), updated_at=NOW()";
+if ($st = $conexion->prepare($sql)) {
+  $st->bind_param('is', $pelea_id, $json);
+  $ok = $st->execute();
+  $st->close();
+  if (!$ok) jfail('No se pudo guardar estado (DB)');
+} else {
+  jfail('Prepare falló');
+}
+
+// Si viene evento_id, seteamos pelea actual (overlay seguirá esto)
+if ($evento_id > 0) {
+  $sql2 = "INSERT INTO overlay_now (evento_id, pelea_id, updated_at)
+           VALUES (?, ?, NOW())
+           ON DUPLICATE KEY UPDATE pelea_id=VALUES(pelea_id), updated_at=NOW()";
+  if ($st2 = $conexion->prepare($sql2)) {
+    $st2->bind_param('ii', $evento_id, $pelea_id);
+    $st2->execute();
+    $st2->close();
   }
 }
 
-out(['ok'=> (bool)$ok]);
+echo json_encode(['ok'=>true,'pelea_id'=>$pelea_id,'evento_id'=>$evento_id,'estado'=>$estado_norm], JSON_UNESCAPED_UNICODE);
