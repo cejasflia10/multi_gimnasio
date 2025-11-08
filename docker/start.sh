@@ -1,11 +1,15 @@
-#!/usr/bin/env sh
+#!/usr/bin/env bash
 set -e
 
-UPLOAD_DIR="/var/www/html/multi_gimnasio/comprobantes"
+# Carpetas de trabajo que tu app pueda necesitar (ajusta si querés)
+mkdir -p /var/www/html/tmp \
+         /var/www/html/storage \
+         /var/www/html/cache
 
-# Asegurar que exista el directorio (si el Disk está montado, solo asegura permisos)
-mkdir -p "$UPLOAD_DIR"
-chown -R www-data:www-data "$UPLOAD_DIR"
+chown -R www-data:www-data /var/www/html/tmp /var/www/html/storage /var/www/html/cache || true
 
-# Iniciar Apache en primer plano (requerido por Render)
+# Mantener headers útiles para OBS browser source / HLS si servís archivos estáticos
+a2enmod headers >/dev/null 2>&1 || true
+
+# Inicia Apache en primer plano (lo que espera Render)
 exec apache2-foreground
