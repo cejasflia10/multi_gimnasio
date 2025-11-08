@@ -315,7 +315,7 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'set_estado') {
   $activo    = get_int_qs($_POST, 'activo', 1) ?? 1;
 
   $en_descanso  = get_int_qs($_POST, 'en_descanso', 0) ?? 0;
-  $epoch_inicio = get_int_qs($_POST, 'epoch_inicio', null);
+  $epoch_inicio = get_int_qs($_POST, 'epoch_inicio', time());
 
   if ($evento_id<=0 || $pelea_id<=0){ echo json_encode(['ok'=>false,'error'=>'evento_id/pelea_id requeridos']); exit; }
 
@@ -541,7 +541,7 @@ if ($isOverlay) {
     <script>
     (function(){
       const eventoId = <?= (int)$evento_param ?>;
-      let state=null, ver=0, uiTick=null;
+      let state=null, uiTick=null;
 
       const nomRojo=document.getElementById('nomRojo'), escRojo=document.getElementById('escRojo'), logoRojo=document.getElementById('logoRojo');
       const nomAzul=document.getElementById('nomAzul'), escAzul=document.getElementById('escAzul'), logoAzul=document.getElementById('logoAzul');
@@ -586,7 +586,7 @@ if ($isOverlay) {
             applyState(j);
           }
         }catch(e){}
-        setTimeout(poll, 500); // 500ms, liviano
+        setTimeout(poll, 500);
       }
       poll();
     })();
@@ -738,7 +738,7 @@ $return_to = 'ver_peleas_evento.php'.($evento_id?('?evento_id='.(int)$evento_id)
 
 $__t_init = isset($timerDur) ? (int)$timerDur : 120;
 $__m_init = (int)floor($__t_init/60);
-$__s_init = str_pad((string)$__t_init%60, 2, '0', STR_PAD_LEFT);
+$__s_init = str_pad((string)($__t_init % 60), 2, '0', STR_PAD_LEFT); // ✅ FIX: módulo sobre entero
 
 ?>
 <!DOCTYPE html>
