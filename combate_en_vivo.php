@@ -17,8 +17,8 @@ require_once __DIR__ . '/conexion.php';
 error_reporting(E_ALL);
 ini_set('display_errors', '1');
 header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
-header('Pragma', 'no-cache');
-header('Expires', '0');
+header('Pragma: no-cache');        // ✅ corregido
+header('Expires: 0');
 if (function_exists('opcache_invalidate')) { @opcache_invalidate(__FILE__, true); }
 $__BUILD = @filemtime(__FILE__) ?: time();
 
@@ -51,7 +51,7 @@ function json_clean_headers(){
   header_remove('Set-Cookie');
   header('Content-Type: application/json; charset=utf-8');
   header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
-  header('Pragma', 'no-cache');
+  header('Pragma: no-cache');
 }
 
 /* ====== Tabla combate_estado: crear y asegurar columnas ====== */
@@ -96,7 +96,7 @@ ensure_combate_estado($conexion);
 $RESULTADOS_RUTA = 'resultados_combates.php';
 
 /* ===== Sonidos ===== */
-$WEB_SND_BASE  = '/multi_gimnasio/assets/sounds/'; // ajustá si tu raíz es otra
+$WEB_SND_BASE  = '/multi_gimnasio/assets/sounds/';
 $DOC_ROOT      = rtrim($_SERVER['DOCUMENT_ROOT'] ?? '', '/');
 $LOCAL_SND_DIR = $DOC_ROOT . $WEB_SND_BASE;
 function pickSoundFile(string $localDir, string $webBase, array $candidates): string {
@@ -133,7 +133,8 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'estado') {
       'running'=>0, 'paused'=>1,
       'en_descanso'=>0, 'remaining'=>180,
       'epoch_inicio'=>null, 'duracion'=>180, 'dur_round'=>180,
-      'descanso'=>60, 'dur_descanso'=>60
+      'descanso'=>60, 'dur_descanso'=>60,
+      'pelea_actual_id'=>null       // ✅ expuesto para el overlay
     ]
   ];
 
@@ -182,6 +183,7 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'estado') {
               $data['timer']['epoch_inicio'] = $epoch ? (int)$epoch : null;
               $data['timer']['dur_round']    = (int)($dR ?: $data['timer']['duracion']);
               $data['timer']['dur_descanso'] = (int)($dD ?: $data['timer']['descanso']);
+              $data['timer']['pelea_actual_id'] = $pid ? (int)$pid : null;   // ✅ NUEVO
             }
             $st2->close();
           }
@@ -266,7 +268,7 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'set_estado') {
             actualizado_en=CURRENT_TIMESTAMP";
 
   if ($st=$conexion->prepare($sql)){
-    // ✅ 14 parámetros => 14 'i' SIN espacios
+    // 14 parámetros int
     $st->bind_param(
       'iiiiiiiiiiiiii',
       $evento_id,$pelea_id,$activo,$ronda,$running,$paused,$duracion,$descanso,$remaining,
@@ -728,7 +730,7 @@ $__s_init = str_pad((string)$__t_init%60, 2, '0', STR_PAD_LEFT);
   const timer=document.getElementById('timer'), rnd=document.getElementById('round');
   const selDur=document.getElementById('selDur'), selRest=document.getElementById('selRest');
   const btnStart=document.getElementById('btnStart'), btnPause=document.getElementById('btnPause'),
-        btnReset=document.getElementById('btnReset'), btnNext=document.getElementById('btnNext');
+        btnReset=document.getElementById('btnReset'), btnNext=document.getElementById('btnNext']);
 
   // ======= PUBLICACIÓN DE TIMER AL VIVO =======
   const eventoId = <?= $evento_id ? (int)$evento_id : 0 ?>;
