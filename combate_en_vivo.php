@@ -1,15 +1,15 @@
 <?php
 /* ============================================
-   COMBATE EN VIVO — Mesa (sin jueces)
-   - Botones de ganador por round (Azul/Rojo/Empate)
-   - Empate global => agrega round extra automático
-   - Publica estado en combate_estado para transmisión
+   COMBATE EN VIVO — Mesa + Overlay (mismo archivo)
+   - SIN archivos nuevos.
+   - Overlay: combate_en_vivo.php?evento_id=123&overlay=1
    - Endpoints internos:
-       • ajax=estado         (JSON para overlay)
-       • ajax=set_estado     (persistir cronómetro/pelea)
-       • ajax=marcar_actual  (activar pelea/evento)
-       • ajax=pausar_actual  (pausar transmisión)
-       • ajax=finalizar      (guardar resultado)
+       • ajax=estado           (JSON por pelea_id)
+       • ajax=estado_evento    (JSON por evento_id, sigue pelea_actual_id)
+       • ajax=set_estado       (persistir cronómetro/pelea)
+       • ajax=marcar_actual    (activar pelea/evento)
+       • ajax=pausar_actual    (pausar transmisión)
+       • ajax=finalizar        (guardar resultado)
    ============================================ */
 if (session_status() === PHP_SESSION_NONE) session_start();
 require_once __DIR__ . '/conexion.php';
@@ -47,8 +47,8 @@ function get_int_qs(array $src, string $key, ?int $def=null): ?int {
   return (int)$v;
 }
 function json_clean_headers(){
-  while (ob_get_level()) { @ob_end_clean(); }
-  @header_remove('Set-Cookie');
+  while (ob_get_level()) { ob_end_clean(); }
+  header_remove('Set-Cookie');
   header('Content-Type: application/json; charset=utf-8');
   header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
   header('Pragma', 'no-cache');
@@ -65,27 +65,23 @@ function ensure_combate_estado(mysqli $db){
       actualizado_en TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
   ");
-
-  // Esquema NUEVO (B)
   $adds = [];
-  if (!has_col($db,'combate_estado','ronda'))     $adds[]="ADD ronda INT NOT NULL DEFAULT 1";
-  if (!has_col($db,'combate_estado','running'))   $adds[]="ADD running TINYINT(1) NOT NULL DEFAULT 0";
-  if (!has_col($db,'combate_estado','paused'))    $adds[]="ADD paused  TINYINT(1) NOT NULL DEFAULT 1";
-  if (!has_col($db,'combate_estado','duracion'))  $adds[]="ADD duracion INT NOT NULL DEFAULT 180";
-  if (!has_col($db,'combate_estado','descanso'))  $adds[]="ADD descanso INT NOT NULL DEFAULT 60";
-  if (!has_col($db,'combate_estado','remaining')) $adds[]="ADD remaining INT NOT NULL DEFAULT 180";
+  foreach ([
+    ['ronda', 'INT NOT NULL DEFAULT 1'],
+    ['running','TINYINT(1) NOT NULL DEFAULT 0'],
+    ['paused','TINYINT(1) NOT NULL DEFAULT 1'],
+    ['duracion','INT NOT NULL DEFAULT 180'],
+    ['descanso','INT NOT NULL DEFAULT 60'],
+    ['remaining','INT NOT NULL DEFAULT 180'],
+    ['ronda_actual','INT DEFAULT 1'],
+    ['en_descanso','TINYINT(1) NOT NULL DEFAULT 0'],
+    ['epoch_inicio','INT DEFAULT NULL'],
+    ['dur_round','INT NOT NULL DEFAULT 180'],
+    ['dur_descanso','INT NOT NULL DEFAULT 60'],
+  ] as $pair){
+    if (!has_col($db,'combate_estado',$pair[0])) $adds[]="ADD {$pair[0]} {$pair[1]}";
+  }
   if ($adds) { $db->query("ALTER TABLE combate_estado ".implode(', ',$adds)); }
-
-  // Esquema ANTERIOR (compatibilidad)
-  $adds2 = [];
-  if (!has_col($db,'combate_estado','ronda_actual'))  $adds2[]="ADD ronda_actual INT DEFAULT 1";
-  if (!has_col($db,'combate_estado','en_descanso'))   $adds2[]="ADD en_descanso TINYINT(1) NOT NULL DEFAULT 0";
-  if (!has_col($db,'combate_estado','epoch_inicio'))  $adds2[]="ADD epoch_inicio INT DEFAULT NULL";
-  if (!has_col($db,'combate_estado','dur_round'))     $adds2[]="ADD dur_round INT NOT NULL DEFAULT 180";
-  if (!has_col($db,'combate_estado','dur_descanso'))  $adds2[]="ADD dur_descanso INT NOT NULL DEFAULT 60";
-  if ($adds2) { $db->query("ALTER TABLE combate_estado ".implode(', ',$adds2)); }
-
-  // Índice útil
   $idx = $db->query("SHOW INDEX FROM combate_estado WHERE Key_name='idx_evento_activo'");
   if (!$idx || $idx->num_rows===0) { $db->query("ALTER TABLE combate_estado ADD INDEX idx_evento_activo (evento_id, activo)"); }
   if ($idx) $idx->close();
@@ -96,7 +92,7 @@ ensure_combate_estado($conexion);
 $RESULTADOS_RUTA = 'resultados_combates.php';
 
 /* ===== Sonidos ===== */
-$WEB_SND_BASE  = '/multi_gimnasio/assets/sounds/'; // ajustá si tu raíz es otra
+$WEB_SND_BASE  = '/multi_gimnasio/assets/sounds/';
 $DOC_ROOT      = rtrim($_SERVER['DOCUMENT_ROOT'] ?? '', '/');
 $LOCAL_SND_DIR = $DOC_ROOT . $WEB_SND_BASE;
 function pickSoundFile(string $localDir, string $webBase, array $candidates): string {
@@ -113,7 +109,7 @@ $SND_FIGHTEND = pickSoundFile($LOCAL_SND_DIR, $WEB_SND_BASE, ['fin_pelea.mp3','f
    ENDPOINTS AJAX
    ==================================================== */
 
-/* a) Estado completo para overlay / vistas externas */
+/* a) Estado por pelea (igual que tenías) */
 if (isset($_GET['ajax']) && $_GET['ajax'] === 'estado') {
   ini_set('display_errors', '0');
   json_clean_headers();
@@ -122,18 +118,13 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'estado') {
 
   $data = [
     'pelea_id'=>$pelea_id,
-    'evento_id'=>null,
-    'ganador_color'=>null,
-    'estado'=>null,
-    'resultado'=>null,
+    'evento_id'=>null,'ganador_color'=>null,'estado'=>null,'resultado'=>null,
     'azul'=>['id'=>null,'nombre'=>null,'escuela'=>null,'logo'=>null],
     'rojo'=>['id'=>null,'nombre'=>null,'escuela'=>null,'logo'=>null],
     'timer'=>[
-      'activo'=>0, 'ronda'=>1, 'ronda_actual'=>1,
-      'running'=>0, 'paused'=>1,
-      'en_descanso'=>0, 'remaining'=>180,
-      'epoch_inicio'=>null, 'duracion'=>180, 'dur_round'=>180,
-      'descanso'=>60, 'dur_descanso'=>60
+      'activo'=>0,'ronda'=>1,'ronda_actual'=>1,'running'=>0,'paused'=>1,
+      'en_descanso'=>0,'remaining'=>180,'epoch_inicio'=>null,
+      'duracion'=>180,'dur_round'=>180,'descanso'=>60,'dur_descanso'=>60
     ]
   ];
 
@@ -170,51 +161,137 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'estado') {
             $st2->execute();
             $st2->bind_result($act,$pid,$r,$run,$pau,$dur,$des,$rem,$rA,$enD,$epoch,$dR,$dD);
             if ($st2->fetch()){
-              $data['timer']['activo'] = (int)$act;
-              $data['timer']['ronda'] = (int)($r ?: 1);
-              $data['timer']['running']  = (int)($run ?: 0);
-              $data['timer']['paused']   = (int)($pau ?: 1);
-              $data['timer']['duracion'] = (int)($dur ?: 180);
-              $data['timer']['descanso'] = (int)($des ?: 60);
-              $data['timer']['remaining']= (int)($rem ?: 180);
-              $data['timer']['ronda_actual'] = (int)($rA ?: $data['timer']['ronda']);
-              $data['timer']['en_descanso']  = (int)($enD ?: 0);
-              $data['timer']['epoch_inicio'] = $epoch ? (int)$epoch : null;
-              $data['timer']['dur_round']    = (int)($dR ?: $data['timer']['duracion']);
-              $data['timer']['dur_descanso'] = (int)($dD ?: $data['timer']['descanso']);
+              $data['timer'] = [
+                'activo'=>(int)$act,
+                'ronda'=>(int)($r ?: 1),
+                'ronda_actual'=>(int)($rA ?: $r ?: 1),
+                'running'=>(int)($run ?: 0),
+                'paused'=>(int)($pau ?: 1),
+                'duracion'=>(int)($dur ?: 180),
+                'descanso'=>(int)($des ?: 60),
+                'remaining'=>(int)($rem ?: 180),
+                'en_descanso'=>(int)($enD ?: 0),
+                'epoch_inicio'=>$epoch ? (int)$epoch : null,
+                'dur_round'=>(int)($dR ?: $dur ?: 180),
+                'dur_descanso'=>(int)($dD ?: $des ?: 60)
+              ];
             }
             $st2->close();
           }
         }
 
-        if ($az_id || $ro_id){
-          if (table_exists($conexion,'competidores_evento')){
-            $C_ESC = has_col($conexion,'competidores_evento','escuela_nombre') ? 'escuela_nombre'
-                    : (has_col($conexion,'competidores_evento','escuela') ? 'escuela'
-                    : (has_col($conexion,'competidores_evento','gimnasio') ? 'gimnasio' : null));
-            $LOGO_CANDS = ['escuela_logo','logo_escuela','logo_url','escudo_url','escuela_escudo','logo','foto_escuela'];
-            $C_LOGO=null; foreach($LOGO_CANDS as $c){ if (has_col($conexion,'competidores_evento',$c)){ $C_LOGO=$c; break; } }
+        if (($az_id || $ro_id) && table_exists($conexion,'competidores_evento')){
+          $C_ESC = has_col($conexion,'competidores_evento','escuela_nombre') ? 'escuela_nombre'
+                  : (has_col($conexion,'competidores_evento','escuela') ? 'escuela'
+                  : (has_col($conexion,'competidores_evento','gimnasio') ? 'gimnasio' : null));
+          $LOGO_CANDS = ['escuela_logo','logo_escuela','logo_url','escudo_url','escuela_escudo','logo','foto_escuela'];
+          $C_LOGO=null; foreach($LOGO_CANDS as $c){ if (has_col($conexion,'competidores_evento',$c)){ $C_LOGO=$c; break; } }
 
-            $colsC = "id, TRIM(CONCAT(COALESCE(apellido,''),' ',COALESCE(nombre,''))) AS nom";
-            $colsC .= $C_ESC ? (", ".bt($C_ESC)." AS esc") : ", NULL AS esc";
-            $colsC .= $C_LOGO? (", ".bt($C_LOGO)." AS logo") : ", NULL AS logo";
+          $colsC = "id, TRIM(CONCAT(COALESCE(apellido,''),' ',COALESCE(nombre,''))) AS nom";
+          $colsC .= $C_ESC ? (", ".bt($C_ESC)." AS esc") : ", NULL AS esc";
+          $colsC .= $C_LOGO? (", ".bt($C_LOGO)." AS logo") : ", NULL AS logo";
 
-            $ids=[]; if ($az_id) $ids[]=$az_id; if ($ro_id) $ids[]=$ro_id;
-            $ph=implode(',', array_fill(0,count($ids),'?')); $typ=str_repeat('i', count($ids));
-            $sqlC = "SELECT $colsC FROM competidores_evento WHERE id IN ($ph)";
-            if ($st3=$conexion->prepare($sqlC)){
-              $st3->bind_param($typ, ...$ids);
-              $st3->execute(); $st3->bind_result($cid,$nom,$esc,$logo);
-              while($st3->fetch()){
-                $arr = ['id'=>(int)$cid,'nombre'=>$nom?:null,'escuela'=>$esc?:null,'logo'=>$logo?:null];
-                if ($az_id && (int)$cid===$az_id) $data['azul']=$arr;
-                if ($ro_id && (int)$cid===$ro_id) $data['rojo']=$arr;
-              }
-              $st3->close();
+          $ids=[]; if ($az_id) $ids[]=$az_id; if ($ro_id) $ids[]=$ro_id;
+          $ph=implode(',', array_fill(0,count($ids),'?')); $typ=str_repeat('i', count($ids));
+          $sqlC = "SELECT $colsC FROM competidores_evento WHERE id IN ($ph)";
+          if ($st3=$conexion->prepare($sqlC)){
+            $st3->bind_param($typ, ...$ids);
+            $st3->execute(); $st3->bind_result($cid,$nom,$esc,$logo);
+            while($st3->fetch()){
+              $arr = ['id'=>(int)$cid,'nombre'=>$nom?:null,'escuela'=>$esc?:null,'logo'=>$logo?:null];
+              if ($az_id && (int)$cid===$az_id) $data['azul']=$arr;
+              if ($ro_id && (int)$cid===$ro_id) $data['rojo']=$arr;
             }
+            $st3->close();
           }
         }
       }
+    }
+  }
+
+  echo json_encode(['ok'=>true,'data'=>$data,'timestamp'=>time()], JSON_UNESCAPED_UNICODE);
+  exit;
+}
+
+/* a2) NUEVO: Estado por evento (para overlay: sigue pelea_actual_id) */
+if (isset($_GET['ajax']) && $_GET['ajax'] === 'estado_evento') {
+  ini_set('display_errors', '0');
+  json_clean_headers();
+
+  $evento_id = get_int_qs($_GET, 'evento_id', 0) ?? 0;
+  if ($evento_id <= 0) { echo json_encode(['ok'=>false,'error'=>'evento_id_invalido']); exit; }
+
+  ensure_combate_estado($conexion);
+  $data = [
+    'evento_id'=>$evento_id,'pelea_actual_id'=>null,
+    'timer'=>['activo'=>0,'ronda'=>1,'ronda_actual'=>1,'running'=>0,'paused'=>1,'duracion'=>180,'descanso'=>60,'remaining'=>180,'en_descanso'=>0,'epoch_inicio'=>null,'dur_round'=>180,'dur_descanso'=>60],
+    'pelea'=>null,'azul'=>null,'rojo'=>null
+  ];
+
+  $st=$conexion->prepare("SELECT pelea_actual_id, activo, ronda, running, paused, duracion, descanso, remaining, ronda_actual, en_descanso, epoch_inicio, dur_round, dur_descanso
+                          FROM combate_estado WHERE evento_id=? LIMIT 1");
+  if ($st){
+    $st->bind_param('i',$evento_id);
+    $st->execute(); $st->bind_result($pid,$act,$r,$run,$pau,$dur,$des,$rem,$rA,$enD,$epoch,$dR,$dD);
+    if ($st->fetch()){
+      $data['pelea_actual_id']=(int)$pid;
+      $data['timer']=[
+        'activo'=>(int)$act,'ronda'=>(int)($r?:1),'ronda_actual'=>(int)($rA?:$r?:1),
+        'running'=>(int)$run,'paused'=>(int)$pau,
+        'duracion'=>(int)$dur,'descanso'=>(int)$des,'remaining'=>(int)$rem,
+        'en_descanso'=>(int)$enD,'epoch_inicio'=>$epoch? (int)$epoch : null,
+        'dur_round'=>(int)($dR?:$dur),'dur_descanso'=>(int)($dD?:$des),
+      ];
+    }
+    $st->close();
+  }
+
+  if (!empty($data['pelea_actual_id']) && table_exists($conexion,'peleas_evento')){
+    $C_AZ = has_col($conexion,'peleas_evento','competidor_azul_id')?'competidor_azul_id':(has_col($conexion,'peleas_evento','azul_id')?'azul_id':null);
+    $C_RO = has_col($conexion,'peleas_evento','competidor_rojo_id')?'competidor_rojo_id':(has_col($conexion,'peleas_evento','rojo_id')?'rojo_id':null);
+    $C_R  = null; foreach(['rondas','rounds','cantidad_rondas','rondas_total'] as $c){ if (has_col($conexion,'peleas_evento',$c)){ $C_R=$c; break; } }
+    $C_NUM= null; foreach(['numero','nro','orden','num'] as $c){ if (has_col($conexion,'peleas_evento',$c)){ $C_NUM=$c; break; } }
+    $C_GAN = has_col($conexion,'peleas_evento','ganador_color')?'ganador_color':(has_col($conexion,'peleas_evento','ganador')?'ganador':null);
+    $C_EST = has_col($conexion,'peleas_evento','estado')?'estado':null;
+
+    $cols="id".($C_NUM?(','.bt($C_NUM).' AS pnum'):',NULL AS pnum')
+           .($C_R?(','.bt($C_R).' AS rds'):',NULL AS rds')
+           .($C_AZ?(','.bt($C_AZ).' AS az'):'')
+           .($C_RO?(','.bt($C_RO).' AS ro'):'')
+           .($C_GAN?(','.bt($C_GAN).' AS gan'):',NULL AS gan')
+           .($C_EST?(','.bt($C_EST).' AS est'):',NULL AS est');
+    if ($st2=$conexion->prepare("SELECT $cols FROM peleas_evento WHERE id=? LIMIT 1")){
+      $st2->bind_param('i',$data['pelea_actual_id']);
+      $st2->execute(); $st2->store_result();
+      if ($C_AZ && $C_RO){ $st2->bind_result($pid,$pnum,$rds,$az,$ro,$gan,$est); }
+      elseif ($C_AZ){ $st2->bind_result($pid,$pnum,$rds,$az,$gan,$est); $ro=null; }
+      elseif ($C_RO){ $st2->bind_result($pid,$pnum,$rds,$ro,$gan,$est); $az=null; }
+      else { $st2->bind_result($pid,$pnum,$rds,$gan,$est); $az=$ro=null; }
+      if ($st2->fetch()){
+        $data['pelea']=['id'=>(int)$pid,'numero'=> is_null($pnum)?null:(int)$pnum,'rondas'=> is_null($rds)?null:(int)$rds,'ganador_color'=>$gan?:null,'estado'=>$est?:null];
+        $ids=[]; if (!empty($az)) $ids[]=(int)$az; if (!empty($ro)) $ids[]=(int)$ro;
+        if ($ids && table_exists($conexion,'competidores_evento')){
+          $C_ESC = has_col($conexion,'competidores_evento','escuela_nombre')?'escuela_nombre':(has_col($conexion,'competidores_evento','escuela')?'escuela':(has_col($conexion,'competidores_evento','gimnasio')?'gimnasio':null));
+          $LOGOS=['escuela_logo','logo_escuela','logo_url','escudo_url','escuela_escudo','logo','foto_escuela']; $C_LOGO=null;
+          foreach($LOGOS as $c){ if (has_col($conexion,'competidores_evento',$c)){ $C_LOGO=$c; break; } }
+          $colsC="id, TRIM(CONCAT(COALESCE(apellido,''),' ',COALESCE(nombre,''))) AS nom";
+          $colsC .= $C_ESC? (", ".bt($C_ESC)." AS esc") : ", NULL AS esc";
+          $colsC .= $C_LOGO?(", ".bt($C_LOGO)." AS logo") : ", NULL AS logo";
+          $ph=implode(',', array_fill(0,count($ids),'?')); $typ=str_repeat('i', count($ids));
+          $sqlC="SELECT $colsC FROM competidores_evento WHERE id IN ($ph)";
+          if ($st3=$conexion->prepare($sqlC)){
+            $st3->bind_param($typ, ...$ids);
+            $st3->execute(); $st3->bind_result($cid,$nom,$esc,$logo);
+            while($st3->fetch()){
+              $arr=['id'=>(int)$cid,'nombre'=>$nom?:null,'escuela'=>$esc?:null,'logo'=>$logo?:null];
+              if (!empty($az) && (int)$cid===(int)$az) $data['azul']=$arr;
+              if (!empty($ro) && (int)$cid===(int)$ro) $data['rojo']=$arr;
+            }
+            $st3->close();
+          }
+        }
+      }
+      $st2->close();
     }
   }
 
@@ -237,7 +314,6 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'set_estado') {
   $remaining = get_int_qs($_POST, 'remaining', $duracion) ?? $duracion;
   $activo    = get_int_qs($_POST, 'activo', 1) ?? 1;
 
-  // Compat opcional
   $en_descanso  = get_int_qs($_POST, 'en_descanso', 0) ?? 0;
   $epoch_inicio = get_int_qs($_POST, 'epoch_inicio', null);
 
@@ -265,8 +341,8 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'set_estado') {
             dur_descanso=VALUES(dur_descanso),
             actualizado_en=CURRENT_TIMESTAMP";
 
+  $ok=false;
   if ($st=$conexion->prepare($sql)){
-    // 14 parámetros int
     $st->bind_param(
       'iiiiiiiiiiiiii',
       $evento_id,$pelea_id,$activo,$ronda,$running,$paused,$duracion,$descanso,$remaining,
@@ -274,8 +350,7 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'set_estado') {
     );
     $ok=$st->execute();
     $st->close();
-  } else { $ok=false; }
-
+  }
   echo json_encode(['ok'=>$ok?true:false]); exit;
 }
 
@@ -328,10 +403,10 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'finalizar') {
     $tmp = json_decode((string)$_POST['manual_scores_json'], true);
     if (is_array($tmp)) $manual_scores = $tmp;
   }
-  $manual_win  = strtolower(trim((string)($_POST['manual_win']  ?? '')));
-  $manual_tipo = strtoupper(trim((string)($_POST['manual_tipo'] ?? '')));
+  $manual_win  = strtolower(trim((string)$_POST['manual_win']  ?? ''));
+  $manual_tipo = strtoupper(trim((string)$_POST['manual_tipo'] ?? ''));
   $manual_rf   = get_int_qs($_POST, 'manual_round_fin', 0) ?? 0;
-  $manual_time = trim((string)($_POST['manual_time'] ?? ''));
+  $manual_time = trim((string)$_POST['manual_time'] ?? '');
 
   if (!$manual_mode || empty($manual_scores)) {
     echo json_encode(['ok'=>false,'error'=>'sin_datos','msg'=>'No hay rounds cargados. Marcá el ganador de cada round.'], JSON_UNESCAPED_UNICODE);
@@ -414,7 +489,116 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'finalizar') {
 }
 
 /* ====================================================
-   VISTA HTML
+   MODO OVERLAY (MISMO ARCHIVO) — ?overlay=1&evento_id=123
+   ==================================================== */
+$isOverlay = (isset($_GET['overlay']) && (string)$_GET['overlay']==='1');
+if ($isOverlay) {
+  $evento_param = get_int_qs($_GET,'evento_id',0) ?? 0;
+  if ($evento_param<=0){ echo "Falta evento_id"; exit; }
+  ?>
+  <!doctype html>
+  <html lang="es">
+  <head>
+    <meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+    <title>Overlay — Evento #<?= (int)$evento_param ?></title>
+    <style>
+      body{margin:0;background:transparent;color:#fff;font-family:system-ui,Segoe UI,Roboto,Arial,sans-serif}
+      .wrap{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:10px 16px;background:rgba(0,0,0,.35);backdrop-filter:blur(4px);border:1px solid #ffffff22;border-radius:14px}
+      .corner{display:flex;align-items:center;gap:10px;max-width:38%}
+      .corner img{width:54px;height:54px;object-fit:contain;background:#000;border:1px solid #ffffff22;border-radius:10px}
+      .name{font-weight:900;font-size:22px;line-height:1.05}
+      .esc{font-size:13px;opacity:.85}
+      .timer{font-size:72px;font-weight:1000;letter-spacing:1px;min-width:180px;text-align:center}
+      .round{font-size:14px;text-align:center;opacity:.9;margin-top:-4px}
+      .red  .name{color:#ff8a80}
+      .blue .name{color:#80c0ff}
+    </style>
+  </head>
+  <body>
+    <div class="wrap" id="overlay">
+      <div class="corner red" id="redC">
+        <img id="logoRojo" alt="">
+        <div>
+          <div class="name" id="nomRojo">Rojo</div>
+          <div class="esc" id="escRojo"></div>
+        </div>
+      </div>
+
+      <div>
+        <div class="timer" id="timer">0:00</div>
+        <div class="round" id="round">R1</div>
+      </div>
+
+      <div class="corner blue" id="blueC">
+        <img id="logoAzul" alt="">
+        <div>
+          <div class="name" id="nomAzul">Azul</div>
+          <div class="esc" id="escAzul"></div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+    (function(){
+      const eventoId = <?= (int)$evento_param ?>;
+      let state=null, ver=0, uiTick=null;
+
+      const nomRojo=document.getElementById('nomRojo'), escRojo=document.getElementById('escRojo'), logoRojo=document.getElementById('logoRojo');
+      const nomAzul=document.getElementById('nomAzul'), escAzul=document.getElementById('escAzul'), logoAzul=document.getElementById('logoAzul');
+      const timerEl=document.getElementById('timer'), roundEl=document.getElementById('round');
+
+      function setLogo(el,url){ if(url){ el.src=url; el.style.visibility='visible'; } else { el.removeAttribute('src'); el.style.visibility='hidden'; } }
+      function fmt(s){ s=Math.max(0,s|0); const m=(s/60)|0, ss=String(s%60).padStart(2,'0'); return `${m}:${ss}`; }
+
+      function calcRemaining(t){
+        if(!t) return 0;
+        const now=(Date.now()/1000)|0;
+        if (t.running && t.epoch_inicio){
+          const base = t.en_descanso ? (t.descanso|0):(t.duracion|0);
+          const elapsed = Math.max(0, now - (t.epoch_inicio|0));
+          return Math.max(0, base - elapsed);
+        }
+        return Math.max(0,(t.remaining|0));
+      }
+
+      function repaint(){
+        if(!state) return;
+        const t=state.timer||{};
+        timerEl.textContent = fmt(calcRemaining(t));
+        roundEl.textContent = `R${(t.ronda||t.ronda_actual||1)}${t.en_descanso?' (descanso)':''}`;
+      }
+
+      function applyState(j){
+        state=j.data;
+        const az=state.azul||{}, ro=state.rojo||{};
+        nomAzul.textContent = az.nombre || 'Azul'; escAzul.textContent = az.escuela || ''; setLogo(logoAzul, az.logo||'');
+        nomRojo.textContent = ro.nombre || 'Rojo'; escRojo.textContent = ro.escuela || ''; setLogo(logoRojo, ro.logo||'');
+        if (uiTick) cancelAnimationFrame(uiTick);
+        const loop=()=>{ repaint(); uiTick=requestAnimationFrame(loop); };
+        uiTick=requestAnimationFrame(loop);
+      }
+
+      async function poll(){
+        try{
+          const r = await fetch(`combate_en_vivo.php?ajax=estado_evento&evento_id=${encodeURIComponent(eventoId)}`,{cache:'no-store'});
+          const j = await r.json();
+          if (j && j.ok && j.data){
+            applyState(j);
+          }
+        }catch(e){}
+        setTimeout(poll, 500); // 500ms, liviano
+      }
+      poll();
+    })();
+    </script>
+  </body>
+  </html>
+  <?php
+  exit;
+}
+
+/* ====================================================
+   VISTA HTML — MESA (tu diseño intacto)
    ==================================================== */
 
 $pelea_id = get_int_qs($_GET, 'pelea_id', 0) ?? 0;
@@ -554,7 +738,7 @@ $return_to = 'ver_peleas_evento.php'.($evento_id?('?evento_id='.(int)$evento_id)
 
 $__t_init = isset($timerDur) ? (int)$timerDur : 120;
 $__m_init = (int)floor($__t_init/60);
-$__s_init = str_pad((string)($__t_init % 60), 2, '0', STR_PAD_LEFT);
+$__s_init = str_pad((string)$__t_init%60, 2, '0', STR_PAD_LEFT);
 
 ?>
 <!DOCTYPE html>
@@ -723,31 +907,16 @@ $__s_init = str_pad((string)($__t_init % 60), 2, '0', STR_PAD_LEFT);
 
 <script>
 (function(){
-  /* ====== Timer ====== */
-  let duration = <?= (int)$timerDur ?>;
-  let rest     = <?= (int)$timerRest ?>;
-  let remain   = duration;
-  let round    = 1;
-  let t        = null;
-  let inRest   = false;
-  let running  = false;
+  /* ====== Timer con corrección de deriva ====== */
+  let duration=<?= (int)$timerDur ?>, rest=<?= (int)$timerRest ?>, remain=<?= (int)$timerDur ?>, round=1, inRest=false;
+  let running=false, nextTs=0, rafId=0;
 
-  const timer   = document.getElementById('timer');
-  const rnd     = document.getElementById('round');
-  const selDur  = document.getElementById('selDur');
-  const selRest = document.getElementById('selRest');
-  const btnStart= document.getElementById('btnStart');
-  const btnPause= document.getElementById('btnPause');
-  const btnReset= document.getElementById('btnReset');
-  const btnNext = document.getElementById('btnNext');
+  const timer=document.getElementById('timer'), rnd=document.getElementById('round');
+  const selDur=document.getElementById('selDur'), selRest=document.getElementById('selRest');
+  const btnStart=document.getElementById('btnStart'), btnPause=document.getElementById('btnPause'),
+        btnReset=document.getElementById('btnReset'), btnNext=document.getElementById('btnNext');
 
-  function setRunning(state){
-    running = !!state;
-    btnStart.disabled = running;
-    btnPause.disabled = !running;
-  }
-
-  // ======= PUBLICACIÓN DE TIMER AL VIVO =======
+  /* ======= PUBLICACIÓN DE TIMER AL VIVO ======= */
   const eventoId = <?= $evento_id ? (int)$evento_id : 0 ?>;
   const peleaId  = <?= (int)$pelea_id ?>;
   let lastPublish = 0;
@@ -758,24 +927,26 @@ $__s_init = str_pad((string)($__t_init % 60), 2, '0', STR_PAD_LEFT);
     if (!force && (now - lastPublish) < 1) return;
     lastPublish = now;
 
-    const elapsed = (inRest ? (rest - remain) : (duration - remain));
-    const epoch_inicio = Math.max(0, Math.floor(Date.now()/1000) - Math.max(0, elapsed));
-
     const fd = new FormData();
     fd.append('evento_id', String(eventoId));
     fd.append('pelea_id',  String(peleaId));
-    fd.append('activo',    '1');
+    fd.append('activo',    running ? '1' : '0');
 
     fd.append('ronda',     String(round));
     fd.append('running',   running ? '1' : '0');
     fd.append('paused',    running ? '0' : '1');
     fd.append('duracion',  String(duration));
     fd.append('descanso',  String(rest));
-    fd.append('remaining', String(Math.max(0, remain)));
+    fd.append('remaining', String(Math.max(0,remain)));
 
     // Compat
     fd.append('ronda_actual', String(round));
     fd.append('en_descanso',  inRest ? '1' : '0');
+
+    // epoch_inicio = ahora - (tiempo transcurrido de fase actual)
+    const base = inRest ? rest : duration;
+    const elapsed = Math.max(0, base - Math.max(0,remain));
+    const epoch_inicio = Math.max(0, Math.floor(Date.now()/1000) - elapsed);
     fd.append('epoch_inicio', String(epoch_inicio));
     fd.append('dur_round',    String(duration));
     fd.append('dur_descanso', String(rest));
@@ -794,99 +965,64 @@ $__s_init = str_pad((string)($__t_init % 60), 2, '0', STR_PAD_LEFT);
     try{ await fetch('combate_en_vivo.php?ajax=pausar_actual', {method:'POST', body:fd, cache:'no-store'}); }catch(e){}
   }
 
-  function clamp(n,min,max){
-    const x = parseInt(n,10);
-    if (Number.isNaN(x)) return min;
-    return Math.max(min, Math.min(max, x));
-  }
-  function fmt(s){
-    s = Math.max(0, s|0);
-    const m = Math.floor(s/60);
-    const ss = String(s%60).padStart(2,'0');
-    return `${m}:${ss}`;
-  }
-  function paint(){
-    timer.textContent = fmt(remain);
-    rnd.textContent   = String(round);
-  }
-  function stopTick(){
-    if (t){ clearInterval(t); t=null; }
-    setRunning(false);
-  }
-  function startTick(){
-    if (t) return;
-    setRunning(true);
-    t = setInterval(tick, 1000);
-  }
-  function tick(){
-    if (remain > 0){
-      remain--;
-      if (remain === 10){
-        try{document.getElementById('snd-10').play().catch(()=>{});}catch(e){}
+  function fmt(s){const m=Math.floor(s/60), ss=String(s%60).padStart(2,'0'); return `${m}:${ss}`;}
+  function paint(){ timer.textContent=fmt(remain); rnd.textContent=round; }
+
+  function step(nowMs){
+    // Corrección de deriva: solo descontar cada 1000ms reales
+    if (nowMs >= nextTs){
+      if(remain>0){
+        remain--;
+        if(remain===10){ try{document.getElementById('snd-10').play().catch(()=>{});}catch(e){} }
+        publishTimer(false);
+      } else {
+        if(!inRest){
+          try{document.getElementById('snd-roundend').play().catch(()=>{});}catch(e){}
+          inRest=true; remain=rest;
+        } else {
+          try{document.getElementById('snd-restend').play().catch(()=>{});}catch(e){}
+          inRest=false; round++; remain=duration;
+        }
+        publishTimer(true);
       }
       paint();
-      publishTimer(false);
-      return;
+      nextTs += 1000;
     }
-    // Cambio de fase
-    if (!inRest){
-      try{document.getElementById('snd-roundend').play().catch(()=>{});}catch(e){}
-      inRest = true;
-      remain = rest;
-    } else {
-      try{document.getElementById('snd-restend').play().catch(()=>{});}catch(e){}
-      inRest = false;
-      round++;
-      remain = duration;
-    }
-    paint();
-    publishTimer(true);
+    if (running) rafId = requestAnimationFrame(step);
   }
 
-  btnStart.onclick = async ()=>{
-    if (!t){
-      startTick();
+  btnStart.onclick=async ()=>{
+    if(!running){
+      running=true;
+      nextTs = performance.now() + 1000; // arranca alineado
       try{document.getElementById('snd-start').play().catch(()=>{});}catch(e){}
       await marcarActual();
       publishTimer(true);
+      rafId = requestAnimationFrame(step);
     }
   };
-  btnPause.onclick = async ()=>{
-    stopTick();
+  btnPause.onclick=async ()=>{
+    if(running){ running=false; cancelAnimationFrame(rafId); }
     await pausarActual();
     publishTimer(true);
   };
-  btnReset.onclick = async ()=>{
-    stopTick();
-    inRest = false; round = 1; remain = duration;
-    paint();
+  btnReset.onclick=async ()=>{
+    if(running){ running=false; cancelAnimationFrame(rafId); }
+    inRest=false; round=1; remain=duration; paint();
     await pausarActual();
     publishTimer(true);
   };
-  btnNext.onclick = async ()=>{
-    stopTick();
-    inRest = false; round++; remain = duration;
-    paint();
+  btnNext.onclick =async ()=>{
+    if(running){ running=false; cancelAnimationFrame(rafId); }
+    inRest=false; round++; remain=duration; paint();
     await marcarActual();
     publishTimer(true);
   };
 
-  selDur.onchange = ()=>{
-    duration = clamp(selDur.value, 30, 900);
-    selDur.value = String(duration);
-    if (!inRest && remain > duration) remain = duration;
-    paint();
-    publishTimer(true);
-  };
-  selRest.onchange = ()=>{
-    rest = clamp(selRest.value, 10, 600);
-    selRest.value = String(rest);
-    if (inRest && remain > rest) remain = rest;
-    paint();
-    publishTimer(true);
-  };
+  selDur.onchange =()=>{ const v = Math.max(30, Math.min(900, parseInt(selDur.value||duration,10))); duration=v; selDur.value=v; if(!inRest&&remain>duration) remain=duration; paint(); publishTimer(true); };
+  selRest.onchange=()=>{ const v = Math.max(10, Math.min(600, parseInt(selRest.value||rest,10))); rest=v; selRest.value=v; if(inRest&&remain>rest) remain=rest; paint(); publishTimer(true); };
 
-  /* ====== Rondas con botones ====== */
+  /* ====== Rondas con botones (igual) ====== */
   const MAX_ROUNDS = 12;
   let rondasConfig = parseInt(document.getElementById('lblRondas').textContent, 10);
   if (!Number.isFinite(rondasConfig) || rondasConfig < 1) rondasConfig = 3;
@@ -902,7 +1038,7 @@ $__s_init = str_pad((string)($__t_init % 60), 2, '0', STR_PAD_LEFT);
   function renderRows(){
     let html = '';
     for(let r=1; r<=rondasEnJuego; r++){
-      const val = (roundResults[r-1] && roundResults[r-1].v) ? roundResults[r-1].v : null;
+      const val = (roundResults[r-1]?.v) || null;
       const isExtra = r > rondasConfig;
       html += `<tr ${isExtra?'class="r-extra"':''}>
         <td>R${r}${isExtra?' <small>(extra)</small>':''}</td>
@@ -942,61 +1078,11 @@ $__s_init = str_pad((string)($__t_init % 60), 2, '0', STR_PAD_LEFT);
     }
   }
 
-  function allBaseFilled(){
-    for(let i=0;i<rondasConfig;i++){
-      if (!roundResults[i] || !roundResults[i].v) return false;
-    }
-    return true;
-  }
-
-  function isGlobalTie(){
-    let az=0, ro=0;
-    roundResults.forEach(rr=>{
-      if (rr && rr.v==='azul') az++;
-      else if (rr && rr.v==='rojo') ro++;
-    });
-    return az===ro;
-  }
-
-  function recalcTotals(){
-    let az=0, ro=0, eq=0;
-    roundResults.forEach(rr=>{
-      if (!rr || !rr.v) return;
-      if (rr.v==='azul') az++;
-      else if (rr.v==='rojo') ro++;
-      else eq++;
-    });
-    rAz.textContent = az; rRo.textContent = ro; rEq.textContent = eq;
-    bSug.textContent = (az>ro?'🔵 Azul':(ro>az?'🔴 Rojo':'⚖️ Empate'));
-  }
-
-  function collectManualScoresAsPoints(){
-    const out = [];
-    for (let r=1; r<=roundResults.length; r++){
-      const v = (roundResults[r-1] && roundResults[r-1].v) ? roundResults[r-1].v : null;
-      if (!v){
-        out.push({round:r, azul:10, rojo:10});
-      } else if (v==='azul'){
-        out.push({round:r, azul:10, rojo:9});
-      } else if (v==='rojo'){
-        out.push({round:r, azul:9, rojo:10});
-      } else {
-        out.push({round:r, azul:10, rojo:10});
-      }
-    }
-    return out;
-  }
-
-  function autoWinnerFromResults(){
-    let az=0, ro=0;
-    roundResults.forEach(rr=>{
-      if (rr && rr.v==='azul') az++;
-      else if (rr && rr.v==='rojo') ro++;
-    });
-    if (az>ro) return 'azul';
-    if (ro>az) return 'rojo';
-    return 'empate';
-  }
+  function allBaseFilled(){ for(let i=0;i<rondasConfig;i++){ if (!roundResults[i] || !roundResults[i].v) return false; } return true; }
+  function isGlobalTie(){ let az=0, ro=0; roundResults.forEach(rr=>{ if (rr?.v==='azul') az++; else if (rr?.v==='rojo') ro++; }); return az===ro; }
+  function recalcTotals(){ let az=0, ro=0, eq=0; roundResults.forEach(rr=>{ if (!rr || !rr.v) return; if (rr.v==='azul') az++; else if (rr.v==='rojo') ro++; else eq++; }); rAz.textContent = az; rRo.textContent = ro; rEq.textContent = eq; bSug.textContent = (az>ro?'🔵 Azul':(ro>az?'🔴 Rojo':'⚖️ Empate')); }
+  function collectManualScoresAsPoints(){ const out=[]; for (let r=1; r<=roundResults.length; r++){ const v = roundResults[r-1]?.v || null; if (!v){ out.push({round:r, azul:10, rojo:10}); } else if (v==='azul'){ out.push({round:r, azul:10, rojo:9}); } else if (v==='rojo'){ out.push({round:r, azul:9, rojo:10}); } else { out.push({round:r, azul:10, rojo:10}); } } return out; }
+  function autoWinnerFromResults(){ let az=0, ro=0; roundResults.forEach(rr=>{ if (rr?.v==='azul') az++; else if (rr?.v==='rojo') ro++; }); if (az>ro) return 'azul'; if (ro>az) return 'rojo'; return 'empate'; }
 
   roundResults = Array.from({length: rondasConfig}, (_,i)=>({r:i+1, v:null}));
   renderRows();
@@ -1010,13 +1096,10 @@ $__s_init = str_pad((string)($__t_init % 60), 2, '0', STR_PAD_LEFT);
   document.getElementById('btnFinish').onclick = async ()=>{
     if (allBaseFilled() && isGlobalTie() && rondasEnJuego < MAX_ROUNDS){
       alert('Empate global: se agregó un round extra. Marcá el ganador del round extra antes de finalizar.');
-      rondasEnJuego++;
-      renderRows();
-      return;
+      rondasEnJuego++; renderRows(); return;
     }
-
     if(!confirm('¿Finalizar el combate y enviar a resultados?')) return;
-    stopTick();
+    running=false; cancelAnimationFrame(rafId);
     try{document.getElementById('snd-fightend').play().catch(()=>{});}catch(e){}
 
     if (!selWin.value){
@@ -1045,15 +1128,13 @@ $__s_init = str_pad((string)($__t_init % 60), 2, '0', STR_PAD_LEFT);
     }catch(e){ alert('Error de red.'); } finally { clearTimeout(to); }
   };
 
-  // Autostart con QS start=1
+  // Autostart
   const autoStart = <?= $autoQS ? 'true' : 'false' ?>;
-  function paintInit(){ remain = duration; paint(); setRunning(false); }
+  function paintInit(){ remain=duration; paint(); }
   paintInit();
-  if (autoStart){ setTimeout(()=>{ btnStart.click(); }, 150); }
+  if (autoStart){ setTimeout(()=>{ btnStart.click(); }, 120); }
 
   publishTimer(true);
-
-  window.addEventListener('beforeunload', ()=>{ if (t) clearInterval(t); });
 })();
 </script>
 </body>
