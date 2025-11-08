@@ -17,8 +17,8 @@ require_once __DIR__ . '/conexion.php';
 error_reporting(E_ALL);
 ini_set('display_errors', '1');
 header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
-header('Pragma: no-cache');
-header('Expires: 0');
+header('Pragma', 'no-cache');
+header('Expires', '0');
 if (function_exists('opcache_invalidate')) { @opcache_invalidate(__FILE__, true); }
 $__BUILD = @filemtime(__FILE__) ?: time();
 
@@ -51,7 +51,7 @@ function json_clean_headers(){
   header_remove('Set-Cookie');
   header('Content-Type: application/json; charset=utf-8');
   header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
-  header('Pragma: no-cache');
+  header('Pragma', 'no-cache');
 }
 
 /* ====== Tabla combate_estado: crear y asegurar columnas ====== */
@@ -66,7 +66,7 @@ function ensure_combate_estado(mysqli $db){
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
   ");
 
-  // Esquema NUEVO (B): sincronización con running/paused/remaining
+  // Esquema NUEVO (B)
   $adds = [];
   if (!has_col($db,'combate_estado','ronda'))     $adds[]="ADD ronda INT NOT NULL DEFAULT 1";
   if (!has_col($db,'combate_estado','running'))   $adds[]="ADD running TINYINT(1) NOT NULL DEFAULT 0";
@@ -76,7 +76,7 @@ function ensure_combate_estado(mysqli $db){
   if (!has_col($db,'combate_estado','remaining')) $adds[]="ADD remaining INT NOT NULL DEFAULT 180";
   if ($adds) { $db->query("ALTER TABLE combate_estado ".implode(', ',$adds)); }
 
-  // Esquema ANTERIOR (compatibilidad con overlay por epoch)
+  // Esquema ANTERIOR (compatibilidad)
   $adds2 = [];
   if (!has_col($db,'combate_estado','ronda_actual'))  $adds2[]="ADD ronda_actual INT DEFAULT 1";
   if (!has_col($db,'combate_estado','en_descanso'))   $adds2[]="ADD en_descanso TINYINT(1) NOT NULL DEFAULT 0";
@@ -92,7 +92,7 @@ function ensure_combate_estado(mysqli $db){
 }
 ensure_combate_estado($conexion);
 
-/* ===== Ruta de resultados (PLURAL) ===== */
+/* ===== Ruta de resultados ===== */
 $RESULTADOS_RUTA = 'resultados_combates.php';
 
 /* ===== Sonidos ===== */
@@ -129,7 +129,6 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'estado') {
     'azul'=>['id'=>null,'nombre'=>null,'escuela'=>null,'logo'=>null],
     'rojo'=>['id'=>null,'nombre'=>null,'escuela'=>null,'logo'=>null],
     'timer'=>[
-      // compat: ambos esquemas
       'activo'=>0, 'ronda'=>1, 'ronda_actual'=>1,
       'running'=>0, 'paused'=>1,
       'en_descanso'=>0, 'remaining'=>180,
@@ -139,7 +138,6 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'estado') {
   ];
 
   if (table_exists($conexion,'peleas_evento')) {
-    // columnas básicas
     $cols = ['id','evento_id'];
     $C_GAN = null;
     foreach (['ganador_color','ganador'] as $c){ if (has_col($conexion,'peleas_evento',$c)){ $cols[]=$c; $C_GAN=$c; break; } }
@@ -161,7 +159,6 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'estado') {
         $az_id = !empty($row[$C_AZ??'']) ? (int)$row[$C_AZ] : null;
         $ro_id = !empty($row[$C_RO??'']) ? (int)$row[$C_RO] : null;
 
-        // timer en combate_estado (por evento)
         if (!empty($data['evento_id'])) {
           ensure_combate_estado($conexion);
           $st2=$conexion->prepare("SELECT activo, pelea_actual_id,
@@ -180,7 +177,6 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'estado') {
               $data['timer']['duracion'] = (int)($dur ?: 180);
               $data['timer']['descanso'] = (int)($des ?: 60);
               $data['timer']['remaining']= (int)($rem ?: 180);
-              // compat
               $data['timer']['ronda_actual'] = (int)($rA ?: $data['timer']['ronda']);
               $data['timer']['en_descanso']  = (int)($enD ?: 0);
               $data['timer']['epoch_inicio'] = $epoch ? (int)$epoch : null;
@@ -191,7 +187,6 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'estado') {
           }
         }
 
-        // nombres/escuelas/logos
         if ($az_id || $ro_id){
           if (table_exists($conexion,'competidores_evento')){
             $C_ESC = has_col($conexion,'competidores_evento','escuela_nombre') ? 'escuela_nombre'
@@ -227,7 +222,7 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'estado') {
   exit;
 }
 
-/* b) Persistir estado (cronómetro/pelea) directamente en este archivo */
+/* b) Persistir estado (cronómetro/pelea) */
 if (isset($_GET['ajax']) && $_GET['ajax'] === 'set_estado') {
   ini_set('display_errors','0');
   json_clean_headers();
@@ -242,7 +237,7 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'set_estado') {
   $remaining = get_int_qs($_POST, 'remaining', $duracion) ?? $duracion;
   $activo    = get_int_qs($_POST, 'activo', 1) ?? 1;
 
-  // Compat opcional (si el front manda epoch/en_descanso)
+  // Compat opcional
   $en_descanso  = get_int_qs($_POST, 'en_descanso', 0) ?? 0;
   $epoch_inicio = get_int_qs($_POST, 'epoch_inicio', null);
 
@@ -250,7 +245,6 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'set_estado') {
 
   ensure_combate_estado($conexion);
 
-  // UPSERT por evento_id
   $sql = "INSERT INTO combate_estado
             (evento_id, pelea_actual_id, activo, ronda, running, paused, duracion, descanso, remaining,
              ronda_actual, en_descanso, epoch_inicio, dur_round, dur_descanso, actualizado_en)
@@ -271,13 +265,16 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'set_estado') {
             dur_descanso=VALUES(dur_descanso),
             actualizado_en=CURRENT_TIMESTAMP";
 
-  $st=$conexion->prepare($sql);
-  $st->bind_param(
-    'iiiiiiiii iiiii',
-    $evento_id,$pelea_id,$activo,$ronda,$running,$paused,$duracion,$descanso,$remaining,
-    $ronda,$en_descanso,$epoch_inicio,$duracion,$descanso
-  );
-  $ok=$st->execute(); $st->close();
+  if ($st=$conexion->prepare($sql)){
+    // ✅ 14 parámetros => 14 'i' SIN espacios
+    $st->bind_param(
+      'iiiiiiiiiiiiii',
+      $evento_id,$pelea_id,$activo,$ronda,$running,$paused,$duracion,$descanso,$remaining,
+      $ronda,$en_descanso,$epoch_inicio,$duracion,$descanso
+    );
+    $ok=$st->execute();
+    $st->close();
+  } else { $ok=false; }
 
   echo json_encode(['ok'=>$ok?true:false]); exit;
 }
@@ -289,7 +286,6 @@ if (isset($_GET['ajax']) && in_array($_GET['ajax'], ['marcar_actual','pausar_act
   $pelea_id = get_int_qs($_POST, 'pelea_id', 0) ?? 0;
   if ($pelea_id <= 0) { echo json_encode(['ok'=>false,'error'=>'pelea_id_invalido']); exit; }
 
-  // Buscar evento_id
   $evento_id_fin = null;
   if (table_exists($conexion,'peleas_evento') && has_col($conexion,'peleas_evento','evento_id')) {
     if ($st=$conexion->prepare("SELECT evento_id FROM peleas_evento WHERE id=? LIMIT 1")){
@@ -330,23 +326,21 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'finalizar') {
   $manual_scores = [];
   if (!empty($_POST['manual_scores_json'])) {
     $tmp = json_decode((string)$_POST['manual_scores_json'], true);
-    if (is_array($tmp)) $manual_scores = $tmp; // [{round:1, azul:10, rojo:9}, ...]
+    if (is_array($tmp)) $manual_scores = $tmp;
   }
-  $manual_win  = strtolower(trim((string)($_POST['manual_win']  ?? ''))); // azul|rojo|empate|''
-  $manual_tipo = strtoupper(trim((string)($_POST['manual_tipo'] ?? ''))); // KO|TKO|SUM|PTS|DQ|NC|''
+  $manual_win  = strtolower(trim((string)($_POST['manual_win']  ?? '')));
+  $manual_tipo = strtoupper(trim((string)($_POST['manual_tipo'] ?? '')));
   $manual_rf   = get_int_qs($_POST, 'manual_round_fin', 0) ?? 0;
-  $manual_time = trim((string)($_POST['manual_time'] ?? '')); // mm:ss
+  $manual_time = trim((string)($_POST['manual_time'] ?? ''));
 
   if (!$manual_mode || empty($manual_scores)) {
     echo json_encode(['ok'=>false,'error'=>'sin_datos','msg'=>'No hay rounds cargados. Marcá el ganador de cada round.'], JSON_UNESCAPED_UNICODE);
     exit;
   }
 
-  // Sumar puntos
   $sumA = 0; $sumR = 0;
   foreach ($manual_scores as $r) { $sumA += (int)($r['azul'] ?? 0); $sumR += (int)($r['rojo'] ?? 0); }
 
-  // Resolver ganador
   $gan=''; $metodo=''; $detalle='';
   if (in_array($manual_win, ['azul','rojo','empate'], true)) {
     $gan    = $manual_win;
@@ -359,7 +353,6 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'finalizar') {
     else                   { $gan='empate';$metodo='DRAW';$detalle='empate en puntos (mesa)'; }
   }
 
-  // Traer IDs/col
   $C_EVENTO    = has_col($conexion,'peleas_evento','evento_id') ? 'evento_id' : null;
   $C_GAN_COLOR = has_col($conexion,'peleas_evento','ganador_color') ? 'ganador_color' : (has_col($conexion,'peleas_evento','ganador')?'ganador':null);
   $C_ESTADO    = has_col($conexion,'peleas_evento','estado') ? 'estado' : null;
@@ -381,7 +374,6 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'finalizar') {
     $stmt->fetch(); $stmt->close();
   }
 
-  // estado / ganador / detalle
   if ($C_ESTADO && ($st=$conexion->prepare("UPDATE peleas_evento SET ".bt($C_ESTADO)."='finalizada' WHERE id=? LIMIT 1"))){
     $st->bind_param('i',$pelea_id); $st->execute(); $st->close();
   }
@@ -407,7 +399,6 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'finalizar') {
     $st->bind_param('si',$txt,$pelea_id); $st->execute(); $st->close();
   }
 
-  // Pausar transmisión si está activa
   if (!empty($evento_id_fin)) {
     ensure_combate_estado($conexion);
     if ($st=$conexion->prepare("UPDATE combate_estado SET activo=0, running=0, paused=1, actualizado_en=CURRENT_TIMESTAMP WHERE evento_id=? LIMIT 1")){
@@ -426,7 +417,6 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'finalizar') {
    VISTA HTML
    ==================================================== */
 
-// Intentar tomar pelea_id del QS; si no viene, usar el de sesión
 $pelea_id = get_int_qs($_GET, 'pelea_id', 0) ?? 0;
 if ($pelea_id <= 0 && !empty($_SESSION['pelea_id_actual'])) $pelea_id = (int)$_SESSION['pelea_id_actual'];
 if ($pelea_id > 0) $_SESSION['pelea_id_actual'] = (int)$pelea_id;
@@ -488,7 +478,6 @@ if (table_exists($conexion,'peleas_evento')) {
     $st->close();
   }
 
-  // Datos extendidos de competidores_evento
   $ids = [];
   if (!empty($az_id) && (int)$az_id>0) $ids[] = (int)$az_id;
   if (!empty($ro_id) && (int)$ro_id>0) $ids[] = (int)$ro_id;
@@ -741,19 +730,17 @@ $__s_init = str_pad((string)$__t_init%60, 2, '0', STR_PAD_LEFT);
   const btnStart=document.getElementById('btnStart'), btnPause=document.getElementById('btnPause'),
         btnReset=document.getElementById('btnReset'), btnNext=document.getElementById('btnNext');
 
-  // ======= PUBLICACIÓN DE TIMER AL VIVO (sin API externo) =======
-  const eventoId = <?= $evento_id ? (int)$evento_id : 0 ?>; // si no hay evento_id, no publica
+  // ======= PUBLICACIÓN DE TIMER AL VIVO =======
+  const eventoId = <?= $evento_id ? (int)$evento_id : 0 ?>;
   const peleaId  = <?= (int)$pelea_id ?>;
-
   let lastPublish = 0;
 
   async function publishTimer(force=false){
     if (!eventoId) return;
     const now = Math.floor(Date.now()/1000);
-    if (!force && (now - lastPublish) < 1) return; // 1s máx
+    if (!force && (now - lastPublish) < 1) return;
     lastPublish = now;
 
-    // epoch_inicio (compat) = inicio de la fase actual (round/descanso)
     const elapsed = (inRest ? (rest - remain) : (duration - remain));
     const epoch_inicio = Math.max(0, Math.floor(Date.now()/1000) - Math.max(0, elapsed));
 
@@ -762,7 +749,6 @@ $__s_init = str_pad((string)$__t_init%60, 2, '0', STR_PAD_LEFT);
     fd.append('pelea_id',  String(peleaId));
     fd.append('activo',    '1');
 
-    // Esquema B
     fd.append('ronda',     String(round));
     fd.append('running',   t ? '1' : '0');
     fd.append('paused',    t ? '0' : '1');
@@ -770,7 +756,7 @@ $__s_init = str_pad((string)$__t_init%60, 2, '0', STR_PAD_LEFT);
     fd.append('descanso',  String(rest));
     fd.append('remaining', String(Math.max(0,remain)));
 
-    // Compat epoch
+    // Compat
     fd.append('ronda_actual', String(round));
     fd.append('en_descanso',  inRest ? '1' : '0');
     fd.append('epoch_inicio', String(epoch_inicio));
@@ -810,7 +796,7 @@ $__s_init = str_pad((string)$__t_init%60, 2, '0', STR_PAD_LEFT);
       inRest=false; round++; remain=duration;
     }
     paint();
-    publishTimer(true); // fase nueva => forzar
+    publishTimer(true);
   }
   btnStart.onclick=async ()=>{
     if(!t){
@@ -842,7 +828,7 @@ $__s_init = str_pad((string)$__t_init%60, 2, '0', STR_PAD_LEFT);
   selRest.onchange=()=>{ rest=clamp(selRest.value,10,600); selRest.value=rest; if(inRest&&remain>rest) remain=rest; paint(); publishTimer(true); };
 
   /* ====== Rondas con botones ====== */
-  const MAX_ROUNDS = 12; // límite de seguridad
+  const MAX_ROUNDS = 12;
   let rondasConfig = parseInt(document.getElementById('lblRondas').textContent, 10);
   if (!Number.isFinite(rondasConfig) || rondasConfig < 1) rondasConfig = 3;
   let rondasEnJuego = rondasConfig;
@@ -852,7 +838,6 @@ $__s_init = str_pad((string)$__t_init%60, 2, '0', STR_PAD_LEFT);
   const bSug = document.getElementById('bSug');
   const lblJugadas = document.getElementById('lblJugadas');
 
-  // roundResults: { r:1..n, v:'azul'|'rojo'|'empate'|null }
   let roundResults = [];
 
   function renderRows(){
@@ -887,15 +872,11 @@ $__s_init = str_pad((string)$__t_init%60, 2, '0', STR_PAD_LEFT);
   function setRound(r, v){
     while (roundResults.length < r) roundResults.push({r: roundResults.length+1, v: null});
     roundResults[r-1].v = v;
-    // refrescar UI del row r
     const rowChips = tblBody.querySelectorAll(`.chip[data-r="${r}"]`);
     rowChips.forEach(c => c.classList.toggle('active', c.dataset.v===v));
     const mark = document.getElementById(`mark-${r}`);
     if (mark) mark.textContent = (v==='azul'?'🔵 Azul':(v==='rojo'?'🔴 Rojo':'⚖️ Empate'));
-
     recalcTotals();
-
-    // Si ya están todos los rounds base cargados y hay empate global, agregar uno extra
     if (allBaseFilled() && isGlobalTie() && rondasEnJuego < MAX_ROUNDS){
       rondasEnJuego++;
       renderRows();
@@ -931,17 +912,16 @@ $__s_init = str_pad((string)$__t_init%60, 2, '0', STR_PAD_LEFT);
   }
 
   function collectManualScoresAsPoints(){
-    // Convertimos a tarjetas 10-9 / 9-10 / 10-10 para backend compatible
     const out = [];
     for (let r=1; r<=roundResults.length; r++){
       const v = roundResults[r-1]?.v || null;
-      if (!v){ // si no está marcado, empate 10-10
+      if (!v){
         out.push({round:r, azul:10, rojo:10});
       } else if (v==='azul'){
         out.push({round:r, azul:10, rojo:9});
       } else if (v==='rojo'){
         out.push({round:r, azul:9, rojo:10});
-      } else { // empate
+      } else {
         out.push({round:r, azul:10, rojo:10});
       }
     }
@@ -959,19 +939,8 @@ $__s_init = str_pad((string)$__t_init%60, 2, '0', STR_PAD_LEFT);
     return 'empate';
   }
 
-  // Init rows
   roundResults = Array.from({length: rondasConfig}, (_,i)=>({r:i+1, v:null}));
   renderRows();
-
-  async function fetchJSON(url, opt={}){
-    const ctrl = new AbortController(); const to = setTimeout(()=>ctrl.abort(), opt.timeout||15000);
-    try{
-      const r = await fetch(url, { cache: 'no-store', signal: ctrl.signal, method: opt.method || 'GET',
-        headers: {'Accept':'application/json'}, body: opt.body || null });
-      const txt = await r.text(); if (!r.ok) { console.error('HTTP', r.status, txt); return null; }
-      try { return JSON.parse(txt); } catch(e){ console.error('JSON parse error:', txt); return null; }
-    }catch(e){ console.warn('AJAX error', e); return null; } finally{ clearTimeout(to); }
-  }
 
   const selWin = document.getElementById('selWin');
   const selTipo = document.getElementById('selTipo');
@@ -980,7 +949,6 @@ $__s_init = str_pad((string)$__t_init%60, 2, '0', STR_PAD_LEFT);
   const banner = document.getElementById('banner');
 
   document.getElementById('btnFinish').onclick = async ()=>{
-    // auto-add extra si está todo cargado y sigue empate
     if (allBaseFilled() && isGlobalTie() && rondasEnJuego < MAX_ROUNDS){
       alert('Empate global: se agregó un round extra. Marcá el ganador del round extra antes de finalizar.');
       rondasEnJuego++;
@@ -989,13 +957,12 @@ $__s_init = str_pad((string)$__t_init%60, 2, '0', STR_PAD_LEFT);
     }
 
     if(!confirm('¿Finalizar el combate y enviar a resultados?')) return;
-    if(t){ clearInterval(t); t=null; } // detener timer local
+    if(t){ clearInterval(t); t=null; }
     try{document.getElementById('snd-fightend').play().catch(()=>{});}catch(e){}
 
-    // Autocompletar ganador si no lo eligieron en el selector manual
     if (!selWin.value){
       const autoGan = autoWinnerFromResults();
-      selWin.value = autoGan; // azul/rojo/empate
+      selWin.value = autoGan;
       if (!selTipo.value) selTipo.value = (autoGan==='empate' ? '' : 'PTS');
     }
 
@@ -1008,23 +975,22 @@ $__s_init = str_pad((string)$__t_init%60, 2, '0', STR_PAD_LEFT);
     form.append('manual_round_fin', inRoundFin.value || String(rondasEnJuego));
     form.append('manual_time', inTime.value || '');
 
-    const j = await fetchJSON('combate_en_vivo.php?ajax=finalizar', {method:'POST', body:form, timeout:20000});
-    if (!j || !j.ok){
-      alert((j && j.msg) ? j.msg : 'No se pudo finalizar. Marcá los rounds.');
-      return;
-    }
-    const lbl = (j.ganador==='azul'?'🔵 AZUL':(j.ganador==='rojo'?'🔴 ROJO':'⚖️ EMPATE'));
-    banner.innerHTML = `<b>Resultado:</b> ${lbl} — ${j.metodo} · <span class="muted">${j.detalle||''}</span>`;
-    setTimeout(()=>{ window.location.href = j.redirect || '<?= h($RESULTADOS_RUTA) ?>?pelea_id='+peleaId; }, 800);
+    const ctrl = new AbortController(); const to = setTimeout(()=>ctrl.abort(), 20000);
+    try{
+      const r = await fetch('combate_en_vivo.php?ajax=finalizar', {method:'POST', body:form, cache:'no-store', signal:ctrl.signal});
+      const j = await r.json();
+      if (!j || !j.ok){ alert((j && j.msg) ? j.msg : 'No se pudo finalizar. Marcá los rounds.'); return; }
+      const lbl = (j.ganador==='azul'?'🔵 AZUL':(j.ganador==='rojo'?'🔴 ROJO':'⚖️ EMPATE'));
+      banner.innerHTML = `<b>Resultado:</b> ${lbl} — ${j.metodo} · <span class="muted">${j.detalle||''}</span>`;
+      setTimeout(()=>{ window.location.href = j.redirect || '<?= h($RESULTADOS_RUTA) ?>?pelea_id='+peleaId; }, 800);
+    }catch(e){ alert('Error de red.'); } finally { clearTimeout(to); }
   };
 
-  // ===== Autostart con QS start=1 =====
+  // Autostart con QS start=1
   const autoStart = <?= $autoQS ? 'true' : 'false' ?>;
   function paintInit(){ remain=duration; paint(); }
   paintInit();
-  if (autoStart){
-    setTimeout(()=>{ btnStart.click(); }, 150);
-  }
+  if (autoStart){ setTimeout(()=>{ btnStart.click(); }, 150); }
 
   publishTimer(true);
 })();
