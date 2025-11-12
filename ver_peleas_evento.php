@@ -685,7 +685,7 @@ $st->close();
 
             <td class="num" data-label="N°">
               <?php if ($C_ORDEN) { ?>
-                <input class="orden-input" type="number" min="1"
+                <input class="orden-input" type="number" min="1" inputmode="numeric" autocomplete="off"
                        name="orden[<?= (int)$p['pelea_id'] ?>]"
                        value="<?= h($p['orden_manual']) ?>"
                        disabled>
@@ -869,11 +869,12 @@ $st->close();
     rows.forEach(r=>tbody.appendChild(r));
   }
 
+  // ⚠️ FIX: no reordenar mientras se escribe (evita que al tipear “11” se mueva al poner “1”)
   const ordenInputs = Array.from(document.querySelectorAll('#form-orden .orden-input'));
   ordenInputs.forEach((inp) => {
-    inp.addEventListener('input', () => { if (inp.disabled) return; reorderRowsDom(); });
+    // quitamos el handler 'input' que reordenaba en cada tecla
     inp.addEventListener('change', () => { if (inp.disabled) return; reorderRowsDom(); });
-    inp.addEventListener('blur', () => { if (inp.disabled) return; reorderRowsDom(); });
+    inp.addEventListener('blur',   () => { if (inp.disabled) return; reorderRowsDom(); });
   });
 
   if (btnGuardarOrden) {
