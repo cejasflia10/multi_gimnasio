@@ -5,7 +5,7 @@
    • Numeración 100% MANUAL (no resecuencia 1..N) con guardado en DOS PASOS (NULL→set) para evitar colisiones
    • Buscador por Apellido y Escuela/Academia (filtra rojo/azul)
    • Modalidad visible (prioriza pelea > texto > obs)
-   • SIN columna “Técnica”
+   • SIN columna “Técnica” (solo chips en la info de cada esquina)
    • Tarjetas con recuadros marcados
    • PDF A4 vertical centrado; texto aprovecha ancho
    • Encabezado con NOMBRE DEL EVENTO BIEN GRANDE (eventos_deportivos.titulo si existe)
@@ -14,6 +14,7 @@
    • Auto-actualización en share (polling)
    • FULL RESPONSIVE (celulares/tablets) + botón Compartir
    • Agenda: hora inicio, duración, intervalo; marca inicio real al tocar “Iniciar” y recalcula; resalta próximas 3
+   • NUEVO: chips de Sexo y Categoría Técnica (N/A/B/C) por esquina (roja/azul)
    ========================= */
 if (session_status() === PHP_SESSION_NONE) session_start();
 require_once __DIR__ . '/conexion.php';
@@ -183,10 +184,62 @@ $__started_map = $_SESSION['peleas_started'][$evento_id] ?? [];
 /* ========= catálogos ========= */
 $tablaModal = (($t=$conexion->query("SHOW TABLES LIKE 'modalidades_evento'")) && $t->num_rows>0) ? 'modalidades_evento' : null;
 $tablaDiv   = (($t=$conexion->query("SHOW TABLES LIKE 'divisiones_evento'")) && $t->num_rows>0) ? 'divisiones_evento' : null;
+/* NUEVO: categorías técnicas (A/B/C/N) */
+$tablaTec   = (($t=$conexion->query("SHOW TABLES LIKE 'categorias_tecnicas_evento'")) && $t->num_rows>0) ? 'categorias_tecnicas_evento' : null;
 
-$MOD_LABEL_COL='nombre'; $DIV_LABEL_COL='nombre';
-if ($tablaModal){ $mc=[]; if($rc=$conexion->query("SHOW COLUMNS FROM $tablaModal")){ while($r=$rc->fetch_assoc()){ $mc[strtolower($r['Field'])]=$r['Field']; } } $MOD_LABEL_COL=$mc['nombre']??($mc['modalidad']??($mc['descripcion']??($mc['name']??'nombre'))); }
-if ($tablaDiv){ $dv=[]; if($rc=$conexion->query("SHOW COLUMNS FROM $tablaDiv")){ while($r=$rc->fetch_assoc()){ $dv[strtolower($r['Field'])]=$r['Field']; } } $DIV_LABEL_COL=$dv['nombre']??($dv['division']??($dv['descripcion']??($dv['name']??'nombre'))); }
+$MOD_LABEL_COL='nombre'; $DIV_LABEL_COL='nombre'; $TEC_LABEL_COL='nombre';
+if ($tablaModal){
+  $mc=[];
+  if($rc=$conexion->query("SHOW COLUMNS FROM $tablaModal")){
+    while($r=$rc->fetch_assoc()){ $mc[strtolower($r['Field'])]=$r['Field']; }
+  }
+  $MOD_LABEL_COL=$mc['nombre']??($mc['modalidad']??($mc['descripcion']??($mc['name']??'nombre')));
+}
+if ($tablaDiv){
+  $dv=[];
+  if($rc=$conexion->query("SHOW COLUMNS FROM $tablaDiv")){
+    while($r=$rc->fetch_assoc()){ $dv[strtolower($r['Field'])]=$r['Field']; }
+  }
+  $DIV_LABEL_COL=$dv['nombre']??($dv['division']??($dv['descripcion']??($dv['name']??'nombre')));
+}
+
+/* 💡 FIJO: detectar columna de texto REAL en categorias_tecnicas_evento */
+if ($tablaTec){
+  $tc=[];
+  if($rc=$conexion->query("SHOW COLUMNS FROM $tablaTec")){
+    while($r=$rc->fetch_assoc()){
+      $tc[strtolower($r['Field'])] = $r['Field'];
+    }
+  }
+  $TEC_LABEL_COL = null;
+  $preferidas = ['nombre','categoria','label','descripcion','tipo','nivel'];
+  foreach($preferidas as $k){
+    if(isset($tc[$k])){
+      $TEC_LABEL_COL = $tc[$k];
+      break;
+    }
+  }
+  if(!$TEC_LABEL_COL && $tc){
+    // si no encontró ninguna de las preferidas, usa la primera columna que exista
+    $primera = reset($tc);
+    if ($primera) $TEC_LABEL_COL = $primera;
+  }
+  // si igual no se pudo determinar, anulamos la tabla para evitar errores
+  if(!$TEC_LABEL_COL){
+    $tablaTec = null;
+  }
+}
+
+/* ========= detectar columnas útiles en competidores_evento ========= */
+$compCols=[]; if ($rc=$conexion->query("SHOW COLUMNS FROM competidores_evento")){ while($r=$rc->fetch_assoc()){ $compCols[strtolower($r['Field'])]=$r['Field']; } }
+$pickComp = function(array $cands) use ($compCols){ foreach($cands as $c){ $lc=strtolower($c); if(isset($compCols[$lc])) return $compCols[$lc]; } return null; };
+
+/* sexo/género */
+$C_SEXO = $pickComp(['sexo','genero']);
+/* FK a categoría técnica si existe */
+$C_TEC_ID = $pickComp(['categoria_tecnica_id','tecnica_id','nivel_tecnico_id']);
+/* texto embebido en competidores_evento si NO hay FK */
+$C_TEC_TXT = $pickComp(['categoria_tecnica','tecnica','nivel']);
 
 /* ========= acciones POST ========= */
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$SHARE) {
@@ -195,15 +248,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$SHARE) {
   $accion   = $_POST['accion'] ?? '';
   $pelea_id = isset($_POST['pelea_id']) && is_numeric($_POST['pelea_id']) ? (int)$_POST['pelea_id'] : 0;
 
-  /* ====== GUARDAR ORDEN — MANUAL (DOS PASOS: NULL→SET con resolución de duplicados) ====== */
+  /* ====== GUARDAR ORDEN — MANUAL (DOS PASOS) ====== */
   if ($accion === 'guardar_orden' && $C_ORDEN) {
     $ordenData = $_POST['orden'] ?? [];
     if (!$ordenData || !is_array($ordenData)) {
       $_SESSION['flash_error'] = 'No llegó ninguna numeración.';
       header('Location: ver_peleas_evento.php?evento_id='.$evento_id.$redir_q); exit;
     }
-
-    // 1) Normalizar
     $normal = [];
     foreach ($ordenData as $pid => $val) {
       if (!is_numeric($pid)) continue;
@@ -211,8 +262,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$SHARE) {
       $val = trim((string)$val);
       $normal[$pid] = ($val === '' || !is_numeric($val)) ? null : (int)$val;
     }
-
-    // 2) Resolver duplicados
     $conNumero = [];
     foreach ($normal as $pid => $nro) {
       if ($nro !== null) $conNumero[] = ['pid'=>$pid, 'ord'=>$nro];
@@ -257,7 +306,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$SHARE) {
     header('Location: ver_peleas_evento.php?evento_id='.$evento_id.$redir_q); exit;
   }
 
-  /* ====== GUARDAR PESAJE DESDE ESTA VISTA (opcional) ====== */
+  /* ====== GUARDAR PESAJE ====== */
   if ($accion === 'guardar_pesajes') {
     $pesosR = $_POST['peso_real_r'] ?? [];
     $pesosA = $_POST['peso_real_a'] ?? [];
@@ -332,9 +381,14 @@ $selectParts[] = $C_ORIGEN_R ? 'p.'.bt($C_ORIGEN_R).' AS origen_r' : "NULL AS or
 $selectParts[] = $C_ORIGEN_A ? 'p.'.bt($C_ORIGEN_A).' AS origen_a' : "NULL AS origen_a";
 
 $selectParts[] = $C_MODAL_P_TXT ? 'p.'.bt($C_MODAL_P_TXT).' AS modalidad_pelea_txt' : "NULL AS modalidad_pelea_txt";
-if ($tablaModal && $C_MODAL_P_ID) { $joins[] = "LEFT JOIN $tablaModal mp ON mp.id = p.".bt($C_MODAL_P_ID); $selectParts[] = 'mp.'.bt($MOD_LABEL_COL).' AS modalidad_pelea'; }
-else { $selectParts[] = "NULL AS modalidad_pelea"; }
+if ($tablaModal && $C_MODAL_P_ID) {
+  $joins[] = "LEFT JOIN $tablaModal mp ON mp.id = p.".bt($C_MODAL_P_ID);
+  $selectParts[] = 'mp.'.bt($MOD_LABEL_COL).' AS modalidad_pelea';
+} else {
+  $selectParts[] = "NULL AS modalidad_pelea";
+}
 
+/* competidores base */
 $selectParts[] = 'cr.apellido AS r_apellido';
 $selectParts[] = 'cr.nombre   AS r_nombre';
 $selectParts[] = 'cr.escuela_nombre AS r_escuela';
@@ -348,12 +402,38 @@ $selectParts[] = 'ca.escuela_logo AS a_logo';
 $selectParts[] = 'cr.peso_kg AS r_peso';
 $selectParts[] = 'ca.peso_kg AS a_peso';
 
+/* divisiones (si existen) */
 if ($tablaDiv) {
   $joins[] = "LEFT JOIN $tablaDiv dvr ON dvr.id = cr.division_id";
   $joins[] = "LEFT JOIN $tablaDiv dva ON dva.id = ca.division_id";
   $selectParts[] = 'dvr.'.bt($DIV_LABEL_COL).' AS r_division';
   $selectParts[] = 'dva.'.bt($DIV_LABEL_COL).' AS a_division';
 } else { $selectParts[] = "NULL AS r_division"; $selectParts[] = "NULL AS a_division"; }
+
+/* NUEVO: SEXO */
+if ($C_SEXO){
+  $selectParts[] = 'cr.'.bt($C_SEXO).' AS r_sexo';
+  $selectParts[] = 'ca.'.bt($C_SEXO).' AS a_sexo';
+} else {
+  $selectParts[] = "NULL AS r_sexo";
+  $selectParts[] = "NULL AS a_sexo";
+}
+
+/* NUEVO: CATEGORÍA TÉCNICA (via FK o texto) */
+if ($tablaTec && $C_TEC_ID && !empty($TEC_LABEL_COL)){
+  $joins[] = "LEFT JOIN $tablaTec tr ON tr.id = cr.".bt($C_TEC_ID);
+  $joins[] = "LEFT JOIN $tablaTec ta ON ta.id = ca.".bt($C_TEC_ID);
+  $selectParts[] = 'tr.'.bt($TEC_LABEL_COL).' AS r_tecnica';
+  $selectParts[] = 'ta.'.bt($TEC_LABEL_COL).' AS a_tecnica';
+} else {
+  if ($C_TEC_TXT){
+    $selectParts[] = 'cr.'.bt($C_TEC_TXT).' AS r_tecnica';
+    $selectParts[] = 'ca.'.bt($C_TEC_TXT).' AS a_tecnica';
+  } else {
+    $selectParts[] = "NULL AS r_tecnica";
+    $selectParts[] = "NULL AS a_tecnica";
+  }
+}
 
 $where = ["p.".bt($C_EVENTO)." = ?"]; $types = 'i'; $params = [$evento_id];
 if ($s_ape !== '') {
@@ -698,6 +778,27 @@ $st->close();
           $rInfo = trim(($p['r_division'] ?? '-') . ' • ' . $rPesoTxt);
           $aInfo = trim(($p['a_division'] ?? '-') . ' • ' . $aPesoTxt);
 
+          /* NUEVO: normalizar sexo (M/F/X…) y técnica (N/A/B/C…) */
+          $normSexo = function($v){
+            $s = mb_strtolower(trim((string)$v),'UTF-8');
+            if ($s==='m' || $s==='masculino' || $s==='hombre') return 'M';
+            if ($s==='f' || $s==='femenino'  || $s==='mujer')  return 'F';
+            if ($s==='mixto') return 'Mixto';
+            return $v!==null && $v!=='' ? mb_strtoupper((string)$v,'UTF-8') : null;
+          };
+          $normTec = function($v){
+            $t = mb_strtoupper(trim((string)$v),'UTF-8');
+            if ($t==='N' || $t==='NOVICIOS' || $t==='NOVATO') return 'N';
+            if ($t==='A' || $t==='AMATEUR' || $t==='PRO-AM') return 'A';
+            if ($t==='B') return 'B';
+            if ($t==='C') return 'C';
+            return ($t!=='') ? $t : null;
+          };
+          $rSexo = $normSexo($p['r_sexo'] ?? null);
+          $aSexo = $normSexo($p['a_sexo'] ?? null);
+          $rTec  = $normTec($p['r_tecnica'] ?? null);
+          $aTec  = $normTec($p['a_tecnica'] ?? null);
+
           $rondasVal = isset($p['rondas']) && is_numeric($p['rondas']) ? (int)$p['rondas'] : 2;
           $obsVal = (string)($p['observaciones'] ?? '');
 
@@ -722,7 +823,7 @@ $st->close();
           $pref_r = $p['peso_real_r'] ?? ($_SESSION['pesajes'][$evento_id][$p['pelea_id']]['r'] ?? '');
           $pref_a = $p['peso_real_a'] ?? ($_SESSION['pesajes'][$evento_id][$p['pelea_id']]['a'] ?? '');
 
-          /* NUEVO: origen de pesaje oficial (texto amigable) */
+          /* Origen de pesaje (si hay columnas) */
           $orig_r = strtolower(trim((string)($p['origen_r'] ?? '')));
           $orig_a = strtolower(trim((string)($p['origen_a'] ?? '')));
           $orig_r_lbl = $orig_r === 'sistema' ? 'Sistema' : ($orig_r === 'manual' ? 'Manual' : ($orig_r!==''?$orig_r:''));
@@ -765,6 +866,8 @@ $st->close();
             </td>
             <td data-label="Roja · Info">
               <span class="pill"><?= h($rInfo) ?></span>
+              <?php if ($rSexo){ ?><span class="pill" title="Sexo"><?= h($rSexo) ?></span><?php } ?>
+              <?php if ($rTec){  ?><span class="pill" title="Categoría técnica"><?= h($rTec) ?></span><?php } ?>
               <div class="pesaje">
                 Real:
                 <input type="number" step="0.1" min="0"
@@ -808,6 +911,8 @@ $st->close();
             </td>
             <td data-label="Azul · Info">
               <span class="pill"><?= h($aInfo) ?></span>
+              <?php if ($aSexo){ ?><span class="pill" title="Sexo"><?= h($aSexo) ?></span><?php } ?>
+              <?php if ($aTec){  ?><span class="pill" title="Categoría técnica"><?= h($aTec) ?></span><?php } ?>
               <div class="pesaje">
                 Real:
                 <input type="number" step="0.1" min="0"
@@ -906,7 +1011,7 @@ $st->close();
   }
   if(btnEditar){ btnEditar.addEventListener('click', ()=> setEditing(!formOrden.classList.contains('editing'))); }
 
-  // === REORDENAR FILAS EN VIVO
+  // === REORDENAR FILAS EN VIVO (solo al confirmar)
   function reorderRowsDom(){
     const rows = Array.from(tbody.querySelectorAll('tr.row-card'));
     rows.sort((a,b)=>{
@@ -924,10 +1029,8 @@ $st->close();
     rows.forEach(r=>tbody.appendChild(r));
   }
 
-  // ⚠️ FIX: no reordenar mientras se escribe (evita que al tipear “11” se mueva al poner “1”)
   const ordenInputs = Array.from(document.querySelectorAll('#form-orden .orden-input'));
   ordenInputs.forEach((inp) => {
-    // quitamos el handler 'input' que reordenaba en cada tecla
     inp.addEventListener('change', () => { if (inp.disabled) return; reorderRowsDom(); });
     inp.addEventListener('blur',   () => { if (inp.disabled) return; reorderRowsDom(); });
   });
@@ -949,7 +1052,7 @@ $st->close();
   }
   setEditing(false);
 
-  // ===== Pesajes: delta en vivo (planilla vs real)
+  // ===== Pesajes: delta en vivo
   function parseKg(s){ const n = parseFloat((s||'').toString().replace(',', '.')); return isNaN(n)?null:n; }
   function regla(diffKg){
     if (diffKg === null) return {txt:'Δ —', cls:''};
@@ -967,7 +1070,7 @@ $st->close();
     const peleaId = input.getAttribute('data-pelea');
     const side = input.getAttribute('data-side');
     const td = input.closest('td'); if (!td) return;
-    const chip = td.querySelector('.pill');
+    const chip = td.querySelector('.pill'); // el primero contiene "• KG"
     const declared = chip ? declaradoDesdeChip(chip.textContent) : null;
     const real = parseKg(input.value);
     const deltaEl = td.querySelector(`#delta_${side}_${peleaId}`);
