@@ -466,32 +466,87 @@ $st->close();
     td.col-eta{ white-space:nowrap; font-weight:800; }
 
     /* ====== MOBILE/TABLET: tarjetas ====== */
-    @media (max-width: 980px) {
-      .toolbar { gap: 6px; }
-      .orden-tools { width: 100%; justify-content: flex-start; }
-      .btn-mini { font-size: 12px; padding: 8px 10px; }
-      .titulo-evento { font-size: clamp(20px, 6.2vw, 34px); }
+@media (max-width: 980px) {
+  .toolbar { gap: 6px; }
+  .orden-tools { width: 100%; justify-content: flex-start; }
+  .btn-mini { font-size: 12px; padding: 8px 10px; }
+  .titulo-evento { font-size: clamp(20px, 6.2vw, 34px); }
 
-      thead { display: none; }
-      table, tbody, tr, td { display: block; width: 100%; }
-      table { border-spacing: 0; }
-      tbody tr.row-card { margin-bottom: 12px; border-radius: 12px; overflow: hidden; }
-      tbody tr.row-card td { border: 0; border-bottom: 1px solid var(--line); box-shadow: none; padding: 10px 12px; }
-      tbody tr.row-card td:last-child { border-bottom: 0; }
-      td[data-label="N°"], td[data-label="Modalidad"] { display: inline-block; vertical-align: middle; }
-      td[data-label="N°"] { width: auto; padding-right: 10px; font-size: 15px; }
-      td[data-label="Modalidad"] { font-size: 14px; font-weight: 800; }
-      td[data-label="Roja · Foto"], td[data-label="Azul · Foto"] { display: none; }
-      td[data-label="Roja · Nombre"], td[data-label="Azul · Nombre"] { display: flex; align-items: center; gap: 10px; font-size: 15px; font-weight: 800; }
-      td[data-label="Roja · Nombre"] .avatar, td[data-label="Azul · Nombre"] .avatar { width:42px; height:42px; }
-      td[data-label="Roja · Info"], td[data-label="Azul · Info"] { padding-top: 4px; }
-      td[data-label="Roja · Escuela"], td[data-label="Azul · Escuela"] .muted { font-size: 13px; }
-      td[data-label="VS"] { text-align: center; font-weight: 900; text-transform: uppercase; background: #f8fafc; }
-      td[data-label="Rondas"], td[data-label="Obs."], td[data-label="Acciones"] { font-size: 13px; }
-      .pesaje input.peso-real { width: 110px; height: 40px; font-size: 15px; }
-      .delta-pill { display: inline-block; margin-top: 6px; }
-      td.col-eta{ padding-top:6px; }
-    }
+  /* Base “card” por fila */
+  thead { display: none; }
+  table { border-spacing: 0; }
+  tbody tr.row-card { margin-bottom: 12px; border-radius: 12px; overflow: hidden; }
+  tbody tr.row-card td { border: 0; border-bottom: 1px solid var(--line); box-shadow: none; padding: 10px 12px; }
+
+  /* Encabezado compacto */
+  td[data-label="Hora"],
+  td[data-label="N°"],
+  td[data-label="Modalidad"]{
+    display:inline-block;
+    vertical-align:middle;
+    margin-right:10px;
+  }
+  td[data-label="N°"]{ font-size:15px; font-weight:900; }
+  td[data-label="Modalidad"]{ font-size:14px; font-weight:800; }
+
+  /* Ocultar fotos sueltas */
+  td[data-label="Roja · Foto"],
+  td[data-label="Azul · Foto"]{ display:none; }
+
+  /* 🔥 Dos columnas: Rojo | Azul */
+  td[data-label="Roja · Nombre"],
+  td[data-label="Azul · Nombre"],
+  td[data-label="Roja · Info"],
+  td[data-label="Azul · Info"],
+  td[data-label="Roja · Escuela"],
+  td[data-label="Azul · Escuela"]{
+    display:inline-block;
+    width:50%;
+    box-sizing:border-box;
+    vertical-align:top;
+  }
+
+  /* Nombre + avatar más compacto */
+  td[data-label="Roja · Nombre"],
+  td[data-label="Azul · Nombre"]{
+    font-size:15px; font-weight:800;
+  }
+  td[data-label="Roja · Nombre"] .avatar,
+  td[data-label="Azul · Nombre"] .avatar{ width:42px; height:42px; margin-right:8px; }
+  td[data-label="Roja · Nombre"] .ph-avatar,
+  td[data-label="Azul · Nombre"] .ph-avatar{ width:36px; height:36px; font-size:12px; margin-right:8px; }
+
+  /* Info (categoría/peso) y Escuela debajo, pareadas */
+  td[data-label="Roja · Info"],
+  td[data-label="Azul · Info"]{ padding-top:6px; }
+  td[data-label="Roja · Escuela"] .muted,
+  td[data-label="Azul · Escuela"] .muted{ font-size:13px; }
+
+  /* VS centrado a ancho completo */
+  td[data-label="VS"]{
+    display:block;
+    width:100%;
+    text-align:center;
+    font-weight:900;
+    text-transform:uppercase;
+    background:#f8fafc;
+    border-top:1px dashed var(--line);
+    border-bottom:1px dashed var(--line);
+    margin:6px 0;
+  }
+
+  /* Otros campos al final */
+  td[data-label="Rondas"],
+  td[data-label="Obs."],
+  td[data-label="Acciones"]{ font-size:13px; }
+
+  /* Pesaje usable en móvil */
+  .pesaje input.peso-real{ width:110px; height:40px; font-size:15px; }
+  .delta-pill{ display:inline-block; margin-top:6px; }
+
+  /* Hora estimada al final de la tarjeta en móvil */
+  td.col-eta{ padding-top:6px; }
+}
 
     @media (max-width: 640px) {
       .contenedor { padding: 10px; }
