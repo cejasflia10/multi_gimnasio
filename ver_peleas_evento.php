@@ -1045,468 +1045,234 @@ $st->close();
           $orig_r = strtolower(trim((string)($p['origen_r'] ?? '')));
           $orig_a = strtolower(trim((string)($p['origen_a'] ?? '')));
           $orig_r_lbl = $orig_r === 'sistema' ? 'Sistema' : ($orig_r === 'manual' ? 'Manual' : ($orig_r!==''?$orig_r:''));
+
           $orig_a_lbl = $orig_a === 'sistema' ? 'Sistema' : ($orig_a === 'manual' ? 'Manual' : ($orig_a!==''?$orig_a:''));
+
+          /* Calcular diferencias de peso */
+          $delta_r = null;
+          $delta_a = null;
+          if ($pref_r !== '' && $pref_r !== null && is_numeric($pref_r) && $p['r_peso'] !== null && is_numeric($p['r_peso'])) {
+              $delta_r = (float)$pref_r - (float)$p['r_peso'];
+          }
+          if ($pref_a !== '' && $pref_a !== null && is_numeric($pref_a) && $p['a_peso'] !== null && is_numeric($p['a_peso'])) {
+              $delta_a = (float)$pref_a - (float)$p['a_peso'];
+          }
+
+          /* Determinar color del delta */
+          $delta_class = function($d){
+              if ($d === null) return '';
+              $abs = abs($d);
+              if ($abs <= 0.1) return 'delta-ok';
+              if ($abs <= 1) return 'delta-1';
+              if ($abs <= 2) return 'delta-2';
+              return 'delta-dq';
+          };
+
+          /* ETA — hora estimada */
+          $eta = '';
+          if (!empty($_GET['t0'])) {
+              $t0 = strtotime($_GET['t0']);
+              if ($t0 !== false) {
+                  $dur = isset($_GET['dur']) ? (int)$_GET['dur'] : 8;
+                  $gap = isset($_GET['gap']) ? (int)$_GET['gap'] : 2;
+                  $index = $nroMostrar - 1;
+                  $eta_ts = $t0 + ($index * ($dur + $gap) * 60);
+                  $eta = date('H:i', $eta_ts);
+              }
+          }
+
+          /* Marcar próximas peleas (upnext) */
+          $extra_class = '';
+          if ($eta !== '') {
+              $now = time();
+              $minsDiff = (strtotime($eta) - $now) / 60;
+              if ($minsDiff >= 0 && $minsDiff < 8)      $extra_class = 'upnext-1';
+              elseif ($minsDiff >= 8 && $minsDiff < 15) $extra_class = 'upnext-2';
+              elseif ($minsDiff >= 15 && $minsDiff < 25) $extra_class = 'upnext-3';
+          }
         ?>
-          <tr class="row-card"
-              id="p<?= (int)$p['pelea_id'] ?>"
-              data-pelea="<?= (int)$p['pelea_id'] ?>"
-              data-orden="<?= (int)$nroMostrar ?>"
-              data-rondas="<?= (int)$rondasVal ?>">
-            <!-- Hora -->
-            <td class="col-eta" data-label="Hora">
-              <span class="badge-eta" id="eta_<?= (int)$p['pelea_id'] ?>">—</span>
-            </td>
+        <tr class="row-card <?= $extra_class ?>">
+          <td class="col-eta" data-label="Hora"><?= $eta ?: '—' ?></td>
+          <td data-label="N°"><input type="text" name="orden[<?= (int)$p['pelea_id'] ?>]" class="orden-input" value="<?= h($p['orden_manual']) ?>"></td>
+          <td data-label="Modalidad"><span class="modalidad"><?= h($modalidadLbl) ?></span></td>
 
-            <td class="num" data-label="N°">
-              <?php if ($C_ORDEN) { ?>
-                <input class="orden-input" type="number" min="1" inputmode="numeric" autocomplete="off"
-                       name="orden[<?= (int)$p['pelea_id'] ?>]"
-                       value="<?= h($p['orden_manual']) ?>"
-                       disabled>
-              <?php } else { ?>
-                <?= (int)$nroMostrar ?>
+          <!-- ROJO: foto -->
+          <td data-label="Roja · Foto">
+            <?php if ($rFoto !== '') { ?>
+              <img class="avatar" src="<?= h($rFoto) ?>">
+            <?php } else { ?>
+              <div class="ph-avatar"><?= h($rIni) ?></div>
+            <?php } ?>
+          </td>
+
+          <!-- ROJO: nombre -->
+          <td data-label="Roja · Nombre"><?= h($rName) ?></td>
+
+          <!-- ROJO: info -->
+          <td data-label="Roja · Info">
+            <?= h($rInfo) ?>
+            <?php if ($rSexo) { ?><span class="pill"><?= h($rSexo) ?></span><?php } ?>
+            <?php if ($rTec) { ?><span class="pill"><?= h($rTec) ?></span><?php } ?>
+
+            <!-- Pesaje -->
+            <div class="pesaje">
+              <?php if (!$SHARE) { ?>
+                <input type="text" class="peso-real" name="peso_real_r[<?= (int)$p['pelea_id'] ?>]" value="<?= h($pref_r) ?>" placeholder="Peso real">
+                <?php if ($delta_r !== null) { ?>
+                    <span class="delta-pill <?= $delta_class($delta_r) ?>"><?= $delta_r >= 0 ? '+'.$delta_r : $delta_r ?> kg</span>
+                <?php } ?>
               <?php } ?>
-            </td>
-            <td class="modalidad" data-label="Modalidad"><?= h($modalidadLbl) ?></td>
+              <span class="real-text"><?= $pref_r !== '' ? h($pref_r).' kg' : '—' ?></span>
+            </div>
 
-            <!-- ROJA -->
-            <td style="text-align:center" data-label="Roja · Foto">
-              <?php if ($rFoto!=='') { ?>
-                <img src="<?= h($rFoto) ?>" class="avatar" alt="Roja" onerror="this.onerror=null;this.replaceWith(phAvatar('<?= h($rIni) ?>'))">
-              <?php } else { ?>
-                <div class="ph-avatar"><?= h($rIni) ?></div>
+            <?php if ($orig_r_lbl) { ?><div class="muted">Origen: <?= h($orig_r_lbl) ?></div><?php } ?>
+          </td>
+
+          <!-- ROJO: escuela -->
+          <td data-label="Roja · Escuela">
+            <?php if ($rLogo !== '') { ?>
+              <img class="logo" src="<?= h($rLogo) ?>">
+            <?php } else { ?>
+              <div class="ph-logo"><?= h($rGymIni) ?></div>
+            <?php } ?>
+            <div class="muted"><?= h($p['r_escuela'] ?? '') ?></div>
+          </td>
+
+          <!-- VS -->
+          <td data-label="VS" class="vs">VS</td>
+
+          <!-- AZUL: foto -->
+          <td data-label="Azul · Foto">
+            <?php if ($aFoto !== '') { ?>
+              <img class="avatar" src="<?= h($aFoto) ?>">
+            <?php } else { ?>
+              <div class="ph-avatar"><?= h($aIni) ?></div>
+            <?php } ?>
+          </td>
+
+          <!-- AZUL: nombre -->
+          <td data-label="Azul · Nombre"><?= h($aName) ?></td>
+
+          <!-- AZUL: info -->
+          <td data-label="Azul · Info">
+            <?= h($aInfo) ?>
+            <?php if ($aSexo) { ?><span class="pill"><?= h($aSexo) ?></span><?php } ?>
+            <?php if ($aTec) { ?><span class="pill"><?= h($aTec) ?></span><?php } ?>
+
+            <!-- Pesaje -->
+            <div class="pesaje">
+              <?php if (!$SHARE) { ?>
+                <input type="text" class="peso-real" name="peso_real_a[<?= (int)$p['pelea_id'] ?>]" value="<?= h($pref_a) ?>" placeholder="Peso real">
+                <?php if ($delta_a !== null) { ?>
+                    <span class="delta-pill <?= $delta_class($delta_a) ?>"><?= $delta_a >= 0 ? '+'.$delta_a : $delta_a ?> kg</span>
+                <?php } ?>
               <?php } ?>
-            </td>
-            <td style="font-weight:800" data-label="Roja · Nombre">
-              <?php if ($rFoto!=='') { ?><img src="<?= h($rFoto) ?>" class="avatar" alt="Roja" style="display:inline-block;margin-right:8px" onerror="this.onerror=null;this.remove()"><?php }
-            else { ?><span class="ph-avatar" style="width:36px;height:36px;font-size:12px;margin-right:8px"><?= h($rIni) ?></span><?php } ?>
-              <?= h($rName !== '' ? $rName : '—') ?>
-            </td>
-            <td data-label="Roja · Info">
-              <span class="pill"><?= h($rInfo) ?></span>
-              <?php if ($rSexo){ ?><span class="pill" title="Sexo"><?= h($rSexo) ?></span><?php } ?>
-              <?php if ($rTec){  ?><span class="pill" title="Categoría técnica"><?= h($rTec) ?></span><?php } ?>
-              <div class="pesaje">
-                Real:
-                <input type="number" step="0.1" min="0"
-                  name="peso_real_r[<?= (int)$p['pelea_id'] ?>]"
-                  class="peso-real" data-side="r" data-pelea="<?= (int)$p['pelea_id'] ?>"
-                  placeholder="kg" value="<?= h($pref_r) ?>" <?= $SHARE ? 'disabled' : '' ?>>
-                <span class="real-text" id="real_r_<?= (int)$p['pelea_id'] ?>">
-                  <?= ($pref_r!=='' && $pref_r!==null) ? h(fmt_num($pref_r)).' kg' : '—' ?>
-                  <?php if ($orig_r_lbl!=='') { ?> · <span class="pill" title="Origen del pesaje oficial: <?= h($orig_r_lbl) ?>"><?= h($orig_r_lbl) ?></span><?php } ?>
-                </span>
-                <span class="delta-pill" id="delta_r_<?= (int)$p['pelea_id'] ?>">Δ —</span>
-                <?php if (!$SHARE && $orig_r_lbl!=='') { ?>
-                  <span class="muted" style="margin-left:6px" title="Origen del pesaje oficial">[<?= h($orig_r_lbl) ?>]</span>
-                <?php } ?>
-              </div>
-            </td>
-            <td class="muted" data-label="Roja · Escuela">
-              <div style="display:flex;align-items:center;gap:8px">
-                <?php if ($rLogo!=='') { ?>
-                  <img src="<?= h($rLogo) ?>" class="logo" alt="Logo escuela roja" onerror="this.onerror=null;this.replaceWith(phLogo('<?= h($rGymIni) ?>'))">
-                <?php } else { ?>
-                  <div class="ph-logo"><?= h($rGymIni) ?></div>
-                <?php } ?>
-                <span style="font-weight:700"><?= h($p['r_escuela'] ?? '-') ?></span>
-              </div>
-            </td>
+              <span class="real-text"><?= $pref_a !== '' ? h($pref_a).' kg' : '—' ?></span>
+            </div>
 
-            <td class="vs" data-label="VS">vs</td>
+            <?php if ($orig_a_lbl) { ?><div class="muted">Origen: <?= h($orig_a_lbl) ?></div><?php } ?>
+          </td>
 
-            <!-- AZUL -->
-            <td style="text-align:center" data-label="Azul · Foto">
-              <?php if ($aFoto!=='') { ?>
-                <img src="<?= h($aFoto) ?>" class="avatar" alt="Azul" onerror="this.onerror=null;this.replaceWith(phAvatar('<?= h($aIni) ?>'))">
-              <?php } else { ?>
-                <div class="ph-avatar"><?= h($aIni) ?></div>
-              <?php } ?>
-            </td>
-            <td style="font-weight:800" data-label="Azul · Nombre">
-              <?php if ($aFoto!=='') { ?><img src="<?= h($aFoto) ?>" class="avatar" alt="Azul" style="display:inline-block;margin-right:8px" onerror="this.onerror=null;this.remove()"><?php } else { ?><span class="ph-avatar" style="width:36px;height:36px;font-size:12px;margin-right:8px"><?= h($aIni) ?></span><?php } ?>
-              <?= h($aName !== '' ? $aName : '—') ?>
-            </td>
-            <td data-label="Azul · Info">
-              <span class="pill"><?= h($aInfo) ?></span>
-              <?php if ($aSexo){ ?><span class="pill" title="Sexo"><?= h($aSexo) ?></span><?php } ?>
-              <?php if ($aTec){  ?><span class="pill" title="Categoría técnica"><?= h($aTec) ?></span><?php } ?>
-              <div class="pesaje">
-                Real:
-                <input type="number" step="0.1" min="0"
-                  name="peso_real_a[<?= (int)$p['pelea_id'] ?>]"
-                  class="peso-real" data-side="a" data-pelea="<?= (int)$p['pelea_id'] ?>"
-                  placeholder="kg" value="<?= h($pref_a) ?>" <?= $SHARE ? 'disabled' : '' ?>>
-                <span class="real-text" id="real_a_<?= (int)$p['pelea_id'] ?>">
-                  <?= ($pref_a!=='' && $pref_a!==null) ? h(fmt_num($pref_a)).' kg' : '—' ?>
-                  <?php if ($orig_a_lbl!=='') { ?> · <span class="pill" title="Origen del pesaje oficial: <?= h($orig_a_lbl) ?>"><?= h($orig_a_lbl) ?></span><?php } ?>
-                </span>
-                <span class="delta-pill" id="delta_a_<?= (int)$p['pelea_id'] ?>">Δ —</span>
-                <?php if (!$SHARE && $orig_a_lbl!=='') { ?>
-                  <span class="muted" style="margin-left:6px" title="Origen del pesaje oficial">[<?= h($orig_a_lbl) ?>]</span>
-                <?php } ?>
-              </div>
-            </td>
-            <td class="muted" data-label="Azul · Escuela">
-              <div style="display:flex;align-items:center;gap:8px">
-                <?php if ($aLogo!=='') { ?>
-                  <img src="<?= h($aLogo) ?>" class="logo" alt="Logo escuela azul" onerror="this.onerror=null;this.replaceWith(phLogo('<?= h($aGymIni) ?>'))">
-                <?php } else { ?>
-                  <div class="ph-logo"><?= h($aGymIni) ?></div>
-                <?php } ?>
-                <span style="font-weight:700"><?= h($p['a_escuela'] ?? '-') ?></span>
-              </div>
-            </td>
+          <!-- Azul: escuela -->
+          <td data-label="Azul · Escuela">
+            <?php if ($aLogo !== '') { ?>
+              <img class="logo" src="<?= h($aLogo) ?>">
+            <?php } else { ?>
+              <div class="ph-logo"><?= h($aGymIni) ?></div>
+            <?php } ?>
+            <div class="muted"><?= h($p['a_escuela'] ?? '') ?></div>
+          </td>
 
-            <td style="font-weight:800" data-label="Rondas"><?= (int)$rondasVal ?></td>
-            <td class="obs" style="font-weight:700" data-label="Obs."><?= h($obsVal) ?></td>
-            <td class="acciones" data-label="Acciones">
-              <div class="row-actions" style="display:flex;gap:6px;flex-wrap:wrap;justify-content:center">
-                <a class="btn btn-xxs btn-primary" title="Editar" href="editar_pelea_evento.php?evento_id=<?= (int)$evento_id ?>&pelea_id=<?= (int)$p['pelea_id'] ?>">✏️ Editar</a>
-                <button type="button" class="btn btn-xxs btn-danger" title="Eliminar" onclick="eliminarPelea(<?= (int)$p['pelea_id'] ?>)">🗑️ Eliminar</button>
-                <a class="btn btn-xxs btn-secondary" title="Iniciar en vivo"
-                   href="combate_en_vivo.php?evento_id=<?= (int)$evento_id ?>&pelea_id=<?= (int)$p['pelea_id'] ?>&nro=<?= (int)$nroMostrar ?><?= $C_RONDAS ? '&rondas='.(int)$rondasVal : '' ?>&dur=180&rest=60">
-                  ▶️ Iniciar
-                </a>
-              </div>
-            </td>
-          </tr>
+          <td data-label="Rondas"><?= (int)$rondasVal ?></td>
+          <td data-label="Obs."><?= h($obsVal) ?></td>
+
+          <!-- ACCIONES -->
+          <td data-label="Acciones" class="acciones">
+            <?php if (!$SHARE) { ?>
+            <div class="row-actions">
+              <a class="btn btn-xxs btn-secondary" href="organizar_pelea.php?pelea_id=<?= (int)$p['pelea_id'] ?>&evento_id=<?= (int)$evento_id ?>">✏️ Editar</a>
+              <a class="btn btn-xxs btn-primary" href="combate_en_vivo.php?pelea_id=<?= (int)$p['pelea_id'] ?>&evento_id=<?= (int)$evento_id ?>" target="_blank">▶️ Iniciar</a>
+              <form method="POST" style="display:inline-block" onsubmit="return confirm('¿Eliminar pelea?')">
+                <input type="hidden" name="accion" value="delete">
+                <input type="hidden" name="evento_id" value="<?= (int)$evento_id ?>">
+                <input type="hidden" name="pelea_id" value="<?= (int)$p['pelea_id'] ?>">
+                <button class="btn btn-xxs btn-danger" type="submit">🗑️</button>
+              </form>
+            </div>
+            <?php } ?>
+          </td>
+        </tr>
         <?php } } ?>
         </tbody>
       </table>
 
       <?php if (!$SHARE) { ?>
-        <div class="form-actions" id="orden-actions" style="margin-top:10px; display:flex; gap:8px; align-items:center; flex-wrap:wrap">
-          <button class="btn btn-primary" type="button" id="btnGuardarOrden">💾 Guardar orden</button>
-          <span class="muted" style="font-weight:700">Tip: activá “✏️ Editar numeración”, escribí el número destino; al guardar se mueve la fila tal cual.</span>
-        </div>
-
-        <div class="form-actions" style="margin-top:10px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px">
-          <div class="muted" style="font-weight:700">Regla de pesaje: ≤0.5kg ✅ · ≤1.0kg −1 · ≤1.5kg −2 · ≥2.0kg ❌</div>
-          <div>
-            <button class="btn btn-primary" type="button" id="btnGuardarPesajes">💾 Guardar pesajes</button>
-          </div>
-        </div>
+      <div class="form-actions" id="orden-actions" style="margin-top:12px; display:none;">
+        <button class="btn btn-primary" type="submit">💾 Guardar numeración</button>
+        <button class="btn btn-secondary" type="button" id="btnCancelarOrden">Cancelar</button>
+      </div>
       <?php } ?>
     </form>
   </div>
 </div>
 
-<div class="snack" id="snack">Link copiado</div>
+<!-- Snack -->
+<div id="snack" class="snack">Copiado</div>
 
 <script>
+"use strict";
+
+/* ===== COMPARTIR ===== */
+document.getElementById("btnCompartir")?.addEventListener("click", function(e){
+    if (navigator.share) {
+        e.preventDefault();
+        navigator.share({
+            title: document.title,
+            url: this.href
+        });
+    }
+});
+
+/* ===== Editar orden ===== */
+const btnEditar = document.getElementById("btnEditarOrden");
+const btnCancelar = document.getElementById("btnCancelarOrden");
+const formOrden = document.getElementById("form-orden");
+
+btnEditar?.addEventListener("click", ()=>{
+    formOrden.classList.add("editing");
+    document.getElementById("orden-actions").style.display = "block";
+});
+btnCancelar?.addEventListener("click", ()=>{
+    formOrden.classList.remove("editing");
+    document.getElementById("orden-actions").style.display = "none";
+});
+
+/* ===== Agenda: botón ahora ===== */
+document.getElementById("btnT0Now")?.addEventListener("click", ()=>{
+    const t = new Date();
+    const hh = t.getHours().toString().padStart(2,"0");
+    const mm = t.getMinutes().toString().padStart(2,"0");
+    document.getElementById("t0").value = `${hh}:${mm}`;
+});
+
+/* ===== Auto-refresh en vista share ===== */
 (function(){
-  window.phAvatar = function(text){ const d=document.createElement('div'); d.className='ph-avatar'; d.textContent=text||'—'; return d; };
-  window.phLogo   = function(text){ const d=document.createElement('div'); d.className='ph-logo';   d.textContent=text||'G';  return d; };
+    const body = document.body;
+    if (!body.classList.contains("solo-vista")) return;
+    const ver = body.dataset.ver;
+    const evento = body.dataset.evento;
 
-  window.eliminarPelea = function(peleaId){
-    if(!confirm('¿Eliminar esta pelea?')) return;
-    const f = document.createElement('form');
-    f.method = 'POST'; f.action = 'ver_peleas_evento.php';
-    const add = (n,v)=>{ const i=document.createElement('input'); i.type='hidden'; i.name=n; i.value=v; f.appendChild(i); };
-    add('accion','delete'); add('evento_id','<?= (int)$evento_id ?>'); add('pelea_id', String(peleaId));
-    document.body.appendChild(f); f.submit();
-  };
-
-  const SHARE = <?= $SHARE ? 'true':'false' ?>;
-  const btnEditar = document.getElementById('btnEditarOrden');
-  const formOrden = document.getElementById('form-orden');
-  const inputsOrden = document.querySelectorAll('#form-orden .orden-input');
-  const accionInput = document.getElementById('accionInput');
-  const btnGuardarOrden = document.getElementById('btnGuardarOrden');
-  const btnGuardarPesajes = document.getElementById('btnGuardarPesajes');
-  const tbody = document.getElementById('tbody-peleas');
-  const t0Inp  = document.getElementById('t0');
-  const durInp = document.getElementById('dur');
-  const gapInp = document.getElementById('gap');
-  const btnNow = document.getElementById('btnT0Now');
-
-  function setEditing(on){
-    if(!formOrden) return;
-    if(on){ formOrden.classList.add('editing'); } else { formOrden.classList.remove('editing'); }
-    inputsOrden.forEach(i=> i.disabled = !on);
-    if(btnEditar){ btnEditar.textContent = on ? '🙈 Terminar edición' : '✏️ Editar numeración'; }
-  }
-  if(btnEditar){ btnEditar.addEventListener('click', ()=> setEditing(!formOrden.classList.contains('editing'))); }
-
-  // === REORDENAR FILAS EN VIVO (solo al confirmar)
-  function reorderRowsDom(){
-    const rows = Array.from(tbody.querySelectorAll('tr.row-card'));
-    rows.sort((a,b)=>{
-      const ia = a.querySelector('.orden-input');
-      const ib = b.querySelector('.orden-input');
-      const va = ia ? parseInt(ia.value||'0',10) : parseInt(a.dataset.orden||'0',10);
-      const vb = ib ? parseInt(ib.value||'0',10) : parseInt(b.dataset.orden||'0',10);
-      const aIsNum = Number.isFinite(va) && !isNaN(va);
-      const bIsNum = Number.isFinite(vb) && !isNaN(vb);
-      if (!aIsNum && !bIsNum) return 0;
-      if (!aIsNum) return 1;
-      if (!bIsNum) return -1;
-      return (va||0)-(vb||0);
-    });
-    rows.forEach(r=>tbody.appendChild(r));
-  }
-
-  const ordenInputs = Array.from(document.querySelectorAll('#form-orden .orden-input'));
-  ordenInputs.forEach((inp) => {
-    inp.addEventListener('change', () => { if (inp.disabled) return; reorderRowsDom(); });
-    inp.addEventListener('blur',   () => { if (inp.disabled) return; reorderRowsDom(); });
-  });
-
-  if (btnGuardarOrden) {
-    btnGuardarOrden.addEventListener('click', ()=>{
-      reorderRowsDom();
-      document.querySelectorAll('#form-orden .orden-input').forEach(i=> i.disabled=false);
-      accionInput.value = 'guardar_orden';
-      formOrden.submit();
-    });
-  }
-
-  if (btnGuardarPesajes) {
-    btnGuardarPesajes.addEventListener('click', ()=>{
-      accionInput.value = 'guardar_pesajes';
-      formOrden.submit();
-    });
-  }
-  setEditing(false);
-
-  // ===== Pesajes: delta en vivo
-  function parseKg(s){ const n = parseFloat((s||'').toString().replace(',', '.')); return isNaN(n)?null:n; }
-  function regla(diffKg){
-    if (diffKg === null) return {txt:'Δ —', cls:''};
-    const d = Math.abs(diffKg);
-    if (d <= 0.5) return {txt:`Δ ${d.toFixed(1)} kg · ✅`, cls:'delta-ok'};
-    if (d <= 1.0) return {txt:`Δ ${d.toFixed(1)} kg · −1`, cls:'delta-1'};
-    if (d <= 1.5) return {txt:`Δ ${d.toFixed(1)} kg · −2`, cls:'delta-2'};
-    return {txt:`Δ ${d.toFixed(1)} kg · ❌`, cls:'delta-dq'};
-  }
-  function declaradoDesdeChip(chipText){
-    const m = (chipText||'').match(/([\d\.,]+)\s*kg/i);
-    return m ? parseKg(m[1]) : null;
-  }
-  function actualizarFila(input){
-    const peleaId = input.getAttribute('data-pelea');
-    const side = input.getAttribute('data-side');
-    const td = input.closest('td'); if (!td) return;
-    const chip = td.querySelector('.pill'); // el primero contiene "• KG"
-    const declared = chip ? declaradoDesdeChip(chip.textContent) : null;
-    const real = parseKg(input.value);
-    const deltaEl = td.querySelector(`#delta_${side}_${peleaId}`);
-    const realText = td.querySelector(`#real_${side}_${peleaId}`);
-    const res = regla(real!==null && declared!==null ? real - declared : null);
-    if (deltaEl){
-      deltaEl.textContent = res.txt;
-      deltaEl.classList.remove('delta-ok','delta-1','delta-2','delta-dq');
-      if (res.cls) deltaEl.classList.add(res.cls);
-    }
-    if (realText){
-      realText.textContent = (real!==null) ? `${real.toFixed(1)} kg` : '—';
-    }
-  }
-  document.querySelectorAll('input.peso-real').forEach(inp=>{
-    actualizarFila(inp);
-    if (!SHARE) inp.addEventListener('input', ()=> actualizarFila(inp));
-  });
-
-  /* ===== Agenda ===== */
-  const startedMap = <?= json_encode($__started_map ?? [], JSON_UNESCAPED_UNICODE) ?>; // {pelea_id: unix}
-  const qs = new URLSearchParams(location.search);
-  const LSKEY = 'sched_'+(document.body.getAttribute('data-evento')||'ev');
-  const store = (obj)=> localStorage.setItem(LSKEY, JSON.stringify(obj));
-  const load  = ()=> { try{ return JSON.parse(localStorage.getItem(LSKEY)||'{}'); }catch(_){ return {}; } };
-  function hhmm(d){ return d.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}); }
-  function minutes(n){ return n*60*1000; }
-  function getConfig(){
-    let cfg = load();
-    const urlT0 = qs.get('t0');
-    const urlDur = qs.get('dur'); const urlGap = qs.get('gap');
-    if (urlT0 && !cfg.t0) cfg.t0 = urlT0;
-    if (urlDur && !cfg.dur) cfg.dur = parseInt(urlDur,10);
-    if (urlGap && !cfg.gap) cfg.gap = parseInt(urlGap,10);
-    return {
-      t0:  t0Inp?.value || cfg.t0 || '',
-      dur: parseInt(durInp?.value || cfg.dur || '8',10) || 8,
-      gap: parseInt(gapInp?.value || cfg.gap || '2',10) || 2
-    };
-  }
-  function setUIFromCfg(cfg){
-    if (t0Inp && !t0Inp.value && cfg.t0) t0Inp.value = cfg.t0;
-    if (durInp) durInp.value = cfg.dur;
-    if (gapInp) gapInp.value = cfg.gap;
-  }
-  function defaultT0IfEmpty(){
-    if (!t0Inp || t0Inp.value) return;
-    const n = new Date();
-    const m = n.getMinutes();
-    const up = m%5 ? (5-(m%5)) : 0;
-    n.setMinutes(m+up,0,0);
-    t0Inp.value = n.toTimeString().slice(0,5);
-  }
-  function calc(){
-    const cfg = getConfig();
-    setUIFromCfg(cfg);
-    store(cfg);
-    const url = new URL(location.href);
-    url.searchParams.set('dur', cfg.dur);
-    url.searchParams.set('gap', cfg.gap);
-    if (cfg.t0) url.searchParams.set('t0', cfg.t0);
-    history.replaceState(null, '', url);
-
-    const base = new Date();
-    if (cfg.t0 && /^\d{2}:\d{2}$/.test(cfg.t0)){
-      const [H,M] = cfg.t0.split(':').map(x=>parseInt(x,10));
-      base.setHours(H, M, 0, 0);
-    }
-    const rows = Array.from(document.querySelectorAll('tbody tr.row-card'));
-    rows.sort((a,b)=> {
-      const ia = a.querySelector('.orden-input');
-      const ib = b.querySelector('.orden-input');
-      const va = ia ? parseInt(ia.value||'0',10) : parseInt(a.dataset.orden||'0',10);
-      const vb = ib ? parseInt(ib.value||'0',10) : parseInt(b.dataset.orden||'0',10);
-      const aIsNum = Number.isFinite(va) && !isNaN(va);
-      const bIsNum = Number.isFinite(vb) && !isNaN(vb);
-      if (!aIsNum && !bIsNum) return 0;
-      if (!aIsNum) return 1;
-      if (!bIsNum) return -1;
-      return (va||0)-(vb||0);
-    });
-
-    let cursor = new Date(base);
-    const startedPairs = Object.entries(startedMap).map(([k,v])=>({id:parseInt(k,10), ts:parseInt(v,10)})).sort((a,b)=>a.ts-b.ts);
-    if (startedPairs.length){
-      const last = startedPairs[startedPairs.length-1];
-      cursor = new Date(last.ts*1000 + minutes(cfg.dur+cfg.gap));
-    }
-
-    const upcoming = [];
-    rows.forEach((tr)=>{
-      const pid = parseInt(tr.dataset.pelea||'0',10);
-      const etaEl = document.getElementById('eta_'+pid);
-      let eta;
-      if (startedMap[pid]) {
-        const st = new Date(startedMap[pid]*1000);
-        eta = `▶ ${hhmm(st)}`;
-      } else {
-        eta = hhmm(cursor);
-      }
-      if (etaEl) etaEl.textContent = eta;
-
-      tr.classList.remove('upnext-1','upnext-2','upnext-3');
-      if (!startedMap[pid]) upcoming.push(tr);
-      if (!startedMap[pid]) cursor = new Date(cursor.getTime() + minutes(cfg.dur+cfg.gap));
-    });
-
-    for (let i=0;i<3 && i<upcoming.length;i++){
-      upcoming[i].classList.add('upnext-'+(i+1));
-    }
-  }
-  function tickRel(){
-    const now = new Date();
-    document.querySelectorAll('[id^="eta_"]').forEach(span=>{
-      const text = span.textContent||'';
-      if (text.startsWith('▶')) { span.title = 'Iniciada'; return; }
-      const m = text.match(/(\d{2}):(\d{2})/);
-      if (!m) return;
-      const d = new Date();
-      d.setHours(parseInt(m[1],10), parseInt(m[2],10), 0, 0);
-      const diff = Math.round((d - now)/60000);
-      span.title = diff >= 0 ? `En ${diff} min` : `${-diff} min retraso`;
-    });
-  }
-  if (btnNow) btnNow.addEventListener('click', ()=>{ const n=new Date(); t0Inp.value = n.toTimeString().slice(0,5); calc(); });
-  [t0Inp,durInp,gapInp].forEach(el=> el && el.addEventListener('change', calc));
-  defaultT0IfEmpty();
-  calc(); tickRel();
-  setInterval(()=>{ calc(); tickRel(); }, 30000);
-
-  /* ===== Marcar inicio al presionar “Iniciar” ===== */
-  document.querySelectorAll('.row-actions a.btn.btn-xxs.btn-secondary[href*="combate_en_vivo.php"]').forEach(a=>{
-    a.addEventListener('click', async ()=>{
-      try{
-        const url = new URL(a.href, location.origin);
-        const pid = parseInt(url.searchParams.get('pelea_id')||'0',10);
-        const t = Math.floor(Date.now()/1000);
-        const u = new URL(location.origin + '/ver_peleas_evento.php');
-        u.searchParams.set('ajax','markStart');
-        u.searchParams.set('evento_id', String(<?= (int)$evento_id ?>));
-        u.searchParams.set('pelea_id', String(pid));
-        u.searchParams.set('ts', String(t));
-        const ctrl = new AbortController();
-        setTimeout(()=>ctrl.abort(), 3000);
-        await fetch(u.toString(), {cache:'no-store', signal:ctrl.signal});
-      }catch(_){}
-    });
-  });
-
-  /* ===== Compartir / Copiar link ===== */
-  (function(){
-    const btn = document.getElementById('btnCompartir');
-    const snack = document.getElementById('snack');
-    if (!btn) return;
-    btn.addEventListener('click', async (e)=>{
-      const cfg = (function(){
-        const j = localStorage.getItem('sched_'+(document.body.getAttribute('data-evento')||'ev'));
-        try{ return JSON.parse(j||'{}'); }catch(_){ return {}; }
-      })();
-      const url = new URL(window.location.origin + '/ver_peleas_evento.php');
-      url.searchParams.set('evento_id','<?= (int)$evento_id ?>');
-      url.searchParams.set('share','1');
-      const cur = new URL(window.location.href);
-      ['ape','esc','t0','dur','gap'].forEach(k=>{
-        const v = cur.searchParams.get(k) || (k in cfg ? cfg[k] : null);
-        if (v) url.searchParams.set(k, v);
-      });
-
-      if (navigator.share) { e.preventDefault(); }
-      try{
-        if (navigator.share) {
-          await navigator.share({ title: '<?= str_replace("'", "\\'", $evento_nombre) ?>', text: 'Programación de peleas', url: url.toString() });
-        } else if (navigator.clipboard && window.isSecureContext) {
-          e.preventDefault();
-          await navigator.clipboard.writeText(url.toString());
-          snack.textContent = 'Link copiado'; snack.classList.add('show'); setTimeout(()=>snack.classList.remove('show'), 1800);
-        }
-      }catch(_){
-        try{
-          e.preventDefault();
-          const ta = document.createElement('textarea');
-          ta.value = url.toString(); document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove();
-          snack.textContent = 'Link copiado'; snack.classList.add('show'); setTimeout(()=>snack.classList.remove('show'), 1800);
-        }catch(__){}
-      }
-    });
-  })();
-
-  /* ===== Auto-refresh SOLO en share ===== */
-  (function(){
-    const isShare = SHARE === true;
-    if (!isShare) return;
-    const eventoId = parseInt(document.body.getAttribute('data-evento'), 10) || 0;
-    const ver0 = document.body.getAttribute('data-ver') || '';
-    const baseUrl = new URL(window.location.href);
-    function reloadSameQS(){
-      baseUrl.searchParams.set('_r', String(Date.now()));
-      window.location.replace(baseUrl.toString());
-    }
-    let lastVer = ver0, backoff = 10000, timer = null;
-    async function tick(){
-      try{
-        const u = new URL(window.location.origin + '/ver_peleas_evento.php');
-        u.searchParams.set('ajax','poll'); u.searchParams.set('evento_id', String(eventoId)); u.searchParams.set('_', String(Date.now()));
-        const ctrl = new AbortController(); const t = setTimeout(()=>ctrl.abort(), 8000);
-        const r = await fetch(u.toString(), {cache:'no-store', signal:ctrl.signal}); clearTimeout(t);
-        if (!r.ok) throw new Error('HTTP '+r.status);
-        const j = await r.json();
-        if (j && j.ok && j.ver && j.ver !== lastVer){ reloadSameQS(); return; }
-        backoff = 10000;
-      }catch(e){ backoff = Math.min(backoff + 5000, 30000); }
-      finally{ timer = setTimeout(tick, backoff); }
-    }
-    document.addEventListener('visibilitychange', ()=>{ if (document.visibilityState === 'visible'){ if (timer) clearTimeout(timer); backoff = 1000; tick(); } });
-    tick();
-  })();
-
+    setInterval(()=>{
+        fetch(`ver_peleas_evento.php?ajax=poll&evento_id=${evento}`)
+        .then(r=>r.json())
+        .then(j=>{
+            if(j.ok && j.ver!==ver){
+                location.reload();
+            }
+        });
+    }, 4000);
 })();
 </script>
+
 </body>
 </html>
