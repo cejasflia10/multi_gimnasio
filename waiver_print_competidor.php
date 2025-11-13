@@ -5,324 +5,192 @@ require_once __DIR__ . '/conexion.php';
 if (!isset($conexion) || !($conexion instanceof mysqli)) {
   http_response_code(500); exit('❌ Sin conexión a BD.');
 }
-if (function_exists('mysqli_report')) { mysqli_report(MYSQLI_REPORT_OFF); }
 @$conexion->set_charset('utf8mb4');
 
-/* ===== Helpers ===== */
 function h($s){ return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); }
 function fmt_fecha_es(?string $ymd): string {
   if (!$ymd || $ymd === '0000-00-00') return '';
   $ts = strtotime($ymd);
-  if ($ts === false) return '';
-  return date('d/m/Y', $ts);
+  return $ts ? date('d/m/Y',$ts) : '';
 }
 
-/* ===== Parámetros ===== */
 $evento_id = (int)($_GET['evento_id'] ?? 0);
 $comp_id   = (int)($_GET['id'] ?? 0);
-if ($evento_id <= 0 || $comp_id <= 0) { http_response_code(400); exit('❌ Falta evento_id o id.'); }
+if ($evento_id<=0 || $comp_id<=0) exit('❌ Falta id.');
 
-/* ===== Competidor: valida pertenencia y datos ===== */
 $st = $conexion->prepare("
-  SELECT id, apellido, nombre, dni, edad, escuela_nombre
+  SELECT id,apellido,nombre,dni,edad,escuela_nombre
   FROM competidores_evento
   WHERE id=? AND evento_id=?
   LIMIT 1
 ");
-if (!$st) { http_response_code(500); exit('❌ Error SQL competidor: '.$conexion->error); }
-$st->bind_param('ii', $comp_id, $evento_id);
-$st->execute(); $rs = $st->get_result(); $comp = $rs ? $rs->fetch_assoc() : null;
+$st->bind_param('ii',$comp_id,$evento_id);
+$st->execute(); $rs=$st->get_result();
+$comp=$rs?$rs->fetch_assoc():null;
 $st->close();
-if (!$comp) { http_response_code(404); exit('❌ Competidor no encontrado en este evento.'); }
+if(!$comp) exit('❌ Competidor no encontrado.');
 
-/* ===== Evento: titulo, fecha, lugar desde eventos_deportivos ===== */
-$evento_titulo = "Evento #{$evento_id}";
-$evento_fecha  = '';
-$evento_lugar  = '';
-
-$qe = $conexion->prepare("SELECT titulo, fecha, lugar FROM eventos_deportivos WHERE id=? LIMIT 1");
-if ($qe) {
-  $qe->bind_param('i', $evento_id);
-  $qe->execute(); $re = $qe->get_result();
-  if ($re && $re->num_rows) {
-    $row = $re->fetch_assoc();
-    if (!empty($row['titulo'])) $evento_titulo = (string)$row['titulo'];
-    $evento_fecha = fmt_fecha_es($row['fecha'] ?? null);
-    $evento_lugar = (string)($row['lugar'] ?? '');
-  }
-  $qe->close();
+$evento = ["titulo"=>"Evento #$evento_id","fecha"=>"","lugar"=>""];
+$q=$conexion->prepare("SELECT titulo,fecha,lugar FROM eventos_deportivos WHERE id=?");
+$q->bind_param('i',$evento_id);
+$q->execute(); $r=$q->get_result();
+if($r&&$r->num_rows){
+  $ev=$r->fetch_assoc();
+  $evento["titulo"]=$ev["titulo"] ?: $evento["titulo"];
+  $evento["fecha"]=fmt_fecha_es($ev["fecha"]);
+  $evento["lugar"]=$ev["lugar"];
 }
+$q->close();
 
-/* ===== Valores impresos ===== */
-$comp_apenom = trim(($comp['apellido'] ?? '').' '.($comp['nombre'] ?? ''));
-$comp_dni    = trim((string)($comp['dni'] ?? ''));
-$comp_edad   = trim((string)($comp['edad'] ?? ''));
-$comp_esc    = trim((string)($comp['escuela_nombre'] ?? ''));
+$nom = trim($comp["apellido"]." ".$comp["nombre"]);
+$dni = $comp["dni"];
+$edad= $comp["edad"];
+$esc = $comp["escuela_nombre"];
 
 ?>
 <!DOCTYPE html>
 <html lang="es">
 <head>
 <meta charset="utf-8">
-<title>Deslinde de Responsabilidad — <?= h($evento_titulo) ?></title>
-<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Deslinde — <?=h($evento["titulo"])?></title>
+
 <style>
-  @page {
-    size: A4;
-    margin: 12mm;
-  }
+@page { size: A4; margin: 12mm; }
 
-  *{ box-sizing: border-box; }
-  html,body{ margin:0; padding:0; }
-  body{
-    font-family: "Times New Roman","Georgia",serif;
-    font-size: 11pt;
-    line-height: 1.4;
-    color:#111827;
-    background:#fff;
-  }
-  .sheet{
-    max-width:210mm;
-    margin:0 auto;
-    padding:6mm 6mm 10mm;
-    background:#fff;
-  }
-  .hdr{ margin-bottom:8mm; }
-  .hdr h1{
-    font-size:18pt;
-    margin:0 0 4px 0;
-    line-height:1.2;
-    text-align:center;
-    text-transform:uppercase;
-  }
-  .sub{
-    color:#6b7280;
-    font-size:10pt;
-    display:flex;
-    flex-wrap:wrap;
-    gap:6px;
-    justify-content:center;
-  }
-  .tag{
-    display:inline-block;
-    padding:1px 8px;
-    border:1px solid #e5e7eb;
-    border-radius:999px;
-    background:#fbfbfb;
-  }
+body{
+  margin:0;
+  font-family:"Times New Roman",serif;
+  font-size:11.2pt;
+  line-height:1.38;
+}
 
-  .meta{
-    width:100%;
-    border:1px solid #e5e7eb;
-    border-radius:6px;
-    padding:8px;
-    margin-bottom:6mm;
-    font-size:10pt;
-  }
-  .row{
-    display:grid;
-    grid-template-columns:1fr 1fr;
-    gap:8px 14px;
-    margin-bottom:6px;
-  }
-  .lbl{
-    font-size:9.5pt;
-    color:#6b7280;
-    margin-bottom:2px;
-  }
-  .line{
-    border-bottom:1px solid #e5e7eb;
-    min-height:18px;
-    position:relative;
-    padding:2px 0;
-  }
-  .fill{
-    position:relative;
-    top:0; left:0;
-    font-size:10.5pt;
-  }
-  .full{ grid-column:1 / -1; }
+.contenido{
+  max-width:190mm;
+  margin:auto;
+}
 
-  .box{
-    border:1px solid #e5e7eb;
-    border-radius:6px;
-    padding:8px 10px;
-    margin-bottom:6mm;
-    font-size:10.5pt;
-  }
-  .box h3{
-    margin:0 0 4px 0;
-    font-size:11.5pt;
-    text-align:center;
-    text-transform:uppercase;
-  }
-  .box, .box p, .box li{
-    text-align:justify;
-    text-justify:inter-word;
-  }
-  ol{
-    margin:4px 0 4px 18px;
-    padding:0;
-  }
-  li{
-    margin:4px 0;
-  }
-  .small{
-    font-size:9.5pt;
-    color:#6b7280;
-  }
+h1{
+  text-align:center;
+  font-size:18pt;
+  margin:0 0 4mm 0;
+  text-transform:uppercase;
+}
 
-  .sig-grid{
-    display:grid;
-    grid-template-columns:1fr 1fr;
-    gap:14px;
-    margin-top:8mm;
-    font-size:10pt;
-  }
-  .sig-grid .full{
-    grid-column:1 / -1;
-  }
-  .sig{
-    border-top:1px solid #e5e7eb;
-    padding-top:5px;
-    text-align:center;
-    min-height:28px;
-  }
+.tagbox{ text-align:center; margin-bottom:5mm; }
+.tag{
+  border:1px solid #ccc;
+  padding:2px 8px;
+  border-radius:50px;
+  font-size:10pt;
+  margin:0 3px;
+}
 
-  .print-bar{
-    position:sticky;
-    top:0;
-    background:#fff;
-    border-bottom:1px solid #e5e7eb;
-    padding:6px 10px;
-    display:flex;
-    justify-content:flex-end;
-  }
-  .btn{
-    padding:6px 10px;
-    border:1px solid #e5e7eb;
-    border-radius:6px;
-    background:#f9fafb;
-    cursor:pointer;
-    font-size:10pt;
-  }
+table.meta{
+  width:100%;
+  border:1px solid #ccc;
+  border-collapse:collapse;
+  margin-bottom:6mm;
+  font-size:10.5pt;
+}
+table.meta td{
+  padding:3px 5px;
+  border:1px solid #ddd;
+}
 
-  @media print{
-    .print-bar{ display:none; }
-    .sheet{ padding:8mm 8mm 10mm; }
-  }
+.bloque{
+  margin-bottom:6mm;
+  text-align:justify;
+  text-justify:inter-word;
+}
+
+.bloque h2{
+  font-size:13pt;
+  text-align:center;
+  margin:0 0 2mm 0;
+}
+
+.bloque ol{
+  margin:0 0 0 17px;
+  padding:0;
+}
+.bloque li{
+  margin:2mm 0;
+}
+
+.firmas{
+  width:100%;
+  margin-top:10mm;
+  font-size:10pt;
+}
+.firmas td{
+  width:33%;
+  text-align:center;
+  vertical-align:bottom;
+  padding-top:14mm;
+}
+.firmas .linea{
+  border-top:1px solid #000;
+  margin-bottom:2px;
+}
 </style>
 </head>
+
 <body>
-<div class="print-bar">
-  <button class="btn" onclick="window.print()">🖨️ Imprimir</button>
+<div class="contenido">
+
+<h1>Deslinde de Responsabilidad</h1>
+
+<div class="tagbox">
+  <span class="tag">Evento: <?=h($evento["titulo"])?></span>
+  <span class="tag">Competidor #<?=$comp_id?></span>
 </div>
 
-<div class="sheet">
-  <div class="hdr">
-    <h1>Deslinde de Responsabilidad</h1>
-    <div class="sub">
-      <span class="tag">Evento: <?= h($evento_titulo) ?></span>
-      <span class="tag">Competidor #<?= (int)$comp_id ?></span>
-    </div>
-  </div>
+<table class="meta">
+<tr><td><b>Fecha:</b></td><td><?=h($evento["fecha"])?></td></tr>
+<tr><td><b>Lugar:</b></td><td><?=h($evento["lugar"])?></td></tr>
+<tr><td><b>Nombre y Apellido:</b></td><td><?=h($nom)?></td></tr>
+<tr><td><b>DNI:</b></td><td><?=h($dni)?></td></tr>
+<tr><td><b>Edad:</b></td><td><?=h($edad)?></td></tr>
+<tr><td><b>Escuela/Gimnasio:</b></td><td><?=h($esc)?></td></tr>
+</table>
 
-  <!-- DATOS (se imprimen si hay valor; si no, queda la línea vacía) -->
-  <div class="meta">
-    <div class="row">
-      <div>
-        <div class="lbl">Fecha</div>
-        <div class="line">
-          <?php if ($evento_fecha !== ''): ?><span class="fill"><?= h($evento_fecha) ?></span><?php endif; ?>
-        </div>
-      </div>
-      <div>
-        <div class="lbl">Lugar</div>
-        <div class="line">
-          <?php if ($evento_lugar !== ''): ?><span class="fill"><?= h($evento_lugar) ?></span><?php endif; ?>
-        </div>
-      </div>
+<div class="bloque">
+<h2>DECLARACIÓN</h2>
 
-      <div>
-        <div class="lbl">Nombre y Apellido</div>
-        <div class="line">
-          <?php if ($comp_apenom !== ''): ?><span class="fill"><?= h($comp_apenom) ?></span><?php endif; ?>
-        </div>
-      </div>
-      <div>
-        <div class="lbl">DNI / Pasaporte</div>
-        <div class="line">
-          <?php if ($comp_dni !== ''): ?><span class="fill"><?= h($comp_dni) ?></span><?php endif; ?>
-        </div>
-      </div>
+<ol>
+<li>Declaro que participo voluntariamente en la actividad/competencia y conozco los riesgos inherentes a la práctica de deportes de contacto.</li>
+<li>Afirmo que me encuentro en condiciones físicas aptas y, de ser necesario, presentaré apto médico correspondiente.</li>
+<li>Asumo personalmente todos los riesgos de lesiones, daños o pérdidas que pudieran ocurrir durante el evento.</li>
+<li>Libero de toda responsabilidad a la organización, promotores, jueces, árbitros, colaboradores, sponsors y al lugar del evento por cualquier contingencia derivada de la actividad.</li>
+<li>Me comprometo a respetar el reglamento vigente y las indicaciones del staff y oficiales durante el desarrollo del evento.</li>
+<li>Autorizo la utilización de mi imagen en fotografías y material audiovisual del evento con fines informativos y promocionales.</li>
+<li>Si soy menor de edad, declaro contar con la autorización de mi padre/madre/tutor responsable, quien firma también este deslinde.</li>
+</ol>
 
-      <div class="full">
-        <div class="lbl">Escuela / Gimnasio</div>
-        <div class="line">
-          <?php if ($comp_esc !== ''): ?><span class="fill"><?= h($comp_esc) ?></span><?php endif; ?>
-        </div>
-      </div>
+<p style="font-size:10pt; margin-top:3mm;">
+Nota: en caso de emergencia, la organización gestionará la asistencia correspondiente y se comunicará con el contacto indicado.
+</p>
+</div>
 
-      <div>
-        <div class="lbl">Teléfono</div>
-        <div class="line"></div>
-      </div>
-      <div>
-        <div class="lbl">Edad</div>
-        <div class="line">
-          <?php if ($comp_edad !== ''): ?><span class="fill"><?= h($comp_edad) ?></span><?php endif; ?>
-        </div>
-      </div>
+<table class="firmas">
+<tr>
+  <td>
+    <div class="linea"></div>
+    Firma del Competidor<br><span style="font-size:9pt;">Aclaración y DNI</span>
+  </td>
 
-      <div class="full">
-        <div class="lbl">Domicilio</div>
-        <div class="line"></div>
-      </div>
-      <div class="full">
-        <div class="lbl">Localidad / Provincia</div>
-        <div class="line"></div>
-      </div>
-      <div class="full">
-        <div class="lbl">Responsable / Tutor (si es menor)</div>
-        <div class="line"></div>
-      </div>
-      <div class="full">
-        <div class="lbl">Datos médicos relevantes / Alergias</div>
-        <div class="line" style="min-height:30px;"></div>
-      </div>
-    </div>
-  </div>
+  <td>
+    <div class="linea"></div>
+    Firma del Responsable (si corresponde)<br><span style="font-size:9pt;">Aclaración y DNI</span>
+  </td>
 
-  <div class="box">
-    <h3>Declaración</h3>
-    <ol>
-      <li>Declaro que participo voluntariamente en la actividad/competencia y conozco los riesgos inherentes a la práctica de deportes de contacto.</li>
-      <li>Afirmo que me encuentro en condiciones físicas aptas y, de ser necesario, presentaré apto médico correspondiente.</li>
-      <li>Asumo personalmente todos los riesgos de lesiones, daños o pérdidas que pudieran ocurrir durante el evento.</li>
-      <li>Libero de toda responsabilidad a la organización, promotores, jueces, árbitros, colaboradores, sponsors y al lugar del evento por cualquier contingencia derivada de la actividad.</li>
-      <li>Me comprometo a respetar el reglamento vigente y las indicaciones del staff y oficiales durante el desarrollo del evento.</li>
-      <li>Autorizo la utilización de mi imagen en fotografías y/o material audiovisual del evento con fines informativos y promocionales.</li>
-      <li>Si soy menor de edad, declaro contar con la autorización de mi padre/madre/tutor responsable, quien firma también este deslinde.</li>
-    </ol>
-    <p class="small">
-      Nota: en caso de emergencia, la organización gestionará la asistencia correspondiente y se comunicará con el contacto indicado.
-    </p>
-  </div>
+  <td>
+    <div class="linea"></div>
+    Firma del Organizador<br><span style="font-size:9pt;">Aclaración</span>
+  </td>
+</tr>
+</table>
 
-  <div class="sig-grid">
-    <div>
-      <div class="sig">Firma del Competidor</div>
-      <div class="small">Aclaración y DNI</div>
-    </div>
-    <div>
-      <div class="sig">Firma del Responsable (si corresponde)</div>
-      <div class="small">Aclaración y DNI</div>
-    </div>
-    <div class="full">
-      <div class="sig">Firma del Organizador</div>
-      <div class="small">Aclaración</div>
-    </div>
-  </div>
 </div>
 </body>
 </html>
