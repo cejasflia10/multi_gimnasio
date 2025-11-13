@@ -53,6 +53,7 @@ $esc = $comp["escuela_nombre"];
 <head>
 <meta charset="utf-8">
 <title>Deslinde — <?=h($evento["titulo"])?></title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
 
 <style>
 @page { size: A4; margin: 12mm; }
@@ -64,9 +65,27 @@ body{
   line-height:1.38;
 }
 
+.toolbar{
+  padding:6px 10px;
+  border-bottom:1px solid #ccc;
+  text-align:right;
+  background:#f9f9f9;
+}
+.toolbar button{
+  padding:6px 10px;
+  font-size:10pt;
+  border:1px solid #ccc;
+  border-radius:6px;
+  background:#ffffff;
+  cursor:pointer;
+}
+.toolbar button:hover{
+  background:#f3f4f6;
+}
+
 .contenido{
   max-width:190mm;
-  margin:auto;
+  margin:8px auto 0;
 }
 
 h1{
@@ -132,64 +151,74 @@ table.meta td{
   border-top:1px solid #000;
   margin-bottom:2px;
 }
+
+@media print{
+  .toolbar{ display:none; }
+  .contenido{ margin-top:0; }
+}
 </style>
 </head>
 
 <body>
+
+<div class="toolbar">
+  <button type="button" onclick="window.print()">🖨️ Imprimir / Guardar PDF</button>
+</div>
+
 <div class="contenido">
 
-<h1>Deslinde de Responsabilidad</h1>
+  <h1>Deslinde de Responsabilidad</h1>
 
-<div class="tagbox">
-  <span class="tag">Evento: <?=h($evento["titulo"])?></span>
-  <span class="tag">Competidor #<?=$comp_id?></span>
-</div>
+  <div class="tagbox">
+    <span class="tag">Evento: <?=h($evento["titulo"])?></span>
+    <span class="tag">Competidor #<?=$comp_id?></span>
+  </div>
 
-<table class="meta">
-<tr><td><b>Fecha:</b></td><td><?=h($evento["fecha"])?></td></tr>
-<tr><td><b>Lugar:</b></td><td><?=h($evento["lugar"])?></td></tr>
-<tr><td><b>Nombre y Apellido:</b></td><td><?=h($nom)?></td></tr>
-<tr><td><b>DNI:</b></td><td><?=h($dni)?></td></tr>
-<tr><td><b>Edad:</b></td><td><?=h($edad)?></td></tr>
-<tr><td><b>Escuela/Gimnasio:</b></td><td><?=h($esc)?></td></tr>
-</table>
+  <table class="meta">
+    <tr><td><b>Fecha:</b></td><td><?=h($evento["fecha"])?></td></tr>
+    <tr><td><b>Lugar:</b></td><td><?=h($evento["lugar"])?></td></tr>
+    <tr><td><b>Nombre y Apellido:</b></td><td><?=h($nom)?></td></tr>
+    <tr><td><b>DNI:</b></td><td><?=h($dni)?></td></tr>
+    <tr><td><b>Edad:</b></td><td><?=h($edad)?></td></tr>
+    <tr><td><b>Escuela/Gimnasio:</b></td><td><?=h($esc)?></td></tr>
+  </table>
 
-<div class="bloque">
-<h2>DECLARACIÓN</h2>
+  <div class="bloque">
+    <h2>DECLARACIÓN</h2>
 
-<ol>
-<li>Declaro que participo voluntariamente en la actividad/competencia y conozco los riesgos inherentes a la práctica de deportes de contacto.</li>
-<li>Afirmo que me encuentro en condiciones físicas aptas y, de ser necesario, presentaré apto médico correspondiente.</li>
-<li>Asumo personalmente todos los riesgos de lesiones, daños o pérdidas que pudieran ocurrir durante el evento.</li>
-<li>Libero de toda responsabilidad a la organización, promotores, jueces, árbitros, colaboradores, sponsors y al lugar del evento por cualquier contingencia derivada de la actividad.</li>
-<li>Me comprometo a respetar el reglamento vigente y las indicaciones del staff y oficiales durante el desarrollo del evento.</li>
-<li>Autorizo la utilización de mi imagen en fotografías y material audiovisual del evento con fines informativos y promocionales.</li>
-<li>Si soy menor de edad, declaro contar con la autorización de mi padre/madre/tutor responsable, quien firma también este deslinde.</li>
-</ol>
+    <ol>
+      <li>Declaro que participo voluntariamente en la actividad/competencia y conozco los riesgos inherentes a la práctica de deportes de contacto.</li>
+      <li>Afirmo que me encuentro en condiciones físicas aptas y, de ser necesario, presentaré apto médico correspondiente.</li>
+      <li>Asumo personalmente todos los riesgos de lesiones, daños o pérdidas que pudieran ocurrir durante el evento.</li>
+      <li>Libero de toda responsabilidad a la organización, promotores, jueces, árbitros, colaboradores, sponsors y al lugar del evento por cualquier contingencia derivada de la actividad.</li>
+      <li>Me comprometo a respetar el reglamento vigente y las indicaciones del staff y oficiales durante el desarrollo del evento.</li>
+      <li>Autorizo la utilización de mi imagen en fotografías y material audiovisual del evento con fines informativos y promocionales.</li>
+      <li>Si soy menor de edad, declaro contar con la autorización de mi padre/madre/tutor responsable, quien firma también este deslinde.</li>
+    </ol>
 
-<p style="font-size:10pt; margin-top:3mm;">
-Nota: en caso de emergencia, la organización gestionará la asistencia correspondiente y se comunicará con el contacto indicado.
-</p>
-</div>
+    <p style="font-size:10pt; margin-top:3mm;">
+      Nota: en caso de emergencia, la organización gestionará la asistencia correspondiente y se comunicará con el contacto indicado.
+    </p>
+  </div>
 
-<table class="firmas">
-<tr>
-  <td>
-    <div class="linea"></div>
-    Firma del Competidor<br><span style="font-size:9pt;">Aclaración y DNI</span>
-  </td>
+  <table class="firmas">
+    <tr>
+      <td>
+        <div class="linea"></div>
+        Firma del Competidor<br><span style="font-size:9pt;">Aclaración y DNI</span>
+      </td>
 
-  <td>
-    <div class="linea"></div>
-    Firma del Responsable (si corresponde)<br><span style="font-size:9pt;">Aclaración y DNI</span>
-  </td>
+      <td>
+        <div class="linea"></div>
+        Firma del Responsable (si corresponde)<br><span style="font-size:9pt;">Aclaración y DNI</span>
+      </td>
 
-  <td>
-    <div class="linea"></div>
-    Firma del Organizador<br><span style="font-size:9pt;">Aclaración</span>
-  </td>
-</tr>
-</table>
+      <td>
+        <div class="linea"></div>
+        Firma del Organizador<br><span style="font-size:9pt;">Aclaración</span>
+      </td>
+    </tr>
+  </table>
 
 </div>
 </body>
