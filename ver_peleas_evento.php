@@ -810,6 +810,12 @@ $st->close();
     margin:0;
   }
 
+  /* 🔒 OCULTAR INFO EN LA VISTA DE COMPARTIR (share=1) EN PANTALLA */
+  body.solo-vista col.info,
+  body.solo-vista .info-col {
+    display:none !important;
+  }
+
   @media print {
     @page { size: A4 portrait; margin: 10mm; }
     .toolbar, .form-actions, .row-actions, .btn { display: none !important; }
@@ -855,6 +861,11 @@ $st->close();
     .titulo-evento{
       font-size:18pt !important;
       margin-bottom:4mm !important;
+    }
+    /* 🔒 OCULTAR COLUMNA INFO EN LA IMPRESIÓN SIEMPRE */
+    col.info,
+    .info-col {
+      display:none !important;
     }
   }
 
@@ -991,9 +1002,9 @@ $st->close();
           </tr>
           <tr>
             <th></th><th></th><th></th>
-            <th>Foto</th><th>Nombre</th><th>Info</th><th>Escuela</th>
+            <th>Foto</th><th>Nombre</th><th class="info-col">Info</th><th>Escuela</th>
             <th></th>
-            <th>Foto</th><th>Nombre</th><th>Info</th><th>Escuela</th>
+            <th>Foto</th><th>Nombre</th><th class="info-col">Info</th><th>Escuela</th>
             <th></th><th class="obs"></th><th class="acciones"></th>
           </tr>
         </thead>
@@ -1098,7 +1109,7 @@ $st->close();
             </td>
 
             <!-- ROJO INFO -->
-            <td data-label="Roja · Info">
+            <td data-label="Roja · Info" class="info-col">
               <span class="pill"><?= h($rSexo ?: '—') ?></span>
               <span class="pill"><?= h($rTec ?: '—') ?></span>
               <div class="muted"><?= h($rInfo) ?></div>
@@ -1132,7 +1143,7 @@ $st->close();
             </td>
 
             <!-- AZUL INFO -->
-            <td data-label="Azul · Info">
+            <td data-label="Azul · Info" class="info-col">
               <span class="pill"><?= h($aSexo ?: '—') ?></span>
               <span class="pill"><?= h($aTec ?: '—') ?></span>
               <div class="muted"><?= h($aInfo) ?></div>
