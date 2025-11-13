@@ -1,20 +1,9 @@
 <?php
 /* ============================================================
    generar_ficha_pelea.php — FICHA MÉDICA DOBLE (2 por hoja)
-   - Usa plantilla "ficha competidor-doble-2022" (2 fichas verticales)
+   - Usa plantilla "ficha_competidor_doble_2022" (2 fichas verticales)
    - Arriba: competidor 1 (esquina roja de la pelea)
    - Abajo: competidor 2 (esquina azul)
-   - Datos que completa en cada ficha:
-       MODALIDAD
-       DNI
-       Apellido y Nombre
-       Fecha de Nacimiento
-       Sexo / Edad
-       Localidad / Provincia
-       Institución / Club o Gimnasio
-       Profesor o Coach
-       Peso (en cuadro de control médico)
-   - Extra médico (apto, etc.) se edita opcional desde ?edit=1
    ============================================================ */
 if (session_status() === PHP_SESSION_NONE) session_start();
 require_once __DIR__ . '/conexion.php';
@@ -228,10 +217,7 @@ function get_comp(mysqli $db,$T_C,$cc,$id){
   $fn     = safe_date($fn_raw);
   $ed     = edad($fn);
 
-  // Localidad / Provincia (usar lo que haya)
   $loc = $val(['localidad','provincia','localidad_provincia','ciudad','poblacion']);
-
-  // Profesor / Coach si existe
   $prof = $val(['profesor','coach','entrenador']);
 
   return [
@@ -267,7 +253,7 @@ $norm=function(&$c){
 $norm($R);
 $norm($A);
 
-/* ========= Extras (tabla JSON) ========= */
+/* ========= Extras médicos simples ========= */
 function x_load(mysqli $db,$T_X,$pid){
   $r=fetch1($db,"SELECT extras_json FROM ".bt($T_X)." WHERE pelea_id=?",[$pid]);
   $d=$r?json_decode($r['extras_json'],true):[];
@@ -289,17 +275,15 @@ $DEF=[
     'fecha'=>$fecha??'',
   ],
   'r'=>[
-    'apto'=>'','apto_fecha'=>'',
-    'obs'=>'',
+    'apto'=>'','apto_fecha'=>'','obs'=>'',
   ],
   'a'=>[
-    'apto'=>'','apto_fecha'=>'',
-    'obs'=>'',
+    'apto'=>'','apto_fecha'=>'','obs'=>'',
   ],
 ];
 $X=array_replace_recursive($DEF,$X);
 
-/* ========= Editor simple (apto / obs) ========= */
+/* ========= Editor ========= */
 if($edit===1){
   if($_SERVER['REQUEST_METHOD']==='POST' && isset($_POST['__save'])){
     $X['general']['modalidad']=trim($_POST['g_modalidad']??$X['general']['modalidad']);
@@ -342,7 +326,7 @@ if($edit===1){
       .g{display:grid;gap:8px}
       .g2{grid-template-columns:1fr 1fr}
       label{font-size:13px;color:#333}
-      input,textarea{font-size:15px;padding:8px;border:1px solid #bbb;border-radius:6px}
+      input{font-size:15px;padding:8px;border:1px solid #bbb;border-radius:6px}
       .row{display:flex;flex-direction:column}
       .act{margin-top:12px;display:flex;gap:8px}
       .btn{padding:10px 14px;border:1px solid #000;background:#111;color:#fff;border-radius:8px;text-decoration:none}
@@ -462,7 +446,6 @@ function render_print_overlay($bg_url,$ev_titulo,$orden,$modal,$categ,$fecha,$R,
         transform: translate(<?= $dx ?>mm, <?= $dy ?>mm) scale(<?= $escala/100 ?>);
       }
       .txt { position:absolute; font-family: Arial, Helvetica, sans-serif; font-size: <?= $fs ?>mm; line-height:1.2; color:#000; white-space:nowrap; }
-      .wrap{ white-space:normal; max-width:90mm; }
 
       .btnbar{
         padding:10px;
@@ -516,42 +499,53 @@ function render_print_overlay($bg_url,$ev_titulo,$orden,$modal,$categ,$fecha,$R,
           echo '<div class="txt" style="left:'.$x_mm.'mm; top:'.$y_mm.'mm">'.h($txt).'</div>';
         };
 
-        // --- función que dibuja UNA ficha (arriba o abajo) ---
-        $drawFicha = function($offsetY, $C, $modal_use, $X_side) use ($put){
-          // MODALIDAD (campo grande arriba a la izquierda)
-          $put(33, $offsetY + 18, $modal_use?:'-');
+       // === Dibuja UNA ficha (arriba o abajo) ===
+$drawFicha = function($offsetY, $C, $modal_use, $X_side) use ($put){
+  // MODALIDAD (campo grande arriba a la izquierda)
+  $put(32, $offsetY + 20, $modal_use?:'-');
 
-          // Datos personales (alineados con la planilla)
-          $put(33, $offsetY + 32, $C['dni']);                                     // DNI
-          $put(60, $offsetY + 38, $C['apellido'].' '.$C['nombre']);              // Apellido y Nombre
-          $put(75, $offsetY + 44, fmt_dmy($C['nac']));                           // Fecha de Nacimiento
-          $put(33, $offsetY + 50, strtoupper(substr($C['sexo'],0,1)));           // Sexo M/F
-          $put(80, $offsetY + 50, ($C['edad']!==null && $C['edad']!=='-')?$C['edad']:''); // Edad
-          $put(65, $offsetY + 56, $C['localidad']?:'-');                         // Localidad / Provincia
-          $put(80, $offsetY + 62, $C['escuela']?:'-');                           // Institución / Club o Gimnasio
-          $put(70, $offsetY + 68, $C['profesor']?:'-');                          // Profesor o Coach
+// Línea DNI (a la derecha de "DNI:")
+$put(46, $offsetY + 20, $C['dni']);                // DNI → 4 mm más a la izquierda
 
-          // Control médico: APTO y PESO (el resto lo completa el médico)
-          if(!empty($X_side['apto'])){
-            $put(145, $offsetY + 32, $X_side['apto']);                           // cerca de APTO
-          }
-          if(!empty($X_side['apto_fecha'])){
-            $put(145, $offsetY + 38, $X_side['apto_fecha']);                     // si querés usar
-          }
-          if(!empty($X_side['obs'])){
-            $put(145, $offsetY + 80, $X_side['obs']);                            // obs. médica texto corto
-          }
+// Línea Apellido y Nombre (a la derecha de "Apellido y Nombre:")
+$put(48, $offsetY + 29, $C['apellido'].' '.$C['nombre']);   // Nombre → 4 mm más a la izquierda
 
-          // Peso del competidor en el cuadro derecho (PESO)
-          if($C['peso'] && $C['peso']!=='-'){
-            $put(170, $offsetY + 72, $C['peso'].' kg');                          // campo PESO
-          }
-        };
+  // Línea Fecha de Nacimiento (a la derecha de "Fecha de Nacimiento:")
+  $put(75, $offsetY + 38, fmt_dmy($C['nac']));
+
+  // Línea Sexo / Edad: cerca de "Sexo M - F" y "Edad:"
+  $put(40, $offsetY + 45, strtoupper(substr($C['sexo'],0,1)));
+  if($C['edad']!==null && $C['edad']!=='-'){
+    $put(92, $offsetY + 45, $C['edad']);
+  }
+
+  // Localidad / Provincia:
+  $put(70, $offsetY + 52, $C['localidad']?:'-');
+
+  // Institución / Club o Gimnasio:
+  $put(80, $offsetY + 59, $C['escuela']?:'-');
+
+  // Profesor o Coach:
+  $put(70, $offsetY + 66, $C['profesor']?:'-');
+
+  // Control médico: APTO / Observación pequeña
+  if(!empty($X_side['apto'])){
+    $put(145, $offsetY + 26, $X_side['apto']);   // texto pequeño cerca de APTO
+  }
+  if(!empty($X_side['obs'])){
+    $put(145, $offsetY + 80, $X_side['obs']);   // observación corta
+  }
+
+  // Peso del competidor en cuadro "PESO"
+  if($C['peso'] && $C['peso']!=='-'){
+    $put(172, $offsetY + 64, $C['peso'].' kg');
+  }
+};
 
         // Ficha 1 (arriba) → competidor ROJO
         $drawFicha(0,   $R, $modal, $X['r']);
 
-        // Ficha 2 (abajo) → competidor AZUL (desplazo ~145 mm hacia abajo)
+        // Ficha 2 (abajo) → competidor AZUL (desplazo ~145 mm)
         $drawFicha(145, $A, $modal, $X['a']);
 
         if($debug){ ?>
