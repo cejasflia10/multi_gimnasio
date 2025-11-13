@@ -220,11 +220,9 @@ if ($tablaTec){
     }
   }
   if(!$TEC_LABEL_COL && $tc){
-    // si no encontró ninguna de las preferidas, usa la primera columna que exista
     $primera = reset($tc);
     if ($primera) $TEC_LABEL_COL = $primera;
   }
-  // si igual no se pudo determinar, anulamos la tabla para evitar errores
   if(!$TEC_LABEL_COL){
     $tablaTec = null;
   }
@@ -660,7 +658,6 @@ $st->close();
     body:not(.solo-vista) .btn-mini { font-size: 12px; padding: 8px 10px; }
     body:not(.solo-vista) .titulo-evento { font-size: clamp(20px, 6.2vw, 34px); }
 
-    /* Base “card” por fila */
     body:not(.solo-vista) thead { display: none; }
     body:not(.solo-vista) table { border-spacing: 0; }
     body:not(.solo-vista) tbody tr.row-card {
@@ -675,7 +672,6 @@ $st->close();
       padding: 10px 12px;
     }
 
-    /* Encabezado compacto */
     body:not(.solo-vista) td[data-label="Hora"],
     body:not(.solo-vista) td[data-label="N°"],
     body:not(.solo-vista) td[data-label="Modalidad"]{
@@ -690,11 +686,9 @@ $st->close();
       font-size:14px;font-weight:800;
     }
 
-    /* Ocultar fotos sueltas */
     body:not(.solo-vista) td[data-label="Roja · Foto"],
     body:not(.solo-vista) td[data-label="Azul · Foto"]{ display:none; }
 
-    /* 🔥 Dos columnas: Rojo | Azul */
     body:not(.solo-vista) td[data-label="Roja · Nombre"],
     body:not(.solo-vista) td[data-label="Azul · Nombre"],
     body:not(.solo-vista) td[data-label="Roja · Info"],
@@ -707,7 +701,6 @@ $st->close();
       vertical-align:top;
     }
 
-    /* Nombre + avatar más compacto */
     body:not(.solo-vista) td[data-label="Roja · Nombre"],
     body:not(.solo-vista) td[data-label="Azul · Nombre"]{
       font-size:15px;font-weight:800;
@@ -721,13 +714,11 @@ $st->close();
       width:36px;height:36px;font-size:12px;margin-right:8px;
     }
 
-    /* Info (categoría/peso) y Escuela debajo, pareadas */
     body:not(.solo-vista) td[data-label="Roja · Info"],
     body:not(.solo-vista) td[data-label="Azul · Info"]{ padding-top:6px; }
     body:not(.solo-vista) td[data-label="Roja · Escuela"] .muted,
     body:not(.solo-vista) td[data-label="Azul · Escuela"] .muted{ font-size:13px; }
 
-    /* VS centrado a ancho completo */
     body:not(.solo-vista) td[data-label="VS"]{
       display:block;
       width:100%;
@@ -740,12 +731,10 @@ $st->close();
       margin:6px 0;
     }
 
-    /* Otros campos al final */
     body:not(.solo-vista) td[data-label="Rondas"],
     body:not(.solo-vista) td[data-label="Obs."],
     body:not(.solo-vista) td[data-label="Acciones"]{ font-size:13px; }
 
-    /* Pesaje usable en móvil */
     body:not(.solo-vista) .pesaje input.peso-real{
       width:110px;height:40px;font-size:15px;
     }
@@ -753,7 +742,6 @@ $st->close();
       display:inline-block;margin-top:6px;
     }
 
-    /* Hora estimada al final de la tarjeta en móvil */
     body:not(.solo-vista) td.col-eta{ padding-top:6px; }
   }
 
@@ -767,7 +755,6 @@ $st->close();
     .btn-xxs { font-size: 11px; }
   }
 
-  /* ===== Estilo tipo planilla para share=1 (solo-vista) ===== */
   body.solo-vista table{
     border-collapse:collapse;
     border-spacing:0;
@@ -853,7 +840,6 @@ $st->close();
     margin:8px 0;font-weight:700
   }
 
-  /* ---- Encabezado sticky ---- */
   .topbar-sticky{
     position: sticky; top: 0; z-index: 1000;
     background: #fff; border-bottom: 1px solid var(--line);
@@ -865,7 +851,6 @@ $st->close();
     position: static; box-shadow: none; border-bottom: 0;
   }
 
-  /* form buscador */
   .search-grid{
     display:grid;
     grid-template-columns:1fr 1fr auto;
@@ -878,7 +863,6 @@ $st->close();
     border-radius:10px;padding:8px 10px;font-size:14px
   }
 
-  /* Snack */
   .snack{
     position:fixed;left:50%;bottom:16px;
     transform:translateX(-50%);
@@ -912,7 +896,6 @@ $st->close();
         <a class="btn btn-mini btn-secondary" id="btnCompartir" href="ver_peleas_evento.php?evento_id=<?= (int)$evento_id ?>&share=1" target="_blank">🔗 Vista para imprimir/compartir</a>
       </div>
 
-      <!-- ===== Agenda / horarios ===== -->
       <div class="schedule-tools" id="scheduleTools">
         <label>Inicio</label>
         <input type="time" id="t0" inputmode="numeric" <?= $SHARE?'disabled':'' ?>>
@@ -924,7 +907,6 @@ $st->close();
       </div>
     </div>
 
-    <!-- === BUSCADOR === -->
     <form method="GET" class="search-grid" autocomplete="off" action="ver_peleas_evento.php">
       <input type="hidden" name="evento_id" value="<?= (int)$evento_id ?>">
       <?php if ($SHARE) { ?><input type="hidden" name="share" value="1"><?php } ?>
@@ -941,7 +923,6 @@ $st->close();
         <a class="btn btn-secondary" href="ver_peleas_evento.php?evento_id=<?= (int)$evento_id ?><?= $SHARE?'&share=1':'' ?>">Limpiar</a>
       </div>
     </form>
-    <!-- === /BUSCADOR === -->
   </div>
 
   <?php if (!$SHARE) { ?>
@@ -996,7 +977,6 @@ $st->close();
           $rInfo = trim(($p['r_division'] ?? '-') . ' • ' . $rPesoTxt);
           $aInfo = trim(($p['a_division'] ?? '-') . ' • ' . $aPesoTxt);
 
-          /* NUEVO: normalizar sexo (M/F/X…) y técnica (N/A/B/C…) */
           $normSexo = function($v){
             $s = mb_strtolower(trim((string)$v),'UTF-8');
             if ($s==='m' || $s==='masculino' || $s==='hombre') return 'M';
@@ -1041,238 +1021,117 @@ $st->close();
           $pref_r = $p['peso_real_r'] ?? ($_SESSION['pesajes'][$evento_id][$p['pelea_id']]['r'] ?? '');
           $pref_a = $p['peso_real_a'] ?? ($_SESSION['pesajes'][$evento_id][$p['pelea_id']]['a'] ?? '');
 
-          /* Origen de pesaje (si hay columnas) */
           $orig_r = strtolower(trim((string)($p['origen_r'] ?? '')));
           $orig_a = strtolower(trim((string)($p['origen_a'] ?? '')));
           $orig_r_lbl = $orig_r === 'sistema' ? 'Sistema' : ($orig_r === 'manual' ? 'Manual' : ($orig_r!==''?$orig_r:''));
-
           $orig_a_lbl = $orig_a === 'sistema' ? 'Sistema' : ($orig_a === 'manual' ? 'Manual' : ($orig_a!==''?$orig_a:''));
-
-          /* Calcular diferencias de peso */
-          $delta_r = null;
-          $delta_a = null;
-          if ($pref_r !== '' && $pref_r !== null && is_numeric($pref_r) && $p['r_peso'] !== null && is_numeric($p['r_peso'])) {
-              $delta_r = (float)$pref_r - (float)$p['r_peso'];
-          }
-          if ($pref_a !== '' && $pref_a !== null && is_numeric($pref_a) && $p['a_peso'] !== null && is_numeric($p['a_peso'])) {
-              $delta_a = (float)$pref_a - (float)$p['a_peso'];
-          }
-
-          /* Determinar color del delta */
-          $delta_class = function($d){
-              if ($d === null) return '';
-              $abs = abs($d);
-              if ($abs <= 0.1) return 'delta-ok';
-              if ($abs <= 1) return 'delta-1';
-              if ($abs <= 2) return 'delta-2';
-              return 'delta-dq';
-          };
-
-          /* ETA — hora estimada */
-          $eta = '';
-          if (!empty($_GET['t0'])) {
-              $t0 = strtotime($_GET['t0']);
-              if ($t0 !== false) {
-                  $dur = isset($_GET['dur']) ? (int)$_GET['dur'] : 8;
-                  $gap = isset($_GET['gap']) ? (int)$_GET['gap'] : 2;
-                  $index = $nroMostrar - 1;
-                  $eta_ts = $t0 + ($index * ($dur + $gap) * 60);
-                  $eta = date('H:i', $eta_ts);
-              }
-          }
-
-          /* Marcar próximas peleas (upnext) */
-          $extra_class = '';
-          if ($eta !== '') {
-              $now = time();
-              $minsDiff = (strtotime($eta) - $now) / 60;
-              if ($minsDiff >= 0 && $minsDiff < 8)      $extra_class = 'upnext-1';
-              elseif ($minsDiff >= 8 && $minsDiff < 15) $extra_class = 'upnext-2';
-              elseif ($minsDiff >= 15 && $minsDiff < 25) $extra_class = 'upnext-3';
-          }
         ?>
-        <tr class="row-card <?= $extra_class ?>">
-          <td class="col-eta" data-label="Hora"><?= $eta ?: '—' ?></td>
-          <td data-label="N°"><input type="text" name="orden[<?= (int)$p['pelea_id'] ?>]" class="orden-input" value="<?= h($p['orden_manual']) ?>"></td>
-          <td data-label="Modalidad"><span class="modalidad"><?= h($modalidadLbl) ?></span></td>
+          <tr class="row-card"
+              id="p<?= (int)$p['pelea_id'] ?>"
+              data-pelea="<?= (int)$p['pelea_id'] ?>"
+              data-orden="<?= (int)$nroMostrar ?>"
+              data-rondas="<?= (int)$rondasVal ?>">
+            <td class="col-eta" data-label="Hora">
+              <span class="badge-eta" id="eta_<?= (int)$p['pelea_id'] ?>">—</span>
+            </td>
 
-          <!-- ROJO: foto -->
-          <td data-label="Roja · Foto">
-            <?php if ($rFoto !== '') { ?>
-              <img class="avatar" src="<?= h($rFoto) ?>">
-            <?php } else { ?>
-              <div class="ph-avatar"><?= h($rIni) ?></div>
-            <?php } ?>
-          </td>
+            <td class="num" data-label="N°">
+              <?php if ($C_ORDEN) { ?>
+                <input class="orden-input" type="number" min="1" inputmode="numeric" autocomplete="off"
+name="orden[<?= (int)$p['pelea_id'] ?>]"
+value="<?= (int)$nroMostrar ?>">
+<?php } else { ?>
+  <span class="num"><?= (int)$nroMostrar ?></span>
+<?php } ?>
+</td>
 
-          <!-- ROJO: nombre -->
-          <td data-label="Roja · Nombre"><?= h($rName) ?></td>
+<td class="modalidad" data-label="Modalidad">
+  <?= h($modalidadLbl) ?>
+</td>
 
-          <!-- ROJO: info -->
-          <td data-label="Roja · Info">
-            <?= h($rInfo) ?>
-            <?php if ($rSexo) { ?><span class="pill"><?= h($rSexo) ?></span><?php } ?>
-            <?php if ($rTec) { ?><span class="pill"><?= h($rTec) ?></span><?php } ?>
+<!-- ROJO FOTO -->
+<td data-label="Roja · Foto">
+  <?php if ($rFoto) { ?>
+    <img src="<?= h($rFoto) ?>" class="avatar">
+  <?php } else { ?>
+    <div class="ph-avatar"><?= h($rIni) ?></div>
+  <?php } ?>
+</td>
 
-            <!-- Pesaje -->
-            <div class="pesaje">
-              <?php if (!$SHARE) { ?>
-                <input type="text" class="peso-real" name="peso_real_r[<?= (int)$p['pelea_id'] ?>]" value="<?= h($pref_r) ?>" placeholder="Peso real">
-                <?php if ($delta_r !== null) { ?>
-                    <span class="delta-pill <?= $delta_class($delta_r) ?>"><?= $delta_r >= 0 ? '+'.$delta_r : $delta_r ?> kg</span>
-                <?php } ?>
-              <?php } ?>
-              <span class="real-text"><?= $pref_r !== '' ? h($pref_r).' kg' : '—' ?></span>
-            </div>
+<!-- ROJO NOMBRE -->
+<td data-label="Roja · Nombre">
+  <strong><?= h($rName) ?></strong>
+</td>
 
-            <?php if ($orig_r_lbl) { ?><div class="muted">Origen: <?= h($orig_r_lbl) ?></div><?php } ?>
-          </td>
+<!-- ROJO INFO -->
+<td data-label="Roja · Info">
+  <span class="pill"><?= h($rSexo ?: '—') ?></span>
+  <span class="pill"><?= h($rTec ?: '—') ?></span>
+  <div class="muted"><?= h($rInfo) ?></div>
+</td>
 
-          <!-- ROJO: escuela -->
-          <td data-label="Roja · Escuela">
-            <?php if ($rLogo !== '') { ?>
-              <img class="logo" src="<?= h($rLogo) ?>">
-            <?php } else { ?>
-              <div class="ph-logo"><?= h($rGymIni) ?></div>
-            <?php } ?>
-            <div class="muted"><?= h($p['r_escuela'] ?? '') ?></div>
-          </td>
+<!-- ROJO ESCUELA -->
+<td data-label="Roja · Escuela">
+  <?php if ($rLogo) { ?>
+    <img src="<?= h($rLogo) ?>" class="logo">
+  <?php } else { ?>
+    <div class="ph-logo"><?= h($rGymIni) ?></div>
+  <?php } ?>
+  <div class="muted"><?= h($p['r_escuela'] ?: '—') ?></div>
+</td>
 
-          <!-- VS -->
-          <td data-label="VS" class="vs">VS</td>
+<!-- VS -->
+<td data-label="VS" class="vs">VS</td>
 
-          <!-- AZUL: foto -->
-          <td data-label="Azul · Foto">
-            <?php if ($aFoto !== '') { ?>
-              <img class="avatar" src="<?= h($aFoto) ?>">
-            <?php } else { ?>
-              <div class="ph-avatar"><?= h($aIni) ?></div>
-            <?php } ?>
-          </td>
+<!-- AZUL FOTO -->
+<td data-label="Azul · Foto">
+  <?php if ($aFoto) { ?>
+    <img src="<?= h($aFoto) ?>" class="avatar">
+  <?php } else { ?>
+    <div class="ph-avatar"><?= h($aIni) ?></div>
+  <?php } ?>
+</td>
 
-          <!-- AZUL: nombre -->
-          <td data-label="Azul · Nombre"><?= h($aName) ?></td>
+<!-- AZUL NOMBRE -->
+<td data-label="Azul · Nombre">
+  <strong><?= h($aName) ?></strong>
+</td>
 
-          <!-- AZUL: info -->
-          <td data-label="Azul · Info">
-            <?= h($aInfo) ?>
-            <?php if ($aSexo) { ?><span class="pill"><?= h($aSexo) ?></span><?php } ?>
-            <?php if ($aTec) { ?><span class="pill"><?= h($aTec) ?></span><?php } ?>
+<!-- AZUL INFO -->
+<td data-label="Azul · Info">
+  <span class="pill"><?= h($aSexo ?: '—') ?></span>
+  <span class="pill"><?= h($aTec ?: '—') ?></span>
+  <div class="muted"><?= h($aInfo) ?></div>
+</td>
 
-            <!-- Pesaje -->
-            <div class="pesaje">
-              <?php if (!$SHARE) { ?>
-                <input type="text" class="peso-real" name="peso_real_a[<?= (int)$p['pelea_id'] ?>]" value="<?= h($pref_a) ?>" placeholder="Peso real">
-                <?php if ($delta_a !== null) { ?>
-                    <span class="delta-pill <?= $delta_class($delta_a) ?>"><?= $delta_a >= 0 ? '+'.$delta_a : $delta_a ?> kg</span>
-                <?php } ?>
-              <?php } ?>
-              <span class="real-text"><?= $pref_a !== '' ? h($pref_a).' kg' : '—' ?></span>
-            </div>
+<!-- AZUL ESCUELA -->
+<td data-label="Azul · Escuela">
+  <?php if ($aLogo) { ?>
+    <img src="<?= h($aLogo) ?>" class="logo">
+  <?php } else { ?>
+    <div class="ph-logo"><?= h($aGymIni) ?></div>
+  <?php } ?>
+  <div class="muted"><?= h($p['a_escuela'] ?: '—') ?></div>
+</td>
 
-            <?php if ($orig_a_lbl) { ?><div class="muted">Origen: <?= h($orig_a_lbl) ?></div><?php } ?>
-          </td>
+<!-- RONDAS -->
+<td data-label="Rondas">
+  <?= (int)$rondasVal ?>
+</td>
 
-          <!-- Azul: escuela -->
-          <td data-label="Azul · Escuela">
-            <?php if ($aLogo !== '') { ?>
-              <img class="logo" src="<?= h($aLogo) ?>">
-            <?php } else { ?>
-              <div class="ph-logo"><?= h($aGymIni) ?></div>
-            <?php } ?>
-            <div class="muted"><?= h($p['a_escuela'] ?? '') ?></div>
-          </td>
+<!-- OBSERVACIONES -->
+<td data-label="Obs.">
+  <?= h($obsVal ?: '—') ?>
+</td>
 
-          <td data-label="Rondas"><?= (int)$rondasVal ?></td>
-          <td data-label="Obs."><?= h($obsVal) ?></td>
-
-          <!-- ACCIONES -->
-          <td data-label="Acciones" class="acciones">
-            <?php if (!$SHARE) { ?>
-            <div class="row-actions">
-              <a class="btn btn-xxs btn-secondary" href="organizar_pelea.php?pelea_id=<?= (int)$p['pelea_id'] ?>&evento_id=<?= (int)$evento_id ?>">✏️ Editar</a>
-              <a class="btn btn-xxs btn-primary" href="combate_en_vivo.php?pelea_id=<?= (int)$p['pelea_id'] ?>&evento_id=<?= (int)$evento_id ?>" target="_blank">▶️ Iniciar</a>
-              <form method="POST" style="display:inline-block" onsubmit="return confirm('¿Eliminar pelea?')">
-                <input type="hidden" name="accion" value="delete">
-                <input type="hidden" name="evento_id" value="<?= (int)$evento_id ?>">
-                <input type="hidden" name="pelea_id" value="<?= (int)$p['pelea_id'] ?>">
-                <button class="btn btn-xxs btn-danger" type="submit">🗑️</button>
-              </form>
-            </div>
-            <?php } ?>
-          </td>
-        </tr>
-        <?php } } ?>
-        </tbody>
-      </table>
-
-      <?php if (!$SHARE) { ?>
-      <div class="form-actions" id="orden-actions" style="margin-top:12px; display:none;">
-        <button class="btn btn-primary" type="submit">💾 Guardar numeración</button>
-        <button class="btn btn-secondary" type="button" id="btnCancelarOrden">Cancelar</button>
-      </div>
-      <?php } ?>
-    </form>
-  </div>
-</div>
-
-<!-- Snack -->
-<div id="snack" class="snack">Copiado</div>
-
-<script>
-"use strict";
-
-/* ===== COMPARTIR ===== */
-document.getElementById("btnCompartir")?.addEventListener("click", function(e){
-    if (navigator.share) {
-        e.preventDefault();
-        navigator.share({
-            title: document.title,
-            url: this.href
-        });
-    }
-});
-
-/* ===== Editar orden ===== */
-const btnEditar = document.getElementById("btnEditarOrden");
-const btnCancelar = document.getElementById("btnCancelarOrden");
-const formOrden = document.getElementById("form-orden");
-
-btnEditar?.addEventListener("click", ()=>{
-    formOrden.classList.add("editing");
-    document.getElementById("orden-actions").style.display = "block";
-});
-btnCancelar?.addEventListener("click", ()=>{
-    formOrden.classList.remove("editing");
-    document.getElementById("orden-actions").style.display = "none";
-});
-
-/* ===== Agenda: botón ahora ===== */
-document.getElementById("btnT0Now")?.addEventListener("click", ()=>{
-    const t = new Date();
-    const hh = t.getHours().toString().padStart(2,"0");
-    const mm = t.getMinutes().toString().padStart(2,"0");
-    document.getElementById("t0").value = `${hh}:${mm}`;
-});
-
-/* ===== Auto-refresh en vista share ===== */
-(function(){
-    const body = document.body;
-    if (!body.classList.contains("solo-vista")) return;
-    const ver = body.dataset.ver;
-    const evento = body.dataset.evento;
-
-    setInterval(()=>{
-        fetch(`ver_peleas_evento.php?ajax=poll&evento_id=${evento}`)
-        .then(r=>r.json())
-        .then(j=>{
-            if(j.ok && j.ver!==ver){
-                location.reload();
-            }
-        });
-    }, 4000);
-})();
-</script>
-
-</body>
-</html>
+<!-- ACCIONES -->
+<td class="acciones" data-label="Acciones">
+<?php if (!$SHARE) { ?>
+  <a class="btn-xxs btn-secondary" href="organizar_pelea.php?pelea_id=<?= (int)$p['pelea_id'] ?>&evento_id=<?= (int)$evento_id ?>">✏️ Editar</a>
+  <a class="btn-xxs btn-secondary" href="combate_en_vivo.php?pelea_id=<?= (int)$p['pelea_id'] ?>&evento_id=<?= (int)$evento_id ?>">▶️ Iniciar</a>
+  <button type="submit" class="btn-xxs btn-danger" name="accion" value="delete" onclick="return confirm('¿Eliminar pelea?')">🗑️</button>
+  <input type="hidden" name="pelea_id" value="<?= (int)$p['pelea_id'] ?>">
+<?php } ?>
+</td>
+</tr>
+<?php }} ?>
