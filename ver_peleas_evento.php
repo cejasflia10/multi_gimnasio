@@ -95,7 +95,10 @@ if (isset($_GET['ajax']) && $_GET['ajax']==='poll') {
   header('Content-Type: application/json; charset=utf-8');
   $evento_id_poll = (int)($_GET['evento_id'] ?? 0);
   $colsMap = [];
-  if ($r = $conexion->query("SHOW COLUMNS FROM `peleas_evento`")) { while($c = $r->fetch_assoc()){ $colsMap[strtolower($c['Field'])] = $c['Field']; } $r->close(); }
+  if ($r = $conexion->query("SHOW COLUMNS FROM `peleas_evento`")) {
+    while($c = $r->fetch_assoc()){ $colsMap[strtolower($c['Field'])] = $c['Field']; }
+    $r->close();
+  }
   $ver = compute_event_signature($conexion, $evento_id_poll, $colsMap);
   echo json_encode(['ok'=>true,'ver'=>$ver], JSON_UNESCAPED_UNICODE);
   exit;
@@ -130,7 +133,10 @@ function obtener_nombre_evento(mysqli $cx, int $evento_id, bool $debug=false): s
   $trySimple = function(string $sql, int $id) use ($cx){
     if(!($st=$cx->prepare($sql))) return null;
     $st->bind_param('i',$id); $st->execute(); $res = $st->get_result(); $out=null;
-    if($res && ($row=$res->fetch_assoc())){ $nom = trim((string)($row['nombre'] ?? $row['titulo'] ?? '')); if($nom!=='') $out=$nom; }
+    if($res && ($row=$res->fetch_assoc())){
+      $nom = trim((string)($row['nombre'] ?? $row['titulo'] ?? ''));
+      if($nom!=='') $out=$nom;
+    }
     $st->close(); return $out;
   };
   if ($existe('eventos_deportivos')) if ($nom=$trySimple("SELECT `titulo` FROM `eventos_deportivos` WHERE `id`=? LIMIT 1",$evento_id)) return $nom;
@@ -149,9 +155,18 @@ $evento_nombre = obtener_nombre_evento($conexion, $evento_id, isset($_GET['debug
 /* ========= columnas peleas_evento ========= */
 $cols = [];
 $res = $conexion->query("SHOW COLUMNS FROM peleas_evento");
-if (!$res) { echo '<div style="max-width:900px;margin:16px auto;padding:12px;border:1px solid #ffcdd2;background:#ffebee;color:#b71c1c;border-radius:8px;">No se pudo leer columnas de <b>peleas_evento</b>: '.h($conexion->error).'</div>'; exit; }
+if (!$res) {
+  echo '<div style="max-width:900px;margin:16px auto;padding:12px;border:1px solid #ffcdd2;background:#ffebee;color:#b71c1c;border-radius:8px;">No se pudo leer columnas de <b>peleas_evento</b>: '.h($conexion->error).'</div>';
+  exit;
+}
 while($r = $res->fetch_assoc()){ $cols[strtolower($r['Field'])] = $r['Field']; }
-$pick = function(array $cands) use ($cols){ foreach ($cands as $c) { $lc = strtolower($c); if (isset($cols[$lc])) return $cols[$lc]; } return null; };
+$pick = function(array $cands) use ($cols){
+  foreach ($cands as $c) {
+    $lc = strtolower($c);
+    if (isset($cols[$lc])) return $cols[$lc];
+  }
+  return null;
+};
 
 $C_ID       = $pick(['id','pelea_id','id_pelea']);
 $C_EVENTO   = $pick(['evento_id','id_evento','evento']);
@@ -172,7 +187,8 @@ $C_MODAL_P_ID  = $pick(['modalidad_id','id_modalidad','modalidad_evento_id']);
 $C_MODAL_P_TXT = $pick(['modalidad','modo','reglamento']);
 
 if (!$C_EVENTO || !$C_ROJO || !$C_AZUL) {
-  echo '<div style="max-width:900px;margin:16px auto;padding:12px;border:1px solid #fdecea;background:#ffebee;color:#b71c1c;border-radius:8px;">Faltan columnas obligatorias en <b>peleas_evento</b> (evento/rojo/azul).</div>'; exit;
+  echo '<div style="max-width:900px;margin:16px auto;padding:12px;border:1px solid #fdecea;background:#ffebee;color:#b71c1c;border-radius:8px;">Faltan columnas obligatorias en <b>peleas_evento</b> (evento/rojo/azul).</div>';
+  exit;
 }
 
 /* ========= firma actual del evento ========= */
@@ -229,8 +245,17 @@ if ($tablaTec){
 }
 
 /* ========= detectar columnas útiles en competidores_evento ========= */
-$compCols=[]; if ($rc=$conexion->query("SHOW COLUMNS FROM competidores_evento")){ while($r=$rc->fetch_assoc()){ $compCols[strtolower($r['Field'])]=$r['Field']; } }
-$pickComp = function(array $cands) use ($compCols){ foreach($cands as $c){ $lc=strtolower($c); if(isset($compCols[$lc])) return $compCols[$lc]; } return null; };
+$compCols=[];
+if ($rc=$conexion->query("SHOW COLUMNS FROM competidores_evento")){
+  while($r=$rc->fetch_assoc()){ $compCols[strtolower($r['Field'])]=$r['Field']; }
+}
+$pickComp = function(array $cands) use ($compCols){
+  foreach($cands as $c){
+    $lc=strtolower($c);
+    if(isset($compCols[$lc])) return $compCols[$lc];
+  }
+  return null;
+};
 
 /* sexo/género */
 $C_SEXO = $pickComp(['sexo','genero']);
@@ -348,6 +373,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$SHARE) {
     header('Location: ver_peleas_evento.php?evento_id='.(int)$evento_id.$redir_q); exit;
   }
 
+  /* ====== ELIMINAR PELEA ====== */
   if ($accion === 'delete' && $pelea_id > 0) {
     $st=$conexion->prepare("DELETE FROM peleas_evento WHERE ".bt($C_EVENTO)."=? AND ".bt($C_ID ?: 'id')."=? LIMIT 1");
     if ($st) { $st->bind_param('ii',$evento_id,$pelea_id); $st->execute(); $st->close(); }
@@ -406,7 +432,10 @@ if ($tablaDiv) {
   $joins[] = "LEFT JOIN $tablaDiv dva ON dva.id = ca.division_id";
   $selectParts[] = 'dvr.'.bt($DIV_LABEL_COL).' AS r_division';
   $selectParts[] = 'dva.'.bt($DIV_LABEL_COL).' AS a_division';
-} else { $selectParts[] = "NULL AS r_division"; $selectParts[] = "NULL AS a_division"; }
+} else {
+  $selectParts[] = "NULL AS r_division";
+  $selectParts[] = "NULL AS a_division";
+}
 
 /* NUEVO: SEXO */
 if ($C_SEXO){
@@ -435,13 +464,15 @@ if ($tablaTec && $C_TEC_ID && !empty($TEC_LABEL_COL)){
 
 $where = ["p.".bt($C_EVENTO)." = ?"]; $types = 'i'; $params = [$evento_id];
 if ($s_ape !== '') {
-  foreach (preg_split('/\s+/', $s_ape) as $tk) { $tk=trim($tk); if($tk==='') continue;
+  foreach (preg_split('/\s+/', $s_ape) as $tk) {
+    $tk=trim($tk); if($tk==='') continue;
     $where[]="(cr.apellido LIKE CONCAT('%', ?, '%') OR ca.apellido LIKE CONCAT('%', ?, '%') OR cr.nombre LIKE CONCAT('%', ?, '%') OR ca.nombre LIKE CONCAT('%', ?, '%'))";
     $types.='ssss'; array_push($params,$tk,$tk,$tk,$tk);
   }
 }
 if ($s_esc !== '') {
-  foreach (preg_split('/\s+/', $s_esc) as $tk) { $tk=trim($tk); if($tk==='') continue;
+  foreach (preg_split('/\s+/', $s_esc) as $tk) {
+    $tk=trim($tk); if($tk==='') continue;
     $where[]="(cr.escuela_nombre LIKE CONCAT('%', ?, '%') OR ca.escuela_nombre LIKE CONCAT('%', ?, '%'))";
     $types.='ss'; array_push($params,$tk,$tk);
   }
@@ -456,7 +487,10 @@ LEFT JOIN competidores_evento ca ON p.".bt($C_AZUL)." = ca.id
 WHERE ".implode(' AND ', $where)."
 ORDER BY $orderBy";
 $st = $conexion->prepare($sql);
-if (!$st) { echo '<div style="max-width:900px;margin:16px auto;padding:12px;border:1px solid #ffcdd2;background:#ffebee;color:#b71c1c;border-radius:8px;">Error preparando la lista de peleas: '.h($conexion->error).'</div>'; exit; }
+if (!$st) {
+  echo '<div style="max-width:900px;margin:16px auto;padding:12px;border:1px solid #ffcdd2;background:#ffebee;color:#b71c1c;border-radius:8px;">Error preparando la lista de peleas: '.h($conexion->error).'</div>';
+  exit;
+}
 $st->bind_param($types, ...$params); $st->execute();
 $peleas = $st->get_result()->fetch_all(MYSQLI_ASSOC);
 $st->close();
@@ -1023,8 +1057,8 @@ $st->close();
 
           $orig_r = strtolower(trim((string)($p['origen_r'] ?? '')));
           $orig_a = strtolower(trim((string)($p['origen_a'] ?? '')));
-          $orig_r_lbl = $orig_r === 'sistema' ? 'Sistema' : ($orig_r === 'manual' ? 'Manual' : ($orig_r!==''?$orig_r:''));
-          $orig_a_lbl = $orig_a === 'sistema' ? 'Sistema' : ($orig_a === 'manual' ? 'Manual' : ($orig_a!==''?$orig_a:''));
+          $orig_r_lbl = $orig_r === 'sistema' ? 'Sistema' : ($orig_r === 'manual' ? 'Manual' : ($orig_r!==''?$orig_r:'')); 
+          $orig_a_lbl = $orig_a === 'sistema' ? 'Sistema' : ($orig_a === 'manual' ? 'Manual' : ($orig_a!==''?$orig_a:'')); 
         ?>
           <tr class="row-card"
               id="p<?= (int)$p['pelea_id'] ?>"
@@ -1038,100 +1072,219 @@ $st->close();
             <td class="num" data-label="N°">
               <?php if ($C_ORDEN) { ?>
                 <input class="orden-input" type="number" min="1" inputmode="numeric" autocomplete="off"
-name="orden[<?= (int)$p['pelea_id'] ?>]"
-value="<?= (int)$nroMostrar ?>">
-<?php } else { ?>
-  <span class="num"><?= (int)$nroMostrar ?></span>
-<?php } ?>
-</td>
+                       name="orden[<?= (int)$p['pelea_id'] ?>]"
+                       value="<?= (int)$nroMostrar ?>">
+              <?php } else { ?>
+                <span class="num"><?= (int)$nroMostrar ?></span>
+              <?php } ?>
+            </td>
 
-<td class="modalidad" data-label="Modalidad">
-  <?= h($modalidadLbl) ?>
-</td>
+            <td class="modalidad" data-label="Modalidad">
+              <?= h($modalidadLbl) ?>
+            </td>
 
-<!-- ROJO FOTO -->
-<td data-label="Roja · Foto">
-  <?php if ($rFoto) { ?>
-    <img src="<?= h($rFoto) ?>" class="avatar">
-  <?php } else { ?>
-    <div class="ph-avatar"><?= h($rIni) ?></div>
-  <?php } ?>
-</td>
+            <!-- ROJO FOTO -->
+            <td data-label="Roja · Foto">
+              <?php if ($rFoto) { ?>
+                <img src="<?= h($rFoto) ?>" class="avatar">
+              <?php } else { ?>
+                <div class="ph-avatar"><?= h($rIni) ?></div>
+              <?php } ?>
+            </td>
 
-<!-- ROJO NOMBRE -->
-<td data-label="Roja · Nombre">
-  <strong><?= h($rName) ?></strong>
-</td>
+            <!-- ROJO NOMBRE -->
+            <td data-label="Roja · Nombre">
+              <strong><?= h($rName) ?></strong>
+            </td>
 
-<!-- ROJO INFO -->
-<td data-label="Roja · Info">
-  <span class="pill"><?= h($rSexo ?: '—') ?></span>
-  <span class="pill"><?= h($rTec ?: '—') ?></span>
-  <div class="muted"><?= h($rInfo) ?></div>
-</td>
+            <!-- ROJO INFO -->
+            <td data-label="Roja · Info">
+              <span class="pill"><?= h($rSexo ?: '—') ?></span>
+              <span class="pill"><?= h($rTec ?: '—') ?></span>
+              <div class="muted"><?= h($rInfo) ?></div>
+            </td>
 
-<!-- ROJO ESCUELA -->
-<td data-label="Roja · Escuela">
-  <?php if ($rLogo) { ?>
-    <img src="<?= h($rLogo) ?>" class="logo">
-  <?php } else { ?>
-    <div class="ph-logo"><?= h($rGymIni) ?></div>
-  <?php } ?>
-  <div class="muted"><?= h($p['r_escuela'] ?: '—') ?></div>
-</td>
+            <!-- ROJO ESCUELA -->
+            <td data-label="Roja · Escuela">
+              <?php if ($rLogo) { ?>
+                <img src="<?= h($rLogo) ?>" class="logo">
+              <?php } else { ?>
+                <div class="ph-logo"><?= h($rGymIni) ?></div>
+              <?php } ?>
+              <div class="muted"><?= h($p['r_escuela'] ?: '—') ?></div>
+            </td>
 
-<!-- VS -->
-<td data-label="VS" class="vs">VS</td>
+            <!-- VS -->
+            <td data-label="VS" class="vs">VS</td>
 
-<!-- AZUL FOTO -->
-<td data-label="Azul · Foto">
-  <?php if ($aFoto) { ?>
-    <img src="<?= h($aFoto) ?>" class="avatar">
-  <?php } else { ?>
-    <div class="ph-avatar"><?= h($aIni) ?></div>
-  <?php } ?>
-</td>
+            <!-- AZUL FOTO -->
+            <td data-label="Azul · Foto">
+              <?php if ($aFoto) { ?>
+                <img src="<?= h($aFoto) ?>" class="avatar">
+              <?php } else { ?>
+                <div class="ph-avatar"><?= h($aIni) ?></div>
+              <?php } ?>
+            </td>
 
-<!-- AZUL NOMBRE -->
-<td data-label="Azul · Nombre">
-  <strong><?= h($aName) ?></strong>
-</td>
+            <!-- AZUL NOMBRE -->
+            <td data-label="Azul · Nombre">
+              <strong><?= h($aName) ?></strong>
+            </td>
 
-<!-- AZUL INFO -->
-<td data-label="Azul · Info">
-  <span class="pill"><?= h($aSexo ?: '—') ?></span>
-  <span class="pill"><?= h($aTec ?: '—') ?></span>
-  <div class="muted"><?= h($aInfo) ?></div>
-</td>
+            <!-- AZUL INFO -->
+            <td data-label="Azul · Info">
+              <span class="pill"><?= h($aSexo ?: '—') ?></span>
+              <span class="pill"><?= h($aTec ?: '—') ?></span>
+              <div class="muted"><?= h($aInfo) ?></div>
+            </td>
 
-<!-- AZUL ESCUELA -->
-<td data-label="Azul · Escuela">
-  <?php if ($aLogo) { ?>
-    <img src="<?= h($aLogo) ?>" class="logo">
-  <?php } else { ?>
-    <div class="ph-logo"><?= h($aGymIni) ?></div>
-  <?php } ?>
-  <div class="muted"><?= h($p['a_escuela'] ?: '—') ?></div>
-</td>
+            <!-- AZUL ESCUELA -->
+            <td data-label="Azul · Escuela">
+              <?php if ($aLogo) { ?>
+                <img src="<?= h($aLogo) ?>" class="logo">
+              <?php } else { ?>
+                <div class="ph-logo"><?= h($aGymIni) ?></div>
+              <?php } ?>
+              <div class="muted"><?= h($p['a_escuela'] ?: '—') ?></div>
+            </td>
 
-<!-- RONDAS -->
-<td data-label="Rondas">
-  <?= (int)$rondasVal ?>
-</td>
+            <!-- RONDAS -->
+            <td data-label="Rondas">
+              <?= (int)$rondasVal ?>
+            </td>
 
-<!-- OBSERVACIONES -->
-<td data-label="Obs.">
-  <?= h($obsVal ?: '—') ?>
-</td>
+            <!-- OBSERVACIONES -->
+            <td data-label="Obs.">
+              <?= h($obsVal ?: '—') ?>
+            </td>
 
-<!-- ACCIONES -->
-<td class="acciones" data-label="Acciones">
-<?php if (!$SHARE) { ?>
-  <a class="btn-xxs btn-secondary" href="organizar_pelea.php?pelea_id=<?= (int)$p['pelea_id'] ?>&evento_id=<?= (int)$evento_id ?>">✏️ Editar</a>
-  <a class="btn-xxs btn-secondary" href="combate_en_vivo.php?pelea_id=<?= (int)$p['pelea_id'] ?>&evento_id=<?= (int)$evento_id ?>">▶️ Iniciar</a>
-  <button type="submit" class="btn-xxs btn-danger" name="accion" value="delete" onclick="return confirm('¿Eliminar pelea?')">🗑️</button>
-  <input type="hidden" name="pelea_id" value="<?= (int)$p['pelea_id'] ?>">
-<?php } ?>
-</td>
-</tr>
-<?php }} ?>
+            <!-- ACCIONES -->
+            <td class="acciones" data-label="Acciones">
+            <?php if (!$SHARE) { ?>
+
+              <!-- EDITAR -->
+              <a class="btn-xxs btn-secondary"
+                 href="editar_pelea_evento.php?pelea_id=<?= (int)$p['pelea_id'] ?>&evento_id=<?= (int)$evento_id ?>">
+                 ✏️ Editar
+              </a>
+
+              <!-- INICIAR -->
+              <a class="btn-xxs btn-secondary"
+                 href="combate_en_vivo.php?pelea_id=<?= (int)$p['pelea_id'] ?>&evento_id=<?= (int)$evento_id ?>">
+                 ▶️ Iniciar
+              </a>
+
+              <!-- ELIMINAR — FORMULARIO INDIVIDUAL -->
+              <form method="POST" action="ver_peleas_evento.php"
+                    style="display:inline-block;margin:0;padding:0;">
+                  <input type="hidden" name="evento_id" value="<?= (int)$evento_id ?>">
+                  <input type="hidden" name="pelea_id" value="<?= (int)$p['pelea_id'] ?>">
+                  <button class="btn-xxs btn-danger"
+                          type="submit"
+                          name="accion"
+                          value="delete"
+                          onclick="return confirm('¿Eliminar pelea?')">
+                          🗑️
+                  </button>
+              </form>
+
+            <?php } ?>
+            </td>
+          </tr>
+        <?php } } ?>  <!-- cierra foreach y el if (!$peleas) -->
+        </tbody>
+      </table>
+    </form>
+  </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  var btnEditar = document.getElementById('btnEditarOrden');
+  var formOrden = document.getElementById('form-orden');
+  var accionInput = document.getElementById('accionInput');
+  var editing = false;
+
+  if (btnEditar && formOrden && accionInput) {
+    btnEditar.addEventListener('click', function () {
+      if (!editing) {
+        // Entramos en modo edición
+        formOrden.classList.add('editing');
+        editing = true;
+        btnEditar.textContent = '💾 Guardar numeración';
+      } else {
+        // Guardar
+        accionInput.value = 'guardar_orden';
+        formOrden.submit();
+      }
+    });
+  }
+
+  var btnT0Now = document.getElementById('btnT0Now');
+  if (btnT0Now) {
+    btnT0Now.addEventListener('click', function () {
+      var now = new Date();
+      var hh = String(now.getHours()).padStart(2, '0');
+      var mm = String(now.getMinutes()).padStart(2, '0');
+      var t0 = document.getElementById('t0');
+      if (t0) t0.value = hh + ':' + mm;
+      calcularAgenda();
+    });
+  }
+
+  var t0 = document.getElementById('t0');
+  var dur = document.getElementById('dur');
+  var gap = document.getElementById('gap');
+  if (t0 && dur && gap) {
+    t0.addEventListener('change', calcularAgenda);
+    dur.addEventListener('change', calcularAgenda);
+    gap.addEventListener('change', calcularAgenda);
+  }
+
+  function calcularAgenda() {
+    if (!t0 || !dur || !gap) return;
+    if (!t0.value) return;
+
+    var partes = t0.value.split(':');
+    if (partes.length < 2) return;
+
+    var baseMin = parseInt(partes[0], 10) * 60 + parseInt(partes[1], 10);
+    if (isNaN(baseMin)) return;
+
+    var durMin = parseInt(dur.value || '0', 10);
+    var gapMin = parseInt(gap.value || '0', 10);
+    if (isNaN(durMin) || durMin <= 0) durMin = 8;
+    if (isNaN(gapMin) || gapMin < 0) gapMin = 2;
+
+    var rows = Array.prototype.slice.call(document.querySelectorAll('tr.row-card'));
+    rows.sort(function(a,b){
+      var oa = parseInt(a.getAttribute('data-orden') || '0', 10);
+      var ob = parseInt(b.getAttribute('data-orden') || '0', 10);
+      return oa - ob;
+    });
+
+    var offset = 0;
+    rows.forEach(function(row){
+      var peleaId = row.getAttribute('data-pelea');
+      var rondas = parseInt(row.getAttribute('data-rondas') || '0', 10);
+      if (isNaN(rondas) || rondas <= 0) rondas = 2;
+
+      var minFight = baseMin + offset;
+      var h = Math.floor(minFight / 60);
+      var m = minFight % 60;
+      var hh = String(h).padStart(2, '0');
+      var mm = String(m).padStart(2, '0');
+
+      var badge = document.getElementById('eta_' + peleaId);
+      if (badge) badge.textContent = hh + ':' + mm;
+
+      offset += (durMin + gapMin);
+    });
+  }
+
+  calcularAgenda();
+});
+</script>
+
+</body>
+</html>

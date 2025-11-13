@@ -2,7 +2,7 @@
 /* ============================================
    editar_pelea_evento.php
    • Edita modalidad (id o texto), rondas y observaciones
-   • NUEVO: permite cambiar competidor rojo/azul (selects)
+   • Permite cambiar competidor rojo/azul (selects)
    • Tolerante a esquema (descubre columnas)
    • Muestra info básica de la pelea/competidores
    ============================================ */
@@ -31,9 +31,15 @@ if ($evento_id<=0 || $pelea_id<=0){
 /* ---------- descubrir columnas de peleas_evento ---------- */
 $colsP = [];
 $rsp = $conexion->query("SHOW COLUMNS FROM peleas_evento");
-if(!$rsp){ echo '<div style="max-width:900px;margin:16px auto;padding:12px;border:1px solid #ffcdd2;background:#ffebee;color:#b71c1c;border-radius:8px;">No se pudo leer columnas de <b>peleas_evento</b>: '.h($conexion->error).'</div>'; exit; }
+if(!$rsp){
+  echo '<div style="max-width:900px;margin:16px auto;padding:12px;border:1px solid #ffcdd2;background:#ffebee;color:#b71c1c;border-radius:8px;">No se pudo leer columnas de <b>peleas_evento</b>: '.h($conexion->error).'</div>';
+  exit;
+}
 while($r=$rsp->fetch_assoc()){ $colsP[strtolower($r['Field'])]=$r['Field']; }
-$pickP = function(array $cands) use ($colsP){ foreach($cands as $c){ $lc=strtolower($c); if(isset($colsP[$lc])) return $colsP[$lc]; } return null; };
+$pickP = function(array $cands) use ($colsP){
+  foreach($cands as $c){ $lc=strtolower($c); if(isset($colsP[$lc])) return $colsP[$lc]; }
+  return null;
+};
 
 $C_ID        = $pickP(['id','pelea_id','id_pelea']);
 $C_EVENTO    = $pickP(['evento_id','id_evento','evento']);
@@ -43,13 +49,19 @@ $C_RONDAS    = $pickP(['rondas','rounds']);
 $C_OBS       = $pickP(['observaciones','obs','comentarios','comentario','nota']);
 $C_ORDEN     = $pickP(['orden','orden_manual','nro','nro_orden','posicion','position','sequence','rank','numero','nro_pelea','sort']);
 
-/* Modalidad en PELEA (opcional) */
+/* Modalidad en PELEA (opcional, texto e id) */
 $C_MODAL_P_ID  = $pickP(['modalidad_id','id_modalidad','modalidad_evento_id']);
-$C_MODAL_P_TXT = $pickP(['modalidad','modo','reglamento']);
+$C_MODAL_P_TXT = $pickP(['modalidad','modo','reglamento','disciplina','tipo','tipo_pelea','titulo_modalidad']);
 
 /* ---------- columnas de competidores_evento ---------- */
-$colsC=[]; if($rc=$conexion->query("SHOW COLUMNS FROM competidores_evento")){ while($r=$rc->fetch_assoc()){ $colsC[strtolower($r['Field'])]=$r['Field']; } }
-$pickC=function(array $cands) use ($colsC){ foreach($cands as $c){ $lc=strtolower($c); if(isset($colsC[$lc])) return $colsC[$lc]; } return null; };
+$colsC=[];
+if($rc=$conexion->query("SHOW COLUMNS FROM competidores_evento")){
+  while($r=$rc->fetch_assoc()){ $colsC[strtolower($r['Field'])]=$r['Field']; }
+}
+$pickC=function(array $cands) use ($colsC){
+  foreach($cands as $c){ $lc=strtolower($c); if(isset($colsC[$lc])) return $colsC[$lc]; }
+  return null;
+};
 
 $CE_ID   = $pickC(['id','competidor_id']);
 $CE_APE  = $pickC(['apellido','apellidos','last_name']);
@@ -71,16 +83,26 @@ $select = [
 $tablaModal = (($t=$conexion->query("SHOW TABLES LIKE 'modalidades_evento'")) && $t->num_rows>0) ? 'modalidades_evento' : null;
 $MOD_LABEL_COL='nombre';
 if ($tablaModal){
-  $mc=[]; if($rc=$conexion->query("SHOW COLUMNS FROM $tablaModal")){ while($r=$rc->fetch_assoc()){ $mc[strtolower($r['Field'])]=$r['Field']; } }
+  $mc=[];
+  if($rc=$conexion->query("SHOW COLUMNS FROM $tablaModal")){
+    while($r=$rc->fetch_assoc()){ $mc[strtolower($r['Field'])]=$r['Field']; }
+  }
   $MOD_LABEL_COL=$mc['nombre']??($mc['modalidad']??($mc['descripcion']??($mc['name']??'nombre')));
 }
 
 if ($C_MODAL_P_ID && $tablaModal){
   $select[] = 'p.'.bt($C_MODAL_P_ID).' AS modalidad_id';
   $select[] = 'm.'.bt($MOD_LABEL_COL).' AS modalidad_lbl';
-} else { $select[]='NULL AS modalidad_id'; $select[]='NULL AS modalidad_lbl'; }
+} else {
+  $select[]='NULL AS modalidad_id';
+  $select[]='NULL AS modalidad_lbl';
+}
 
-if ($C_MODAL_P_TXT){ $select[] = 'p.'.bt($C_MODAL_P_TXT).' AS modalidad_txt'; } else { $select[]='NULL AS modalidad_txt'; }
+if ($C_MODAL_P_TXT){
+  $select[] = 'p.'.bt($C_MODAL_P_TXT).' AS modalidad_txt';
+} else {
+  $select[]='NULL AS modalidad_txt';
+}
 
 /* competidores (datos para header) */
 $select[] = 'cr.'.bt($CE_APE?:'apellido').' AS r_apellido';
@@ -94,7 +116,9 @@ $select[] = $CE_ESC ? 'ca.'.bt($CE_ESC).' AS a_escuela' : "NULL AS a_escuela";
 $select[] = $CE_FOTO? 'ca.'.bt($CE_FOTO).' AS a_foto'    : "NULL AS a_foto";
 
 $joins=[];
-if ($tablaModal && $C_MODAL_P_ID){ $joins[]="LEFT JOIN $tablaModal m ON m.id = p.".bt($C_MODAL_P_ID); }
+if ($tablaModal && $C_MODAL_P_ID){
+  $joins[]="LEFT JOIN $tablaModal m ON m.id = p.".bt($C_MODAL_P_ID);
+}
 
 $sql = "SELECT ".implode(",\n  ",$select)."
 FROM peleas_evento p
@@ -102,34 +126,70 @@ JOIN competidores_evento cr ON p.".bt($C_ROJO)." = cr.".bt($CE_ID?:'id')."
 LEFT JOIN competidores_evento ca ON p.".bt($C_AZUL)." = ca.".bt($CE_ID?:'id')."
 ".implode("\n",$joins)."
 WHERE p.".bt($C_EVENTO)."=? AND p.".bt($C_ID?:'id')."=? LIMIT 1";
+
 $st=$conexion->prepare($sql);
-if(!$st){ echo '<div style="max-width:900px;margin:16px auto;padding:12px;border:1px solid #ffcdd2;background:#ffebee;color:#b71c1c;border-radius:8px;">Error preparando detalle: '.h($conexion->error).'</div>'; exit; }
+if(!$st){
+  echo '<div style="max-width:900px;margin:16px auto;padding:12px;border:1px solid #ffcdd2;background:#ffebee;color:#b71c1c;border-radius:8px;">Error preparando detalle: '.h($conexion->error).'</div>';
+  exit;
+}
 $st->bind_param('ii',$evento_id,$pelea_id);
 $st->execute();
 $pelea = $st->get_result()->fetch_assoc();
 $st->close();
-if(!$pelea){ echo '<div style="max-width:900px;margin:16px auto;padding:12px;border:1px solid #ffcdd2;background:#ffebee;color:#b71c1c;border-radius:8px;">No se encontró la pelea.</div>'; exit; }
+if(!$pelea){
+  echo '<div style="max-width:900px;margin:16px auto;padding:12px;border:1px solid #ffcdd2;background:#ffebee;color:#b71c1c;border-radius:8px;">No se encontró la pelea.</div>';
+  exit;
+}
 
 /* ---------- catálogo de modalidades (opcional) ---------- */
 $modalidades = [];
 if ($tablaModal){
   $q = "SELECT id, ".bt($MOD_LABEL_COL)." AS nombre FROM $tablaModal ORDER BY ".bt($MOD_LABEL_COL);
-  if($rs=$conexion->query($q)){ $modalidades = $rs->fetch_all(MYSQLI_ASSOC); }
+  if($rs=$conexion->query($q)){
+    $modalidades = $rs->fetch_all(MYSQLI_ASSOC);
+  }
+  // Quitar duplicados tipo Low Kick / Lowkick / K1 / K-1, etc.
+  if ($modalidades){
+    $seen = [];
+    $filtered = [];
+    foreach ($modalidades as $m){
+      $lbl = trim((string)$m['nombre']);
+      if ($lbl === '') continue;
+      $key = mb_strtolower($lbl,'UTF-8');
+      $key = preg_replace('/[\s\-]+/u','', $key);
+      if (isset($seen[$key])) continue;
+      $seen[$key] = true;
+      $m['nombre'] = $lbl;
+      $filtered[] = $m;
+    }
+    $modalidades = $filtered;
+  }
 }
+
+/* ---------- plantillas de título para modalidad_txt ---------- */
+$plantillas_titulo = [
+  'Boxeo título amateur',
+  'Lowkick título amateurs',
+  'Lowkick título proam',
+  'Lowkick título profesional',
+  'K1 título amateur',
+  'K1 título proam',
+  'K1 título profesional',
+  'Muay Thai título amateur',
+  'Muay Thai título proam',
+];
 
 /* ---------- catálogo de competidores del evento (para selects) ---------- */
 $competidores = [];
 if ($CE_ID && $CE_EVT){
-  // 🔧 FIX: paréntesis/comillas del ternario que arma 'AS esc'
   $q = "SELECT "
       . bt($CE_ID) ." AS id, "
       . bt($CE_APE?:'apellido') ." AS ape, "
       . bt($CE_NOM?:'nombre')  ." AS nom, "
-      . ( $CE_ESC ? bt($CE_ESC)." AS esc" : "'-' AS esc" ) . "
+      . ($CE_ESC ? bt($CE_ESC)." AS esc" : "'-' AS esc") . "
     FROM competidores_evento
     WHERE ".bt($CE_EVT)." = ?
     ORDER BY ape, nom";
-
   if ($st=$conexion->prepare($q)){
     $st->bind_param('i',$evento_id);
     $st->execute();
@@ -145,11 +205,9 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && isset($_POST['accion']) && $_POST['ac
   $mod_id = isset($_POST['modalidad_id']) && $_POST['modalidad_id']!=='' ? (int)$_POST['modalidad_id'] : null;
   $mod_tx = trim((string)($_POST['modalidad_txt'] ?? ''));
 
-  // NUEVO: lectura de selects de competidores
   $nuevo_rojo = isset($_POST['rojo_id']) && $_POST['rojo_id']!=='' ? (int)$_POST['rojo_id'] : null;
   $nuevo_azul = isset($_POST['azul_id']) && $_POST['azul_id']!=='' ? (int)$_POST['azul_id'] : null;
 
-  // Validaciones simples
   if ($nuevo_rojo !== null && $nuevo_azul !== null && $nuevo_rojo === $nuevo_azul){
     $_SESSION['flash_error'] = 'Las dos esquinas no pueden tener el mismo competidor.';
     header('Location: editar_pelea_evento.php?evento_id='.$evento_id.'&pelea_id='.$pelea_id);
@@ -170,7 +228,6 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && isset($_POST['accion']) && $_POST['ac
   if ($C_MODAL_P_TXT){
     $set[] = bt($C_MODAL_P_TXT).'=?'; $types.='s'; $vals[] = ($mod_tx!=='' ? $mod_tx : null);
   }
-  // NUEVO: columnas de competidores (si existen)
   if ($C_ROJO){
     $set[] = bt($C_ROJO).'=?'; $types.='i'; $vals[] = $nuevo_rojo;
   }
@@ -180,14 +237,19 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && isset($_POST['accion']) && $_POST['ac
 
   if (!$set){
     $_SESSION['flash_error'] = 'No hay columnas para actualizar (revisá el esquema de <b>peleas_evento</b>).';
-    header('Location: ver_peleas_evento.php?evento_id='.$evento_id); exit;
+    header('Location: ver_peleas_evento.php?evento_id='.$evento_id);
+    exit;
   }
 
   $sqlUp = "UPDATE peleas_evento SET ".implode(',', $set)." WHERE ".bt($C_EVENTO)."=? AND ".bt($C_ID?:'id')."=? LIMIT 1";
   $types .= 'ii'; $vals[]=$evento_id; $vals[]=$pelea_id;
 
   $st=$conexion->prepare($sqlUp);
-  if(!$st){ $_SESSION['flash_error'] = 'Prep update: '.$conexion->error; header('Location: editar_pelea_evento.php?evento_id='.$evento_id.'&pelea_id='.$pelea_id); exit; }
+  if(!$st){
+    $_SESSION['flash_error'] = 'Prep update: '.$conexion->error;
+    header('Location: editar_pelea_evento.php?evento_id='.$evento_id.'&pelea_id='.$pelea_id);
+    exit;
+  }
 
   // Si algún entero va como NULL, cambiamos tipo a 's' para que pase NULL real
   for ($i=0;$i<strlen($types);$i++){
@@ -201,10 +263,11 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && isset($_POST['accion']) && $_POST['ac
 
   if($ok) $_SESSION['flash_ok']='✅ Cambios guardados.';
   else    $_SESSION['flash_warn']='ℹ️ No hubo cambios para guardar.';
-  header('Location: ver_peleas_evento.php?evento_id='.$evento_id); exit;
+  header('Location: ver_peleas_evento.php?evento_id='.$evento_id);
+  exit;
 }
 
-/* ---------- UI ---------- */
+/* ---------- UI helpers ---------- */
 function initials($ap,$no){
   $a = mb_substr(trim((string)$ap),0,1,'UTF-8');
   $n = mb_substr(trim((string)$no),0,1,'UTF-8');
@@ -240,12 +303,11 @@ $aIni = initials($pelea['a_apellido']??'',$pelea['a_nombre']??'');
     .btn{display:inline-block;padding:9px 12px;border-radius:10px;border:0;cursor:pointer;font-weight:800}
     .btn-primary{background:var(--btn);color:#fff}
     .btn-secondary{background:var(--btn-sec-bg)}
-    .btn-danger{background:var(--btn-dg);color:#fff}
     .grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
     .competidor{display:flex;align-items:center;gap:10px}
     .avatar{width:52px;height:52px;border-radius:10px;object-fit:cover;border:1px solid var(--line);background:#f1f5f9}
     .ph{width:52px;height:52px;border-radius:10px;border:1px solid var(--line);display:inline-flex;align-items:center;justify-content:center;background:#eef2f7;font-weight:900}
-    .muted{color:var(--muted)}
+    .muted{color:var(--muted);}
     .divider{height:1px;background:#e5e7eb;margin:10px 0}
     @media(max-width:720px){ .row,.grid2{grid-template-columns:1fr} }
   </style>
@@ -289,7 +351,7 @@ $aIni = initials($pelea['a_apellido']??'',$pelea['a_nombre']??'');
     <input type="hidden" name="evento_id" value="<?= (int)$evento_id ?>">
     <input type="hidden" name="pelea_id" value="<?= (int)$pelea_id ?>">
 
-    <!-- NUEVO: Cambiar competidores -->
+    <!-- Cambiar competidores -->
     <div class="row">
       <div class="field">
         <label>Esquina Roja — competidor</label>
@@ -299,7 +361,9 @@ $aIni = initials($pelea['a_apellido']??'',$pelea['a_nombre']??'');
             <?php
               $selR = isset($pelea['rojo_id']) ? (int)$pelea['rojo_id'] : null;
               foreach($competidores as $c){
-                $id=(int)$c['id']; $nom=trim(($c['ape']??'').' '.($c['nom']??'')); $esc=(string)($c['esc']??'-');
+                $id=(int)$c['id'];
+                $nom=trim(($c['ape']??'').' '.($c['nom']??''));
+                $esc=(string)($c['esc']??'-');
                 $sel = ($selR!==null && $selR===$id) ? 'selected' : '';
                 echo '<option value="'.$id.'" '.$sel.'>'.h($nom.' — '.$esc).'</option>';
               }
@@ -319,7 +383,9 @@ $aIni = initials($pelea['a_apellido']??'',$pelea['a_nombre']??'');
             <?php
               $selA = isset($pelea['azul_id']) ? (int)$pelea['azul_id'] : null;
               foreach($competidores as $c){
-                $id=(int)$c['id']; $nom=trim(($c['ape']??'').' '.($c['nom']??'')); $esc=(string)($c['esc']??'-');
+                $id=(int)$c['id'];
+                $nom=trim(($c['ape']??'').' '.($c['nom']??''));
+                $esc=(string)($c['esc']??'-');
                 $sel = ($selA!==null && $selA===$id) ? 'selected' : '';
                 echo '<option value="'.$id.'" '.$sel.'>'.h($nom.' — '.$esc).'</option>';
               }
@@ -340,34 +406,43 @@ $aIni = initials($pelea['a_apellido']??'',$pelea['a_nombre']??'');
 
     <div class="row">
       <div class="field">
-        <label>Modalidad</label>
+        <label>Modalidad (reglamento)</label>
         <?php if ($tablaModal && $C_MODAL_P_ID) { ?>
-          <select name="modalidad_id">
+          <select name="modalidad_id" id="modalidad_id">
             <option value="">— (sin asignar)</option>
             <?php
               $selId = isset($pelea['modalidad_id']) ? (int)$pelea['modalidad_id'] : null;
               foreach ($modalidades as $m){
-                $id=(int)$m['id']; $lbl=(string)$m['nombre'];
+                $id=(int)$m['id'];
+                $lbl=(string)$m['nombre'];
                 $sel = ($selId!==null && $selId===$id) ? 'selected' : '';
                 echo '<option value="'.$id.'" '.$sel.'>'.h($lbl).'</option>';
               }
+              echo '<optgroup label="Títulos">';
+              foreach ($plantillas_titulo as $tpl){
+                echo '<option value="" data-titulo="'.h($tpl).'">★ '.h($tpl).'</option>';
+              }
+              echo '</optgroup>';
             ?>
           </select>
-          <?php if ($C_MODAL_P_TXT) { ?>
-            <small class="muted">Opcional: texto libre (para sobrescribir o añadir detalle)</small>
-            <input type="text" name="modalidad_txt" value="<?= h($pelea['modalidad_txt'] ?? '') ?>" placeholder="Ej: Exhibición Lowkick">
-          <?php } ?>
-        <?php } elseif ($C_MODAL_P_TXT) { ?>
-          <input type="text" name="modalidad_txt" value="<?= h($pelea['modalidad_txt'] ?? '') ?>" placeholder="Ej: K1 Amateur, MMA, Boxeo…">
-          <small class="muted">No hay tabla <b>modalidades_evento</b> o columna id. Se guardará como texto.</small>
+          <small class="muted">Elegí el reglamento general o un título específico.</small>
         <?php } else { ?>
-          <div class="muted">⚠️ Tu tabla <b>peleas_evento</b> no tiene ni <code>modalidad_id</code> ni <code>modalidad</code>.</div>
+          <div class="muted">No hay tabla <b>modalidades_evento</b>. Podés escribir manualmente abajo.</div>
         <?php } ?>
+
+        <!-- SIEMPRE mostramos un campo de texto para el título / detalle -->
+        <small class="muted">Texto / título mostrado en listados y PDF.</small>
+        <input type="text"
+               name="modalidad_txt"
+               id="modalidad_txt"
+               value="<?= h($pelea['modalidad_txt'] ?? '') ?>"
+               placeholder="Ej: Lowkick título amateur, K1 título profesional" />
       </div>
 
       <div class="field">
         <label>Rondas</label>
-        <input type="number" name="rondas" min="1" step="1" value="<?= h(isset($pelea['rondas']) && is_numeric($pelea['rondas']) ? (int)$pelea['rondas'] : 2) ?>">
+        <input type="number" name="rondas" min="1" step="1"
+               value="<?= h(isset($pelea['rondas']) && is_numeric($pelea['rondas']) ? (int)$pelea['rondas'] : 2) ?>">
         <small class="muted">Si tu tabla no tiene columna de rondas, este campo se ignorará.</small>
       </div>
     </div>
@@ -386,7 +461,10 @@ $aIni = initials($pelea['a_apellido']??'',$pelea['a_nombre']??'');
 
 <script>
   function ph(txt){
-    const d=document.createElement('div'); d.className='ph'; d.textContent=txt||'—'; return d;
+    const d=document.createElement('div');
+    d.className='ph';
+    d.textContent=txt||'—';
+    return d;
   }
   // Intercambiar selects rojo/azul
   const sr = document.getElementById('select_rojo');
@@ -396,6 +474,19 @@ $aIni = initials($pelea['a_apellido']??'',$pelea['a_nombre']??'');
     btnSwap.addEventListener('click', ()=>{
       const vr = sr.value, va = sa.value;
       sr.value = va; sa.value = vr;
+    });
+  }
+
+  // Cuando elijas un "★ título" en el combo, se copia al campo de texto
+  const selModal = document.getElementById('modalidad_id');
+  const modTxt   = document.getElementById('modalidad_txt');
+  if (selModal && modTxt){
+    selModal.addEventListener('change', ()=>{
+      const opt = selModal.options[selModal.selectedIndex];
+      if (opt && opt.dataset && opt.dataset.titulo){
+        modTxt.value = opt.dataset.titulo;
+        selModal.value = ''; // queda sin ID, solo texto
+      }
     });
   }
 </script>
