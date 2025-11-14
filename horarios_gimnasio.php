@@ -517,11 +517,12 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && $accion==='plan_fijo'){
   $dias = array_values(array_intersect($dias, $DIAS_VALIDOS));
 
   $dias_json = json_encode(array_values($dias), JSON_UNESCAPED_UNICODE);
+
   if ($profesor_id===null){
     run_stmt($conexion,
       "INSERT INTO gym_clientes_plan (gimnasio_id, cliente_id, plan_id, desde, hasta, hora, dias_json, profesor_id)
        VALUES (?,?,?,?,?,?,?,NULL)
-       ON DUPLICATE KEY UPDATE dias_json=VALUES(dias_json), hora=VALUES(hora)",
+       ON DUPLICATE KEY UPDATE dias_json=VALUES(dias_json), hora=VALUES(hora), desde=VALUES(desde), hasta=VALUES(hasta)",
        function($st) use($gimnasio_id,$cliente_id,$plan_id,$desde,$hasta,$hora,$dias_json){
          $st->bind_param("iiissss",$gimnasio_id,$cliente_id,$plan_id,$desde,$hasta,$hora,$dias_json);
        }, false
@@ -530,7 +531,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && $accion==='plan_fijo'){
     run_stmt($conexion,
       "INSERT INTO gym_clientes_plan (gimnasio_id, cliente_id, plan_id, desde, hasta, hora, dias_json, profesor_id)
        VALUES (?,?,?,?,?,?,?,?)
-       ON DUPLICATE KEY UPDATE dias_json=VALUES(dias_json), hora=VALUES(hora), profesor_id=VALUES(profesor_id)",
+       ON DUPLICATE KEY UPDATE dias_json=VALUES(dias_json), hora=VALUES(hora), profesor_id=VALUES(profesor_id), desde=VALUES(desde), hasta=VALUES(hasta)",
        function($st) use($gimnasio_id,$cliente_id,$plan_id,$desde,$hasta,$hora,$dias_json,$profesor_id){
          $st->bind_param("iiissssi",$gimnasio_id,$cliente_id,$plan_id,$desde,$hasta,$hora,$dias_json,$profesor_id);
        }, false
@@ -674,7 +675,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && $accion==='rep_fijo'){
           WHERE gimnasio_id=? AND cliente_id=? AND hora=? AND profesor_id IS NULL
           LIMIT 1",
         function($st) use($hora_new,$dias_json,$profesor_new,$gimnasio_id,$cliente_id,$hora_old){
-          $st->bind_param("ssiisis",$hora_new,$dias_json,$profesor_new,$gimnasio_id,$cliente_id,$hora_old);
+          $st->bind_param("ssiiis",$hora_new,$dias_json,$profesor_new,$gimnasio_id,$cliente_id,$hora_old);
         }, false
       );
     }
@@ -696,7 +697,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && $accion==='rep_fijo'){
           WHERE gimnasio_id=? AND cliente_id=? AND hora=? AND profesor_id=?
           LIMIT 1",
         function($st) use($hora_new,$dias_json,$profesor_new,$gimnasio_id,$cliente_id,$hora_old,$profesor_old){
-          $st->bind_param("ssiisii",$hora_new,$dias_json,$profesor_new,$gimnasio_id,$cliente_id,$hora_old,$profesor_old);
+          $st->bind_param("ssiiisi",$hora_new,$dias_json,$profesor_new,$gimnasio_id,$cliente_id,$hora_old,$profesor_old);
         }, false
       );
     }
