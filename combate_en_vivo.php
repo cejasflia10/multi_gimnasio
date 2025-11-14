@@ -58,16 +58,25 @@ function json_clean_headers(){
 /* ===== Ruta de resultados (DESPUÉS de finalizar) ===== */
 $RESULTADOS_RUTA = 'resultados_combates.php';
 
-/* ===== Sonidos (locales) ===== */
-$WEB_SND_BASE  = '/multi_gimnasio/assets/sounds/';
-$DOC_ROOT      = rtrim($_SERVER['DOCUMENT_ROOT'] ?? '', '/');
-$LOCAL_SND_DIR = $DOC_ROOT . $WEB_SND_BASE;
+/* ===== Sonidos (rutas relativas al archivo) =====
+   Estructura esperada:
+   /multi_gimnasio/
+      combate_en_vivo.php
+      assets/
+         sounds/
+           campana_inicio.mp3
+           ...
+*/
+$LOCAL_SND_DIR = __DIR__ . '/assets/sounds/';   // Ruta física
+$WEB_SND_BASE  = 'assets/sounds/';              // Ruta web relativa (sin barra inicial)
 
 function pickSoundFile(string $localDir, string $webBase, array $candidates): string {
   foreach ($candidates as $f) {
-    if (@is_file($localDir.$f)) return $webBase.$f;
+    if (@is_file($localDir . $f)) {
+      return $webBase . $f;
+    }
   }
-  return $webBase.$candidates[0];
+  return $webBase . $candidates[0];
 }
 
 $SND_START    = pickSoundFile($LOCAL_SND_DIR, $WEB_SND_BASE, ['campana_inicio.mp3','ring_start_bell.mp3','inicio_round.mp3','start.mp3']);
@@ -665,7 +674,7 @@ $__s_init = str_pad((string)($__t_init % 60), 2, '0', STR_PAD_LEFT);
     paint();
   };
 
-  /* ====== Rondas con botones (igual) ====== */
+  /* ====== Rondas con botones ====== */
   const MAX_ROUNDS = 12;
   let rondasConfig = parseInt(document.getElementById('lblRondas').textContent, 10);
   if (!Number.isFinite(rondasConfig) || rondasConfig < 1) rondasConfig = 3;
