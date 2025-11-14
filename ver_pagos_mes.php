@@ -17,7 +17,7 @@ $mes  = $_GET['mes']  ?? date('m');
 $anio = $_GET['anio'] ?? date('Y');
 if (!preg_match('/^(0[1-9]|1[0-2])$/', $mes))  $mes  = date('m');
 if (!preg_match('/^\d{4}$/', $anio))           $anio = date('Y');
-$mes_int  = (int)$mes;   // <-- bind como int
+$mes_int  = (int)$mes;
 $anio_int = (int)$anio;
 
 $meses = [
@@ -25,26 +25,79 @@ $meses = [
     '07'=>'Julio','08'=>'Agosto','09'=>'Septiembre','10'=>'Octubre','11'=>'Noviembre','12'=>'Diciembre'
 ];
 
+// ✅ Rango real de fechas del mes (para BETWEEN)
+$primer_dia = sprintf('%04d-%02d-01', $anio_int, $mes_int);
+$ultimo_dia = date('Y-m-t', strtotime($primer_dia));
+
 /* ================== Datos ================== */
-$stmt = $conexion->prepare("
-    SELECT m.fecha_inicio, m.fecha_vencimiento,
-           IFNULL(m.pago_efectivo,0)          AS pago_efectivo,
-           IFNULL(m.pago_transferencia,0)     AS pago_transferencia,
-           IFNULL(m.pago_debito,0)            AS pago_debito,
-           IFNULL(m.pago_credito,0)           AS pago_credito,
-           IFNULL(m.pago_cuenta_corriente,0)  AS pago_cuenta_corriente,
-           IFNULL(m.otros_pagos,0)            AS otros_pagos,
-           IFNULL(m.total_pagado,0)           AS total,
-           c.apellido, c.nombre
+/*
+   Usamos directamente las columnas reales de la tabla:
+
+   - Formas de pago:
+       pago_efectivo, pago_transferencia, pago_debito, pago_credito, pago_cuenta_corriente
+       y como respaldo para efectivo/transferencia: monto_efectivo, monto_transferencia.
+
+   - Total pagado:
+       primero total_pagado; si está en 0, usamos monto_pago; si no, total.
+
+   🔴 Muy importante:
+   En vez de filtrar por MONTH(fecha_inicio), usamos un rango de fechas del mes:
+     - fecha_inicio ENTRE primer_dia y ultimo_dia
+       O fecha_vencimiento ENTRE primer_dia y ultimo_dia
+
+   Así una renovación cuya fecha_inicio o fecha_vencimiento caiga en el mes
+   ENTRA en el listado, igual que la ves en ver_membresias.
+*/
+
+$sql = "
+    SELECT 
+        m.fecha_inicio,
+        m.fecha_vencimiento,
+
+        -- Formas de pago (si pago_* es 0, usamos monto_efectivo / monto_transferencia como respaldo)
+        IFNULL(NULLIF(m.pago_efectivo,0),      m.monto_efectivo)      AS pago_efectivo,
+        IFNULL(NULLIF(m.pago_transferencia,0), m.monto_transferencia) AS pago_transferencia,
+        IFNULL(m.pago_debito,0)                AS pago_debito,
+        IFNULL(m.pago_credito,0)               AS pago_credito,
+        IFNULL(m.pago_cuenta_corriente,0)      AS pago_cuenta_corriente,
+
+        IFNULL(m.otros_pagos,0)                AS otros_pagos,
+
+        -- Total pagado: primero total_pagado; si está en 0, usamos monto_pago; si no, total
+        IFNULL(
+          NULLIF(m.total_pagado,0),
+          IFNULL(NULLIF(m.monto_pago,0), m.total)
+        )                                      AS total,
+
+        c.apellido, 
+        c.nombre
     FROM membresias m
     INNER JOIN clientes c ON m.cliente_id = c.id
-    WHERE MONTH(m.fecha_inicio) = ? AND YEAR(m.fecha_inicio) = ? AND m.gimnasio_id = ?
+    WHERE 
+        m.gimnasio_id = ?
+        AND (
+              (m.fecha_inicio      BETWEEN ? AND ?)
+           OR (m.fecha_vencimiento BETWEEN ? AND ?)
+        )
     ORDER BY m.fecha_inicio DESC
-");
-$stmt->bind_param("iii", $mes_int, $anio_int, $gimnasio_id);
+";
+
+$stmt = $conexion->prepare($sql);
+if (!$stmt) {
+    die('Error preparando consulta: '.$conexion->error);
+}
+$stmt->bind_param(
+    "issss",
+    $gimnasio_id,
+    $primer_dia,
+    $ultimo_dia,
+    $primer_dia,
+    $ultimo_dia
+);
 $stmt->execute();
 $resultado = $stmt->get_result();
 
+/* === Igual que en ver_membresias, armamos texto de forma de pago === */
 function obtenerMetodoPago(array $f): string {
     $metodos = [];
     if ($f['pago_efectivo']          > 0) $metodos[] = 'Efectivo';
@@ -73,7 +126,6 @@ $stmt->close();
   <!-- Tema unificado igual al index -->
   <link rel="stylesheet" href="estilo_unificado.css">
   <style>
-    /* ===== Estructura alineada al index ===== */
     .wrap{ max-width:1200px; margin:24px auto; padding:0 16px 40px; }
     .page-card{
       background:var(--card); border:1px solid var(--stroke);
@@ -84,8 +136,6 @@ $stmt->close();
       background:linear-gradient(90deg,var(--brand),var(--brand-2),var(--brand-3));
       -webkit-background-clip:text; background-clip:text; color:transparent;
     }
-
-    /* Filtros (mes/año) con estilos del sistema */
     .toolbar{
       display:flex; align-items:center; justify-content:center; gap:10px; flex-wrap:wrap; margin-bottom:12px;
     }
@@ -97,8 +147,6 @@ $stmt->close();
     .toolbar button:hover, .toolbar a:hover{
       box-shadow:0 6px 16px rgba(2,6,23,.06);
     }
-
-    /* ===== Tabla “tipo index” ===== */
     .table-wrap{ width:100%; overflow-x:auto; -webkit-overflow-scrolling:touch; }
     table.tabla{ width:100%; min-width:900px; border-collapse:collapse; background:#fff; }
     .tabla thead th{
@@ -137,11 +185,10 @@ $stmt->close();
 
         <button type="submit">Filtrar</button>
 
-        <!-- PDF con gimnasio_id en la URL (APK compat) -->
         <a
           href="<?= 'https://'.$_SERVER['HTTP_HOST'].'/exportar_pagos_pdf.php?mes='.$mes.'&anio='.$anio.'&gimnasio_id='.$gimnasio_id ?>"
           target="_blank" rel="noopener"
-          >📄 Descargar PDF</a>
+        >📄 Descargar PDF</a>
       </form>
 
       <div class="table-wrap">
@@ -166,14 +213,20 @@ $stmt->close();
                 <td><?= htmlspecialchars($f['fecha_inicio']) ?></td>
                 <td><?= htmlspecialchars($f['fecha_vencimiento']) ?></td>
                 <td>
-                  <?php if ($f['metodo_pago']): ?>
+                  <?php if (!empty($f['metodo_pago'])): ?>
                     <?= htmlspecialchars($f['metodo_pago']) ?>
                   <?php else: ?>
                     <span class="muted">Sin especificar</span>
                   <?php endif; ?>
                 </td>
-                <td style="text-align:right">$<?= number_format((float)$f['otros_pagos'], 0, ',', '.') ?></td>
-                <td style="text-align:right"><span class="amount-strong">$<?= number_format((float)$f['total'], 0, ',', '.') ?></span></td>
+                <td style="text-align:right">
+                  $<?= number_format((float)$f['otros_pagos'], 0, ',', '.') ?>
+                </td>
+                <td style="text-align:right">
+                  <span class="amount-strong">
+                    $<?= number_format((float)$f['total'], 0, ',', '.') ?>
+                  </span>
+                </td>
               </tr>
             <?php endforeach; ?>
           <?php endif; ?>

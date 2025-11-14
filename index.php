@@ -192,21 +192,21 @@ body{
   .card{ grid-column:1 / -1; }
 }
 
-/* ====== ALUMNOS HOY (vertical por turno) ====== */
+/* ====== ALUMNOS HOY ====== */
 #contenedor-alumnos ul.alum-list{ list-style:none; margin:0; padding:0; }
 #contenedor-alumnos ul.alum-list li{ padding:8px 6px; border-bottom:1px dashed rgba(15,23,42,.12); }
 #contenedor-alumnos ul.alum-list li:last-child{ border-bottom:none; }
 #contenedor-alumnos .alum-head{ font-weight:800; color:#b45309; margin-bottom:4px; }
 #contenedor-alumnos .alum-name{ white-space:normal; overflow-wrap:anywhere; line-height:1.25; }
 
-/* ====== RESERVAS (vertical por turno) ====== */
+/* ====== RESERVAS ====== */
 #contenedor-reservas ul.res-list{ list-style:none; margin:0; padding:0; }
 #contenedor-reservas ul.res-list li{ padding:8px 6px; border-bottom:1px dashed rgba(15,23,42,.12); }
 #contenedor-reservas ul.res-list li:last-child{ border-bottom:none; }
 #contenedor-reservas .res-head{ font-weight:800; color:#b45309; margin-bottom:4px; }
 #contenedor-reservas .cli{ white-space:normal; overflow-wrap:anywhere; line-height:1.25; }
 
-/* ===== CENTRAR LAS 3 TARJETAS ===== */
+/* ===== CENTRAR TARJETAS ===== */
 #contenedor-ingresos,
 #card-venc,
 #card-cumples { text-align:center; }
@@ -220,7 +220,7 @@ body.ocultar-montos #ingresos-body [class*="monto"]{
   user-select: none;
 }
 
-/* En PC también centramos el contenido dentro de cada fila de ingreso */
+/* Contenido ingresos centrado */
 #ingresos-body .box,
 #ingresos-body .ing-card{
   display:flex; flex-direction:column; align-items:center; gap:6px;
@@ -275,7 +275,7 @@ body.ocultar-montos #ingresos-body [class*="monto"]{
     </div>
   <?php endif; ?>
 
-  <div class="toolbar" style="display:flex; gap:10px; align-items:center">
+  <div class="toolbar" style="display:flex; gap:10px; alignitems:center">
     <button id="btn-ojo" class="btn-mini" title="Mostrar/Ocultar montos" onclick="toggleMontos()">👁️‍🗨️ Ver montos</button>
   </div>
 
@@ -380,8 +380,7 @@ function fetchIntoBody(url, bodyId, afterLoad){
     .catch(()=>{});
 }
 
-/* ===== ALUMNOS: agrupar por HORA en vertical (sin profesor/academia) ===== */
-/* Util: limpia nombre y lo pasa a lower para comparar */
+/* helpers nombres/profes (igual que tenías) */
 function _cleanName(s){
   return (s||'')
     .replace(/[🕒📅⏰👤🏠🏫🏡🏢🏟️👨‍🏫🧑‍🏫]/g,' ')
@@ -391,33 +390,28 @@ function _cleanName(s){
 }
 function _lower(s){ return _cleanName(s).toLowerCase(); }
 
-/* Construye un SET con nombres de profesores detectados en el HTML */
 function _buildProfExcludes(root){
   const excludes = new Set();
   const full = (root.textContent || '').replace(/\u00A0/g,' ');
 
-  // 1) “Profesor: Nombre …”
   const reProf = /(Profesor|Profe|Entrenador|Coach)\s*:?\s*([A-Za-zÁÉÍÓÚÑñÜü'´` .-]{2,})(?=$|[,\n;|/]| - | – | — )/gi;
   for (let m; (m = reProf.exec(full)); ){
     const nm = _cleanName(m[2]);
     if (nm) excludes.add(_lower(nm));
   }
 
-  // 2) Con emoji de profesor
   const reEmoji = /(👨‍🏫|🧑‍🏫)\s*([A-Za-zÁÉÍÓÚÑñÜü'´` .-]{2,})(?=$|[,\n;|/]| - | – | — )/g;
   for (let m; (m = reEmoji.exec(full)); ){
     const nm = _cleanName(m[2]);
     if (nm) excludes.add(_lower(nm));
   }
 
-  // 3) Pistas típicas: “🏠 Nombre” (cartel del profe/academia)
   const reCasa = /(🏠)\s*([A-Za-zÁÉÍÓÚÑñÜü'´` .-]{2,})(?=$|[,\n;|/]| - | – | — )/g;
   for (let m; (m = reCasa.exec(full)); ){
     const nm = _cleanName(m[2]);
     if (nm) excludes.add(_lower(nm));
   }
 
-  // 4) Línea con palabra clave y un nombre detrás (profes sin emoji)
   const reLinea = /\b(Profesor|Profe|Entrenador|Coach)\b[^A-Za-zÁÉÍÓÚÑñÜü]*([A-Za-zÁÉÍÓÚÑñÜü'´` .-]{2,})/gi;
   for (let m; (m = reLinea.exec(full)); ){
     const nm = _cleanName(m[2]);
@@ -427,26 +421,21 @@ function _buildProfExcludes(root){
   return excludes;
 }
 
-/* ===== ALUMNOS HOY — agrupar por HORA, SOLO clientes (sin profesor/academia) ===== */
+/* ALUMNOS HOY */
 function normalizeAlumnos(root){
-  // contador si viene en el HTML
   const m = (root.textContent||'').match(/(\d+)\s+ingresos?/i);
   if (m) { const span = document.getElementById('alumnos-count'); if (span) span.textContent = m[1]+' ingresos'; }
 
-  // set de nombres de profesor a excluir
   const EXC = _buildProfExcludes(root);
 
-  // recolectar items base
   let seedLis = root.querySelectorAll('li');
   if (!seedLis.length){ const ul = root.querySelector('ul'); if (ul) seedLis = ul.querySelectorAll('li'); }
   if (!seedLis.length) return;
 
-  // nombre + HH
   const registros = [];
   seedLis.forEach(li=>{
     let txt = (li.textContent||'').replace(/\u00A0/g,' ').replace(/\s+/g,' ').trim();
 
-    // recorta todo lo que venga después de etiquetas de profesor/academia
     txt = txt.replace(/\b(Profesor|Profe|Entrenador|Coach)\b.*$/i,'')
              .replace(/(🏠|🏫|👨‍🏫|🧑‍🏫).*$/,'')
              .trim();
@@ -456,14 +445,13 @@ function normalizeAlumnos(root){
     const horaHH = mm ? mm[2] : null;
 
     if (!nombre) return;
-    if (EXC.has(_lower(nombre))) return;     // **filtra profe**
-    if (/\b(Academia|Escuela|Team|Dojo|Gym|Gimnasio)\b/i.test(nombre)) return; // **filtra academias**
+    if (EXC.has(_lower(nombre))) return;
+    if (/\b(Academia|Escuela|Team|Dojo|Gym|Gimnasio)\b/i.test(nombre)) return;
 
     const key = horaHH ? (horaHH.padStart(2,'0')+' hs') : '— hs';
     registros.push({ key, nombre });
   });
 
-  // agrupar y render
   const map = new Map();
   for (const r of registros){ if(!map.has(r.key)) map.set(r.key,new Set()); map.get(r.key).add(r.nombre); }
 
@@ -481,17 +469,15 @@ function normalizeAlumnos(root){
   root.appendChild(ul);
 }
 
-/* ===== RESERVAS — agrupar por HORA, SOLO clientes (sin profesor/academia) ===== */
+/* RESERVAS */
 function normalizeReservas(root){
   const cont = document.getElementById('reservas-body') || root;
 
-  // set de nombres de profesor a excluir sacados del HTML de origen
   const EXC = _buildProfExcludes(root);
 
   let txt = (root.textContent || '').replace(/\u00A0/g,' ').trim();
   if (!txt) { cont.innerHTML = '<div class="mut">No hay reservas para este día.</div>'; return; }
 
-  // normaliza separadores y expone horas como líneas
   txt = txt
     .replace(/\s*·\s*/g, '\n')
     .replace(/[|/]/g, '\n')
@@ -516,7 +502,6 @@ function normalizeReservas(root){
 
     if (IGNORE_RE.test(line) || /^👤+$/.test(line) || line.length<2) continue;
 
-    // corta cualquier parte “Profesor …”, “🏠 …”, etc.
     line = line
       .replace(/\b(Profesor|Profe|Entrenador|Coach)\b.*$/i,'')
       .replace(/(🏠|🏫|👨‍🏫|🧑‍🏫).*$/,'')
@@ -525,7 +510,6 @@ function normalizeReservas(root){
     const nombre = _cleanName(line);
     if (!nombre) continue;
 
-    // **filtros fuertes**: no profes ni academias
     if (EXC.has(_lower(nombre))) continue;
     if (/\b(Academia|Escuela|Team|Dojo|Gym|Gimnasio)\b/i.test(nombre)) continue;
     if (PROF_WORD.test(line)) continue;
@@ -558,7 +542,8 @@ function normalizeReservas(root){
 function cargarDatos(){
   const f = document.getElementById('fecha')?.value;
 
-  fetchIntoBody('ajax_ingresos.php', 'ingresos-body');
+  // 🔹 AQUÍ EL CAMBIO: pasamos la fecha también a ajax_ingresos.php
+  fetchIntoBody('ajax_ingresos.php' + (f ? '?fecha='+encodeURIComponent(f) : ''), 'ingresos-body');
 
   if (f) fetchIntoBody('ajax_reservas.php?fecha='+encodeURIComponent(f), 'reservas-body', normalizeReservas);
   fetchIntoBody('ajax_alumnos_hoy.php', 'alumnos-body', normalizeAlumnos);
