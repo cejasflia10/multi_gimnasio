@@ -88,7 +88,7 @@ if ($evento_id <= 0) { http_response_code(400); exit('❌ Falta evento_id'); }
 $_SESSION['evento_id_actual'] = $evento_id;
 
 /* =========================
-   Detección columnas peleas_evento (para bloqueo de borrado)
+   Detección columnas peleas_evento (para bloqueo de borrado y marcas)
    ========================= */
 function pe_get_cols(mysqli $db){
   $res = $db->query("SHOW COLUMNS FROM peleas_evento");
@@ -240,6 +240,36 @@ $res = $st->get_result();
 $competidores = $res ? $res->fetch_all(MYSQLI_ASSOC) : [];
 $st->close();
 
+/* =========================
+   MAPA: competidores que YA TIENEN PELEA
+   ========================= */
+$tienePelea = [];
+$pe = pe_get_cols($conexion);
+if ($pe && $pe['evento'] && $pe['rojo'] && $pe['azul']) {
+  $sqlPe = "SELECT DISTINCT comp_id FROM (
+              SELECT ".bt($pe['rojo'])." AS comp_id
+              FROM peleas_evento
+              WHERE ".bt($pe['evento'])."=?
+              UNION
+              SELECT ".bt($pe['azul'])." AS comp_id
+              FROM peleas_evento
+              WHERE ".bt($pe['evento'])."=?
+            ) t
+            WHERE comp_id IS NOT NULL";
+  $stPe = $conexion->prepare($sqlPe);
+  if ($stPe) {
+    $stPe->bind_param('ii', $evento_id, $evento_id);
+    if ($stPe->execute()) {
+      $rPe = $stPe->get_result();
+      while($row = $rPe->fetch_assoc()){
+        $cid = (int)$row['comp_id'];
+        if ($cid > 0) $tienePelea[$cid] = true;
+      }
+    }
+    $stPe->close();
+  }
+}
+
 ?>
 <!DOCTYPE html>
 <html lang="es">
@@ -282,6 +312,19 @@ $st->close();
     .btn-danger { background:#dc2626; color:#fff; border:0; }
     form.inline { display:inline; }
     .actions a, .actions button { margin-right:6px; margin-bottom:6px; }
+
+    /* Marca de competidores con pelea */
+    .tabla tr.tr-pelea { background:#ecfdf5; } /* verde muy suave */
+    .badge-pelea {
+      display:inline-block;
+      margin-top:4px;
+      padding:2px 6px;
+      font-size:11px;
+      border-radius:999px;
+      background:#16a34a;
+      color:#fff;
+      font-weight:600;
+    }
   </style>
 </head>
 <body>
@@ -294,6 +337,11 @@ $st->close();
   <?php if (isset($_SESSION['flash_ok'])): ?>
     <div class="alert ok"><?= h($_SESSION['flash_ok']); unset($_SESSION['flash_ok']); ?></div>
   <?php endif; ?>
+
+  <p style="font-size:13px;margin-top:4px;margin-bottom:10px;">
+    <span class="badge-pelea">✔ Tiene pelea</span> = competidor que ya está en una pelea cargada en <code>ver_peleas_evento.php</code>
+    (útil para saber qué deslindes imprimir primero).
+  </p>
 
   <form method="GET">
     <input type="hidden" name="evento_id" value="<?= (int)$evento_id ?>">
@@ -395,10 +443,17 @@ $st->close();
 
             // Peso declarado (formateado)
             $pesoDecl = fmt_kg($c['peso_declarado'] ?? null);
+
+            $enPelea = !empty($tienePelea[(int)$c['id']]);
           ?>
-            <tr>
+            <tr class="<?= $enPelea ? 'tr-pelea' : '' ?>">
               <td data-label="Foto"><img class="avatar" src="<?= h($srcFoto) ?>" alt="Foto"></td>
-              <td data-label="Apellido y Nombre"><?= h($c['apellido']) ?> <?= h($c['nombre']) ?></td>
+              <td data-label="Apellido y Nombre">
+                <?= h($c['apellido']) ?> <?= h($c['nombre']) ?>
+                <?php if ($enPelea): ?>
+                  <div><span class="badge-pelea">✔ Tiene pelea</span></div>
+                <?php endif; ?>
+              </td>
               <td data-label="DNI"><?= h($c['dni']) ?></td>
               <td data-label="Edad"><?= h($c['edad']) ?></td>
               <td data-label="Disciplina"><?= h($c['disciplina'] ?? '-') ?></td>
@@ -410,7 +465,11 @@ $st->close();
               <td data-label="Logo"><img class="logo" src="<?= h($srcLogo) ?>" alt="Logo"></td>
 
               <td data-label="Deslinde">
-                <a class="btn btn-primary" href="waiver_print_competidor.php?id=<?= (int)$c['id'] ?>&evento_id=<?= (int)$evento_id ?>" target="_blank">🧾 PDF</a>
+                <?php if ($enPelea): ?>
+                  <a class="btn btn-primary" href="waiver_print_competidor.php?id=<?= (int)$c['id'] ?>&evento_id=<?= (int)$evento_id ?>" target="_blank">🧾 PDF</a>
+                <?php else: ?>
+                  <a class="btn" href="waiver_print_competidor.php?id=<?= (int)$c['id'] ?>&evento_id=<?= (int)$evento_id ?>" target="_blank">🧾 PDF</a>
+                <?php endif; ?>
               </td>
 
               <td class="actions" data-label="Acciones">
