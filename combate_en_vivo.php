@@ -1,15 +1,8 @@
 <?php
 /* ============================================
-   COMBATE EN VIVO — Mesa + Overlay (mismo archivo)
-   - SIN archivos nuevos.
-   - Overlay: combate_en_vivo.php?evento_id=123&overlay=1
-   - Endpoints internos:
-       • ajax=estado           (JSON por pelea_id)
-       • ajax=estado_evento    (JSON por evento_id, sigue pelea_actual_id)
-       • ajax=set_estado       (persistir cronómetro/pelea)
-       • ajax=marcar_actual    (activar pelea/evento)
-       • ajax=pausar_actual    (pausar transmisión)
-       • ajax=finalizar        (guardar resultado)
+   COMBATE EN VIVO — SOLO MESA / CRONÓMETRO
+   - Sin overlay, sin transmisiones, sin sincronizar con otros equipos.
+   - Solo cronómetro, tarjetas y datos de la pelea del sistema.
    ============================================ */
 if (session_status() === PHP_SESSION_NONE) session_start();
 require_once __DIR__ . '/conexion.php';
@@ -22,7 +15,10 @@ header('Expires', '0');
 if (function_exists('opcache_invalidate')) { @opcache_invalidate(__FILE__, true); }
 $__BUILD = @filemtime(__FILE__) ?: time();
 
-if (!isset($conexion) || !($conexion instanceof mysqli)) { http_response_code(500); exit('❌ Sin conexión a BD.'); }
+if (!isset($conexion) || !($conexion instanceof mysqli)) {
+  http_response_code(500);
+  exit('❌ Sin conexión a BD.');
+}
 if (function_exists('mysqli_report')) { mysqli_report(MYSQLI_REPORT_OFF); }
 @$conexion->set_charset('utf8mb4');
 
@@ -31,12 +27,17 @@ function h($s){ return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); }
 function bt($c){ return '`'.str_replace('`','``',(string)$c).'`'; }
 function table_exists(mysqli $db, string $name): bool {
   $name = $db->real_escape_string($name);
-  if ($r = $db->query("SHOW TABLES LIKE '$name'")) { $ok = (bool)$r->num_rows; $r->close(); return $ok; }
+  if ($r = $db->query("SHOW TABLES LIKE '$name'")) {
+    $ok = (bool)$r->num_rows;
+    $r->close();
+    return $ok;
+  }
   return false;
 }
 function has_col(mysqli $db, string $table, string $col): bool {
   $t=$db->real_escape_string($table); $c=$db->real_escape_string($col);
-  $sql="SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='$t' AND COLUMN_NAME='$c' LIMIT 1";
+  $sql="SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS
+        WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='$t' AND COLUMN_NAME='$c' LIMIT 1";
   if ($r=$db->query($sql)) { $ok=(bool)$r->num_rows; $r->close(); return $ok; }
   return false;
 }
@@ -54,51 +55,21 @@ function json_clean_headers(){
   header('Pragma', 'no-cache');
 }
 
-/* ====== Tabla combate_estado: crear y asegurar columnas ====== */
-function ensure_combate_estado(mysqli $db){
-  $db->query("
-    CREATE TABLE IF NOT EXISTS combate_estado (
-      id INT AUTO_INCREMENT PRIMARY KEY,
-      evento_id INT NOT NULL UNIQUE,
-      pelea_actual_id INT DEFAULT NULL,
-      activo TINYINT(1) NOT NULL DEFAULT 0,
-      actualizado_en TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-  ");
-  $adds = [];
-  foreach ([
-    ['ronda', 'INT NOT NULL DEFAULT 1'],
-    ['running','TINYINT(1) NOT NULL DEFAULT 0'],
-    ['paused','TINYINT(1) NOT NULL DEFAULT 1'],
-    ['duracion','INT NOT NULL DEFAULT 180'],
-    ['descanso','INT NOT NULL DEFAULT 60'],
-    ['remaining','INT NOT NULL DEFAULT 180'],
-    ['ronda_actual','INT DEFAULT 1'],
-    ['en_descanso','TINYINT(1) NOT NULL DEFAULT 0'],
-    ['epoch_inicio','INT DEFAULT NULL'],
-    ['dur_round','INT NOT NULL DEFAULT 180'],
-    ['dur_descanso','INT NOT NULL DEFAULT 60'],
-  ] as $pair){
-    if (!has_col($db,'combate_estado',$pair[0])) $adds[]="ADD {$pair[0]} {$pair[1]}";
-  }
-  if ($adds) { $db->query("ALTER TABLE combate_estado ".implode(', ',$adds)); }
-  $idx = $db->query("SHOW INDEX FROM combate_estado WHERE Key_name='idx_evento_activo'");
-  if (!$idx || $idx->num_rows===0) { $db->query("ALTER TABLE combate_estado ADD INDEX idx_evento_activo (evento_id, activo)"); }
-  if ($idx) $idx->close();
-}
-ensure_combate_estado($conexion);
-
-/* ===== Ruta de resultados ===== */
+/* ===== Ruta de resultados (DESPUÉS de finalizar) ===== */
 $RESULTADOS_RUTA = 'resultados_combates.php';
 
-/* ===== Sonidos ===== */
+/* ===== Sonidos (locales) ===== */
 $WEB_SND_BASE  = '/multi_gimnasio/assets/sounds/';
 $DOC_ROOT      = rtrim($_SERVER['DOCUMENT_ROOT'] ?? '', '/');
 $LOCAL_SND_DIR = $DOC_ROOT . $WEB_SND_BASE;
+
 function pickSoundFile(string $localDir, string $webBase, array $candidates): string {
-  foreach ($candidates as $f) { if (@is_file($localDir.$f)) return $webBase.$f; }
+  foreach ($candidates as $f) {
+    if (@is_file($localDir.$f)) return $webBase.$f;
+  }
   return $webBase.$candidates[0];
 }
+
 $SND_START    = pickSoundFile($LOCAL_SND_DIR, $WEB_SND_BASE, ['campana_inicio.mp3','ring_start_bell.mp3','inicio_round.mp3','start.mp3']);
 $SND_WARN10   = pickSoundFile($LOCAL_SND_DIR, $WEB_SND_BASE, ['segundos_afuera_10s.mp3','segundos_afuera.mp3','10s.mp3','aviso10.mp3']);
 $SND_ROUNDEND = pickSoundFile($LOCAL_SND_DIR, $WEB_SND_BASE, ['fin_round.mp3','ring_end_bell.mp3','gong_fin.mp3']);
@@ -106,295 +77,17 @@ $SND_RESTEND  = pickSoundFile($LOCAL_SND_DIR, $WEB_SND_BASE, ['fin_descanso.mp3'
 $SND_FIGHTEND = pickSoundFile($LOCAL_SND_DIR, $WEB_SND_BASE, ['fin_pelea.mp3','fight_end.mp3','ring_end_bell.mp3']);
 
 /* ====================================================
-   ENDPOINTS AJAX
+   ÚNICO ENDPOINT AJAX: FINALIZAR (guardar resultado)
    ==================================================== */
-
-/* a) Estado por pelea (igual que tenías) */
-if (isset($_GET['ajax']) && $_GET['ajax'] === 'estado') {
-  ini_set('display_errors', '0');
-  json_clean_headers();
-  $pelea_id = get_int_qs($_GET, 'pelea_id', 0);
-  if ($pelea_id <= 0) { echo json_encode(['ok'=>false,'error'=>'pelea_id_invalido']); exit; }
-
-  $data = [
-    'pelea_id'=>$pelea_id,
-    'evento_id'=>null,'ganador_color'=>null,'estado'=>null,'resultado'=>null,
-    'azul'=>['id'=>null,'nombre'=>null,'escuela'=>null,'logo'=>null],
-    'rojo'=>['id'=>null,'nombre'=>null,'escuela'=>null,'logo'=>null],
-    'timer'=>[
-      'activo'=>0,'ronda'=>1,'ronda_actual'=>1,'running'=>0,'paused'=>1,
-      'en_descanso'=>0,'remaining'=>180,'epoch_inicio'=>null,
-      'duracion'=>180,'dur_round'=>180,'descanso'=>60,'dur_descanso'=>60
-    ]
-  ];
-
-  if (table_exists($conexion,'peleas_evento')) {
-    $cols = ['id','evento_id'];
-    $C_GAN = null;
-    foreach (['ganador_color','ganador'] as $c){ if (has_col($conexion,'peleas_evento',$c)){ $cols[]=$c; $C_GAN=$c; break; } }
-    foreach (['estado','resultado'] as $c){ if (has_col($conexion,'peleas_evento',$c)) $cols[]=$c; }
-    $C_AZ = (has_col($conexion,'peleas_evento','competidor_azul_id')?'competidor_azul_id':(has_col($conexion,'peleas_evento','azul_id')?'azul_id':null));
-    $C_RO = (has_col($conexion,'peleas_evento','competidor_rojo_id')?'competidor_rojo_id':(has_col($conexion,'peleas_evento','rojo_id')?'rojo_id':null));
-    if ($C_AZ) $cols[]=$C_AZ; if ($C_RO) $cols[]=$C_RO;
-
-    $sql = "SELECT ".implode(',',array_map('bt',$cols))." FROM peleas_evento WHERE id=? LIMIT 1";
-    if ($st=$conexion->prepare($sql)){
-      $st->bind_param('i',$pelea_id);
-      $st->execute(); $r=$st->get_result(); $row=$r->fetch_assoc() ?: [];
-      $st->close();
-      if ($row){
-        $data['evento_id'] = (int)($row['evento_id'] ?? 0) ?: null;
-        $data['ganador_color'] = isset($row[$C_GAN??'ganador_color']) ? (string)$row[$C_GAN??'ganador_color'] : null;
-        $data['estado'] = isset($row['estado']) ? (string)$row['estado'] : null;
-        $data['resultado'] = isset($row['resultado']) ? (string)$row['resultado'] : null;
-        $az_id = !empty($row[$C_AZ??'']) ? (int)$row[$C_AZ] : null;
-        $ro_id = !empty($row[$C_RO??'']) ? (int)$row[$C_RO] : null;
-
-        if (!empty($data['evento_id'])) {
-          ensure_combate_estado($conexion);
-          $st2=$conexion->prepare("SELECT activo, pelea_actual_id,
-                                          ronda, running, paused, duracion, descanso, remaining,
-                                          ronda_actual, en_descanso, epoch_inicio, dur_round, dur_descanso
-                                   FROM combate_estado WHERE evento_id=? LIMIT 1");
-          if ($st2){
-            $st2->bind_param('i', $data['evento_id']);
-            $st2->execute();
-            $st2->bind_result($act,$pid,$r,$run,$pau,$dur,$des,$rem,$rA,$enD,$epoch,$dR,$dD);
-            if ($st2->fetch()){
-              $data['timer'] = [
-                'activo'=>(int)$act,
-                'ronda'=>(int)($r ?: 1),
-                'ronda_actual'=>(int)($rA ?: $r ?: 1),
-                'running'=>(int)($run ?: 0),
-                'paused'=>(int)($pau ?: 1),
-                'duracion'=>(int)($dur ?: 180),
-                'descanso'=>(int)($des ?: 60),
-                'remaining'=>(int)($rem ?: 180),
-                'en_descanso'=>(int)($enD ?: 0),
-                'epoch_inicio'=>$epoch ? (int)$epoch : null,
-                'dur_round'=>(int)($dR ?: $dur ?: 180),
-                'dur_descanso'=>(int)($dD ?: $des ?: 60)
-              ];
-            }
-            $st2->close();
-          }
-        }
-
-        if (($az_id || $ro_id) && table_exists($conexion,'competidores_evento')){
-          $C_ESC = has_col($conexion,'competidores_evento','escuela_nombre') ? 'escuela_nombre'
-                  : (has_col($conexion,'competidores_evento','escuela') ? 'escuela'
-                  : (has_col($conexion,'competidores_evento','gimnasio') ? 'gimnasio' : null));
-          $LOGO_CANDS = ['escuela_logo','logo_escuela','logo_url','escudo_url','escuela_escudo','logo','foto_escuela'];
-          $C_LOGO=null; foreach($LOGO_CANDS as $c){ if (has_col($conexion,'competidores_evento',$c)){ $C_LOGO=$c; break; } }
-
-          $colsC = "id, TRIM(CONCAT(COALESCE(apellido,''),' ',COALESCE(nombre,''))) AS nom";
-          $colsC .= $C_ESC ? (", ".bt($C_ESC)." AS esc") : ", NULL AS esc";
-          $colsC .= $C_LOGO? (", ".bt($C_LOGO)." AS logo") : ", NULL AS logo";
-
-          $ids=[]; if ($az_id) $ids[]=$az_id; if ($ro_id) $ids[]=$ro_id;
-          $ph=implode(',', array_fill(0,count($ids),'?')); $typ=str_repeat('i', count($ids));
-          $sqlC = "SELECT $colsC FROM competidores_evento WHERE id IN ($ph)";
-          if ($st3=$conexion->prepare($sqlC)){
-            $st3->bind_param($typ, ...$ids);
-            $st3->execute(); $st3->bind_result($cid,$nom,$esc,$logo);
-            while($st3->fetch()){
-              $arr = ['id'=>(int)$cid,'nombre'=>$nom?:null,'escuela'=>$esc?:null,'logo'=>$logo?:null];
-              if ($az_id && (int)$cid===$az_id) $data['azul']=$arr;
-              if ($ro_id && (int)$cid===$ro_id) $data['rojo']=$arr;
-            }
-            $st3->close();
-          }
-        }
-      }
-    }
-  }
-
-  echo json_encode(['ok'=>true,'data'=>$data,'timestamp'=>time()], JSON_UNESCAPED_UNICODE);
-  exit;
-}
-
-/* a2) NUEVO: Estado por evento (para overlay: sigue pelea_actual_id) */
-if (isset($_GET['ajax']) && $_GET['ajax'] === 'estado_evento') {
-  ini_set('display_errors', '0');
-  json_clean_headers();
-
-  $evento_id = get_int_qs($_GET, 'evento_id', 0) ?? 0;
-  if ($evento_id <= 0) { echo json_encode(['ok'=>false,'error'=>'evento_id_invalido']); exit; }
-
-  ensure_combate_estado($conexion);
-  $data = [
-    'evento_id'=>$evento_id,'pelea_actual_id'=>null,
-    'timer'=>['activo'=>0,'ronda'=>1,'ronda_actual'=>1,'running'=>0,'paused'=>1,'duracion'=>180,'descanso'=>60,'remaining'=>180,'en_descanso'=>0,'epoch_inicio'=>null,'dur_round'=>180,'dur_descanso'=>60],
-    'pelea'=>null,'azul'=>null,'rojo'=>null
-  ];
-
-  $st=$conexion->prepare("SELECT pelea_actual_id, activo, ronda, running, paused, duracion, descanso, remaining, ronda_actual, en_descanso, epoch_inicio, dur_round, dur_descanso
-                          FROM combate_estado WHERE evento_id=? LIMIT 1");
-  if ($st){
-    $st->bind_param('i',$evento_id);
-    $st->execute(); $st->bind_result($pid,$act,$r,$run,$pau,$dur,$des,$rem,$rA,$enD,$epoch,$dR,$dD);
-    if ($st->fetch()){
-      $data['pelea_actual_id']=(int)$pid;
-      $data['timer']=[
-        'activo'=>(int)$act,'ronda'=>(int)($r?:1),'ronda_actual'=>(int)($rA?:$r?:1),
-        'running'=>(int)$run,'paused'=>(int)$pau,
-        'duracion'=>(int)$dur,'descanso'=>(int)$des,'remaining'=>(int)$rem,
-        'en_descanso'=>(int)$enD,'epoch_inicio'=>$epoch? (int)$epoch : null,
-        'dur_round'=>(int)($dR?:$dur),'dur_descanso'=>(int)($dD?:$des),
-      ];
-    }
-    $st->close();
-  }
-
-  if (!empty($data['pelea_actual_id']) && table_exists($conexion,'peleas_evento')){
-    $C_AZ = has_col($conexion,'peleas_evento','competidor_azul_id')?'competidor_azul_id':(has_col($conexion,'peleas_evento','azul_id')?'azul_id':null);
-    $C_RO = has_col($conexion,'peleas_evento','competidor_rojo_id')?'competidor_rojo_id':(has_col($conexion,'peleas_evento','rojo_id')?'rojo_id':null);
-    $C_R  = null; foreach(['rondas','rounds','cantidad_rondas','rondas_total'] as $c){ if (has_col($conexion,'peleas_evento',$c)){ $C_R=$c; break; } }
-    $C_NUM= null; foreach(['numero','nro','orden','num'] as $c){ if (has_col($conexion,'peleas_evento',$c)){ $C_NUM=$c; break; } }
-    $C_GAN = has_col($conexion,'peleas_evento','ganador_color')?'ganador_color':(has_col($conexion,'peleas_evento','ganador')?'ganador':null);
-    $C_EST = has_col($conexion,'peleas_evento','estado')?'estado':null;
-
-    $cols="id".($C_NUM?(','.bt($C_NUM).' AS pnum'):',NULL AS pnum')
-           .($C_R?(','.bt($C_R).' AS rds'):',NULL AS rds')
-           .($C_AZ?(','.bt($C_AZ).' AS az'):'')
-           .($C_RO?(','.bt($C_RO).' AS ro'):'')
-           .($C_GAN?(','.bt($C_GAN).' AS gan'):',NULL AS gan')
-           .($C_EST?(','.bt($C_EST).' AS est'):',NULL AS est');
-    if ($st2=$conexion->prepare("SELECT $cols FROM peleas_evento WHERE id=? LIMIT 1")){
-      $st2->bind_param('i',$data['pelea_actual_id']);
-      $st2->execute(); $st2->store_result();
-      if ($C_AZ && $C_RO){ $st2->bind_result($pid,$pnum,$rds,$az,$ro,$gan,$est); }
-      elseif ($C_AZ){ $st2->bind_result($pid,$pnum,$rds,$az,$gan,$est); $ro=null; }
-      elseif ($C_RO){ $st2->bind_result($pid,$pnum,$rds,$ro,$gan,$est); $az=null; }
-      else { $st2->bind_result($pid,$pnum,$rds,$gan,$est); $az=$ro=null; }
-      if ($st2->fetch()){
-        $data['pelea']=['id'=>(int)$pid,'numero'=> is_null($pnum)?null:(int)$pnum,'rondas'=> is_null($rds)?null:(int)$rds,'ganador_color'=>$gan?:null,'estado'=>$est?:null];
-        $ids=[]; if (!empty($az)) $ids[]=(int)$az; if (!empty($ro)) $ids[]=(int)$ro;
-        if ($ids && table_exists($conexion,'competidores_evento')){
-          $C_ESC = has_col($conexion,'competidores_evento','escuela_nombre')?'escuela_nombre':(has_col($conexion,'competidores_evento','escuela')?'escuela':(has_col($conexion,'competidores_evento','gimnasio')?'gimnasio':null));
-          $LOGOS=['escuela_logo','logo_escuela','logo_url','escudo_url','escuela_escudo','logo','foto_escuela']; $C_LOGO=null;
-          foreach($LOGOS as $c){ if (has_col($conexion,'competidores_evento',$c)){ $C_LOGO=$c; break; } }
-          $colsC="id, TRIM(CONCAT(COALESCE(apellido,''),' ',COALESCE(nombre,''))) AS nom";
-          $colsC .= $C_ESC? (", ".bt($C_ESC)." AS esc") : ", NULL AS esc";
-          $colsC .= $C_LOGO?(", ".bt($C_LOGO)." AS logo") : ", NULL AS logo";
-          $ph=implode(',', array_fill(0,count($ids),'?')); $typ=str_repeat('i', count($ids));
-          $sqlC="SELECT $colsC FROM competidores_evento WHERE id IN ($ph)";
-          if ($st3=$conexion->prepare($sqlC)){
-            $st3->bind_param($typ, ...$ids);
-            $st3->execute(); $st3->bind_result($cid,$nom,$esc,$logo);
-            while($st3->fetch()){
-              $arr=['id'=>(int)$cid,'nombre'=>$nom?:null,'escuela'=>$esc?:null,'logo'=>$logo?:null];
-              if (!empty($az) && (int)$cid===(int)$az) $data['azul']=$arr;
-              if (!empty($ro) && (int)$cid===(int)$ro) $data['rojo']=$arr;
-            }
-            $st3->close();
-          }
-        }
-      }
-      $st2->close();
-    }
-  }
-
-  echo json_encode(['ok'=>true,'data'=>$data,'timestamp'=>time()], JSON_UNESCAPED_UNICODE);
-  exit;
-}
-
-/* b) Persistir estado (cronómetro/pelea) */
-if (isset($_GET['ajax']) && $_GET['ajax'] === 'set_estado') {
-  ini_set('display_errors','0');
-  json_clean_headers();
-
-  $evento_id = get_int_qs($_POST, 'evento_id', 0) ?? 0;
-  $pelea_id  = get_int_qs($_POST, 'pelea_id', 0) ?? 0;
-  $ronda     = get_int_qs($_POST, 'ronda', 1) ?? 1;
-  $running   = get_int_qs($_POST, 'running', 0) ?? 0;
-  $paused    = get_int_qs($_POST, 'paused', 1) ?? 1;
-  $duracion  = get_int_qs($_POST, 'duracion', 180) ?? 180;
-  $descanso  = get_int_qs($_POST, 'descanso', 60) ?? 60;
-  $remaining = get_int_qs($_POST, 'remaining', $duracion) ?? $duracion;
-  $activo    = get_int_qs($_POST, 'activo', 1) ?? 1;
-
-  $en_descanso  = get_int_qs($_POST, 'en_descanso', 0) ?? 0;
-  $epoch_inicio = get_int_qs($_POST, 'epoch_inicio', time());
-
-  if ($evento_id<=0 || $pelea_id<=0){ echo json_encode(['ok'=>false,'error'=>'evento_id/pelea_id requeridos']); exit; }
-
-  ensure_combate_estado($conexion);
-
-  $sql = "INSERT INTO combate_estado
-            (evento_id, pelea_actual_id, activo, ronda, running, paused, duracion, descanso, remaining,
-             ronda_actual, en_descanso, epoch_inicio, dur_round, dur_descanso, actualizado_en)
-          VALUES (?,?,?,?,?,?,?,?,?, ?,?,?,?, ?, CURRENT_TIMESTAMP)
-          ON DUPLICATE KEY UPDATE
-            pelea_actual_id=VALUES(pelea_actual_id),
-            activo=VALUES(activo),
-            ronda=VALUES(ronda),
-            running=VALUES(running),
-            paused=VALUES(paused),
-            duracion=VALUES(duracion),
-            descanso=VALUES(descanso),
-            remaining=VALUES(remaining),
-            ronda_actual=VALUES(ronda_actual),
-            en_descanso=VALUES(en_descanso),
-            epoch_inicio=VALUES(epoch_inicio),
-            dur_round=VALUES(dur_round),
-            dur_descanso=VALUES(dur_descanso),
-            actualizado_en=CURRENT_TIMESTAMP";
-
-  $ok=false;
-  if ($st=$conexion->prepare($sql)){
-    $st->bind_param(
-      'iiiiiiiiiiiiii',
-      $evento_id,$pelea_id,$activo,$ronda,$running,$paused,$duracion,$descanso,$remaining,
-      $ronda,$en_descanso,$epoch_inicio,$duracion,$descanso
-    );
-    $ok=$st->execute();
-    $st->close();
-  }
-  echo json_encode(['ok'=>$ok?true:false]); exit;
-}
-
-/* c) Marcar/pausar pelea actual (combate_estado) */
-if (isset($_GET['ajax']) && in_array($_GET['ajax'], ['marcar_actual','pausar_actual'], true)) {
-  ini_set('display_errors', '0');
-  json_clean_headers();
-  $pelea_id = get_int_qs($_POST, 'pelea_id', 0) ?? 0;
-  if ($pelea_id <= 0) { echo json_encode(['ok'=>false,'error'=>'pelea_id_invalido']); exit; }
-
-  $evento_id_fin = null;
-  if (table_exists($conexion,'peleas_evento') && has_col($conexion,'peleas_evento','evento_id')) {
-    if ($st=$conexion->prepare("SELECT evento_id FROM peleas_evento WHERE id=? LIMIT 1")){
-      $st->bind_param('i',$pelea_id); $st->execute(); $st->bind_result($evento_id_fin); $st->fetch(); $st->close();
-    }
-  }
-  if (empty($evento_id_fin)) { echo json_encode(['ok'=>false,'error'=>'sin_evento_id']); exit; }
-
-  ensure_combate_estado($conexion);
-
-  if ($_GET['ajax']==='marcar_actual'){
-    $sql = "INSERT INTO combate_estado (evento_id, pelea_actual_id, activo, running, paused)
-            VALUES (?, ?, 1, 0, 1)
-            ON DUPLICATE KEY UPDATE pelea_actual_id=VALUES(pelea_actual_id), activo=1, actualizado_en=CURRENT_TIMESTAMP";
-    if ($st=$conexion->prepare($sql)){
-      $st->bind_param('ii',$evento_id_fin,$pelea_id); $st->execute(); $st->close();
-      echo json_encode(['ok'=>true,'evento_id'=>$evento_id_fin,'pelea_actual_id'=>$pelea_id,'activo'=>1]); exit;
-    }
-  } else { // pausar_actual
-    if ($st=$conexion->prepare("UPDATE combate_estado SET activo=0, running=0, paused=1, actualizado_en=CURRENT_TIMESTAMP WHERE evento_id=? LIMIT 1")){
-      $st->bind_param('i',$evento_id_fin); $st->execute(); $st->close();
-      echo json_encode(['ok'=>true,'evento_id'=>$evento_id_fin,'activo'=>0]); exit;
-    }
-  }
-  echo json_encode(['ok'=>false,'error'=>'db']); exit;
-}
-
-/* d) FINALIZAR (mesa/manual) */
 if (isset($_GET['ajax']) && $_GET['ajax'] === 'finalizar') {
   ini_set('display_errors', '0');
   json_clean_headers();
 
-  $pelea_id     = get_int_qs($_POST, 'pelea_id', 0) ?? 0;
-  if ($pelea_id <= 0) { echo json_encode(['ok'=>false,'error'=>'pelea_id_invalido']); exit; }
+  $pelea_id = get_int_qs($_POST, 'pelea_id', 0) ?? 0;
+  if ($pelea_id <= 0) {
+    echo json_encode(['ok'=>false,'error'=>'pelea_id_invalido']);
+    exit;
+  }
   $_SESSION['pelea_id_actual'] = (int)$pelea_id;
 
   $manual_mode  = (isset($_POST['manual_mode']) && $_POST['manual_mode'] === '1');
@@ -403,18 +96,25 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'finalizar') {
     $tmp = json_decode((string)$_POST['manual_scores_json'], true);
     if (is_array($tmp)) $manual_scores = $tmp;
   }
-  $manual_win  = strtolower(trim((string)$_POST['manual_win']  ?? ''));
-  $manual_tipo = strtoupper(trim((string)$_POST['manual_tipo'] ?? ''));
+  $manual_win  = strtolower(trim((string)($_POST['manual_win']  ?? '')));
+  $manual_tipo = strtoupper(trim((string)($_POST['manual_tipo'] ?? '')));
   $manual_rf   = get_int_qs($_POST, 'manual_round_fin', 0) ?? 0;
-  $manual_time = trim((string)$_POST['manual_time'] ?? '');
+  $manual_time = trim((string)($_POST['manual_time'] ?? ''));
 
   if (!$manual_mode || empty($manual_scores)) {
-    echo json_encode(['ok'=>false,'error'=>'sin_datos','msg'=>'No hay rounds cargados. Marcá el ganador de cada round.'], JSON_UNESCAPED_UNICODE);
+    echo json_encode([
+      'ok'=>false,
+      'error'=>'sin_datos',
+      'msg'=>'No hay rounds cargados. Marcá el ganador de cada round.'
+    ], JSON_UNESCAPED_UNICODE);
     exit;
   }
 
   $sumA = 0; $sumR = 0;
-  foreach ($manual_scores as $r) { $sumA += (int)($r['azul'] ?? 0); $sumR += (int)($r['rojo'] ?? 0); }
+  foreach ($manual_scores as $r) {
+    $sumA += (int)($r['azul'] ?? 0);
+    $sumR += (int)($r['rojo'] ?? 0);
+  }
 
   $gan=''; $metodo=''; $detalle='';
   if (in_array($manual_win, ['azul','rojo','empate'], true)) {
@@ -429,11 +129,15 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'finalizar') {
   }
 
   $C_EVENTO    = has_col($conexion,'peleas_evento','evento_id') ? 'evento_id' : null;
-  $C_GAN_COLOR = has_col($conexion,'peleas_evento','ganador_color') ? 'ganador_color' : (has_col($conexion,'peleas_evento','ganador')?'ganador':null);
+  $C_GAN_COLOR = has_col($conexion,'peleas_evento','ganador_color') ? 'ganador_color'
+                : (has_col($conexion,'peleas_evento','ganador') ? 'ganador' : null);
   $C_ESTADO    = has_col($conexion,'peleas_evento','estado') ? 'estado' : null;
-  $C_DETALLE   = has_col($conexion,'peleas_evento','detalle_resultado') ? 'detalle_resultado' : (has_col($conexion,'peleas_evento','resolucion')?'resolucion':null);
-  $C_AZUL_ID   = has_col($conexion,'peleas_evento','competidor_azul_id') ? 'competidor_azul_id' : (has_col($conexion,'peleas_evento','azul_id')?'azul_id':null);
-  $C_ROJO_ID   = has_col($conexion,'peleas_evento','competidor_rojo_id') ? 'competidor_rojo_id' : (has_col($conexion,'peleas_evento','rojo_id')?'rojo_id':null);
+  $C_DETALLE   = has_col($conexion,'peleas_evento','detalle_resultado') ? 'detalle_resultado'
+                : (has_col($conexion,'peleas_evento','resolucion') ? 'resolucion' : null);
+  $C_AZUL_ID   = has_col($conexion,'peleas_evento','competidor_azul_id') ? 'competidor_azul_id'
+                : (has_col($conexion,'peleas_evento','azul_id') ? 'azul_id' : null);
+  $C_ROJO_ID   = has_col($conexion,'peleas_evento','competidor_rojo_id') ? 'competidor_rojo_id'
+                : (has_col($conexion,'peleas_evento','rojo_id') ? 'rojo_id' : null);
   $C_GAN_ID    = has_col($conexion,'peleas_evento','ganador_id') ? 'ganador_id' : null;
 
   $azul_id = $rojo_id = $evento_id_fin = null;
@@ -442,11 +146,13 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'finalizar') {
   $parts[] = $C_EVENTO ? bt($C_EVENTO).' AS ev' : 'NULL AS ev';
   $parts[] = $C_AZUL_ID ? bt($C_AZUL_ID).' AS az' : 'NULL AS az';
   $parts[] = $C_ROJO_ID ? bt($C_ROJO_ID).' AS ro' : 'NULL AS ro';
+
   if ($stmt = $conexion->prepare("SELECT ".implode(', ',$parts)." FROM peleas_evento WHERE id=? LIMIT 1")) {
     $stmt->bind_param('i',$pelea_id);
     $stmt->execute();
     $stmt->bind_result($evento_id_fin,$azul_id,$rojo_id);
-    $stmt->fetch(); $stmt->close();
+    $stmt->fetch();
+    $stmt->close();
   }
 
   if ($C_ESTADO && ($st=$conexion->prepare("UPDATE peleas_evento SET ".bt($C_ESTADO)."='finalizada' WHERE id=? LIMIT 1"))){
@@ -474,137 +180,36 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'finalizar') {
     $st->bind_param('si',$txt,$pelea_id); $st->execute(); $st->close();
   }
 
-  if (!empty($evento_id_fin)) {
-    ensure_combate_estado($conexion);
-    if ($st=$conexion->prepare("UPDATE combate_estado SET activo=0, running=0, paused=1, actualizado_en=CURRENT_TIMESTAMP WHERE evento_id=? LIMIT 1")){
-      $st->bind_param('i',$evento_id_fin); $st->execute(); $st->close();
-    }
+  $redir = $RESULTADOS_RUTA.'?pelea_id='.$pelea_id;
+  if (!is_null($evento_id_fin) && (int)$evento_id_fin>0) {
+    $redir .= '&evento_id='.(int)$evento_id_fin;
   }
 
-  $redir = $RESULTADOS_RUTA.'?pelea_id='.$pelea_id;
-  if (!is_null($evento_id_fin) && (int)$evento_id_fin>0) { $redir .= '&evento_id='.(int)$evento_id_fin; }
-
-  echo json_encode(['ok'=>true,'ganador'=>$gan,'metodo'=>$metodo,'detalle'=>$detalle,'redirect'=>$redir], JSON_UNESCAPED_UNICODE);
+  echo json_encode([
+    'ok'=>true,
+    'ganador'=>$gan,
+    'metodo'=>$metodo,
+    'detalle'=>$detalle,
+    'redirect'=>$redir
+  ], JSON_UNESCAPED_UNICODE);
   exit;
 }
 
 /* ====================================================
-   MODO OVERLAY (MISMO ARCHIVO) — ?overlay=1&evento_id=123
-   ==================================================== */
-$isOverlay = (isset($_GET['overlay']) && (string)$_GET['overlay']==='1');
-if ($isOverlay) {
-  $evento_param = get_int_qs($_GET,'evento_id',0) ?? 0;
-  if ($evento_param<=0){ echo "Falta evento_id"; exit; }
-  ?>
-  <!doctype html>
-  <html lang="es">
-  <head>
-    <meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
-    <title>Overlay — Evento #<?= (int)$evento_param ?></title>
-    <style>
-      body{margin:0;background:transparent;color:#fff;font-family:system-ui,Segoe UI,Roboto,Arial,sans-serif}
-      .wrap{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:10px 16px;background:rgba(0,0,0,.35);backdrop-filter:blur(4px);border:1px solid #ffffff22;border-radius:14px}
-      .corner{display:flex;align-items:center;gap:10px;max-width:38%}
-      .corner img{width:54px;height:54px;object-fit:contain;background:#000;border:1px solid #ffffff22;border-radius:10px}
-      .name{font-weight:900;font-size:22px;line-height:1.05}
-      .esc{font-size:13px;opacity:.85}
-      .timer{font-size:72px;font-weight:1000;letter-spacing:1px;min-width:180px;text-align:center}
-      .round{font-size:14px;text-align:center;opacity:.9;margin-top:-4px}
-      .red  .name{color:#ff8a80}
-      .blue .name{color:#80c0ff}
-    </style>
-  </head>
-  <body>
-    <div class="wrap" id="overlay">
-      <div class="corner red" id="redC">
-        <img id="logoRojo" alt="">
-        <div>
-          <div class="name" id="nomRojo">Rojo</div>
-          <div class="esc" id="escRojo"></div>
-        </div>
-      </div>
-
-      <div>
-        <div class="timer" id="timer">0:00</div>
-        <div class="round" id="round">R1</div>
-      </div>
-
-      <div class="corner blue" id="blueC">
-        <img id="logoAzul" alt="">
-        <div>
-          <div class="name" id="nomAzul">Azul</div>
-          <div class="esc" id="escAzul"></div>
-        </div>
-      </div>
-    </div>
-
-    <script>
-    (function(){
-      const eventoId = <?= (int)$evento_param ?>;
-      let state=null, uiTick=null;
-
-      const nomRojo=document.getElementById('nomRojo'), escRojo=document.getElementById('escRojo'), logoRojo=document.getElementById('logoRojo');
-      const nomAzul=document.getElementById('nomAzul'), escAzul=document.getElementById('escAzul'), logoAzul=document.getElementById('logoAzul');
-      const timerEl=document.getElementById('timer'), roundEl=document.getElementById('round');
-
-      function setLogo(el,url){ if(url){ el.src=url; el.style.visibility='visible'; } else { el.removeAttribute('src'); el.style.visibility='hidden'; } }
-      function fmt(s){ s=Math.max(0,s|0); const m=(s/60)|0, ss=String(s%60).padStart(2,'0'); return `${m}:${ss}`; }
-
-      function calcRemaining(t){
-        if(!t) return 0;
-        const now=(Date.now()/1000)|0;
-        if (t.running && t.epoch_inicio){
-          const base = t.en_descanso ? (t.descanso|0):(t.duracion|0);
-          const elapsed = Math.max(0, now - (t.epoch_inicio|0));
-          return Math.max(0, base - elapsed);
-        }
-        return Math.max(0,(t.remaining|0));
-      }
-
-      function repaint(){
-        if(!state) return;
-        const t=state.timer||{};
-        timerEl.textContent = fmt(calcRemaining(t));
-        roundEl.textContent = `R${(t.ronda||t.ronda_actual||1)}${t.en_descanso?' (descanso)':''}`;
-      }
-
-      function applyState(j){
-        state=j.data;
-        const az=state.azul||{}, ro=state.rojo||{};
-        nomAzul.textContent = az.nombre || 'Azul'; escAzul.textContent = az.escuela || ''; setLogo(logoAzul, az.logo||'');
-        nomRojo.textContent = ro.nombre || 'Rojo'; escRojo.textContent = ro.escuela || ''; setLogo(logoRojo, ro.logo||'');
-        if (uiTick) cancelAnimationFrame(uiTick);
-        const loop=()=>{ repaint(); uiTick=requestAnimationFrame(loop); };
-        uiTick=requestAnimationFrame(loop);
-      }
-
-      async function poll(){
-        try{
-          const r = await fetch(`combate_en_vivo.php?ajax=estado_evento&evento_id=${encodeURIComponent(eventoId)}`,{cache:'no-store'});
-          const j = await r.json();
-          if (j && j.ok && j.data){
-            applyState(j);
-          }
-        }catch(e){}
-        setTimeout(poll, 500);
-      }
-      poll();
-    })();
-    </script>
-  </body>
-  </html>
-  <?php
-  exit;
-}
-
-/* ====================================================
-   VISTA HTML — MESA (tu diseño intacto)
+   VISTA HTML — MESA (CRONÓMETRO + TARJETAS)
    ==================================================== */
 
 $pelea_id = get_int_qs($_GET, 'pelea_id', 0) ?? 0;
-if ($pelea_id <= 0 && !empty($_SESSION['pelea_id_actual'])) $pelea_id = (int)$_SESSION['pelea_id_actual'];
-if ($pelea_id > 0) $_SESSION['pelea_id_actual'] = (int)$pelea_id;
-if ($pelea_id <= 0) { echo '<div style="max-width:900px;margin:16px auto;padding:12px;border:1px solid #f5c6cb;background:#fdecea;color:#b71c1c;border-radius:8px;">Falta <b>pelea_id</b>.</div>'; exit; }
+if ($pelea_id <= 0 && !empty($_SESSION['pelea_id_actual'])) {
+  $pelea_id = (int)$_SESSION['pelea_id_actual'];
+}
+if ($pelea_id > 0) {
+  $_SESSION['pelea_id_actual'] = (int)$pelea_id;
+}
+if ($pelea_id <= 0) {
+  echo '<div style="max-width:900px;margin:16px auto;padding:12px;border:1px solid #f5c6cb;background:#fdecea;color:#b71c1c;border-radius:8px;">Falta <b>pelea_id</b>.</div>';
+  exit;
+}
 
 /* QS (solo vista) */
 $nroQS    = get_int_qs($_GET,'nro',null);
@@ -628,12 +233,27 @@ $azul_mod='';  $rojo_mod='';
 
 if (table_exists($conexion,'peleas_evento')) {
   $C_EVENTO  = has_col($conexion,'peleas_evento','evento_id') ? 'evento_id' : null;
-  $C_AZUL_ID = has_col($conexion,'peleas_evento','competidor_azul_id') ? 'competidor_azul_id' : (has_col($conexion,'peleas_evento','azul_id')?'azul_id':null);
-  $C_ROJO_ID = has_col($conexion,'peleas_evento','competidor_rojo_id') ? 'competidor_rojo_id' : (has_col($conexion,'peleas_evento','rojo_id')?'rojo_id':null);
-  $C_DUR  = null; foreach (['duracion_round','duracion','round_duracion','tiempo_round'] as $cand) { if (has_col($conexion,'peleas_evento',$cand)) { $C_DUR=$cand; break; } }
-  $C_DESC = null; foreach (['descanso','tiempo_descanso','descanso_seg'] as $cand) { if (has_col($conexion,'peleas_evento',$cand)) { $C_DESC=$cand; break; } }
-  $C_RONDAS = null; foreach(['rondas','rounds','total_rounds','rondas_total','rondas_totales','cantidad_rondas','cant_rondas','n_rondas','numero_rondas','rounds_total','rounds_totales','rondas_pelea','rondas_conf','rondas_configuradas'] as $cand){ if (has_col($conexion,'peleas_evento',$cand)){ $C_RONDAS=$cand; break; } }
-  $C_NUMERO = null; foreach(['numero','nro','orden','n_orden','num'] as $cand){ if(has_col($conexion,'peleas_evento',$cand)){ $C_NUMERO=$cand; break; } }
+  $C_AZUL_ID = has_col($conexion,'peleas_evento','competidor_azul_id') ? 'competidor_azul_id'
+              : (has_col($conexion,'peleas_evento','azul_id') ? 'azul_id' : null);
+  $C_ROJO_ID = has_col($conexion,'peleas_evento','competidor_rojo_id') ? 'competidor_rojo_id'
+              : (has_col($conexion,'peleas_evento','rojo_id') ? 'rojo_id' : null);
+  $C_DUR  = null; foreach (['duracion_round','duracion','round_duracion','tiempo_round'] as $cand) {
+    if (has_col($conexion,'peleas_evento',$cand)) { $C_DUR=$cand; break; }
+  }
+  $C_DESC = null; foreach (['descanso','tiempo_descanso','descanso_seg'] as $cand) {
+    if (has_col($conexion,'peleas_evento',$cand)) { $C_DESC=$cand; break; }
+  }
+  $C_RONDAS = null;
+  foreach(['rondas','rounds','total_rounds','rondas_total','rondas_totales',
+           'cantidad_rondas','cant_rondas','n_rondas','numero_rondas',
+           'rounds_total','rounds_totales','rondas_pelea','rondas_conf',
+           'rondas_configuradas'] as $cand){
+    if (has_col($conexion,'peleas_evento',$cand)){ $C_RONDAS=$cand; break; }
+  }
+  $C_NUMERO = null;
+  foreach(['numero','nro','orden','n_orden','num'] as $cand){
+    if(has_col($conexion,'peleas_evento',$cand)){ $C_NUMERO=$cand; break; }
+  }
 
   $sel=[]; $sel[] = $C_EVENTO ? bt($C_EVENTO).' AS ev' : 'NULL AS ev';
   $sel[] = $C_RONDAS ? bt($C_RONDAS).' AS rds' : 'NULL AS rds';
@@ -648,15 +268,20 @@ if (table_exists($conexion,'peleas_evento')) {
     $st->bind_param('i',$pelea_id);
     $st->execute(); $st->store_result();
     $ev=$rds=$pnum=$dur=$dsc=null; $az_id=$ro_id=null;
-    if ($C_AZUL_ID && $C_ROJO_ID) { $st->bind_result($ev,$rds,$pnum,$dur,$dsc,$az_id,$ro_id);
-    } elseif ($C_AZUL_ID)         { $st->bind_result($ev,$rds,$pnum,$dur,$dsc,$az_id);
-    } elseif ($C_ROJO_ID)         { $st->bind_result($ev,$rds,$pnum,$dur,$dsc,$ro_id);
-    } else                        { $st->bind_result($ev,$rds,$pnum,$dur,$dsc); }
+    if ($C_AZUL_ID && $C_ROJO_ID) {
+      $st->bind_result($ev,$rds,$pnum,$dur,$dsc,$az_id,$ro_id);
+    } elseif ($C_AZUL_ID) {
+      $st->bind_result($ev,$rds,$pnum,$dur,$dsc,$az_id);
+    } elseif ($C_ROJO_ID) {
+      $st->bind_result($ev,$rds,$pnum,$dur,$dsc,$ro_id);
+    } else {
+      $st->bind_result($ev,$rds,$pnum,$dur,$dsc);
+    }
     if($st->fetch()){
       $evento_id = is_null($ev)?null:(int)$ev;
       $rds = (int)$rds; if ($rds>0) $rondasEsperadas = $rds;
       if (!is_null($pnum) && $pnum!=='') $pelea_numero = (int)$pnum;
-      if (isset($dur) && (int)$dur > 0 && !($durQS  && $durQS  > 0)) $timerDur  = (int)$dur;
+      if (isset($dur) && (int)$dur > 0 && !($durQS  && $durQS  > 0))  $timerDur  = (int)$dur;
       if (isset($dsc) && (int)$dsc > 0 && !($restQS && $restQS > 0)) $timerRest = (int)$dsc;
     }
     $st->close();
@@ -671,17 +296,24 @@ if (table_exists($conexion,'peleas_evento')) {
                   : (has_col($conexion,'competidores_evento','escuela_nombre') ? 'escuela_nombre'
                   : (has_col($conexion,'competidores_evento','gimnasio') ? 'gimnasio' : null));
     $LOGO_CANDS = ['escuela_logo','logo_escuela','logo_url','escudo_url','escuela_escudo','logo','foto_escuela'];
-    $C_LOGO = null; foreach($LOGO_CANDS as $c){ if (has_col($conexion,'competidores_evento',$c)){ $C_LOGO=$c; break; } }
+    $C_LOGO = null;
+    foreach($LOGO_CANDS as $c){
+      if (has_col($conexion,'competidores_evento',$c)){ $C_LOGO=$c; break; }
+    }
 
     $haveDV  = table_exists($conexion,'divisiones_evento');
     $haveCP  = table_exists($conexion,'categorias_peso_evento');
     $haveMD  = table_exists($conexion,'modalidades_evento');
 
-    $C_DIV_ID  = has_col($conexion,'competidores_evento','division_id') ? 'division_id' : (has_col($conexion,'competidores_evento','id_division')?'id_division':null);
+    $C_DIV_ID  = has_col($conexion,'competidores_evento','division_id') ? 'division_id'
+                  : (has_col($conexion,'competidores_evento','id_division')?'id_division':null);
     $C_DIV_TXT = has_col($conexion,'competidores_evento','division') ? 'division' : null;
 
-    $C_PESO_ID  = has_col($conexion,'competidores_evento','categoria_peso_id') ? 'categoria_peso_id' : (has_col($conexion,'competidores_evento','id_categoria_peso')?'id_categoria_peso':null);
-    $C_PESO_TXT = has_col($conexion,'competidores_evento','peso_kg') ? 'peso_kg' : (has_col($conexion,'competidores_evento','peso') ? 'peso' : (has_col($conexion,'competidores_evento','categoria_peso')?'categoria_peso':null));
+    $C_PESO_ID  = has_col($conexion,'competidores_evento','categoria_peso_id') ? 'categoria_peso_id'
+                  : (has_col($conexion,'competidores_evento','id_categoria_peso')?'id_categoria_peso':null);
+    $C_PESO_TXT = has_col($conexion,'competidores_evento','peso_kg') ? 'peso_kg'
+                   : (has_col($conexion,'competidores_evento','peso') ? 'peso'
+                   : (has_col($conexion,'competidores_evento','categoria_peso')?'categoria_peso':null));
 
     $C_MOD_ID  = has_col($conexion,'competidores_evento','modalidad_id') ? 'modalidad_id' : null;
     $C_MOD_TXT = has_col($conexion,'competidores_evento','modalidad') ? 'modalidad' : null;
@@ -738,14 +370,20 @@ $return_to = 'ver_peleas_evento.php'.($evento_id?('?evento_id='.(int)$evento_id)
 
 $__t_init = isset($timerDur) ? (int)$timerDur : 120;
 $__m_init = (int)floor($__t_init/60);
-$__s_init = str_pad((string)($__t_init % 60), 2, '0', STR_PAD_LEFT); // ✅ FIX: módulo sobre entero
+$__s_init = str_pad((string)($__t_init % 60), 2, '0', STR_PAD_LEFT);
 
 ?>
 <!DOCTYPE html>
 <html lang="es">
 <head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"/>
-<title>🥊 Combate en vivo — <?php if (!is_null($pelea_numero)) { echo 'Pelea N° '.(int)$pelea_numero.' (ID '.(int)$pelea_id.')'; } else { echo 'Pelea #'.(int)$pelea_id; } ?></title>
+<title>🥊 Combate en vivo — <?php
+  if (!is_null($pelea_numero)) {
+    echo 'Pelea N° '.(int)$pelea_numero.' (ID '.(int)$pelea_id.')';
+  } else {
+    echo 'Pelea #'.(int)$pelea_id;
+  }
+?></title>
 <style>
   :root{ --panel-bg:#121416; --panel-br:#26313a; --muted:#b6c7d8; }
   body{background:#0c0f12;color:#fff;font-family:system-ui,Segoe UI,Roboto,Arial,sans-serif;margin:0}
@@ -765,13 +403,15 @@ $__s_init = str_pad((string)($__t_init % 60), 2, '0', STR_PAD_LEFT); // ✅ FIX:
   .tag{padding:5px 10px;border-radius:999px;background:#1b2430;border:1px solid #2a3a4a;font-size:12px}
   .controls{display:flex;flex-wrap:wrap;gap:10px;justify-content:center;margin-top:12px}
   .btn{padding:12px 16px;border-radius:10px;border:0;cursor:pointer}
-  .btn-primary{background:#00b894;color:#fff}.btn-warn{background:#ffb300}.btn-danger{background:#e53935}.btn-gray{background:#2a2f35;color:#fff}
+  .btn-primary{background:#00b894;color:#fff}
+  .btn-warn{background:#ffb300}
+  .btn-danger{background:#e53935}
+  .btn-gray{background:#2a2f35;color:#fff}
   .btn-ghost{background:transparent;border:1px solid #334250}
   .timer{font-size:110px;font-weight:900;line-height:1;letter-spacing:1px}
   .round{font-size:18px;font-weight:700;margin-bottom:6px}
   .badge{padding:6px 10px;border-radius:999px;background:#121a24;border:1px solid #2a3a4a;margin-right:6px}
   .muted{color:var(--muted)}
-  .switch{display:inline-flex;align-items:center;gap:8px}
   .tbl-rounds{width:100%;border-collapse:collapse;margin-top:8px}
   .tbl-rounds th,.tbl-rounds td{border:1px solid #26313a;padding:6px;text-align:center}
   .chip{display:inline-flex;align-items:center;gap:6px;padding:8px 12px;border-radius:10px;border:1px solid #2a3a4a;background:#141a20;color:#e5eef7;font-weight:700;cursor:pointer;user-select:none}
@@ -907,120 +547,123 @@ $__s_init = str_pad((string)($__t_init % 60), 2, '0', STR_PAD_LEFT); // ✅ FIX:
 
 <script>
 (function(){
-  /* ====== Timer con corrección de deriva ====== */
-  let duration=<?= (int)$timerDur ?>, rest=<?= (int)$timerRest ?>, remain=<?= (int)$timerDur ?>, round=1, inRest=false;
-  let running=false, nextTs=0, rafId=0;
-
-  const timer=document.getElementById('timer'), rnd=document.getElementById('round');
-  const selDur=document.getElementById('selDur'), selRest=document.getElementById('selRest');
-  const btnStart=document.getElementById('btnStart'), btnPause=document.getElementById('btnPause'),
-        btnReset=document.getElementById('btnReset'), btnNext=document.getElementById('btnNext');
-
-  /* ======= PUBLICACIÓN DE TIMER AL VIVO ======= */
-  const eventoId = <?= $evento_id ? (int)$evento_id : 0 ?>;
   const peleaId  = <?= (int)$pelea_id ?>;
-  let lastPublish = 0;
 
-  async function publishTimer(force=false){
-    if (!eventoId) return;
-    const now = Math.floor(Date.now()/1000);
-    if (!force && (now - lastPublish) < 1) return;
-    lastPublish = now;
-
-    const fd = new FormData();
-    fd.append('evento_id', String(eventoId));
-    fd.append('pelea_id',  String(peleaId));
-    fd.append('activo',    running ? '1' : '0');
-
-    fd.append('ronda',     String(round));
-    fd.append('running',   running ? '1' : '0');
-    fd.append('paused',    running ? '0' : '1');
-    fd.append('duracion',  String(duration));
-    fd.append('descanso',  String(rest));
-    fd.append('remaining', String(Math.max(0,remain)));
-
-    // Compat
-    fd.append('ronda_actual', String(round));
-    fd.append('en_descanso',  inRest ? '1' : '0');
-
-    // epoch_inicio = ahora - (tiempo transcurrido de fase actual)
-    const base = inRest ? rest : duration;
-    const elapsed = Math.max(0, base - Math.max(0,remain));
-    const epoch_inicio = Math.max(0, Math.floor(Date.now()/1000) - elapsed);
-    fd.append('epoch_inicio', String(epoch_inicio));
-    fd.append('dur_round',    String(duration));
-    fd.append('dur_descanso', String(rest));
-
-    try{ await fetch('combate_en_vivo.php?ajax=set_estado', {method:'POST', body:fd, cache:'no-store'}); }catch(e){}
+  /* ===== Util: reproducir sonido confiable ===== */
+  function playSound(id){
+    try{
+      const a = document.getElementById(id);
+      if (!a) return;
+      a.currentTime = 0;
+      a.play().catch(()=>{});
+    }catch(e){}
   }
 
-  async function marcarActual(){
-    if (!eventoId) return;
-    const fd = new FormData(); fd.append('pelea_id', String(peleaId));
-    try{ await fetch('combate_en_vivo.php?ajax=marcar_actual', {method:'POST', body:fd, cache:'no-store'}); }catch(e){}
-  }
-  async function pausarActual(){
-    if (!eventoId) return;
-    const fd = new FormData(); fd.append('pelea_id', String(peleaId));
-    try{ await fetch('combate_en_vivo.php?ajax=pausar_actual', {method:'POST', body:fd, cache:'no-store'}); }catch(e){}
-  }
+  /* ====== Timer local con corrección de deriva ====== */
+  let duration = <?= (int)$timerDur ?>;
+  let rest     = <?= (int)$timerRest ?>;
+  let remain   = duration;
+  let round    = 1;
+  let inRest   = false;
+  let running  = false;
+  let nextTs   = 0;
+  let rafId    = 0;
 
-  function fmt(s){const m=Math.floor(s/60), ss=String(s%60).padStart(2,'0'); return `${m}:${ss}`;}
-  function paint(){ timer.textContent=fmt(remain); rnd.textContent=round; }
+  const timer   = document.getElementById('timer');
+  const rnd     = document.getElementById('round');
+  const selDur  = document.getElementById('selDur');
+  const selRest = document.getElementById('selRest');
+  const btnStart= document.getElementById('btnStart');
+  const btnPause= document.getElementById('btnPause');
+  const btnReset= document.getElementById('btnReset');
+  const btnNext = document.getElementById('btnNext');
+
+  function fmt(s){
+    s = Math.max(0, s|0);
+    const m  = Math.floor(s/60);
+    const ss = String(s%60).padStart(2,'0');
+    return `${m}:${ss}`;
+  }
+  function paint(){
+    timer.textContent = fmt(remain);
+    rnd.textContent   = round;
+  }
 
   function step(nowMs){
-    // Corrección de deriva: solo descontar cada 1000ms reales
     if (nowMs >= nextTs){
-      if(remain>0){
+      if (remain > 0){
         remain--;
-        if(remain===10){ try{document.getElementById('snd-10').play().catch(()=>{});}catch(e){} }
-        publishTimer(false);
-      } else {
-        if(!inRest){
-          try{document.getElementById('snd-roundend').play().catch(()=>{});}catch(e){}
-          inRest=true; remain=rest;
-        } else {
-          try{document.getElementById('snd-restend').play().catch(()=>{});}catch(e){}
-          inRest=false; round++; remain=duration;
+        if (remain === 10) {
+          playSound('snd-10');
         }
-        publishTimer(true);
+      } else {
+        if (!inRest){
+          // Fin de round, pasa a descanso
+          playSound('snd-roundend');
+          inRest = true;
+          remain = rest;
+        } else {
+          // Fin descanso, siguiente round
+          playSound('snd-restend');
+          inRest = false;
+          round++;
+          remain = duration;
+        }
       }
       paint();
       nextTs += 1000;
     }
-    if (running) rafId = requestAnimationFrame(step);
-  }
-
-  btnStart.onclick=async ()=>{
-    if(!running){
-      running=true;
-      nextTs = performance.now() + 1000; // arranca alineado
-      try{document.getElementById('snd-start').play().catch(()=>{});}catch(e){}
-      await marcarActual();
-      publishTimer(true);
+    if (running){
       rafId = requestAnimationFrame(step);
     }
-  };
-  btnPause.onclick=async ()=>{
-    if(running){ running=false; cancelAnimationFrame(rafId); }
-    await pausarActual();
-    publishTimer(true);
-  };
-  btnReset.onclick=async ()=>{
-    if(running){ running=false; cancelAnimationFrame(rafId); }
-    inRest=false; round=1; remain=duration; paint();
-    await pausarActual();
-    publishTimer(true);
-  };
-  btnNext.onclick =async ()=>{
-    if(running){ running=false; cancelAnimationFrame(rafId); }
-    inRest=false; round++; remain=duration; paint();
-    await marcarActual();
-    publishTimer(true);
+  }
+
+  btnStart.onclick = ()=> {
+    if (running) return;
+    running = true;
+    nextTs  = performance.now() + 1000;
+    playSound('snd-start');
+    rafId   = requestAnimationFrame(step);
   };
 
-  selDur.onchange =()=>{ const v = Math.max(30, Math.min(900, parseInt(selDur.value||duration,10))); duration=v; selDur.value=v; if(!inRest&&remain>duration) remain=duration; paint(); publishTimer(true); };
-  selRest.onchange=()=>{ const v = Math.max(10, Math.min(600, parseInt(selRest.value||rest,10))); rest=v; selRest.value=v; if(inRest&&remain>rest) remain=rest; paint(); publishTimer(true); };
+  btnPause.onclick = ()=> {
+    if (!running) return;
+    running = false;
+    cancelAnimationFrame(rafId);
+  };
+
+  btnReset.onclick = ()=> {
+    running = false;
+    cancelAnimationFrame(rafId);
+    inRest  = false;
+    round   = 1;
+    remain  = duration;
+    paint();
+  };
+
+  btnNext.onclick = ()=> {
+    running = false;
+    cancelAnimationFrame(rafId);
+    inRest  = false;
+    round++;
+    remain  = duration;
+    paint();
+  };
+
+  selDur.onchange = ()=> {
+    const v = Math.max(30, Math.min(900, parseInt(selDur.value || duration, 10)));
+    duration  = v;
+    selDur.value = v;
+    if (!inRest && remain > duration) remain = duration;
+    paint();
+  };
+  selRest.onchange = ()=> {
+    const v = Math.max(10, Math.min(600, parseInt(selRest.value || rest, 10)));
+    rest  = v;
+    selRest.value = v;
+    if (inRest && remain > rest) remain = rest;
+    paint();
+  };
 
   /* ====== Rondas con botones (igual) ====== */
   const MAX_ROUNDS = 12;
@@ -1028,16 +671,18 @@ $__s_init = str_pad((string)($__t_init % 60), 2, '0', STR_PAD_LEFT); // ✅ FIX:
   if (!Number.isFinite(rondasConfig) || rondasConfig < 1) rondasConfig = 3;
   let rondasEnJuego = rondasConfig;
 
-  const tblBody = document.getElementById('tbRoundRows');
-  const rAz = document.getElementById('rAz'), rRo = document.getElementById('rRo'), rEq = document.getElementById('rEq');
-  const bSug = document.getElementById('bSug');
+  const tblBody    = document.getElementById('tbRoundRows');
+  const rAz        = document.getElementById('rAz');
+  const rRo        = document.getElementById('rRo');
+  const rEq        = document.getElementById('rEq');
+  const bSug       = document.getElementById('bSug');
   const lblJugadas = document.getElementById('lblJugadas');
 
   let roundResults = [];
 
   function renderRows(){
     let html = '';
-    for(let r=1; r<=rondasEnJuego; r++){
+    for (let r=1; r<=rondasEnJuego; r++){
       const val = (roundResults[r-1]?.v) || null;
       const isExtra = r > rondasConfig;
       html += `<tr ${isExtra?'class="r-extra"':''}>
@@ -1065,42 +710,99 @@ $__s_init = str_pad((string)($__t_init % 60), 2, '0', STR_PAD_LEFT); // ✅ FIX:
   }
 
   function setRound(r, v){
-    while (roundResults.length < r) roundResults.push({r: roundResults.length+1, v: null});
+    while (roundResults.length < r) {
+      roundResults.push({r: roundResults.length+1, v: null});
+    }
     roundResults[r-1].v = v;
     const rowChips = tblBody.querySelectorAll(`.chip[data-r="${r}"]`);
     rowChips.forEach(c => c.classList.toggle('active', c.dataset.v===v));
     const mark = document.getElementById(`mark-${r}`);
-    if (mark) mark.textContent = (v==='azul'?'🔵 Azul':(v==='rojo'?'🔴 Rojo':'⚖️ Empate'));
+    if (mark) {
+      mark.textContent = (v==='azul'?'🔵 Azul':(v==='rojo'?'🔴 Rojo':'⚖️ Empate'));
+    }
     recalcTotals();
+
     if (allBaseFilled() && isGlobalTie() && rondasEnJuego < MAX_ROUNDS){
       rondasEnJuego++;
       renderRows();
     }
   }
 
-  function allBaseFilled(){ for(let i=0;i<rondasConfig;i++){ if (!roundResults[i] || !roundResults[i].v) return false; } return true; }
-  function isGlobalTie(){ let az=0, ro=0; roundResults.forEach(rr=>{ if (rr?.v==='azul') az++; else if (rr?.v==='rojo') ro++; }); return az===ro; }
-  function recalcTotals(){ let az=0, ro=0, eq=0; roundResults.forEach(rr=>{ if (!rr || !rr.v) return; if (rr.v==='azul') az++; else if (rr.v==='rojo') ro++; else eq++; }); rAz.textContent = az; rRo.textContent = ro; rEq.textContent = eq; bSug.textContent = (az>ro?'🔵 Azul':(ro>az?'🔴 Rojo':'⚖️ Empate')); }
-  function collectManualScoresAsPoints(){ const out=[]; for (let r=1; r<=roundResults.length; r++){ const v = roundResults[r-1]?.v || null; if (!v){ out.push({round:r, azul:10, rojo:10}); } else if (v==='azul'){ out.push({round:r, azul:10, rojo:9}); } else if (v==='rojo'){ out.push({round:r, azul:9, rojo:10}); } else { out.push({round:r, azul:10, rojo:10}); } } return out; }
-  function autoWinnerFromResults(){ let az=0, ro=0; roundResults.forEach(rr=>{ if (rr?.v==='azul') az++; else if (rr?.v==='rojo') ro++; }); if (az>ro) return 'azul'; if (ro>az) return 'rojo'; return 'empate'; }
+  function allBaseFilled(){
+    for(let i=0;i<rondasConfig;i++){
+      if (!roundResults[i] || !roundResults[i].v) return false;
+    }
+    return true;
+  }
+  function isGlobalTie(){
+    let az=0, ro=0;
+    roundResults.forEach(rr=>{
+      if (rr?.v === 'azul') az++;
+      else if (rr?.v === 'rojo') ro++;
+    });
+    return az === ro;
+  }
+  function recalcTotals(){
+    let az=0, ro=0, eq=0;
+    roundResults.forEach(rr=>{
+      if (!rr || !rr.v) return;
+      if (rr.v === 'azul')      az++;
+      else if (rr.v === 'rojo') ro++;
+      else                      eq++;
+    });
+    rAz.textContent = az;
+    rRo.textContent = ro;
+    rEq.textContent = eq;
+    bSug.textContent = (az>ro?'🔵 Azul':(ro>az?'🔴 Rojo':'⚖️ Empate'));
+  }
+  function collectManualScoresAsPoints(){
+    const out=[];
+    for (let r=1; r<=roundResults.length; r++){
+      const v = roundResults[r-1]?.v || null;
+      if (!v){
+        out.push({round:r, azul:10, rojo:10});
+      } else if (v==='azul'){
+        out.push({round:r, azul:10, rojo:9});
+      } else if (v==='rojo'){
+        out.push({round:r, azul:9,  rojo:10});
+      } else {
+        out.push({round:r, azul:10, rojo:10});
+      }
+    }
+    return out;
+  }
+  function autoWinnerFromResults(){
+    let az=0, ro=0;
+    roundResults.forEach(rr=>{
+      if (rr?.v==='azul') az++;
+      else if (rr?.v==='rojo') ro++;
+    });
+    if (az>ro) return 'azul';
+    if (ro>az) return 'rojo';
+    return 'empate';
+  }
 
   roundResults = Array.from({length: rondasConfig}, (_,i)=>({r:i+1, v:null}));
   renderRows();
 
-  const selWin = document.getElementById('selWin');
-  const selTipo = document.getElementById('selTipo');
+  const selWin     = document.getElementById('selWin');
+  const selTipo    = document.getElementById('selTipo');
   const inRoundFin = document.getElementById('inRoundFin');
-  const inTime = document.getElementById('inTime');
-  const banner = document.getElementById('banner');
+  const inTime     = document.getElementById('inTime');
+  const banner     = document.getElementById('banner');
 
-  document.getElementById('btnFinish').onclick = async ()=>{
+  document.getElementById('btnFinish').onclick = async ()=> {
     if (allBaseFilled() && isGlobalTie() && rondasEnJuego < MAX_ROUNDS){
       alert('Empate global: se agregó un round extra. Marcá el ganador del round extra antes de finalizar.');
-      rondasEnJuego++; renderRows(); return;
+      rondasEnJuego++;
+      renderRows();
+      return;
     }
     if(!confirm('¿Finalizar el combate y enviar a resultados?')) return;
-    running=false; cancelAnimationFrame(rafId);
-    try{document.getElementById('snd-fightend').play().catch(()=>{});}catch(e){}
+
+    running = false;
+    cancelAnimationFrame(rafId);
+    playSound('snd-fightend');
 
     if (!selWin.value){
       const autoGan = autoWinnerFromResults();
@@ -1112,29 +814,45 @@ $__s_init = str_pad((string)($__t_init % 60), 2, '0', STR_PAD_LEFT); // ✅ FIX:
     form.append('pelea_id', String(peleaId));
     form.append('manual_mode', '1');
     form.append('manual_scores_json', JSON.stringify(collectManualScoresAsPoints()));
-    form.append('manual_win', selWin.value || '');
+    form.append('manual_win',  selWin.value || '');
     form.append('manual_tipo', selTipo.value || '');
     form.append('manual_round_fin', inRoundFin.value || String(rondasEnJuego));
     form.append('manual_time', inTime.value || '');
 
-    const ctrl = new AbortController(); const to = setTimeout(()=>ctrl.abort(), 20000);
+    const ctrl = new AbortController();
+    const to   = setTimeout(()=>ctrl.abort(), 20000);
+
     try{
-      const r = await fetch('combate_en_vivo.php?ajax=finalizar', {method:'POST', body:form, cache:'no-store', signal:ctrl.signal});
+      const r = await fetch('combate_en_vivo.php?ajax=finalizar', {
+        method:'POST',
+        body:form,
+        cache:'no-store',
+        signal:ctrl.signal
+      });
       const j = await r.json();
-      if (!j || !j.ok){ alert((j && j.msg) ? j.msg : 'No se pudo finalizar. Marcá los rounds.'); return; }
+      if (!j || !j.ok){
+        alert((j && j.msg) ? j.msg : 'No se pudo finalizar. Marcá los rounds.');
+        return;
+      }
       const lbl = (j.ganador==='azul'?'🔵 AZUL':(j.ganador==='rojo'?'🔴 ROJO':'⚖️ EMPATE'));
       banner.innerHTML = `<b>Resultado:</b> ${lbl} — ${j.metodo} · <span class="muted">${j.detalle||''}</span>`;
       setTimeout(()=>{ window.location.href = j.redirect || '<?= h($RESULTADOS_RUTA) ?>?pelea_id='+peleaId; }, 800);
-    }catch(e){ alert('Error de red.'); } finally { clearTimeout(to); }
+    }catch(e){
+      alert('Error de red.');
+    } finally {
+      clearTimeout(to);
+    }
   };
 
-  // Autostart
-  const autoStart = <?= $autoQS ? 'true' : 'false' ?>;
-  function paintInit(){ remain=duration; paint(); }
-  paintInit();
-  if (autoStart){ setTimeout(()=>{ btnStart.click(); }, 120); }
+  // Estado inicial
+  remain = duration;
+  paint();
 
-  publishTimer(true);
+  // Autostart si viene con ?start=1
+  const autoStart = <?= $autoQS ? 'true' : 'false' ?>;
+  if (autoStart){
+    setTimeout(()=>{ btnStart.click(); }, 120);
+  }
 })();
 </script>
 </body>
