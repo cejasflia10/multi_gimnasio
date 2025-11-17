@@ -2,7 +2,9 @@
 /* ============================================
    COMBATE EN VIVO — SOLO MESA / CRONÓMETRO
    - Sin overlay, sin transmisiones, sin sincronizar con otros equipos.
-   - Solo cronómetro, tarjetas y datos de la pelea del sistema.
+   - Solo cronómetro y datos de la pelea del sistema.
+   - Marca ganador directo + tipo de victoria
+   - Al finalizar salta a la próxima pelea (pero SIN auto iniciar).
    ============================================ */
 if (session_status() === PHP_SESSION_NONE) session_start();
 require_once __DIR__ . '/conexion.php';
@@ -22,10 +24,12 @@ if (!isset($conexion) || !($conexion instanceof mysqli)) {
 if (function_exists('mysqli_report')) { mysqli_report(MYSQLI_REPORT_OFF); }
 @$conexion->set_charset('utf8mb4');
 
-/* ===== Helpers PHP ===== */
+/* ===== Helpers PHP (compatibles con PHP 5) ===== */
 function h($s){ return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); }
 function bt($c){ return '`'.str_replace('`','``',(string)$c).'`'; }
-function table_exists(mysqli $db, string $name): bool {
+
+function table_exists($db, $name) {
+  if (!($db instanceof mysqli)) return false;
   $name = $db->real_escape_string($name);
   if ($r = $db->query("SHOW TABLES LIKE '$name'")) {
     $ok = (bool)$r->num_rows;
@@ -34,14 +38,17 @@ function table_exists(mysqli $db, string $name): bool {
   }
   return false;
 }
-function has_col(mysqli $db, string $table, string $col): bool {
-  $t=$db->real_escape_string($table); $c=$db->real_escape_string($col);
+
+function has_col($db, $table, $col) {
+  if (!($db instanceof mysqli)) return false;
+  $t=$db->real_escape_string($table);
+  $c=$db->real_escape_string($col);
   $sql="SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS
         WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='$t' AND COLUMN_NAME='$c' LIMIT 1";
   if ($r=$db->query($sql)) { $ok=(bool)$r->num_rows; $r->close(); return $ok; }
   return false;
 }
-function get_int_qs(array $src, string $key, ?int $def=null): ?int {
+function get_int_qs($src, $key, $def=null) {
   if (!isset($src[$key])) return $def;
   $v = trim((string)$src[$key]);
   if ($v === '' || !preg_match('/^-?\d+$/', $v)) return $def;
@@ -55,22 +62,14 @@ function json_clean_headers(){
   header('Pragma', 'no-cache');
 }
 
-/* ===== Ruta de resultados (DESPUÉS de finalizar) ===== */
+/* ===== Ruta de resultados (opcional después) ===== */
 $RESULTADOS_RUTA = 'resultados_combates.php';
 
-/* ===== Sonidos (rutas relativas al archivo) =====
-   Estructura esperada:
-   /multi_gimnasio/
-      combate_en_vivo.php
-      assets/
-         sounds/
-           campana_inicio.mp3
-           ...
-*/
+/* ===== Sonidos ===== */
 $LOCAL_SND_DIR = __DIR__ . '/assets/sounds/';   // Ruta física
-$WEB_SND_BASE  = 'assets/sounds/';              // Ruta web relativa (sin barra inicial)
+$WEB_SND_BASE  = 'assets/sounds/';              // Ruta web relativa
 
-function pickSoundFile(string $localDir, string $webBase, array $candidates): string {
+function pickSoundFile($localDir, $webBase, $candidates) {
   foreach ($candidates as $f) {
     if (@is_file($localDir . $f)) {
       return $webBase . $f;
@@ -79,64 +78,92 @@ function pickSoundFile(string $localDir, string $webBase, array $candidates): st
   return $webBase . $candidates[0];
 }
 
-$SND_START    = pickSoundFile($LOCAL_SND_DIR, $WEB_SND_BASE, ['campana_inicio.mp3','ring_start_bell.mp3','inicio_round.mp3','start.mp3']);
-$SND_WARN10   = pickSoundFile($LOCAL_SND_DIR, $WEB_SND_BASE, ['segundos_afuera_10s.mp3','segundos_afuera.mp3','10s.mp3','aviso10.mp3']);
-$SND_ROUNDEND = pickSoundFile($LOCAL_SND_DIR, $WEB_SND_BASE, ['fin_round.mp3','ring_end_bell.mp3','gong_fin.mp3']);
-$SND_RESTEND  = pickSoundFile($LOCAL_SND_DIR, $WEB_SND_BASE, ['fin_descanso.mp3','inicio_round.mp3','ring_start_bell.mp3']);
-$SND_FIGHTEND = pickSoundFile($LOCAL_SND_DIR, $WEB_SND_BASE, ['fin_pelea.mp3','fight_end.mp3','ring_end_bell.mp3']);
+$SND_START    = pickSoundFile($LOCAL_SND_DIR, $WEB_SND_BASE, array('campana_inicio.mp3','ring_start_bell.mp3','inicio_round.mp3','start.mp3'));
+$SND_WARN10   = pickSoundFile($LOCAL_SND_DIR, $WEB_SND_BASE, array('segundos_afuera_10s.mp3','segundos_afuera.mp3','10s.mp3','aviso10.mp3'));
+$SND_ROUNDEND = pickSoundFile($LOCAL_SND_DIR, $WEB_SND_BASE, array('fin_round.mp3','ring_end_bell.mp3','gong_fin.mp3'));
+$SND_RESTEND  = pickSoundFile($LOCAL_SND_DIR, $WEB_SND_BASE, array('fin_descanso.mp3','inicio_round.mp3','ring_start_bell.mp3'));
+$SND_FIGHTEND = pickSoundFile($LOCAL_SND_DIR, $WEB_SND_BASE, array('fin_pelea.mp3','fight_end.mp3','ring_end_bell.mp3'));
+
+/* ===== Existe resultados_combates? ===== */
+$HAS_RESULTADOS = table_exists($conexion,'resultados_combates');
 
 /* ====================================================
    ÚNICO ENDPOINT AJAX: FINALIZAR (guardar resultado)
+   - Recibe ganador directo + tipo de victoria.
+   - Calcula próxima pelea del mismo evento (si existe).
+   - Guarda en resultados_combates (si existe la tabla).
    ==================================================== */
 if (isset($_GET['ajax']) && $_GET['ajax'] === 'finalizar') {
   ini_set('display_errors', '0');
   json_clean_headers();
 
-  $pelea_id = get_int_qs($_POST, 'pelea_id', 0) ?? 0;
-  if ($pelea_id <= 0) {
-    echo json_encode(['ok'=>false,'error'=>'pelea_id_invalido']);
+  $pelea_id = get_int_qs($_POST, 'pelea_id', 0);
+  if ($pelea_id === null || $pelea_id <= 0) {
+    echo json_encode(array('ok'=>false,'error'=>'pelea_id_invalido'));
     exit;
   }
   $_SESSION['pelea_id_actual'] = (int)$pelea_id;
 
-  $manual_mode  = (isset($_POST['manual_mode']) && $_POST['manual_mode'] === '1');
-  $manual_scores = [];
-  if (!empty($_POST['manual_scores_json'])) {
-    $tmp = json_decode((string)$_POST['manual_scores_json'], true);
-    if (is_array($tmp)) $manual_scores = $tmp;
-  }
-  $manual_win  = strtolower(trim((string)($_POST['manual_win']  ?? '')));
-  $manual_tipo = strtoupper(trim((string)($_POST['manual_tipo'] ?? '')));
-  $manual_rf   = get_int_qs($_POST, 'manual_round_fin', 0) ?? 0;
-  $manual_time = trim((string)($_POST['manual_time'] ?? ''));
+  // Ganador directo + tipo de victoria
+  $ganador = strtolower(trim((string)(isset($_POST['ganador']) ? $_POST['ganador'] : (isset($_POST['manual_win']) ? $_POST['manual_win'] : ''))));
+  $tipoRaw = (string)(isset($_POST['tipo']) ? $_POST['tipo'] : (isset($_POST['manual_tipo']) ? $_POST['manual_tipo'] : ''));
+  $tipo    = strtoupper(trim($tipoRaw));
 
-  if (!$manual_mode || empty($manual_scores)) {
-    echo json_encode([
-      'ok'=>false,
-      'error'=>'sin_datos',
-      'msg'=>'No hay rounds cargados. Marcá el ganador de cada round.'
-    ], JSON_UNESCAPED_UNICODE);
-    exit;
+  $round_fin = get_int_qs($_POST, 'round_fin', null);
+  if ($round_fin === null) {
+    $round_fin = get_int_qs($_POST, 'manual_round_fin', 0);
+    if ($round_fin === null) $round_fin = 0;
   }
+  $time_fin = trim((string)(isset($_POST['time']) ? $_POST['time'] : (isset($_POST['manual_time']) ? $_POST['manual_time'] : '')));
 
-  $sumA = 0; $sumR = 0;
-  foreach ($manual_scores as $r) {
-    $sumA += (int)($r['azul'] ?? 0);
-    $sumR += (int)($r['rojo'] ?? 0);
-  }
-
-  $gan=''; $metodo=''; $detalle='';
-  if (in_array($manual_win, ['azul','rojo','empate'], true)) {
-    $gan    = $manual_win;
-    $metodo = $manual_tipo ?: 'PTS';
-    $detalle= 'por ' . $metodo . ($manual_rf ? (' en R' . (int)$manual_rf) : '');
-  }
-  if ($gan === '') {
-    if     ($sumA > $sumR) { $gan='azul';  $metodo='PTS'; $detalle='por puntos (mesa)'; }
-    elseif ($sumR > $sumA) { $gan='rojo';  $metodo='PTS'; $detalle='por puntos (mesa)'; }
-    else                   { $gan='empate';$metodo='DRAW';$detalle='empate en puntos (mesa)'; }
+  // Permitir SIN DECISIÓN (NC) sin ganador explícito
+  if (!in_array($ganador, array('azul','rojo','empate'), true)) {
+    if ($tipo === 'NC') {
+      // Internamente lo tratamos como "empate técnico" para que no rompa,
+      // pero visualmente se mostrará "SIN DECISIÓN".
+      $ganador = 'empate';
+    } else {
+      echo json_encode(array(
+        'ok'=>false,
+        'error'=>'ganador_invalido',
+        'msg'=>'Tenés que elegir el ganador del combate (Azul, Rojo o Empate).'
+      ));
+      exit;
+    }
   }
 
+  if ($tipo === '') {
+    $tipo = 'PTS'; // por defecto puntos
+  }
+
+  // Texto detalle según tipo
+  $detalleParts = array();
+  switch ($tipo) {
+    case 'PTS': $detalleParts[] = 'por puntos'; break;
+    case 'KO':  $detalleParts[] = 'por KO'; break;
+    case 'KOT':
+    case 'TKO': $detalleParts[] = 'por KOT'; break;
+    case 'AB':
+    case 'ABANDONO': $detalleParts[] = 'por abandono'; break;
+    case 'DM':
+    case 'DEC_MEDICA': $detalleParts[] = 'por decisión médica'; break;
+    case 'SUB':
+    case 'SUM':
+    case 'SURRENDER': $detalleParts[] = 'por sumisión'; break;
+    case 'DQ': $detalleParts[] = 'por descalificación'; break;
+    case 'NC': $detalleParts[] = 'sin decisión'; break;
+    default:   $detalleParts[] = 'por '.$tipo; break;
+  }
+  if ($round_fin > 0) {
+    $detalleParts[] = 'en R'.$round_fin;
+  }
+  if ($time_fin !== '') {
+    $detalleParts[] = 'tiempo '.$time_fin;
+  }
+  $detalle = implode(' ', $detalleParts);
+  $metodo  = $tipo;
+
+  // Descubrir columnas de peleas_evento
   $C_EVENTO    = has_col($conexion,'peleas_evento','evento_id') ? 'evento_id' : null;
   $C_GAN_COLOR = has_col($conexion,'peleas_evento','ganador_color') ? 'ganador_color'
                 : (has_col($conexion,'peleas_evento','ganador') ? 'ganador' : null);
@@ -149,34 +176,48 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'finalizar') {
                 : (has_col($conexion,'peleas_evento','rojo_id') ? 'rojo_id' : null);
   $C_GAN_ID    = has_col($conexion,'peleas_evento','ganador_id') ? 'ganador_id' : null;
 
-  $azul_id = $rojo_id = $evento_id_fin = null;
+  // Columna de número de pelea (para buscar la próxima)
+  $C_NUMERO = null;
+  foreach(array('numero','nro','orden','n_orden','num') as $cand){
+    if (has_col($conexion,'peleas_evento',$cand)){ $C_NUMERO=$cand; break; }
+  }
 
-  $parts = [];
-  $parts[] = $C_EVENTO ? bt($C_EVENTO).' AS ev' : 'NULL AS ev';
-  $parts[] = $C_AZUL_ID ? bt($C_AZUL_ID).' AS az' : 'NULL AS az';
-  $parts[] = $C_ROJO_ID ? bt($C_ROJO_ID).' AS ro' : 'NULL AS ro';
+  $azul_id = null;
+  $rojo_id = null;
+  $evento_id_fin = null;
+  $numero_actual = null;
 
-  if ($stmt = $conexion->prepare("SELECT ".implode(', ',$parts)." FROM peleas_evento WHERE id=? LIMIT 1")) {
+  // Cargar datos básicos de la pelea actual
+  $cols = array();
+  $cols[] = $C_EVENTO ? bt($C_EVENTO).' AS ev' : 'NULL AS ev';
+  $cols[] = $C_AZUL_ID ? bt($C_AZUL_ID).' AS az' : 'NULL AS az';
+  $cols[] = $C_ROJO_ID ? bt($C_ROJO_ID).' AS ro' : 'NULL AS ro';
+  $cols[] = $C_NUMERO  ? bt($C_NUMERO).'  AS pnum' : 'NULL AS pnum';
+
+  $sqlSel = "SELECT ".implode(', ', $cols)." FROM peleas_evento WHERE id=? LIMIT 1";
+  if ($stmt = $conexion->prepare($sqlSel)) {
     $stmt->bind_param('i',$pelea_id);
     $stmt->execute();
-    $stmt->bind_result($evento_id_fin,$azul_id,$rojo_id);
+    $stmt->bind_result($evento_id_fin,$azul_id,$rojo_id,$numero_actual);
     $stmt->fetch();
     $stmt->close();
   }
+  $numero_actual = is_null($numero_actual) ? null : (int)$numero_actual;
 
+  // Marcar pelea como finalizada + ganador + detalle
   if ($C_ESTADO && ($st=$conexion->prepare("UPDATE peleas_evento SET ".bt($C_ESTADO)."='finalizada' WHERE id=? LIMIT 1"))){
     $st->bind_param('i',$pelea_id); $st->execute(); $st->close();
   }
   if ($C_GAN_COLOR && ($st=$conexion->prepare("UPDATE peleas_evento SET ".bt($C_GAN_COLOR)."=? WHERE id=? LIMIT 1"))){
-    $val = ($gan==='empate'?'empate':$gan);
+    $val = ($ganador==='empate'?'empate':$ganador);
     $st->bind_param('si',$val,$pelea_id); $st->execute(); $st->close();
   }
   if ($C_GAN_ID){
-    if ($gan==='azul' && $azul_id) {
+    if ($ganador==='azul' && $azul_id) {
       if ($st=$conexion->prepare("UPDATE peleas_evento SET ".bt($C_GAN_ID)."=? WHERE id=? LIMIT 1")){
         $st->bind_param('ii', $azul_id, $pelea_id); $st->execute(); $st->close();
       }
-    } elseif ($gan==='rojo' && $rojo_id) {
+    } elseif ($ganador==='rojo' && $rojo_id) {
       if ($st=$conexion->prepare("UPDATE peleas_evento SET ".bt($C_GAN_ID)."=? WHERE id=? LIMIT 1")){
         $st->bind_param('ii', $rojo_id, $pelea_id); $st->execute(); $st->close();
       }
@@ -185,32 +226,135 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'finalizar') {
     }
   }
   if ($C_DETALLE && ($st=$conexion->prepare("UPDATE peleas_evento SET ".bt($C_DETALLE)."=? WHERE id=? LIMIT 1"))){
-    $txt = strtoupper($metodo).' — '.$detalle.' · Mesa: AZ '.$sumA.' / RO '.$sumR;
+    $txt = strtoupper($metodo).' — '.$detalle;
     $st->bind_param('si',$txt,$pelea_id); $st->execute(); $st->close();
   }
 
-  $redir = $RESULTADOS_RUTA.'?pelea_id='.$pelea_id;
+  /* === GUARDAR EN resultados_combates (ranking) === */
+  if ($HAS_RESULTADOS) {
+    // evento_id: si no vino en la pelea, usamos el de sesión si existe
+    if (is_null($evento_id_fin) || (int)$evento_id_fin <= 0) {
+      $evento_id_fin = isset($_SESSION['evento_id_actual']) ? (int)$_SESSION['evento_id_actual'] : 0;
+    }
+    $evento_id_rc = (int)$evento_id_fin;
+
+    if ($evento_id_rc > 0) {
+      $ganador_color = $ganador; // 'azul', 'rojo' o 'empate'
+      $ganador_id    = null;
+      if ($ganador_color === 'azul' && $azul_id) {
+        $ganador_id = (int)$azul_id;
+      } elseif ($ganador_color === 'rojo' && $rojo_id) {
+        $ganador_id = (int)$rojo_id;
+      }
+
+      // Por ahora no manejamos puntos en este layout → 0
+      $puntos_rojo = 0;
+      $puntos_azul = 0;
+
+      $sqlUp = "INSERT INTO resultados_combates
+                (pelea_id, evento_id, ganador_color, ganador_id, metodo, detalle, puntos_rojo, puntos_azul)
+                VALUES (?,?,?,?,?,?,?,?)
+                ON DUPLICATE KEY UPDATE
+                  ganador_color = VALUES(ganador_color),
+                  ganador_id    = VALUES(ganador_id),
+                  metodo        = VALUES(metodo),
+                  detalle       = VALUES(detalle),
+                  puntos_rojo   = VALUES(puntos_rojo),
+                  puntos_azul   = VALUES(puntos_azul)";
+      if ($st = $conexion->prepare($sqlUp)) {
+        $st->bind_param(
+          'iissssii',
+          $pelea_id,
+          $evento_id_rc,
+          $ganador_color,
+          $ganador_id,
+          $metodo,
+          $detalle,
+          $puntos_rojo,
+          $puntos_azul
+        );
+        $st->execute();
+        $st->close();
+      }
+    }
+  }
+
+  // Calcular próxima pelea del mismo evento (si existe)
+  $next_id = null;
+  if (!is_null($evento_id_fin) && (int)$evento_id_fin > 0 && $C_EVENTO) {
+    if ($C_NUMERO && !is_null($numero_actual)) {
+      // Buscar por número de pelea > al actual
+      $sqlNext = "SELECT id FROM peleas_evento
+                  WHERE ".bt($C_EVENTO)." = ? AND ".bt($C_NUMERO)." > ? ";
+      if ($C_ESTADO) {
+        $sqlNext .= "AND (".bt($C_ESTADO)." IS NULL OR ".bt($C_ESTADO)." <> 'finalizada') ";
+      }
+      $sqlNext .= "ORDER BY ".bt($C_NUMERO)." ASC LIMIT 1";
+      if ($st = $conexion->prepare($sqlNext)) {
+        $st->bind_param('ii', $evento_id_fin, $numero_actual);
+        $st->execute(); $st->bind_result($nid);
+        if ($st->fetch()) { $next_id = (int)$nid; }
+        $st->close();
+      }
+    }
+    // Respaldo por id si no se encontró por número
+    if (is_null($next_id)) {
+      $sqlNext = "SELECT id FROM peleas_evento
+                  WHERE ".bt($C_EVENTO)." = ? AND id > ? ";
+      if ($C_ESTADO) {
+        $sqlNext .= "AND (".bt($C_ESTADO)." IS NULL OR ".bt($C_ESTADO)." <> 'finalizada') ";
+      }
+      $sqlNext .= "ORDER BY id ASC LIMIT 1";
+      if ($st = $conexion->prepare($sqlNext)) {
+        $st->bind_param('ii', $evento_id_fin, $pelea_id);
+        $st->execute(); $st->bind_result($nid);
+        if ($st->fetch()) { $next_id = (int)$nid; }
+        $st->close();
+      }
+    }
+  } else {
+    // Sin evento_id, buscar siguiente por id en general
+    $sqlNext = "SELECT id FROM peleas_evento WHERE id > ? ";
+    if ($C_ESTADO) {
+      $sqlNext .= "AND (".bt($C_ESTADO)." IS NULL OR ".bt($C_ESTADO)." <> 'finalizada') ";
+    }
+    $sqlNext .= "ORDER BY id ASC LIMIT 1";
+    if ($st = $conexion->prepare($sqlNext)) {
+      $st->bind_param('i', $pelea_id);
+      $st->execute(); $st->bind_result($nid);
+      if ($st->fetch()) { $next_id = (int)$nid; }
+      $st->close();
+    }
+  }
+
+  $redir    = $RESULTADOS_RUTA.'?pelea_id='.$pelea_id;
   if (!is_null($evento_id_fin) && (int)$evento_id_fin>0) {
     $redir .= '&evento_id='.(int)$evento_id_fin;
   }
+  // NO mandamos &start=1 → la próxima pelea no arranca sola
+  $next_url = $next_id ? ('combate_en_vivo.php?pelea_id='.$next_id) : null;
 
-  echo json_encode([
-    'ok'=>true,
-    'ganador'=>$gan,
-    'metodo'=>$metodo,
-    'detalle'=>$detalle,
-    'redirect'=>$redir
-  ], JSON_UNESCAPED_UNICODE);
+  echo json_encode(array(
+    'ok'       => true,
+    'ganador'  => $ganador,
+    'metodo'   => $metodo,
+    'detalle'  => $detalle,
+    'redirect' => $redir,
+    'next_id'  => $next_id,
+    'next_url' => $next_url
+  ));
   exit;
 }
 
 /* ====================================================
-   VISTA HTML — MESA (CRONÓMETRO + TARJETAS)
+   VISTA HTML — MESA (CRONÓMETRO + RESULTADO DIRECTO)
    ==================================================== */
 
-$pelea_id = get_int_qs($_GET, 'pelea_id', 0) ?? 0;
-if ($pelea_id <= 0 && !empty($_SESSION['pelea_id_actual'])) {
-  $pelea_id = (int)$_SESSION['pelea_id_actual'];
+$pelea_id = get_int_qs($_GET, 'pelea_id', 0);
+if ($pelea_id === null || $pelea_id <= 0) {
+  if (!empty($_SESSION['pelea_id_actual'])) {
+    $pelea_id = (int)$_SESSION['pelea_id_actual'];
+  }
 }
 if ($pelea_id > 0) {
   $_SESSION['pelea_id_actual'] = (int)$pelea_id;
@@ -225,13 +369,16 @@ $nroQS    = get_int_qs($_GET,'nro',null);
 $rondasQS = get_int_qs($_GET,'rondas',null);
 $durQS    = get_int_qs($_GET,'dur',null);
 $restQS   = get_int_qs($_GET,'rest',null);
+// autoQS ya no se usa para autostart, lo dejamos por compatibilidad
 $autoQS   = isset($_GET['start']) && (string)$_GET['start']==='1';
 
 $timerDur  = ($durQS  && $durQS  > 0) ? $durQS  : 120;
 $timerRest = ($restQS && $restQS > 0) ? $restQS : 60;
 
 /* Datos de pelea + competidores */
-$evento_id = null; $rondasEsperadas = 3; $pelea_numero = null;
+$evento_id = null;
+$rondasEsperadas = 3;
+$pelea_numero = null;
 
 $azul_nom='Azul'; $rojo_nom='Rojo';
 $azul_logo=''; $rojo_logo='';
@@ -246,25 +393,28 @@ if (table_exists($conexion,'peleas_evento')) {
               : (has_col($conexion,'peleas_evento','azul_id') ? 'azul_id' : null);
   $C_ROJO_ID = has_col($conexion,'peleas_evento','competidor_rojo_id') ? 'competidor_rojo_id'
               : (has_col($conexion,'peleas_evento','rojo_id') ? 'rojo_id' : null);
-  $C_DUR  = null; foreach (['duracion_round','duracion','round_duracion','tiempo_round'] as $cand) {
+  $C_DUR  = null;
+  foreach (array('duracion_round','duracion','round_duracion','tiempo_round') as $cand) {
     if (has_col($conexion,'peleas_evento',$cand)) { $C_DUR=$cand; break; }
   }
-  $C_DESC = null; foreach (['descanso','tiempo_descanso','descanso_seg'] as $cand) {
+  $C_DESC = null;
+  foreach (array('descanso','tiempo_descanso','descanso_seg') as $cand) {
     if (has_col($conexion,'peleas_evento',$cand)) { $C_DESC=$cand; break; }
   }
   $C_RONDAS = null;
-  foreach(['rondas','rounds','total_rounds','rondas_total','rondas_totales',
+  foreach(array('rondas','rounds','total_rounds','rondas_total','rondas_totales',
            'cantidad_rondas','cant_rondas','n_rondas','numero_rondas',
            'rounds_total','rounds_totales','rondas_pelea','rondas_conf',
-           'rondas_configuradas'] as $cand){
+           'rondas_configuradas') as $cand){
     if (has_col($conexion,'peleas_evento',$cand)){ $C_RONDAS=$cand; break; }
   }
   $C_NUMERO = null;
-  foreach(['numero','nro','orden','n_orden','num'] as $cand){
+  foreach(array('numero','nro','orden','n_orden','num') as $cand){
     if(has_col($conexion,'peleas_evento',$cand)){ $C_NUMERO=$cand; break; }
   }
 
-  $sel=[]; $sel[] = $C_EVENTO ? bt($C_EVENTO).' AS ev' : 'NULL AS ev';
+  $sel = array();
+  $sel[] = $C_EVENTO ? bt($C_EVENTO).' AS ev' : 'NULL AS ev';
   $sel[] = $C_RONDAS ? bt($C_RONDAS).' AS rds' : 'NULL AS rds';
   $sel[] = $C_NUMERO ? bt($C_NUMERO).' AS pnum' : 'NULL AS pnum';
   $sel[] = $C_DUR  ? bt($C_DUR).'  AS dur'  : 'NULL AS dur';
@@ -275,8 +425,10 @@ if (table_exists($conexion,'peleas_evento')) {
   $sqlSel = "SELECT ".implode(', ', $sel)." FROM peleas_evento WHERE id=? LIMIT 1";
   if ($st=$conexion->prepare($sqlSel)){
     $st->bind_param('i',$pelea_id);
-    $st->execute(); $st->store_result();
-    $ev=$rds=$pnum=$dur=$dsc=null; $az_id=$ro_id=null;
+    $st->execute();
+    $st->store_result();
+    $ev=$rds=$pnum=$dur=$dsc=null;
+    $az_id=$ro_id=null;
     if ($C_AZUL_ID && $C_ROJO_ID) {
       $st->bind_result($ev,$rds,$pnum,$dur,$dsc,$az_id,$ro_id);
     } elseif ($C_AZUL_ID) {
@@ -288,7 +440,8 @@ if (table_exists($conexion,'peleas_evento')) {
     }
     if($st->fetch()){
       $evento_id = is_null($ev)?null:(int)$ev;
-      $rds = (int)$rds; if ($rds>0) $rondasEsperadas = $rds;
+      $rds = (int)$rds;
+      if ($rds>0) $rondasEsperadas = $rds;
       if (!is_null($pnum) && $pnum!=='') $pelea_numero = (int)$pnum;
       if (isset($dur) && (int)$dur > 0 && !($durQS  && $durQS  > 0))  $timerDur  = (int)$dur;
       if (isset($dsc) && (int)$dsc > 0 && !($restQS && $restQS > 0)) $timerRest = (int)$dsc;
@@ -296,7 +449,7 @@ if (table_exists($conexion,'peleas_evento')) {
     $st->close();
   }
 
-  $ids = [];
+  $ids = array();
   if (!empty($az_id) && (int)$az_id>0) $ids[] = (int)$az_id;
   if (!empty($ro_id) && (int)$ro_id>0) $ids[] = (int)$ro_id;
 
@@ -304,7 +457,7 @@ if (table_exists($conexion,'peleas_evento')) {
     $C_ESCUELA = has_col($conexion,'competidores_evento','escuela') ? 'escuela'
                   : (has_col($conexion,'competidores_evento','escuela_nombre') ? 'escuela_nombre'
                   : (has_col($conexion,'competidores_evento','gimnasio') ? 'gimnasio' : null));
-    $LOGO_CANDS = ['escuela_logo','logo_escuela','logo_url','escudo_url','escuela_escudo','logo','foto_escuela'];
+    $LOGO_CANDS = array('escuela_logo','logo_escuela','logo_url','escudo_url','escuela_escudo','logo','foto_escuela');
     $C_LOGO = null;
     foreach($LOGO_CANDS as $c){
       if (has_col($conexion,'competidores_evento',$c)){ $C_LOGO=$c; break; }
@@ -348,12 +501,22 @@ if (table_exists($conexion,'peleas_evento')) {
     if ($haveCP && $C_PESO_ID) $joins .= " LEFT JOIN categorias_peso_evento cp ON cp.id = ce.".bt($C_PESO_ID);
     if ($haveMD && $C_MOD_ID)  $joins .= " LEFT JOIN modalidades_evento md ON md.id = ce.".bt($C_MOD_ID);
 
-    $ph  = implode(',', array_fill(0,count($ids),'?'));
-    $typ = str_repeat('i', count($ids));
-    $sql = "SELECT $cols FROM competidores_evento ce $joins WHERE ce.id IN ($ph)";
+    $sql = "SELECT $cols FROM competidores_evento ce $joins WHERE ";
+    $countIds = count($ids);
+    if ($countIds === 1) {
+      $sql .= "ce.id = ?";
+    } else {
+      $sql .= "ce.id IN (?,?)";
+    }
+
     if ($st=$conexion->prepare($sql)){
-      $st->bind_param($typ, ...$ids);
-      $st->execute(); $st->store_result();
+      if ($countIds === 1) {
+        $st->bind_param('i', $ids[0]);
+      } else {
+        $st->bind_param('ii', $ids[0], $ids[1]);
+      }
+      $st->execute();
+      $st->store_result();
       $st->bind_result($cid,$nom,$esc,$logo,$division,$peso,$modalidad);
       while($st->fetch()){
         if ((int)$cid === (int)($az_id ?? 0)){
@@ -419,17 +582,13 @@ $__s_init = str_pad((string)($__t_init % 60), 2, '0', STR_PAD_LEFT);
   .btn-ghost{background:transparent;border:1px solid #334250}
   .timer{font-size:110px;font-weight:900;line-height:1;letter-spacing:1px}
   .round{font-size:18px;font-weight:700;margin-bottom:6px}
-  .badge{padding:6px 10px;border-radius:999px;background:#121a24;border:1px solid #2a3a4a;margin-right:6px}
   .muted{color:var(--muted)}
-  .tbl-rounds{width:100%;border-collapse:collapse;margin-top:8px}
-  .tbl-rounds th,.tbl-rounds td{border:1px solid #26313a;padding:6px;text-align:center}
-  .chip{display:inline-flex;align-items:center;gap:6px;padding:8px 12px;border-radius:10px;border:1px solid #2a3a4a;background:#141a20;color:#e5eef7;font-weight:700;cursor:pointer;user-select:none}
-  .chip[data-v="azul"]{border-color:#0b5aa6}
-  .chip[data-v="rojo"]{border-color:#a60b1f}
-  .chip[data-v="empate"]{border-color:#606b7a}
-  .chip.active{outline:2px solid #fff2; box-shadow:0 0 0 2px #fff2 inset}
-  .chip:hover{filter:brightness(1.1)}
-  .r-extra{background:#151b22}
+  .winner-chip{padding:10px 14px;border-radius:999px;border:1px solid #2a3a4a;background:#141a20;color:#e5eef7;font-weight:700;cursor:pointer;user-select:none}
+  .winner-chip[data-v="azul"]{border-color:#0b5aa6}
+  .winner-chip[data-v="rojo"]{border-color:#a60b1f}
+  .winner-chip[data-v="empate"]{border-color:#606b7a}
+  .winner-chip.active{outline:2px solid #fff2; box-shadow:0 0 0 2px #fff2 inset}
+  .winner-chip:hover{filter:brightness(1.1)}
 </style>
 </head>
 <body>
@@ -442,10 +601,12 @@ $__s_init = str_pad((string)($__t_init % 60), 2, '0', STR_PAD_LEFT);
       Pelea #<?= (int)$pelea_id ?>
     <?php endif; ?>
   </h2>
-  <div class="sub" style="margin-bottom:10px">
+  <div class="sub" style="margin-bottom:4px">
     <?= $evento_id!==null ? ('Evento #'.(int)$evento_id) : '(sin evento_id)' ?>
     · Rondas configuradas: <b id="lblRondas"><?= (int)$rondasEsperadas ?></b>
-    · Rondas en juego: <b id="lblJugadas"><?= (int)$rondasEsperadas ?></b>
+  </div>
+  <div class="sub" style="margin-bottom:10px;font-size:12px;opacity:0.85">
+    Si no se escuchan las campanas, hacé clic en cualquier parte o en <b>Iniciar</b> para habilitar el audio del navegador.
   </div>
 
   <div class="grid">
@@ -484,44 +645,41 @@ $__s_init = str_pad((string)($__t_init % 60), 2, '0', STR_PAD_LEFT);
         <input id="selRest" type="number" class="btn btn-gray" style="width:110px" min="10" max="600" step="5" value="<?= (int)$timerRest ?>">
       </div>
 
-      <h4 style="margin:14px 0 4px">📝 Ganador por round (rápido)</h4>
-      <div class="sub" style="margin-bottom:6px">Tocá el ganador de cada round. Si al finalizar hay empate global, se agrega un round extra automáticamente.</div>
+      <h4 style="margin:14px 0 4px">🏁 Resultado del combate</h4>
+      <div class="sub" style="margin-bottom:6px">
+        Marcá directamente quién ganó y la forma en que ganó.
+      </div>
 
-      <table class="tbl-rounds" id="tblRounds">
-        <thead><tr><th style="width:90px">Round</th><th>Ganador</th><th style="width:180px">Marcado</th></tr></thead>
-        <tbody id="tbRoundRows"></tbody>
-        <tfoot>
-          <tr>
-            <th>Σ</th>
-            <th style="text-align:center">
-              <span class="badge">Rounds Azul: <b id="rAz">0</b></span>
-              <span class="badge">Rounds Rojo: <b id="rRo">0</b></span>
-              <span class="badge">Empates: <b id="rEq">0</b></span>
-            </th>
-            <th><span class="badge">Sugerido: <b id="bSug">—</b></span></th>
-          </tr>
-        </tfoot>
-      </table>
-
-      <div class="sub" style="margin:10px 0 4px">Fallo manual (opcional)</div>
       <div class="controls">
-        <select id="selWin" class="btn btn-gray">
+        <div class="winner-chip" data-v="azul"   id="chipAzul">🔵 Gana Azul</div>
+        <div class="winner-chip" data-v="rojo"   id="chipRojo">🔴 Gana Rojo</div>
+        <div class="winner-chip" data-v="empate" id="chipEmpate">⚖️ Empate</div>
+      </div>
+
+      <div class="controls">
+        <select id="selWin" class="btn btn-gray" style="display:none">
           <option value="">— Ganador —</option>
           <option value="azul">🔵 Azul</option>
           <option value="rojo">🔴 Rojo</option>
           <option value="empate">⚖️ Empate</option>
         </select>
         <select id="selTipo" class="btn btn-gray">
-          <option value="">— Tipo —</option>
-          <option>KO</option><option>TKO</option><option>SUM</option>
-          <option>PTS</option><option>DQ</option><option>NC</option>
+          <option value="">— Forma de victoria —</option>
+          <option value="PTS">Puntos (PTS)</option>
+          <option value="KO">KO</option>
+          <option value="KOT">KOT / TKO</option>
+          <option value="AB">Abandono</option>
+          <option value="DM">Decisión médica</option>
+          <option value="SUB">Surrender / Sumisión</option>
+          <option value="DQ">Descalificación (DQ)</option>
+          <option value="NC">Sin decisión (NC)</option>
         </select>
-        <input id="inRoundFin" class="btn btn-gray" type="number" min="0" step="1" placeholder="Round fin">
-        <input id="inTime" class="btn btn-gray" type="text" placeholder="Tiempo mm:ss">
+        <input id="inRoundFin" class="btn btn-gray" type="number" min="0" step="1" placeholder="Round fin (opcional)">
+        <input id="inTime" class="btn btn-gray" type="text" placeholder="Tiempo mm:ss (opcional)">
       </div>
 
       <div class="controls">
-        <a class="btn btn-gray" href="<?= h($return_to) ?>">↩️ Volver</a>
+        <a class="btn btn-gray" href="<?= h($return_to) ?>">↩️ Volver al listado</a>
         <button id="btnFinish" class="btn btn-danger" type="button">🏁 Finalizar combate</button>
       </div>
 
@@ -558,13 +716,54 @@ $__s_init = str_pad((string)($__t_init % 60), 2, '0', STR_PAD_LEFT);
 (function(){
   const peleaId  = <?= (int)$pelea_id ?>;
 
-  /* ===== Util: reproducir sonido confiable ===== */
+  // ====== DESBLOQUEO DE AUDIO (MUY IMPORTANTE) ======
+  let audioUnlocked = false;
+  const soundIds = ['snd-start','snd-10','snd-roundend','snd-restend','snd-fightend'];
+
+  function unlockAudio() {
+    if (audioUnlocked) return;
+    audioUnlocked = true;
+    soundIds.forEach(function(id){
+      try {
+        const a = document.getElementById(id);
+        if (!a) return;
+        // Reproducir en silencio una vez para que el navegador lo permita luego
+        a.muted = true;
+        const p = a.play();
+        if (p && typeof p.then === 'function') {
+          p.then(function(){
+            a.pause();
+            a.currentTime = 0;
+            a.muted = false;
+          }).catch(function(){
+            // Si falla, lo intentaremos de nuevo en otro click si hace falta
+          });
+        } else {
+          // Navegadores viejos
+          a.pause();
+          a.currentTime = 0;
+          a.muted = false;
+        }
+      } catch(e){}
+    });
+  }
+
+  // Primer click en cualquier lado desbloquea audio
+  document.addEventListener('click', function firstClick(){
+    unlockAudio();
+    document.removeEventListener('click', firstClick);
+  }, { once:true });
+
   function playSound(id){
     try{
       const a = document.getElementById(id);
       if (!a) return;
       a.currentTime = 0;
-      a.play().catch(()=>{});
+      a.play().catch(function(err){
+        // Si por alguna razón vuelve a bloquear, intentamos desbloquear otra vez
+        audioUnlocked = false;
+        unlockAudio();
+      });
     }catch(e){}
   }
 
@@ -577,6 +776,11 @@ $__s_init = str_pad((string)($__t_init % 60), 2, '0', STR_PAD_LEFT);
   let running  = false;
   let nextTs   = 0;
   let rafId    = 0;
+
+  // Total de rounds configurados desde la vista
+  const totalRoundsLabel = document.getElementById('lblRondas');
+  let totalRounds = parseInt(totalRoundsLabel ? totalRoundsLabel.textContent : '3', 10);
+  if (!Number.isFinite(totalRounds) || totalRounds <= 0) totalRounds = 3;
 
   const timer   = document.getElementById('timer');
   const rnd     = document.getElementById('round');
@@ -591,7 +795,7 @@ $__s_init = str_pad((string)($__t_init % 60), 2, '0', STR_PAD_LEFT);
     s = Math.max(0, s|0);
     const m  = Math.floor(s/60);
     const ss = String(s%60).padStart(2,'0');
-    return `${m}:${ss}`;
+    return m + ':' + ss;
   }
   function paint(){
     timer.textContent = fmt(remain);
@@ -607,12 +811,20 @@ $__s_init = str_pad((string)($__t_init % 60), 2, '0', STR_PAD_LEFT);
         }
       } else {
         if (!inRest){
-          // Fin de round, pasa a descanso
+          // ✅ Fin de TODOS los rounds configurados: se termina la pelea por tiempo
+          if (round >= totalRounds){
+            playSound('snd-fightend');
+            remain = 0;
+            paint();
+            running = false;
+            return; // NO pasa a descanso ni a otro round
+          }
+          // Fin de round normal → pasa a descanso
           playSound('snd-roundend');
           inRest = true;
           remain = rest;
         } else {
-          // Fin descanso, siguiente round
+          // Fin descanso → siguiente round (todavía no llegamos al último)
           playSound('snd-restend');
           inRest = false;
           round++;
@@ -627,21 +839,22 @@ $__s_init = str_pad((string)($__t_init % 60), 2, '0', STR_PAD_LEFT);
     }
   }
 
-  btnStart.onclick = ()=> {
+  // Sin campana al iniciar / reanudar, pero desbloqueamos audio al iniciar
+  btnStart.onclick = function(){
+    unlockAudio();
     if (running) return;
     running = true;
     nextTs  = performance.now() + 1000;
-    playSound('snd-start');
     rafId   = requestAnimationFrame(step);
   };
 
-  btnPause.onclick = ()=> {
+  btnPause.onclick = function(){
     if (!running) return;
     running = false;
     cancelAnimationFrame(rafId);
   };
 
-  btnReset.onclick = ()=> {
+  btnReset.onclick = function(){
     running = false;
     cancelAnimationFrame(rafId);
     inRest  = false;
@@ -650,7 +863,8 @@ $__s_init = str_pad((string)($__t_init % 60), 2, '0', STR_PAD_LEFT);
     paint();
   };
 
-  btnNext.onclick = ()=> {
+  btnNext.onclick = function(){
+    // Botón manual para forzar un round extra si lo necesitás
     running = false;
     cancelAnimationFrame(rafId);
     inRest  = false;
@@ -659,209 +873,131 @@ $__s_init = str_pad((string)($__t_init % 60), 2, '0', STR_PAD_LEFT);
     paint();
   };
 
-  selDur.onchange = ()=> {
-    const v = Math.max(30, Math.min(900, parseInt(selDur.value || duration, 10)));
+  selDur.onchange = function(){
+    var v = parseInt(selDur.value || duration, 10);
+    if (isNaN(v)) v = duration;
+    v = Math.max(30, Math.min(900, v));
     duration  = v;
     selDur.value = v;
     if (!inRest && remain > duration) remain = duration;
     paint();
   };
-  selRest.onchange = ()=> {
-    const v = Math.max(10, Math.min(600, parseInt(selRest.value || rest, 10)));
+  selRest.onchange = function(){
+    var v = parseInt(selRest.value || rest, 10);
+    if (isNaN(v)) v = rest;
+    v = Math.max(10, Math.min(600, v));
     rest  = v;
     selRest.value = v;
     if (inRest && remain > rest) remain = rest;
     paint();
   };
 
-  /* ====== Rondas con botones ====== */
-  const MAX_ROUNDS = 12;
-  let rondasConfig = parseInt(document.getElementById('lblRondas').textContent, 10);
-  if (!Number.isFinite(rondasConfig) || rondasConfig < 1) rondasConfig = 3;
-  let rondasEnJuego = rondasConfig;
+  // ===== Selección directa de ganador =====
+  var selWin     = document.getElementById('selWin');
+  var selTipo    = document.getElementById('selTipo');
+  var inRoundFin = document.getElementById('inRoundFin');
+  var inTime     = document.getElementById('inTime');
+  var banner     = document.getElementById('banner');
 
-  const tblBody    = document.getElementById('tbRoundRows');
-  const rAz        = document.getElementById('rAz');
-  const rRo        = document.getElementById('rRo');
-  const rEq        = document.getElementById('rEq');
-  const bSug       = document.getElementById('bSug');
-  const lblJugadas = document.getElementById('lblJugadas');
+  var chipAzul   = document.getElementById('chipAzul');
+  var chipRojo   = document.getElementById('chipRojo');
+  var chipEmpate = document.getElementById('chipEmpate');
 
-  let roundResults = [];
-
-  function renderRows(){
-    let html = '';
-    for (let r=1; r<=rondasEnJuego; r++){
-      const val = (roundResults[r-1]?.v) || null;
-      const isExtra = r > rondasConfig;
-      html += `<tr ${isExtra?'class="r-extra"':''}>
-        <td>R${r}${isExtra?' <small>(extra)</small>':''}</td>
-        <td>
-          <div class="controls" style="justify-content:center">
-            <div class="chip ${val==='azul'?'active':''}" data-r="${r}" data-v="azul">🔵 Azul</div>
-            <div class="chip ${val==='rojo'?'active':''}" data-r="${r}" data-v="rojo">🔴 Rojo</div>
-            <div class="chip ${val==='empate'?'active':''}" data-r="${r}" data-v="empate">⚖️ Empate</div>
-          </div>
-        </td>
-        <td id="mark-${r}" class="sub">${val? (val==='azul'?'🔵 Azul':(val==='rojo'?'🔴 Rojo':'⚖️ Empate')) : '—'}</td>
-      </tr>`;
-    }
-    tblBody.innerHTML = html;
-    tblBody.querySelectorAll('.chip').forEach(btn=>{
-      btn.addEventListener('click', ()=>{
-        const r = parseInt(btn.dataset.r,10);
-        const v = btn.dataset.v;
-        setRound(r, v);
-      });
+  function setWinner(v){
+    selWin.value = v || '';
+    [chipAzul, chipRojo, chipEmpate].forEach(function(ch){
+      ch.classList.toggle('active', ch.getAttribute('data-v') === v);
     });
-    lblJugadas.textContent = String(rondasEnJuego);
-    recalcTotals();
   }
 
-  function setRound(r, v){
-    while (roundResults.length < r) {
-      roundResults.push({r: roundResults.length+1, v: null});
-    }
-    roundResults[r-1].v = v;
-    const rowChips = tblBody.querySelectorAll(`.chip[data-r="${r}"]`);
-    rowChips.forEach(c => c.classList.toggle('active', c.dataset.v===v));
-    const mark = document.getElementById(`mark-${r}`);
-    if (mark) {
-      mark.textContent = (v==='azul'?'🔵 Azul':(v==='rojo'?'🔴 Rojo':'⚖️ Empate'));
-    }
-    recalcTotals();
+  chipAzul.addEventListener('click', function(){ setWinner('azul'); });
+  chipRojo.addEventListener('click', function(){ setWinner('rojo'); });
+  chipEmpate.addEventListener('click', function(){ setWinner('empate'); });
 
-    if (allBaseFilled() && isGlobalTie() && rondasEnJuego < MAX_ROUNDS){
-      rondasEnJuego++;
-      renderRows();
-    }
-  }
+  // Botón finalizar combate
+  document.getElementById('btnFinish').onclick = async function(){
+    var tipoVal = selTipo.value || '';
 
-  function allBaseFilled(){
-    for(let i=0;i<rondasConfig;i++){
-      if (!roundResults[i] || !roundResults[i].v) return false;
-    }
-    return true;
-  }
-  function isGlobalTie(){
-    let az=0, ro=0;
-    roundResults.forEach(rr=>{
-      if (rr?.v === 'azul') az++;
-      else if (rr?.v === 'rojo') ro++;
-    });
-    return az === ro;
-  }
-  function recalcTotals(){
-    let az=0, ro=0, eq=0;
-    roundResults.forEach(rr=>{
-      if (!rr || !rr.v) return;
-      if (rr.v === 'azul')      az++;
-      else if (rr.v === 'rojo') ro++;
-      else                      eq++;
-    });
-    rAz.textContent = az;
-    rRo.textContent = ro;
-    rEq.textContent = eq;
-    bSug.textContent = (az>ro?'🔵 Azul':(ro>az?'🔴 Rojo':'⚖️ Empate'));
-  }
-  function collectManualScoresAsPoints(){
-    const out=[];
-    for (let r=1; r<=roundResults.length; r++){
-      const v = roundResults[r-1]?.v || null;
-      if (!v){
-        out.push({round:r, azul:10, rojo:10});
-      } else if (v==='azul'){
-        out.push({round:r, azul:10, rojo:9});
-      } else if (v==='rojo'){
-        out.push({round:r, azul:9,  rojo:10});
-      } else {
-        out.push({round:r, azul:10, rojo:10});
-      }
-    }
-    return out;
-  }
-  function autoWinnerFromResults(){
-    let az=0, ro=0;
-    roundResults.forEach(rr=>{
-      if (rr?.v==='azul') az++;
-      else if (rr?.v==='rojo') ro++;
-    });
-    if (az>ro) return 'azul';
-    if (ro>az) return 'rojo';
-    return 'empate';
-  }
-
-  roundResults = Array.from({length: rondasConfig}, (_,i)=>({r:i+1, v:null}));
-  renderRows();
-
-  const selWin     = document.getElementById('selWin');
-  const selTipo    = document.getElementById('selTipo');
-  const inRoundFin = document.getElementById('inRoundFin');
-  const inTime     = document.getElementById('inTime');
-  const banner     = document.getElementById('banner');
-
-  document.getElementById('btnFinish').onclick = async ()=> {
-    if (allBaseFilled() && isGlobalTie() && rondasEnJuego < MAX_ROUNDS){
-      alert('Empate global: se agregó un round extra. Marcá el ganador del round extra antes de finalizar.');
-      rondasEnJuego++;
-      renderRows();
+    // 🎯 Si NO es "Sin decisión", seguimos obligando a elegir ganador
+    if (tipoVal !== 'NC' && !selWin.value){
+      alert('Elegí el ganador del combate (Azul, Rojo o Empate).');
       return;
     }
-    if(!confirm('¿Finalizar el combate y enviar a resultados?')) return;
+
+    // Si no se eligió tipo, lo dejamos por defecto en PTS (como antes)
+    if (!tipoVal){
+      if (!confirm('No elegiste la forma de victoria. ¿Guardar como "PTS" (puntos)?')) {
+        return;
+      }
+      selTipo.value = 'PTS';
+      tipoVal = 'PTS';
+    }
+
+    // 🟥 Caso especial: SIN DECISIÓN (NC)
+    // No hubo ganador ni perdedor ni empate "real".
+    // No pedimos ganador y, si viene vacío, lo marcamos internamente como empate
+    // solo para que el backend no rompa, pero el texto dirá "SIN DECISIÓN".
+    if (tipoVal === 'NC' && !selWin.value){
+      setWinner('empate'); // técnico, pero el resultado visible será "Sin decisión"
+    }
+
+    if(!confirm('¿Finalizar el combate y guardar el resultado?\nLuego se abrirá la próxima pelea (si existe).')) return;
 
     running = false;
     cancelAnimationFrame(rafId);
     playSound('snd-fightend');
 
-    if (!selWin.value){
-      const autoGan = autoWinnerFromResults();
-      selWin.value = autoGan;
-      if (!selTipo.value) selTipo.value = (autoGan==='empate' ? '' : 'PTS');
-    }
-
-    const form = new FormData();
+    var form = new FormData();
     form.append('pelea_id', String(peleaId));
-    form.append('manual_mode', '1');
-    form.append('manual_scores_json', JSON.stringify(collectManualScoresAsPoints()));
-    form.append('manual_win',  selWin.value || '');
-    form.append('manual_tipo', selTipo.value || '');
-    form.append('manual_round_fin', inRoundFin.value || String(rondasEnJuego));
-    form.append('manual_time', inTime.value || '');
+    form.append('ganador',  selWin.value || '');
+    form.append('tipo',     selTipo.value || '');
+    form.append('round_fin', inRoundFin.value || '');
+    form.append('time',      inTime.value || '');
 
-    const ctrl = new AbortController();
-    const to   = setTimeout(()=>ctrl.abort(), 20000);
+    var ctrl = new AbortController();
+    var to   = setTimeout(function(){ ctrl.abort(); }, 20000);
 
     try{
-      const r = await fetch('combate_en_vivo.php?ajax=finalizar', {
+      var r = await fetch('combate_en_vivo.php?ajax=finalizar', {
         method:'POST',
         body:form,
         cache:'no-store',
         signal:ctrl.signal
       });
-      const j = await r.json();
+      var j = await r.json();
       if (!j || !j.ok){
-        alert((j && j.msg) ? j.msg : 'No se pudo finalizar. Marcá los rounds.');
+        alert((j && j.msg) ? j.msg : 'No se pudo finalizar el combate.');
         return;
       }
-      const lbl = (j.ganador==='azul'?'🔵 AZUL':(j.ganador==='rojo'?'🔴 ROJO':'⚖️ EMPATE'));
-      banner.innerHTML = `<b>Resultado:</b> ${lbl} — ${j.metodo} · <span class="muted">${j.detalle||''}</span>`;
-      setTimeout(()=>{ window.location.href = j.redirect || '<?= h($RESULTADOS_RUTA) ?>?pelea_id='+peleaId; }, 800);
+
+      // 🟢 Si es NC, mostramos "SIN DECISIÓN", no empate
+      var lbl;
+      if (j.metodo === 'NC') {
+        lbl = '🚫 SIN DECISIÓN';
+      } else {
+        lbl = (j.ganador==='azul'?'🔵 AZUL':(j.ganador==='rojo'?'🔴 ROJO':'⚖️ EMPATE'));
+      }
+
+      banner.innerHTML = '<b>Resultado:</b> '+lbl+' — '+j.metodo+' · <span class="muted">'+(j.detalle||'')+'</span>';
+
+      // Si hay próxima pelea, ir a esa página, pero el reloj quedará parado hasta que vos pongas Iniciar
+      setTimeout(function(){
+        if (j.next_url) {
+          window.location.href = j.next_url;
+        } else if (j.redirect) {
+          window.location.href = j.redirect;
+        }
+      }, 800);
     }catch(e){
-      alert('Error de red.');
+      alert('Error de red al finalizar el combate.');
     } finally {
       clearTimeout(to);
     }
   };
 
-  // Estado inicial
+  // Estado inicial (sin autoStart)
   remain = duration;
   paint();
-
-  // Autostart si viene con ?start=1
-  const autoStart = <?= $autoQS ? 'true' : 'false' ?>;
-  if (autoStart){
-    setTimeout(()=>{ btnStart.click(); }, 120);
-  }
 })();
 </script>
 </body>

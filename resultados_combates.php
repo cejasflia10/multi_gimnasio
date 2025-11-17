@@ -51,12 +51,97 @@ if ($can_join_pe) {
 }
 $can_names = $can_join_pe && $C_ROJO && $C_AZUL;
 
+/* ===== Detección de columnas de ranking en competidores_evento ===== */
+$CE_ID = null;
+if (has_col($conexion,'competidores_evento','id'))            $CE_ID = 'id';
+elseif (has_col($conexion,'competidores_evento','competidor_id')) $CE_ID = 'competidor_id';
+
+$CE_WINS = null;
+if (has_col($conexion,'competidores_evento','wins'))          $CE_WINS = 'wins';
+elseif (has_col($conexion,'competidores_evento','ganadas'))   $CE_WINS = 'ganadas';
+elseif (has_col($conexion,'competidores_evento','w'))         $CE_WINS = 'w';
+
+$CE_LOSSES = null;
+if (has_col($conexion,'competidores_evento','losses'))        $CE_LOSSES = 'losses';
+elseif (has_col($conexion,'competidores_evento','perdidas'))  $CE_LOSSES = 'perdidas';
+elseif (has_col($conexion,'competidores_evento','l'))         $CE_LOSSES = 'l';
+
+$CE_DRAWS = null;
+if (has_col($conexion,'competidores_evento','draws'))         $CE_DRAWS = 'draws';
+elseif (has_col($conexion,'competidores_evento','empates'))   $CE_DRAWS = 'empates';
+elseif (has_col($conexion,'competidores_evento','d'))         $CE_DRAWS = 'd';
+
+$CE_NC = null;
+if (has_col($conexion,'competidores_evento','no_contest'))    $CE_NC = 'no_contest';
+elseif (has_col($conexion,'competidores_evento','nc'))        $CE_NC = 'nc';
+elseif (has_col($conexion,'competidores_evento','sin_decision')) $CE_NC = 'sin_decision';
+
+/* PK de peleas_evento (por si se usa en recálculo) */
+$PE_ID = null;
+if (has_col($conexion,'peleas_evento','id'))         $PE_ID = 'id';
+elseif (has_col($conexion,'peleas_evento','pelea_id')) $PE_ID = 'pelea_id';
+
+/**
+ * Recalcula W/L/D/NC de un competidor en competidores_evento
+ * usando TODOS los resultados de resultados_combates + peleas_evento.
+ */
+function recalc_record(mysqli $db, int $compId){
+  global $C_ROJO,$C_AZUL,$PE_ID,$CE_ID,$CE_WINS,$CE_LOSSES,$CE_DRAWS,$CE_NC;
+
+  if (!$C_ROJO || !$C_AZUL || !$PE_ID || !$CE_ID) return;
+  if (!$CE_WINS && !$CE_LOSSES && !$CE_DRAWS && !$CE_NC) return;
+
+  $compId = (int)$compId;
+  if ($compId <= 0) return;
+
+  $sql = "SELECT rc.ganador_color,
+                 pe.".bt($C_ROJO)." AS rid,
+                 pe.".bt($C_AZUL)." AS aid
+          FROM resultados_combates rc
+          JOIN peleas_evento pe ON pe.".bt($PE_ID)." = rc.pelea_id
+          WHERE pe.".bt($C_ROJO)." = {$compId} OR pe.".bt($C_AZUL)." = {$compId}";
+
+  $w=0; $l=0; $d=0; $nc=0;
+
+  if ($r=$db->query($sql)){
+    while($row=$r->fetch_assoc()){
+      $g = strtolower((string)($row['ganador_color'] ?? ''));
+      $esRojo = ((int)$row['rid'] === $compId);
+      $esAzul = ((int)$row['aid'] === $compId);
+
+      if ($g === 'empate'){
+        $d++;
+      } elseif ($g === 'nc' || $g === 'no_contest'){
+        $nc++;
+      } elseif ($g === 'rojo' || $g === 'azul'){
+        $yo = $esRojo ? 'rojo' : ($esAzul ? 'azul' : null);
+        if ($yo && $g === $yo) $w++;
+        elseif ($yo) $l++;
+      }
+    }
+    $r->close();
+  }
+
+  $sets=[];
+  if ($CE_WINS)   $sets[] = bt($CE_WINS).'='.(int)$w;
+  if ($CE_LOSSES) $sets[] = bt($CE_LOSSES).'='.(int)$l;
+  if ($CE_DRAWS)  $sets[] = bt($CE_DRAWS).'='.(int)$d;
+  if ($CE_NC)     $sets[] = bt($CE_NC).'='.(int)$nc;
+  if (!$sets) return;
+
+  $sqlU = "UPDATE competidores_evento
+           SET ".implode(',', $sets)."
+           WHERE ".bt($CE_ID)."={$compId}
+           LIMIT 1";
+  $db->query($sqlU);
+}
+
 /* ===== Nombre en competidores_evento ===== */
 function name_expr_ce($db, $alias='ce'){
   $parts=[];
-  if (has_col($db,'competidores_evento','display_name'))   $parts[]="{$alias}.`display_name`";
-  if (has_col($db,'competidores_evento','nombre_completo'))$parts[]="{$alias}.`nombre_completo`";
-  if (has_col($db,'competidores_evento','nombreyapellido'))$parts[]="{$alias}.`nombreyapellido`";
+  if (has_col($db,'competidores_evento','display_name'))    $parts[]="{$alias}.`display_name`";
+  if (has_col($db,'competidores_evento','nombre_completo')) $parts[]="{$alias}.`nombre_completo`";
+  if (has_col($db,'competidores_evento','nombreyapellido')) $parts[]="{$alias}.`nombreyapellido`";
   $ap = has_col($db,'competidores_evento','apellido')  ? "{$alias}.`apellido`"
      : (has_col($db,'competidores_evento','apellidos') ? "{$alias}.`apellidos`" : "NULL");
   $no = has_col($db,'competidores_evento','nombre')    ? "{$alias}.`nombre`"
@@ -71,7 +156,13 @@ function name_expr_ce($db, $alias='ce'){
 /* ===== Parámetros / sesión ===== */
 $combate_id = toIntOrNull(getv('id'));
 $pelea_id_q = toIntOrNull(getv('pelea_id'));
+
 $evento_id_actual = isset($_SESSION['evento_id_actual']) ? (int)$_SESSION['evento_id_actual'] : null;
+/* fallback: permitir ?evento_id=XX */
+$evento_id_get = toIntOrNull(getv('evento_id'));
+if ($evento_id_actual === null && $evento_id_get !== null) {
+  $evento_id_actual = $evento_id_get;
+}
 
 $flash_ok    = $_SESSION['flash_ok']    ?? '';
 $flash_error = $_SESSION['flash_error'] ?? '';
@@ -95,7 +186,6 @@ if (!$combate_id && $pelea_id_q){
 /* ===== FICHA por id ===== */
 if ($combate_id){
   $err = null;
-  // Query MUY directa, solo usa competidores_evento
   $select = [
     "rc.id","rc.pelea_id","rc.evento_id",
     "rc.ganador_color","rc.ganador_id","rc.metodo","rc.detalle",
@@ -110,12 +200,15 @@ if ($combate_id){
     $joins[] = "LEFT JOIN competidores_evento cg ON cg.id = rc.ganador_id";
     $loserIdCase = "CASE WHEN rc.ganador_color='rojo' THEN pe.".bt($C_AZUL)." WHEN rc.ganador_color='azul' THEN pe.".bt($C_ROJO)." ELSE NULL END";
     $joins[] = "LEFT JOIN competidores_evento cp ON cp.id = {$loserIdCase}";
+    /* IDs de competidores para recalcular ranking */
+    $select[] = "pe.".bt($C_ROJO)." AS rojo_id";
+    $select[] = "pe.".bt($C_AZUL)." AS azul_id";
+
     $R_NAME = name_expr_ce($conexion,'cr');
     $A_NAME = name_expr_ce($conexion,'ca');
     $WIN_N  = name_expr_ce($conexion,'cg');
     $LOSE_N = name_expr_ce($conexion,'cp');
   } else {
-    // Sin columnas rojo/azul en peleas_evento: al menos traemos ganador por su ID
     $joins[] = "LEFT JOIN competidores_evento cg ON cg.id = rc.ganador_id";
     $R_NAME = "NULL"; $A_NAME="NULL";
     $WIN_N  = name_expr_ce($conexion,'cg');
@@ -160,6 +253,13 @@ if ($combate_id){
           'fecha'         => (string)($row['creado_en'] ?? '')
         ];
         $view_mode='ficha';
+
+        /* Recalcular ranking solo para los dos competidores de esta pelea */
+        if (!empty($row['rojo_id'])) recalc_record($conexion, (int)$row['rojo_id']);
+        if (!empty($row['azul_id']) && (int)$row['azul_id'] !== (int)$row['rojo_id']) {
+          recalc_record($conexion, (int)$row['azul_id']);
+        }
+
       } else {
         $flash_error='No se encontró el combate en tu evento.';
       }
@@ -190,19 +290,26 @@ if ($combate_id){
       --btn:#111; --btn-fg:#fff; --btn2:#f3f4f6; --btn2-fg:#111;
       --gold:#d4af37; --green:#10b981; --winR:#b91c1c; --winA:#1d4ed8; --draw:#92400e; --th:#f9fafb;
     }
-    *{box-sizing:border-box} body{background:var(--bg);color:var(--fg);font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Helvetica,Arial,sans-serif}
+    *{box-sizing:border-box}
+    body{background:var(--bg);color:var(--fg);font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Helvetica,Arial,sans-serif}
     .wrap{max-width:1100px;margin:0 auto;padding:16px}
     .card{background:var(--card);border:1px solid var(--card-border);border-radius:14px;padding:14px;margin-top:12px}
-    h2{margin:.2rem 0 .8rem} .row{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+    h2{margin:.2rem 0 .8rem}
+    .row{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
     .badge{display:inline-block;padding:4px 8px;border-radius:999px;background:var(--badge);color:var(--badge-fg);font-size:12px}
     .btn{display:inline-block;padding:10px 14px;border-radius:10px;border:1px solid var(--border);text-decoration:none;cursor:pointer}
     .btn-gray{background:var(--btn2);color:var(--btn2-fg)}
     .btn-green{background:var(--green);color:#fff;border:0}
-    .winR{color:var(--winR);font-weight:800} .winA{color:var(--winA);font-weight:800} .draw{color:var(--draw);font-weight:800}
-    table{width:100%;border-collapse:collapse;margin-top:8px} th,td{border:1px solid var(--border);padding:8px 10px;text-align:left} th{background:var(--th)}
+    .winR{color:var(--winR);font-weight:800}
+    .winA{color:var(--winA);font-weight:800}
+    .draw{color:var(--draw);font-weight:800}
+    table{width:100%;border-collapse:collapse;margin-top:8px}
+    th,td{border:1px solid var(--border);padding:8px 10px;text-align:left}
+    th{background:var(--th)}
     .ok{padding:10px;border-radius:10px;background:var(--ok-bg);border:1px solid var(--ok-bd);color:var(--ok-fg);margin-top:10px}
     .bad{padding:10px;border-radius:10px;background:var(--bad-bg);border:1px solid var(--bad-bd);color:var(--bad-fg);margin-top:10px}
-    .nowrap{white-space:nowrap} .muted{color:var(--muted)}
+    .nowrap{white-space:nowrap}
+    .muted{color:var(--muted)}
   </style>
 </head>
 <body>
@@ -258,7 +365,7 @@ if ($combate_id){
   <h2>📜 Historial de Combates — Tu evento</h2>
 
   <?php if ($evento_id_actual === null): ?>
-    <div class="bad">No hay un <b>evento activo</b> en la sesión. Configurá <code>$_SESSION['evento_id_actual']</code> durante el login.</div>
+    <div class="bad">No hay un <b>evento activo</b> en la sesión. Configurá <code>$_SESSION['evento_id_actual']</code> o usá <code>?evento_id=XX</code> en la URL.</div>
   <?php else: ?>
     <?php
       $err=null;
@@ -276,6 +383,10 @@ if ($combate_id){
         $joins[] = "LEFT JOIN competidores_evento cg ON cg.id = rc.ganador_id";
         $loserIdCase = "CASE WHEN rc.ganador_color='rojo' THEN pe.".bt($C_AZUL)." WHEN rc.ganador_color='azul' THEN pe.".bt($C_ROJO)." ELSE NULL END";
         $joins[] = "LEFT JOIN competidores_evento cp ON cp.id = {$loserIdCase}";
+        /* IDs para recálculo */
+        $select[] = "pe.".bt($C_ROJO)." AS rojo_id";
+        $select[] = "pe.".bt($C_AZUL)." AS azul_id";
+
         $R_NAME = name_expr_ce($conexion,'cr');
         $A_NAME = name_expr_ce($conexion,'ca');
         $WIN_N  = name_expr_ce($conexion,'cg');
@@ -309,6 +420,18 @@ if ($combate_id){
 
       if ($DEBUG && !empty($sql)){
         echo '<div class="ok" style="white-space:pre-wrap"><b>SQL Historial:</b> '.h($sql)."</div>";
+      }
+
+      /* Recalcular ranking de todos los competidores que aparecen en este evento */
+      if (!empty($rows) && $C_ROJO && $C_AZUL && $PE_ID && $CE_ID && ($CE_WINS || $CE_LOSSES || $CE_DRAWS || $CE_NC)){
+        $compIds = [];
+        foreach ($rows as $r){
+          if (!empty($r['rojo_id'])) $compIds[(int)$r['rojo_id']] = true;
+          if (!empty($r['azul_id'])) $compIds[(int)$r['azul_id']] = true;
+        }
+        foreach (array_keys($compIds) as $cid){
+          recalc_record($conexion, (int)$cid);
+        }
       }
     ?>
 

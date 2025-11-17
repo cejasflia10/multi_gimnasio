@@ -943,7 +943,12 @@ $st->close();
 
       <div class="schedule-tools" id="scheduleTools">
         <label>Inicio</label>
-        <input type="time" id="t0" inputmode="numeric" <?= $SHARE?'disabled':'' ?>>
+        <input type="time"
+               id="t0"
+               name="t0"
+               inputmode="numeric"
+               value="<?= h($_GET['t0'] ?? '') ?>"
+               <?= $SHARE ? 'disabled' : '' ?>>
         <label>Duración</label>
         <input type="number" id="dur" min="1" step="1" value="<?= (int)($_GET['dur'] ?? 8) ?>" <?= $SHARE?'disabled':'' ?>> <span class="muted">min</span>
         <label>Intervalo</label>
@@ -955,6 +960,15 @@ $st->close();
     <form method="GET" class="search-grid" autocomplete="off" action="ver_peleas_evento.php">
       <input type="hidden" name="evento_id" value="<?= (int)$evento_id ?>">
       <?php if ($SHARE) { ?><input type="hidden" name="share" value="1"><?php } ?>
+      <?php if (isset($_GET['t0']) && $_GET['t0'] !== '') { ?>
+        <input type="hidden" name="t0" value="<?= h($_GET['t0']) ?>">
+      <?php } ?>
+      <?php if (isset($_GET['dur'])) { ?>
+        <input type="hidden" name="dur" value="<?= (int)$_GET['dur'] ?>">
+      <?php } ?>
+      <?php if (isset($_GET['gap'])) { ?>
+        <input type="hidden" name="gap" value="<?= (int)$_GET['gap'] ?>">
+      <?php } ?>
       <div class="field">
         <label style="font-weight:700">Apellido / Nombre</label>
         <input type="text" name="ape" value="<?= h($s_ape) ?>" placeholder="Ej: González o Juan">
@@ -1179,9 +1193,10 @@ $st->close();
                  ✏️ Editar
               </a>
 
-              <!-- INICIAR -->
+              <!-- INICIAR (PESTAÑA NUEVA) -->
               <a class="btn-xxs btn-secondary"
-                 href="combate_en_vivo.php?pelea_id=<?= (int)$p['pelea_id'] ?>&evento_id=<?= (int)$evento_id ?>">
+                 href="combate_en_vivo.php?pelea_id=<?= (int)$p['pelea_id'] ?>&evento_id=<?= (int)$evento_id ?>"
+                 target="_blank" rel="noopener noreferrer">
                  ▶️ Iniciar
               </a>
 
@@ -1252,6 +1267,26 @@ document.addEventListener('DOMContentLoaded', function () {
     gap.addEventListener('change', calcularAgenda);
   }
 
+  // 👉 Pasar t0/dur/gap a la vista de compartir/imprimir
+  var btnCompartir = document.getElementById('btnCompartir');
+  if (btnCompartir && t0 && dur && gap) {
+    btnCompartir.addEventListener('click', function (e) {
+      e.preventDefault();
+      var url = btnCompartir.getAttribute('href') || '';
+
+      var extra = [];
+      if (t0.value)  extra.push('t0='  + encodeURIComponent(t0.value));
+      if (dur.value) extra.push('dur=' + encodeURIComponent(dur.value));
+      if (gap.value) extra.push('gap=' + encodeURIComponent(gap.value));
+
+      if (extra.length) {
+        url += (url.indexOf('?') === -1 ? '?' : '&') + extra.join('&');
+      }
+
+      window.open(url, '_blank', 'noopener');
+    });
+  }
+
   function calcularAgenda() {
     if (!t0 || !dur || !gap) return;
     if (!t0.value) return;
@@ -1280,9 +1315,13 @@ document.addEventListener('DOMContentLoaded', function () {
       var rondas = parseInt(row.getAttribute('data-rondas') || '0', 10);
       if (isNaN(rondas) || rondas <= 0) rondas = 2;
 
-      var minFight = baseMin + offset;
-      var h = Math.floor(minFight / 60);
-      var m = minFight % 60;
+      // 🔁 Cálculo de hora con wrap a 24 hs (00–23)
+      var totalMinutes = baseMin + offset;
+      var minutesInDay = 24 * 60;
+      totalMinutes = ((totalMinutes % minutesInDay) + minutesInDay) % minutesInDay;
+
+      var h = Math.floor(totalMinutes / 60);
+      var m = totalMinutes % 60;
       var hh = String(h).padStart(2, '0');
       var mm = String(m).padStart(2, '0');
 

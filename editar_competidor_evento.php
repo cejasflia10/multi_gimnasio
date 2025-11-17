@@ -3,7 +3,16 @@
 if (session_status() === PHP_SESSION_NONE) session_start();
 require_once __DIR__.'/conexion.php';
 
-if (!isset($conexion) || !($conexion instanceof mysqli)) { http_response_code(500); exit('❌ Sin conexión a BD.'); }
+// Config Cloudinary (opcional, no rompe si no existe)
+$cloud_cfg = __DIR__ . '/cloudy_boot_constants.php';
+if (is_file($cloud_cfg)) {
+    require_once $cloud_cfg;
+}
+
+if (!isset($conexion) || !($conexion instanceof mysqli)) {
+  http_response_code(500);
+  exit('❌ Sin conexión a BD.');
+}
 if (function_exists('mysqli_report')) { mysqli_report(MYSQLI_REPORT_OFF); }
 @$conexion->set_charset('utf8mb4');
 
@@ -13,15 +22,25 @@ function bt($c){ return '`'.str_replace('`','``',$c).'`'; }
 function has_table(mysqli $db, string $t): bool {
   $t = $db->real_escape_string($t);
   $q = $db->query("SHOW TABLES LIKE '$t'");
-  $ok = $q && $q->num_rows>0; if($q) $q->close();
+  $ok = $q && $q->num_rows>0;
+  if($q) $q->close();
   return $ok;
 }
 function cols(mysqli $db, string $t): array {
-  $out=[]; if($r=$db->query("SHOW COLUMNS FROM ".bt($t))){ while($x=$r->fetch_assoc()){ $out[strtolower($x['Field'])]=$x['Field']; } $r->close(); }
+  $out=[];
+  if($r=$db->query("SHOW COLUMNS FROM ".bt($t))){
+    while($x=$r->fetch_assoc()){
+      $out[strtolower($x['Field'])]=$x['Field'];
+    }
+    $r->close();
+  }
   return $out;
 }
 function pick(array $cands, array $pool){
-  foreach($cands as $c){ $lc=strtolower($c); if(isset($pool[$lc])) return $pool[$lc]; }
+  foreach($cands as $c){
+    $lc=strtolower($c);
+    if(isset($pool[$lc])) return $pool[$lc];
+  }
   return null;
 }
 function parse_float_or_null($s){
@@ -29,6 +48,104 @@ function parse_float_or_null($s){
   if ($s==='') return null;
   $s = str_replace(',', '.', $s);
   return is_numeric($s) ? (float)$s : null;
+}
+
+/**
+ * Sube una imagen a Cloudinary usando CLOUDINARY_URL (si está configurado).
+ * - $fieldName: nombre del input file en $_FILES
+ * - $folder: carpeta / carpeta destino en Cloudinary (opcional)
+ * - $errRef: referencia a string para acumular errores
+ * Devuelve: URL segura (secure_url) o null si no se sube nada / falla.
+ */
+function upload_cloudinary_from_files(string $fieldName, string $folder, string &$errRef): ?string {
+  if (
+    empty($_FILES[$fieldName]) ||
+    empty($_FILES[$fieldName]['tmp_name']) ||
+    $_FILES[$fieldName]['error'] !== UPLOAD_ERR_OK
+  ) {
+    return null; // no se subió archivo
+  }
+
+  if (!defined('CLOUDINARY_URL')) {
+    $errRef .= ' Cloudinary no está configurado (falta CLOUDINARY_URL).';
+    return null;
+  }
+
+  $cUrl = CLOUDINARY_URL;
+  $parts = parse_url($cUrl);
+  if (!$parts || empty($parts['user']) || empty($parts['pass']) || empty($parts['host'])) {
+    $errRef .= ' CLOUDINARY_URL no es válido.';
+    return null;
+  }
+
+  $api_key    = $parts['657814174747186'];
+  $api_secret = $parts['TKo5BRiKCEjxSLFzn2DLbz_ji4c'];
+  $cloud_name = $parts['ddfugds9b'];
+
+  $timestamp = time();
+  $params = [
+    'timestamp' => $timestamp,
+  ];
+  if ($folder !== '') {
+    $params['folder'] = $folder;
+  }
+
+  // Crear signature
+  ksort($params);
+  $to_sign = [];
+  foreach ($params as $k=>$v) {
+    $to_sign[] = $k.'='.$v;
+  }
+  $sign_str = implode('&', $to_sign) . $api_secret;
+  $signature = sha1($sign_str);
+
+  $upload_url = "https://api.cloudinary.com/v1_1/{$cloud_name}/image/upload";
+
+  $postFields = $params;
+  $postFields['api_key']   = $api_key;
+  $postFields['signature'] = $signature;
+  $postFields['file'] = new CURLFile(
+    $_FILES[$fieldName]['tmp_name'],
+    $_FILES[$fieldName]['type'] ?? 'application/octet-stream',
+    $_FILES[$fieldName]['name'] ?? 'upload'
+  );
+
+  $ch = curl_init($upload_url);
+  curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+  curl_setopt($ch, CURLOPT_POST, true);
+  curl_setopt($ch, CURLOPT_POSTFIELDS, $postFields);
+  $resp = curl_exec($ch);
+  $curl_err = curl_error($ch);
+  $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+  curl_close($ch);
+
+  if ($resp === false) {
+    $errRef .= ' Error al conectar con Cloudinary: '.$curl_err;
+    return null;
+  }
+
+  $json = json_decode($resp, true);
+  if (!is_array($json)) {
+    $errRef .= ' Respuesta inválida de Cloudinary.';
+    return null;
+  }
+
+  if (!empty($json['error']['message'])) {
+    $errRef .= ' Cloudinary: '.$json['error']['message'];
+    return null;
+  }
+
+  if ($http_code >= 400) {
+    $errRef .= ' Error HTTP Cloudinary ('.$http_code.').';
+    return null;
+  }
+
+  if (!empty($json['secure_url'])) {
+    return $json['secure_url'];
+  }
+
+  $errRef .= ' No se recibió secure_url desde Cloudinary.';
+  return null;
 }
 
 /* ===== Descubrir columnas ===== */
@@ -43,7 +160,22 @@ $C_ESC_LOGO  = pick(['escuela_logo','logo_escuela','logo_academia'],$cc);
 $C_FOTO      = pick(['foto_competidor','foto','avatar'],$cc);
 $C_EDAD      = pick(['edad'],$cc);
 $C_MODAL_ID  = pick(['modalidad_id'],$cc);
-$C_PESO_CAT  = pick(['categoria_peso_id','peso_id'],$cc);
+
+/* Posible columna de sexo/género del competidor */
+$C_SEXO      = pick(['sexo','genero','sexo_biologico','sexo_competidor'],$cc);
+
+/* 👉 Columna FK que apunta a categorias_evento (muchos posibles nombres) */
+$C_PESO_CAT  = pick([
+  'categorias_evento_id',
+  'categoria_evento_id',
+  'categoria_id',
+  'categoria_peso_id',
+  'categoria_peso_evento_id',
+  'peso_cat_id',
+  'categoria_peso',
+  'categoria',
+  'peso_min_id'
+], $cc);
 
 /* 👉 Columna de PESO declarado: lista ampliada */
 $C_PESO_KG = pick([
@@ -62,15 +194,51 @@ if (!$C_PESO_KG) {
 }
 
 /* Catálogos (opcionales) */
-$mods=[]; if (has_table($conexion,'modalidades_evento')) {
+$mods=[];
+if (has_table($conexion,'modalidades_evento')) {
   if ($r=$conexion->query("SELECT id,nombre FROM modalidades_evento ORDER BY nombre")){
-    while($x=$r->fetch_assoc()) $mods[]=['id'=>(int)$x['id'],'nombre'=>$x['nombre']];
+    while($x=$r->fetch_assoc()){
+      $mods[]=['id'=>(int)$x['id'],'nombre'=>$x['nombre']];
+    }
     $r->close();
   }
 }
-$pesos=[]; if (has_table($conexion,'categorias_peso_evento')) {
+
+/* 👉 CATEGORÍAS DE PESO DESDE categorias_evento (nuevo)
+   y fallback a categorias_peso_evento (viejo) */
+$pesos=[];
+if (has_table($conexion,'categorias_evento')) {
+  $sql = "SELECT id,nombre,peso_min,peso_max,genero,edad_min,edad_max
+          FROM categorias_evento
+          ORDER BY peso_min, peso_max, nombre";
+  if ($r = $conexion->query($sql)) {
+    while($x = $r->fetch_assoc()){
+      $pesos[] = [
+        'id'       => (int)$x['id'],
+        'nombre'   => $x['nombre'],
+        'peso_min' => $x['peso_min'],
+        'peso_max' => $x['peso_max'],
+        'genero'   => $x['genero'],
+        'edad_min' => $x['edad_min'],
+        'edad_max' => $x['edad_max'],
+      ];
+    }
+    $r->close();
+  }
+} elseif (has_table($conexion,'categorias_peso_evento')) {
+  // Compatibilidad con tabla vieja
   if ($r=$conexion->query("SELECT id,nombre FROM categorias_peso_evento ORDER BY nombre")){
-    while($x=$r->fetch_assoc()) $pesos[]=['id'=>(int)$x['id'],'nombre'=>$x['nombre']];
+    while($x=$r->fetch_assoc()){
+      $pesos[] = [
+        'id'       => (int)$x['id'],
+        'nombre'   => $x['nombre'],
+        'peso_min' => null,
+        'peso_max' => null,
+        'genero'   => '',
+        'edad_min' => null,
+        'edad_max' => null,
+      ];
+    }
     $r->close();
   }
 }
@@ -88,45 +256,7 @@ if (isset($_GET['evento_id']) && ctype_digit($_GET['evento_id'])) {
 
 if ($id<=0) exit('❌ Falta id');
 
-/* ================= Guardar (POST) ================= */
-$msg=''; $err='';
-if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
-  $sets=[]; $vals=[]; $types='';
-
-  if ($C_APELLIDO){ $v=trim((string)($_POST['apellido']??'')); $sets[]=bt($C_APELLIDO)."=?"; $vals[]=$v; $types.='s'; }
-  if ($C_NOMBRE){ $v=trim((string)($_POST['nombre']??'')); $sets[]=bt($C_NOMBRE)."=?"; $vals[]=$v; $types.='s'; }
-  if ($C_ESC_NOM){ $v=trim((string)($_POST['escuela']??'')); $sets[]=bt($C_ESC_NOM)."=?"; $vals[]=$v; $types.='s'; }
-  if ($C_ESC_LOGO){ $v=trim((string)($_POST['escuela_logo']??'')); $sets[]=bt($C_ESC_LOGO)."=?"; $vals[]=$v; $types.='s'; }
-  if ($C_FOTO){ $v=trim((string)($_POST['foto']??'')); $sets[]=bt($C_FOTO)."=?"; $vals[]=$v; $types.='s'; }
-  if ($C_EDAD){ $raw=trim((string)($_POST['edad']??'')); $v=($raw!=='' && ctype_digit($raw))?(int)$raw:null; $sets[]=bt($C_EDAD)."=?"; $vals[]=$v; $types.='i'; }
-  if ($C_MODAL_ID){ $raw=trim((string)($_POST['modalidad_id']??'')); $v=($raw!=='' && ctype_digit($raw))?(int)$raw:null; $sets[]=bt($C_MODAL_ID)."=?"; $vals[]=$v; $types.='i'; }
-  if ($C_PESO_CAT){ $raw=trim((string)($_POST['peso_cat_id']??'')); $v=($raw!=='' && ctype_digit($raw))?(int)$raw:null; $sets[]=bt($C_PESO_CAT)."=?"; $vals[]=$v; $types.='i'; }
-
-  /* 👉 SIEMPRE intentar guardar PESO declarado */
-  $pval = parse_float_or_null($_POST['peso_kg'] ?? '');
-  if ($C_PESO_KG){ $sets[] = bt($C_PESO_KG)."=?"; $vals[]=$pval; $types.='d'; }
-
-  if ($sets){
-    $sql="UPDATE `competidores_evento` SET ".implode(', ',$sets)." WHERE ".bt($C_ID)."=?";
-    $types.='i'; $vals[]=$id;
-    if ($st=$conexion->prepare($sql)){
-      $st->bind_param($types, ...$vals);
-      if ($st->execute()){
-        $_SESSION['flash_ok'] = '✅ Cambios guardados.';
-        // 🔁 Volver a ver_competidores_evento
-        header('Location: ver_competidores_evento.php?evento_id='.(int)$evento_id);
-        exit;
-      } else {
-        $err='No se pudo guardar: '.$st->error;
-      }
-      $st->close();
-    } else { $err='Error preparando UPDATE.'; }
-  } else {
-    $err='No hay cambios.';
-  }
-}
-
-/* ================= Leer competidor ================= */
+/* ================= Leer competidor (para mostrar y fallback) ================= */
 $sel = "SELECT ".
        bt($C_ID)." AS id".
        ($C_APELLIDO ? ", ".bt($C_APELLIDO)." AS apellido" : ", NULL AS apellido").
@@ -138,15 +268,173 @@ $sel = "SELECT ".
        ($C_MODAL_ID ? ", ".bt($C_MODAL_ID)." AS modalidad_id" : ", NULL AS modalidad_id").
        ($C_PESO_CAT ? ", ".bt($C_PESO_CAT)." AS peso_cat_id"  : ", NULL AS peso_cat_id").
        ($C_PESO_KG  ? ", ".bt($C_PESO_KG) ." AS peso_kg"      : ", NULL AS peso_kg").
+       ($C_SEXO     ? ", ".bt($C_SEXO)    ." AS sexo"         : ", NULL AS sexo").
        " FROM `competidores_evento` WHERE ".bt($C_ID)."=? LIMIT 1";
-$st=$conexion->prepare($sel); $st->bind_param('i',$id); $st->execute();
-$comp=$st->get_result()->fetch_assoc(); $st->close();
+$st=$conexion->prepare($sel);
+$st->bind_param('i',$id);
+$st->execute();
+$comp=$st->get_result()->fetch_assoc();
+$st->close();
 if (!$comp) exit('❌ No encontrado');
+
+/* ================= Guardar (POST) ================= */
+$msg=''; $err='';
+if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
+  $sets=[]; $vals=[]; $types='';
+  $cloudErr = '';
+
+  if ($C_APELLIDO){
+    $v=trim((string)($_POST['apellido']??''));
+    $sets[]=bt($C_APELLIDO)."=?";
+    $vals[]=$v; $types.='s';
+  }
+  if ($C_NOMBRE){
+    $v=trim((string)($_POST['nombre']??''));
+    $sets[]=bt($C_NOMBRE)."=?";
+    $vals[]=$v; $types.='s';
+  }
+  if ($C_ESC_NOM){
+    $v=trim((string)($_POST['escuela']??''));
+    $sets[]=bt($C_ESC_NOM)."=?";
+    $vals[]=$v; $types.='s';
+  }
+
+  /* ==== Logo academia ==== */
+  if ($C_ESC_LOGO){
+    // Primero, valor desde el input de texto
+    $logo_url = trim((string)($_POST['escuela_logo']??''));
+    // Si se sube archivo, Cloudinary tiene prioridad
+    $nuevo_logo = upload_cloudinary_from_files('escuela_logo_file', 'eventos/escuelas', $cloudErr);
+    if ($nuevo_logo) {
+      $logo_url = $nuevo_logo;
+    }
+    $sets[]=bt($C_ESC_LOGO)."=?";
+    $vals[]=$logo_url; $types.='s';
+  }
+
+  /* ==== Foto competidor ==== */
+  if ($C_FOTO){
+    // URL desde el campo de texto
+    $foto_url = trim((string)($_POST['foto']??''));
+    // Archivo a Cloudinary (si se subió)
+    $nueva_foto = upload_cloudinary_from_files('foto_file', 'eventos/competidores', $cloudErr);
+    if ($nueva_foto) {
+      $foto_url = $nueva_foto;
+    }
+    $sets[]=bt($C_FOTO)."=?";
+    $vals[]=$foto_url; $types.='s';
+  }
+
+  if ($C_EDAD){
+    $raw=trim((string)($_POST['edad']??''));
+    $v=($raw!=='' && ctype_digit($raw))?(int)$raw:null;
+    $sets[]=bt($C_EDAD)."=?";
+    $vals[]=$v; $types.='i';
+  }
+  if ($C_MODAL_ID){
+    $raw=trim((string)($_POST['modalidad_id']??''));
+    $v=($raw!=='' && ctype_digit($raw))?(int)$raw:null;
+    $sets[]=bt($C_MODAL_ID)."=?";
+    $vals[]=$v; $types.='i';
+  }
+  if ($C_PESO_CAT){
+    $raw=trim((string)($_POST['peso_cat_id']??''));
+    $v=($raw!=='' && ctype_digit($raw))?(int)$raw:null;
+    $sets[]=bt($C_PESO_CAT)."=?";
+    $vals[]=$v; $types.='i';
+  }
+
+  /* 👉 SIEMPRE intentar guardar PESO declarado */
+  $pval = parse_float_or_null($_POST['peso_kg'] ?? '');
+  if ($C_PESO_KG){
+    $sets[] = bt($C_PESO_KG)."=?";
+    $vals[]=$pval; $types.='d';
+  }
+
+  if ($cloudErr !== '') {
+    // Añadimos error de Cloudinary al mensaje general
+    $err .= trim($cloudErr);
+  }
+
+  if ($sets){
+    $sql="UPDATE `competidores_evento` SET ".implode(', ',$sets)." WHERE ".bt($C_ID)."=?";
+    $types.='i'; $vals[]=$id;
+    if ($st=$conexion->prepare($sql)){
+      $st->bind_param($types, ...$vals);
+      if ($st->execute()){
+        $_SESSION['flash_ok'] = '✅ Cambios guardados.';
+        header('Location: ver_competidores_evento.php?evento_id='.(int)$evento_id);
+        exit;
+      } else {
+        $err='No se pudo guardar: '.$st->error . ($cloudErr ? ' | '.$cloudErr : '');
+      }
+      $st->close();
+    } else {
+      $err='Error preparando UPDATE.' . ($cloudErr ? ' | '.$cloudErr : '');
+    }
+  } else {
+    $err='No hay cambios.' . ($cloudErr ? ' | '.$cloudErr : '');
+  }
+}
+
+/* ===== Determinar categoría seleccionada ===== */
+$selected_cat_id = (int)($comp['peso_cat_id'] ?? 0);
+
+/* Si no hay FK guardada, intentar deducir según peso/edad/sexo */
+if (!$selected_cat_id && $pesos){
+  $peso_kg_comp = null;
+  if (isset($comp['peso_kg']) && $comp['peso_kg'] !== null && $comp['peso_kg'] !== '') {
+    $peso_kg_comp = (float)$comp['peso_kg'];
+  }
+  $edad_comp = null;
+  if (isset($comp['edad']) && $comp['edad'] !== null && $comp['edad'] !== '') {
+    $edad_comp = (int)$comp['edad'];
+  }
+  $sexo_comp = strtolower(trim((string)($comp['sexo'] ?? '')));
+
+  foreach($pesos as $p){
+    $ok = true;
+
+    $pm = $p['peso_min'];
+    $px = $p['peso_max'];
+    if ($peso_kg_comp !== null && $pm !== null && $pm !== '' && $px !== null && $px !== ''){
+      $peso_min_cat = (float)$pm;
+      $peso_max_cat = (float)$px;
+      if ($peso_kg_comp < $peso_min_cat || $peso_kg_comp > $peso_max_cat){
+        $ok = false;
+      }
+    }
+
+    $em = $p['edad_min'];
+    $ex = $p['edad_max'];
+    if ($ok && $edad_comp !== null && $em !== null && $em !== '' && $ex !== null && $ex !== ''){
+      $edad_min_cat = (int)$em;
+      $edad_max_cat = (int)$ex;
+      if ($edad_comp < $edad_min_cat || $edad_comp > $edad_max_cat){
+        $ok = false;
+      }
+    }
+
+    $gen = strtolower(trim((string)$p['genero']));
+    if ($ok && $gen !== '' && $gen !== 'mixto' && $sexo_comp !== ''){
+      $prim = $sexo_comp[0]; // m / f
+      if ($gen[0] !== $prim){
+        $ok = false;
+      }
+    }
+
+    if ($ok){
+      $selected_cat_id = (int)$p['id'];
+      break;
+    }
+  }
+}
 
 /* ================= Render ================= */
 $phUser='assets/placeholder-user.png';
 $phGym ='assets/placeholder-gym.png';
-$nombre = trim(($comp['apellido']??'').' '.($comp['nombre']??'')); if ($nombre==='') { $nombre = '#'.$id; }
+$nombre = trim(($comp['apellido']??'').' '.($comp['nombre']??''));
+if ($nombre==='') { $nombre = '#'.$id; }
 ?>
 <!doctype html>
 <html lang="es">
@@ -166,7 +454,7 @@ $nombre = trim(($comp['apellido']??'').' '.($comp['nombre']??'')); if ($nombre==
   .ok{margin:10px 0;padding:10px;border-radius:10px;background:#0f251b;border:1px solid #164b31;color:#b6f3d1}
   .bad{margin:10px 0;padding:10px;border-radius:10px;background:#2a1414;border:1px solid #5e2626;color:#ffb4b4}
   img.pfp{width:72px;height:72px;object-fit:cover;border-radius:10px;border:1px solid #2b3c4f}
-  .muted{color:#9ecbff}
+  .muted{color:#9ecbff;font-size:0.85rem}
 </style>
 </head>
 <body>
@@ -175,10 +463,14 @@ $nombre = trim(($comp['apellido']??'').' '.($comp['nombre']??'')); if ($nombre==
 <div class="wrap">
   <div class="card">
     <h2 style="margin:0 0 8px 0">✏️ Editar competidor — <?= h($nombre) ?></h2>
-    <?php if(!empty($_SESSION['flash_ok'])): ?><div class="ok"><?= h($_SESSION['flash_ok']); unset($_SESSION['flash_ok']); ?></div><?php endif; ?>
-    <?php if(!empty($err)): ?><div class="bad"><?= h($err) ?></div><?php endif; ?>
+    <?php if(!empty($_SESSION['flash_ok'])): ?>
+      <div class="ok"><?= h($_SESSION['flash_ok']); unset($_SESSION['flash_ok']); ?></div>
+    <?php endif; ?>
+    <?php if(!empty($err)): ?>
+      <div class="bad"><?= h($err) ?></div>
+    <?php endif; ?>
 
-    <form method="post" novalidate>
+    <form method="post" enctype="multipart/form-data" novalidate>
       <!-- mantener evento_id para volver correctamente -->
       <input type="hidden" name="evento_id" value="<?= (int)$evento_id ?>">
 
@@ -214,10 +506,16 @@ $nombre = trim(($comp['apellido']??'').' '.($comp['nombre']??'')); if ($nombre==
         <div style="flex:1">
           <label>URL Foto competidor</label>
           <input name="foto" value="<?= h($comp['foto'] ?? '') ?>">
+          <label style="margin-top:6px;">Foto competidor (subir archivo)</label>
+          <input type="file" name="foto_file" accept="image/*">
+          <small class="muted">Si subís un archivo, se guardará esa foto en Cloudinary y se usará en lugar de la URL.</small>
         </div>
         <div style="flex:1">
           <label>URL Logo academia</label>
           <input name="escuela_logo" value="<?= h($comp['escuela_logo'] ?? '') ?>">
+          <label style="margin-top:6px;">Logo academia (subir archivo)</label>
+          <input type="file" name="escuela_logo_file" accept="image/*">
+          <small class="muted">Si subís un archivo, se guardará ese logo en Cloudinary y reemplazará la URL.</small>
         </div>
       </div>
 
@@ -246,15 +544,43 @@ $nombre = trim(($comp['apellido']??'').' '.($comp['nombre']??'')); if ($nombre==
             <select name="peso_cat_id">
               <option value="">—</option>
               <?php foreach($pesos as $p): ?>
-                <option value="<?= (int)$p['id'] ?>" <?= (int)($comp['peso_cat_id']??0)===(int)$p['id']?'selected':''; ?>>
-                  <?= h($p['nombre']) ?>
+                <?php
+                  $label = (string)$p['nombre'];
+
+                  $pm = $p['peso_min'];
+                  $px = $p['peso_max'];
+                  $em = $p['edad_min'];
+                  $ex = $p['edad_max'];
+                  $gen = trim((string)$p['genero']);
+
+                  $extra = [];
+
+                  if ($pm !== null && $pm !== '' || $px !== null && $px !== '') {
+                    $txtPesoMin = ($pm !== null && $pm !== '') ? $pm : '?';
+                    $txtPesoMax = ($px !== null && $px !== '') ? $px : '?';
+                    $extra[] = $txtPesoMin.'–'.$txtPesoMax.' kg';
+                  }
+                  if ($em !== null && $em !== '' || $ex !== null && $ex !== '') {
+                    $txtEdadMin = ($em !== null && $em !== '') ? $em : '?';
+                    $txtEdadMax = ($ex !== null && $ex !== '') ? $ex : '?';
+                    $extra[] = $txtEdadMin.'–'.$txtEdadMax.' años';
+                  }
+                  if ($gen !== '') {
+                    $extra[] = $gen;
+                  }
+                  if (!empty($extra)) {
+                    $label .= ' ('.implode(', ', $extra).')';
+                  }
+                ?>
+                <option value="<?= (int)$p['id'] ?>" <?= (int)$selected_cat_id === (int)$p['id'] ? 'selected' : ''; ?>>
+                  <?= h($label) ?>
                 </option>
               <?php endforeach; ?>
             </select>
           <?php elseif ($C_PESO_CAT): ?>
-            <input value="(sin tabla categorias_peso_evento)" disabled>
+            <input value="(sin tabla categorias_evento / categorias_peso_evento)" disabled>
           <?php else: ?>
-            <input value="(columna categoria_peso_id/peso_id no existe)" disabled>
+            <input value="(columna de categoría de peso no existe)" disabled>
           <?php endif; ?>
         </div>
       </div>
