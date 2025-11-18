@@ -3,18 +3,43 @@
 if (session_status() === PHP_SESSION_NONE) session_start();
 require_once __DIR__.'/conexion.php';
 
-// Config Cloudinary (opcional, no rompe si no existe)
-$cloud_cfg = __DIR__ . '/cloudy_boot_constants.php';
-if (is_file($cloud_cfg)) {
-    require_once $cloud_cfg;
-}
-
 if (!isset($conexion) || !($conexion instanceof mysqli)) {
   http_response_code(500);
   exit('❌ Sin conexión a BD.');
 }
 if (function_exists('mysqli_report')) { mysqli_report(MYSQLI_REPORT_OFF); }
 @$conexion->set_charset('utf8mb4');
+
+/* =========================================================
+   Cloudinary (Cloudy) — ACTIVADO + credenciales
+   (bloque tal cual me lo pasaste, aplicado en este archivo)
+   ========================================================= */
+const CLOUD_ENABLED     = true;                    // ← activado
+const CLOUD_NAME        = 'ddfugds9b';
+const CLOUD_API_KEY     = '657814174747186';
+const CLOUD_API_SECRET  = 'TKo5BRiKCEjxSLFzn2DLbz_ji4c';
+
+function cloud_init(): void {
+  static $inited=false; if ($inited) return; $inited=true;
+  $vendor1 = __DIR__.'/vendor/autoload.php';
+  $vendor2 = dirname(__DIR__).'/vendor/autoload.php';
+  if (file_exists($vendor1)) require_once $vendor1;
+  elseif (file_exists($vendor2)) require_once $vendor2;
+
+  // Config SDK si no hay CLOUDINARY_URL exportada
+  if (class_exists('\Cloudinary\Configuration\Configuration')
+      && !getenv('CLOUDINARY_URL')
+      && CLOUD_ENABLED && CLOUD_NAME && CLOUD_API_KEY && CLOUD_API_SECRET) {
+    \Cloudinary\Configuration\Configuration::instance([
+      'cloud'=>[
+        'cloud_name'=>CLOUD_NAME,
+        'api_key'   =>CLOUD_API_KEY,
+        'api_secret'=>CLOUD_API_SECRET
+      ],
+      'secure'=>true
+    ]);
+  }
+}
 
 /* ================= Utilidades ================= */
 function h($s){ return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); }
@@ -51,11 +76,11 @@ function parse_float_or_null($s){
 }
 
 /**
- * Sube una imagen a Cloudinary usando CLOUDINARY_URL (si está configurado).
+ * Sube una imagen a Cloudinary usando el SDK (Cloudy).
  * - $fieldName: nombre del input file en $_FILES
- * - $folder: carpeta / carpeta destino en Cloudinary (opcional)
- * - $errRef: referencia a string para acumular errores
- * Devuelve: URL segura (secure_url) o null si no se sube nada / falla.
+ * - $folder: carpeta destino en Cloudinary (ej: 'eventos/competidores')
+ * - $errRef: string de errores acumulados (por referencia)
+ * Devuelve: URL (secure_url/url) o null si no se sube nada / falla.
  */
 function upload_cloudinary_from_files(string $fieldName, string $folder, string &$errRef): ?string {
   if (
@@ -66,86 +91,55 @@ function upload_cloudinary_from_files(string $fieldName, string $folder, string 
     return null; // no se subió archivo
   }
 
-  if (!defined('CLOUDINARY_URL')) {
-    $errRef .= ' Cloudinary no está configurado (falta CLOUDINARY_URL).';
+  cloud_init();
+
+  if (defined('CLOUD_ENABLED') && !CLOUD_ENABLED) {
+    $errRef .= ' Cloudinary está desactivado (CLOUD_ENABLED=false).';
     return null;
   }
 
-  $cUrl = CLOUDINARY_URL;
-  $parts = parse_url($cUrl);
-  if (!$parts || empty($parts['user']) || empty($parts['pass']) || empty($parts['host'])) {
-    $errRef .= ' CLOUDINARY_URL no es válido.';
+  $tmpPath = $_FILES[$fieldName]['tmp_name'];
+
+  try {
+    $res = null;
+
+    // SDK nuevo (Cloudinary\Cloudinary)
+    if (class_exists('\Cloudinary\Cloudinary')) {
+      $cloudinary = new \Cloudinary\Cloudinary();
+      $opts = [];
+      if ($folder !== '') {
+        $opts['folder'] = $folder;
+      }
+      $res = $cloudinary->uploadApi()->upload($tmpPath, $opts);
+
+    // SDK clásico (Cloudinary\Uploader)
+    } elseif (class_exists('\Cloudinary\Uploader')) {
+      $opts = [];
+      if ($folder !== '') {
+        $opts['folder'] = $folder;
+      }
+      $res = \Cloudinary\Uploader::upload($tmpPath, $opts);
+
+    } else {
+      $errRef .= ' SDK Cloudinary no encontrado.';
+      return null;
+    }
+
+    if (!is_array($res)) {
+      $errRef .= ' Respuesta inesperada de Cloudinary.';
+      return null;
+    }
+
+    if (!empty($res['secure_url'])) return $res['secure_url'];
+    if (!empty($res['url']))        return $res['url'];
+
+    $errRef .= ' Cloudinary no devolvió URL.';
+    return null;
+
+  } catch (\Throwable $e) {
+    $errRef .= ' Error Cloudinary: '.$e->getMessage();
     return null;
   }
-
-  $api_key    = $parts['657814174747186'];
-  $api_secret = $parts['TKo5BRiKCEjxSLFzn2DLbz_ji4c'];
-  $cloud_name = $parts['ddfugds9b'];
-
-  $timestamp = time();
-  $params = [
-    'timestamp' => $timestamp,
-  ];
-  if ($folder !== '') {
-    $params['folder'] = $folder;
-  }
-
-  // Crear signature
-  ksort($params);
-  $to_sign = [];
-  foreach ($params as $k=>$v) {
-    $to_sign[] = $k.'='.$v;
-  }
-  $sign_str = implode('&', $to_sign) . $api_secret;
-  $signature = sha1($sign_str);
-
-  $upload_url = "https://api.cloudinary.com/v1_1/{$cloud_name}/image/upload";
-
-  $postFields = $params;
-  $postFields['api_key']   = $api_key;
-  $postFields['signature'] = $signature;
-  $postFields['file'] = new CURLFile(
-    $_FILES[$fieldName]['tmp_name'],
-    $_FILES[$fieldName]['type'] ?? 'application/octet-stream',
-    $_FILES[$fieldName]['name'] ?? 'upload'
-  );
-
-  $ch = curl_init($upload_url);
-  curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-  curl_setopt($ch, CURLOPT_POST, true);
-  curl_setopt($ch, CURLOPT_POSTFIELDS, $postFields);
-  $resp = curl_exec($ch);
-  $curl_err = curl_error($ch);
-  $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-  curl_close($ch);
-
-  if ($resp === false) {
-    $errRef .= ' Error al conectar con Cloudinary: '.$curl_err;
-    return null;
-  }
-
-  $json = json_decode($resp, true);
-  if (!is_array($json)) {
-    $errRef .= ' Respuesta inválida de Cloudinary.';
-    return null;
-  }
-
-  if (!empty($json['error']['message'])) {
-    $errRef .= ' Cloudinary: '.$json['error']['message'];
-    return null;
-  }
-
-  if ($http_code >= 400) {
-    $errRef .= ' Error HTTP Cloudinary ('.$http_code.').';
-    return null;
-  }
-
-  if (!empty($json['secure_url'])) {
-    return $json['secure_url'];
-  }
-
-  $errRef .= ' No se recibió secure_url desde Cloudinary.';
-  return null;
 }
 
 /* ===== Descubrir columnas ===== */
@@ -163,6 +157,9 @@ $C_MODAL_ID  = pick(['modalidad_id'],$cc);
 
 /* Posible columna de sexo/género del competidor */
 $C_SEXO      = pick(['sexo','genero','sexo_biologico','sexo_competidor'],$cc);
+
+/* Columna posible de evento_id en la tabla de competidores_evento */
+$C_EVENTO_ID = pick(['evento_id','event_id','id_evento'],$cc);
 
 /* 👉 Columna FK que apunta a categorias_evento (muchos posibles nombres) */
 $C_PESO_CAT  = pick([
@@ -246,7 +243,6 @@ if (has_table($conexion,'categorias_evento')) {
 /* ================= Parámetros ================= */
 $id = isset($_GET['id']) && ctype_digit($_GET['id']) ? (int)$_GET['id'] : 0;
 
-/* ✅ Reemplazo del ternario encadenado por if/elseif */
 $evento_id = 0;
 if (isset($_GET['evento_id']) && ctype_digit($_GET['evento_id'])) {
   $evento_id = (int)$_GET['evento_id'];
@@ -269,6 +265,7 @@ $sel = "SELECT ".
        ($C_PESO_CAT ? ", ".bt($C_PESO_CAT)." AS peso_cat_id"  : ", NULL AS peso_cat_id").
        ($C_PESO_KG  ? ", ".bt($C_PESO_KG) ." AS peso_kg"      : ", NULL AS peso_kg").
        ($C_SEXO     ? ", ".bt($C_SEXO)    ." AS sexo"         : ", NULL AS sexo").
+       ($C_EVENTO_ID ? ", ".bt($C_EVENTO_ID)." AS evento_id_comp" : ", NULL AS evento_id_comp").
        " FROM `competidores_evento` WHERE ".bt($C_ID)."=? LIMIT 1";
 $st=$conexion->prepare($sel);
 $st->bind_param('i',$id);
@@ -276,6 +273,11 @@ $st->execute();
 $comp=$st->get_result()->fetch_assoc();
 $st->close();
 if (!$comp) exit('❌ No encontrado');
+
+/* Si no vino evento_id por GET/POST, intentar sacarlo de la fila del competidor */
+if ($evento_id <= 0 && !empty($comp['evento_id_comp'])) {
+  $evento_id = (int)$comp['evento_id_comp'];
+}
 
 /* ================= Guardar (POST) ================= */
 $msg=''; $err='';
@@ -301,9 +303,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
 
   /* ==== Logo academia ==== */
   if ($C_ESC_LOGO){
-    // Primero, valor desde el input de texto
     $logo_url = trim((string)($_POST['escuela_logo']??''));
-    // Si se sube archivo, Cloudinary tiene prioridad
     $nuevo_logo = upload_cloudinary_from_files('escuela_logo_file', 'eventos/escuelas', $cloudErr);
     if ($nuevo_logo) {
       $logo_url = $nuevo_logo;
@@ -314,9 +314,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
 
   /* ==== Foto competidor ==== */
   if ($C_FOTO){
-    // URL desde el campo de texto
     $foto_url = trim((string)($_POST['foto']??''));
-    // Archivo a Cloudinary (si se subió)
     $nueva_foto = upload_cloudinary_from_files('foto_file', 'eventos/competidores', $cloudErr);
     if ($nueva_foto) {
       $foto_url = $nueva_foto;
@@ -344,7 +342,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
     $vals[]=$v; $types.='i';
   }
 
-  /* 👉 SIEMPRE intentar guardar PESO declarado */
+  /* 👉 SIEMPRE guardar PESO declarado */
   $pval = parse_float_or_null($_POST['peso_kg'] ?? '');
   if ($C_PESO_KG){
     $sets[] = bt($C_PESO_KG)."=?";
@@ -352,7 +350,6 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
   }
 
   if ($cloudErr !== '') {
-    // Añadimos error de Cloudinary al mensaje general
     $err .= trim($cloudErr);
   }
 
@@ -363,7 +360,11 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
       $st->bind_param($types, ...$vals);
       if ($st->execute()){
         $_SESSION['flash_ok'] = '✅ Cambios guardados.';
-        header('Location: ver_competidores_evento.php?evento_id='.(int)$evento_id);
+        if ($evento_id > 0) {
+          header('Location: ver_competidores_evento.php?evento_id='.(int)$evento_id);
+        } else {
+          header('Location: ver_competidores_evento.php');
+        }
         exit;
       } else {
         $err='No se pudo guardar: '.$st->error . ($cloudErr ? ' | '.$cloudErr : '');
@@ -471,7 +472,7 @@ if ($nombre==='') { $nombre = '#'.$id; }
     <?php endif; ?>
 
     <form method="post" enctype="multipart/form-data" novalidate>
-      <!-- mantener evento_id para volver correctamente -->
+      <!-- mantener evento_id para volver correctamente (si lo tenemos) -->
       <input type="hidden" name="evento_id" value="<?= (int)$evento_id ?>">
 
       <div class="row" style="align-items:center;margin-bottom:8px">
@@ -508,14 +509,14 @@ if ($nombre==='') { $nombre = '#'.$id; }
           <input name="foto" value="<?= h($comp['foto'] ?? '') ?>">
           <label style="margin-top:6px;">Foto competidor (subir archivo)</label>
           <input type="file" name="foto_file" accept="image/*">
-          <small class="muted">Si subís un archivo, se guardará esa foto en Cloudinary y se usará en lugar de la URL.</small>
+          <small class="muted">Si subís un archivo, se guarda en Cloudinary y reemplaza la URL.</small>
         </div>
         <div style="flex:1">
           <label>URL Logo academia</label>
           <input name="escuela_logo" value="<?= h($comp['escuela_logo'] ?? '') ?>">
           <label style="margin-top:6px;">Logo academia (subir archivo)</label>
           <input type="file" name="escuela_logo_file" accept="image/*">
-          <small class="muted">Si subís un archivo, se guardará ese logo en Cloudinary y reemplazará la URL.</small>
+          <small class="muted">Si subís un archivo, se guarda en Cloudinary y reemplaza la URL.</small>
         </div>
       </div>
 
@@ -602,7 +603,11 @@ if ($nombre==='') { $nombre = '#'.$id; }
 
       <div class="row" style="margin-top:12px">
         <button class="btn" type="submit">💾 Guardar cambios</button>
-        <a class="btn" href="ver_competidores_evento.php?evento_id=<?= (int)$evento_id ?>" style="background:#1b2836;border-color:#2b3c4f">⬅ Volver</a>
+        <?php if ($evento_id > 0): ?>
+          <a class="btn" href="ver_competidores_evento.php?evento_id=<?= (int)$evento_id ?>" style="background:#1b2836;border-color:#2b3c4f">⬅ Volver</a>
+        <?php else: ?>
+          <a class="btn" href="ver_competidores_evento.php" style="background:#1b2836;border-color:#2b3c4f">⬅ Volver</a>
+        <?php endif; ?>
       </div>
     </form>
   </div>
