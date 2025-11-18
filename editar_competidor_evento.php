@@ -12,7 +12,7 @@ if (function_exists('mysqli_report')) { mysqli_report(MYSQLI_REPORT_OFF); }
 
 /* =========================================================
    Cloudinary (Cloudy) — ACTIVADO + credenciales
-   (bloque tal cual me lo pasaste, aplicado en este archivo)
+   (tal como me lo pasaste)
    ========================================================= */
 const CLOUD_ENABLED     = true;                    // ← activado
 const CLOUD_NAME        = 'ddfugds9b';
@@ -155,13 +155,9 @@ $C_FOTO      = pick(['foto_competidor','foto','avatar'],$cc);
 $C_EDAD      = pick(['edad'],$cc);
 $C_MODAL_ID  = pick(['modalidad_id'],$cc);
 
-/* Posible columna de sexo/género del competidor */
 $C_SEXO      = pick(['sexo','genero','sexo_biologico','sexo_competidor'],$cc);
-
-/* Columna posible de evento_id en la tabla de competidores_evento */
 $C_EVENTO_ID = pick(['evento_id','event_id','id_evento'],$cc);
 
-/* 👉 Columna FK que apunta a categorias_evento (muchos posibles nombres) */
 $C_PESO_CAT  = pick([
   'categorias_evento_id',
   'categoria_evento_id',
@@ -174,7 +170,6 @@ $C_PESO_CAT  = pick([
   'peso_min_id'
 ], $cc);
 
-/* 👉 Columna de PESO declarado: lista ampliada */
 $C_PESO_KG = pick([
   'peso_kg','peso','peso_declarado','peso_decl','kg','weight_kg',
   'peso_evento','peso_actual','peso_competidor','peso_inscripcion'
@@ -223,7 +218,6 @@ if (has_table($conexion,'categorias_evento')) {
     $r->close();
   }
 } elseif (has_table($conexion,'categorias_peso_evento')) {
-  // Compatibilidad con tabla vieja
   if ($r=$conexion->query("SELECT id,nombre FROM categorias_peso_evento ORDER BY nombre")){
     while($x=$r->fetch_assoc()){
       $pesos[] = [
@@ -303,24 +297,48 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
 
   /* ==== Logo academia ==== */
   if ($C_ESC_LOGO){
-    $logo_url = trim((string)($_POST['escuela_logo']??''));
-    $nuevo_logo = upload_cloudinary_from_files('escuela_logo_file', 'eventos/escuelas', $cloudErr);
-    if ($nuevo_logo) {
-      $logo_url = $nuevo_logo;
+    $logo_actual_bd = (string)($comp['escuela_logo'] ?? '');
+    $logo_url_texto = trim((string)($_POST['escuela_logo']??''));
+    $nuevo_logo_url = null;
+
+    // Intentar subir archivo
+    $subida_logo = upload_cloudinary_from_files('escuela_logo_file', 'eventos/escuelas', $cloudErr);
+    if ($subida_logo) {
+      $nuevo_logo_url = $subida_logo;
+    } elseif ($logo_url_texto !== '') {
+      // Sin archivo pero con URL escrita
+      $nuevo_logo_url = $logo_url_texto;
     }
-    $sets[]=bt($C_ESC_LOGO)."=?";
-    $vals[]=$logo_url; $types.='s';
+
+    if ($nuevo_logo_url !== null) {
+      // Solo actualizamos si hay algo nuevo
+      $sets[]=bt($C_ESC_LOGO)."=?";
+      $vals[]=$nuevo_logo_url; $types.='s';
+    }
+    // Si no hay nada nuevo y texto vacío, NO tocamos el logo (se queda como está)
   }
 
   /* ==== Foto competidor ==== */
   if ($C_FOTO){
-    $foto_url = trim((string)($_POST['foto']??''));
-    $nueva_foto = upload_cloudinary_from_files('foto_file', 'eventos/competidores', $cloudErr);
-    if ($nueva_foto) {
-      $foto_url = $nueva_foto;
+    $foto_actual_bd = (string)($comp['foto'] ?? '');
+    $foto_url_texto = trim((string)($_POST['foto']??''));
+    $nueva_foto_url = null;
+
+    // Intentar subir archivo
+    $subida_foto = upload_cloudinary_from_files('foto_file', 'eventos/competidores', $cloudErr);
+    if ($subida_foto) {
+      $nueva_foto_url = $subida_foto;
+    } elseif ($foto_url_texto !== '') {
+      // Sin archivo pero con URL escrita
+      $nueva_foto_url = $foto_url_texto;
     }
-    $sets[]=bt($C_FOTO)."=?";
-    $vals[]=$foto_url; $types.='s';
+
+    if ($nueva_foto_url !== null) {
+      // Solo actualizamos si hay algo nuevo
+      $sets[]=bt($C_FOTO)."=?";
+      $vals[]=$nueva_foto_url; $types.='s';
+    }
+    // Si no hay nada nuevo y texto vacío, NO tocamos la foto
   }
 
   if ($C_EDAD){
@@ -342,11 +360,14 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
     $vals[]=$v; $types.='i';
   }
 
-  /* 👉 SIEMPRE guardar PESO declarado */
-  $pval = parse_float_or_null($_POST['peso_kg'] ?? '');
+  /* 👉 SIEMPRE guardar PESO declarado (si viene algo) */
   if ($C_PESO_KG){
-    $sets[] = bt($C_PESO_KG)."=?";
-    $vals[]=$pval; $types.='d';
+    $pval_raw = $_POST['peso_kg'] ?? '';
+    if (trim((string)$pval_raw) !== '') {
+      $pval = parse_float_or_null($pval_raw);
+      $sets[] = bt($C_PESO_KG)."=?";
+      $vals[]=$pval; $types.='d';
+    }
   }
 
   if ($cloudErr !== '') {
@@ -472,7 +493,6 @@ if ($nombre==='') { $nombre = '#'.$id; }
     <?php endif; ?>
 
     <form method="post" enctype="multipart/form-data" novalidate>
-      <!-- mantener evento_id para volver correctamente (si lo tenemos) -->
       <input type="hidden" name="evento_id" value="<?= (int)$evento_id ?>">
 
       <div class="row" style="align-items:center;margin-bottom:8px">
@@ -509,14 +529,14 @@ if ($nombre==='') { $nombre = '#'.$id; }
           <input name="foto" value="<?= h($comp['foto'] ?? '') ?>">
           <label style="margin-top:6px;">Foto competidor (subir archivo)</label>
           <input type="file" name="foto_file" accept="image/*">
-          <small class="muted">Si subís un archivo, se guarda en Cloudinary y reemplaza la URL.</small>
+          <small class="muted">Si subís un archivo o escribís una URL, se actualiza la foto. Si dejás vacío, se mantiene la actual.</small>
         </div>
         <div style="flex:1">
           <label>URL Logo academia</label>
           <input name="escuela_logo" value="<?= h($comp['escuela_logo'] ?? '') ?>">
           <label style="margin-top:6px;">Logo academia (subir archivo)</label>
           <input type="file" name="escuela_logo_file" accept="image/*">
-          <small class="muted">Si subís un archivo, se guarda en Cloudinary y reemplaza la URL.</small>
+          <small class="muted">Si subís un archivo o escribís una URL, se actualiza el logo. Si dejás vacío, se mantiene el actual.</small>
         </div>
       </div>
 
@@ -547,15 +567,12 @@ if ($nombre==='') { $nombre = '#'.$id; }
               <?php foreach($pesos as $p): ?>
                 <?php
                   $label = (string)$p['nombre'];
-
                   $pm = $p['peso_min'];
                   $px = $p['peso_max'];
                   $em = $p['edad_min'];
                   $ex = $p['edad_max'];
                   $gen = trim((string)$p['genero']);
-
                   $extra = [];
-
                   if ($pm !== null && $pm !== '' || $px !== null && $px !== '') {
                     $txtPesoMin = ($pm !== null && $pm !== '') ? $pm : '?';
                     $txtPesoMax = ($px !== null && $px !== '') ? $px : '?';
@@ -586,7 +603,6 @@ if ($nombre==='') { $nombre = '#'.$id; }
         </div>
       </div>
 
-      <!-- 👉 SIEMPRE visible -->
       <div class="row">
         <div style="flex:1">
           <label>Peso declarado (kg)</label>
