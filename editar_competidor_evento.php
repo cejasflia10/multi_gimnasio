@@ -11,52 +11,31 @@ if (function_exists('mysqli_report')) { mysqli_report(MYSQLI_REPORT_OFF); }
 @$conexion->set_charset('utf8mb4');
 
 /* =========================================================
-   Cloudinary (Cloudy) — ACTIVADO + credenciales
+   Cloudinary (Cloudy) — constantes (SIN SDK, vía HTTP)
    ========================================================= */
-// Tal cual me lo pasaste:
 const CLOUD_ENABLED     = true;                    // ← activado
 const CLOUD_NAME        = 'ddfugds9b';
 const CLOUD_API_KEY     = '657814174747186';
 const CLOUD_API_SECRET  = 'TKo5BRiKCEjxSLFzn2DLbz_ji4c';
 
-function cloud_init(): void {
-  static $inited=false; if ($inited) return; $inited=true;
-  $vendor1 = __DIR__.'/vendor/autoload.php';
-  $vendor2 = dirname(__DIR__).'/vendor/autoload.php';
-  if (file_exists($vendor1)) require_once $vendor1;
-  elseif (file_exists($vendor2)) require_once $vendor2;
-
-  if (class_exists('\Cloudinary\Configuration\Configuration')
-      && !getenv('CLOUDINARY_URL')
-      && CLOUD_ENABLED && CLOUD_NAME && CLOUD_API_KEY && CLOUD_API_SECRET) {
-    \Cloudinary\Configuration\Configuration::instance([
-      'cloud'=>[
-        'cloud_name'=>CLOUD_NAME,
-        'api_key'   =>CLOUD_API_KEY,
-        'api_secret'=>CLOUD_API_SECRET
-      ],
-      'secure'=>true
-    ]);
-  }
-}
-
-/* Pequeño helper solo para mostrar estado en pantalla */
+/* Estado simple para mostrar en pantalla */
 function cloud_status(): array {
-  $msg = '';
-  $ok  = false;
-
   if (!defined('CLOUD_ENABLED') || !CLOUD_ENABLED) {
-    $msg = '⛔ Cloudinary desactivado (CLOUD_ENABLED=false).';
-  } else {
-    cloud_init();
-    if (class_exists('\Cloudinary\Cloudinary') || class_exists('\Cloudinary\Uploader')) {
-      $ok  = true;
-      $msg = '✅ Cloudinary activo — las imágenes nuevas se suben y guardan como URL.';
-    } else {
-      $msg = '⚠️ Cloudinary configurado pero el SDK (vendor/autoload.php) no se encontró.';
-    }
+    return [
+      'ok'  => false,
+      'msg' => '⛔ Cloudinary desactivado (CLOUD_ENABLED=false).'
+    ];
   }
-  return ['ok'=>$ok,'msg'=>$msg];
+  if (!CLOUD_NAME || !CLOUD_API_KEY || !CLOUD_API_SECRET) {
+    return [
+      'ok'  => false,
+      'msg' => '⚠️ Cloudinary sin credenciales completas.'
+    ];
+  }
+  return [
+    'ok'  => true,
+    'msg' => '✅ Cloudinary activo (subida directa por HTTP, sin SDK).'
+  ];
 }
 
 /* ================= Utilidades ================= */
@@ -94,7 +73,7 @@ function parse_float_or_null($s){
 }
 
 /**
- * Sube una imagen a Cloudinary usando el SDK (Cloudy).
+ * Sube una imagen a Cloudinary usando la API HTTP (sin SDK).
  * - $fieldName: nombre del input file en $_FILES
  * - $folder: carpeta destino en Cloudinary (ej: 'eventos/competidores')
  * - $errRef: string de errores acumulados (por referencia)
@@ -102,62 +81,81 @@ function parse_float_or_null($s){
  */
 function upload_cloudinary_from_files(string $fieldName, string $folder, string &$errRef): ?string {
   if (
+    !CLOUD_ENABLED ||
     empty($_FILES[$fieldName]) ||
     empty($_FILES[$fieldName]['tmp_name']) ||
     $_FILES[$fieldName]['error'] !== UPLOAD_ERR_OK
   ) {
-    return null; // no se subió archivo
-  }
-
-  cloud_init();
-
-  if (defined('CLOUD_ENABLED') && !CLOUD_ENABLED) {
-    $errRef .= ' Cloudinary está desactivado (CLOUD_ENABLED=false).';
-    return null;
+    return null; // no se subió archivo o está desactivado
   }
 
   $tmpPath = $_FILES[$fieldName]['tmp_name'];
-
-  try {
-    $res = null;
-
-    // SDK nuevo (Cloudinary\Cloudinary)
-    if (class_exists('\Cloudinary\Cloudinary')) {
-      $cloudinary = new \Cloudinary\Cloudinary();
-      $opts = [];
-      if ($folder !== '') {
-        $opts['folder'] = $folder;
-      }
-      $res = $cloudinary->uploadApi()->upload($tmpPath, $opts);
-
-    // SDK clásico (Cloudinary\Uploader)
-    } elseif (class_exists('\Cloudinary\Uploader')) {
-      $opts = [];
-      if ($folder !== '') {
-        $opts['folder'] = $folder;
-      }
-      $res = \Cloudinary\Uploader::upload($tmpPath, $opts);
-
-    } else {
-      $errRef .= ' SDK Cloudinary no encontrado.';
-      return null;
-    }
-
-    if (!is_array($res)) {
-      $errRef .= ' Respuesta inesperada de Cloudinary.';
-      return null;
-    }
-
-    if (!empty($res['secure_url'])) return $res['secure_url'];
-    if (!empty($res['url']))        return $res['url'];
-
-    $errRef .= ' Cloudinary no devolvió URL.';
-    return null;
-
-  } catch (\Throwable $e) {
-    $errRef .= ' Error Cloudinary: '.$e->getMessage();
+  if (!is_readable($tmpPath)) {
+    $errRef .= ' Archivo temporal no legible.';
     return null;
   }
+
+  if (!function_exists('curl_init')) {
+    $errRef .= ' cURL no disponible en el servidor.';
+    return null;
+  }
+
+  $endpoint  = "https://api.cloudinary.com/v1_1/".CLOUD_NAME."/image/upload";
+  $timestamp = time();
+
+  // Solo firmamos "folder" y "timestamp"
+  $toSignParts = [];
+  if ($folder !== '') {
+    $toSignParts[] = 'folder='.$folder;
+  }
+  $toSignParts[] = 'timestamp='.$timestamp;
+  $toSign = implode('&', $toSignParts) . CLOUD_API_SECRET;
+  $signature = sha1($toSign);
+
+  $postFields = [
+    'api_key'   => CLOUD_API_KEY,
+    'timestamp' => $timestamp,
+    'signature' => $signature,
+    'file'      => new CURLFile($tmpPath)
+  ];
+  if ($folder !== '') {
+    $postFields['folder'] = $folder;
+  }
+
+  $ch = curl_init($endpoint);
+  curl_setopt_array($ch, [
+    CURLOPT_RETURNTRANSFER => true,
+    CURLOPT_POST           => true,
+    CURLOPT_POSTFIELDS     => $postFields,
+    CURLOPT_TIMEOUT        => 30,
+  ]);
+  $resp = curl_exec($ch);
+  $errC = curl_error($ch);
+  $code = curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
+  curl_close($ch);
+
+  if ($resp === false) {
+    $errRef .= ' Error cURL Cloudinary: '.$errC;
+    return null;
+  }
+
+  $data = json_decode($resp, true);
+  if (!is_array($data)) {
+    $errRef .= ' Respuesta Cloudinary inválida (no JSON).';
+    return null;
+  }
+
+  if ($code >= 400 || isset($data['error'])) {
+    $msg = $data['error']['message'] ?? 'HTTP '.$code;
+    $errRef .= ' Error Cloudinary: '.$msg;
+    return null;
+  }
+
+  if (!empty($data['secure_url'])) return $data['secure_url'];
+  if (!empty($data['url']))        return $data['url'];
+
+  $errRef .= ' Cloudinary no devolvió URL.';
+  return null;
 }
 
 /* ===== Descubrir columnas ===== */
@@ -264,7 +262,7 @@ if (isset($_GET['evento_id']) && ctype_digit($_GET['evento_id'])) {
 
 if ($id<=0) exit('❌ Falta id');
 
-/* ================= Leer competidor (para mostrar y fallback) ================= */
+/* ================= Leer competidor ================= */
 $sel = "SELECT ".
        bt($C_ID)." AS id".
        ($C_APELLIDO ? ", ".bt($C_APELLIDO)." AS apellido" : ", NULL AS apellido").
@@ -291,7 +289,7 @@ if ($evento_id <= 0 && !empty($comp['evento_id_comp'])) {
   $evento_id = (int)$comp['evento_id_comp'];
 }
 
-/* Estado de Cloudinary para mostrar en la vista */
+/* Estado Cloudinary para mostrar */
 $cloudInfo = cloud_status();
 
 /* ================= Guardar (POST) ================= */
@@ -331,7 +329,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
     if ($nuevo_logo_url !== null) {
       $sets[]=bt($C_ESC_LOGO)."=?";
       $vals[]=$nuevo_logo_url; $types.='s';
-      $comp['escuela_logo'] = $nuevo_logo_url; // actualizar en memoria para mostrar
+      $comp['escuela_logo'] = $nuevo_logo_url;
     }
   }
 
@@ -350,7 +348,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
     if ($nueva_foto_url !== null) {
       $sets[]=bt($C_FOTO)."=?";
       $vals[]=$nueva_foto_url; $types.='s';
-      $comp['foto'] = $nueva_foto_url; // actualizar en memoria para mostrar
+      $comp['foto'] = $nueva_foto_url;
     }
   }
 
@@ -376,7 +374,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
     $comp['peso_cat_id'] = $v;
   }
 
-  /* 👉 SIEMPRE guardar PESO declarado (si viene algo) */
+  /* 👉 PESO declarado */
   if ($C_PESO_KG){
     $pval_raw = $_POST['peso_kg'] ?? '';
     if (trim((string)$pval_raw) !== '') {
@@ -385,10 +383,6 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
       $vals[]=$pval; $types.='d';
       $comp['peso_kg'] = $pval;
     }
-  }
-
-  if ($cloudErr !== '') {
-    $err .= trim($cloudErr);
   }
 
   if ($sets){
