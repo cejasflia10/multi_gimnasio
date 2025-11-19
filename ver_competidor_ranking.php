@@ -486,6 +486,27 @@ if ($dni_in) {
   $mod_id=$base['mod_id']??null; $peso_id=$base['peso_id']??null;
 }
 
+/* 👉 Refrescar SIEMPRE foto y logo desde la fila base (id_base),
+   para tomar las últimas URLs guardadas (Cloudinary) */
+if (!empty($perfil['id_base'])) {
+  $sqlF = "SELECT ".
+          ($CE_FOTO     ? "c.".bt($CE_FOTO)." AS foto" : "NULL AS foto").",".
+          ($CE_ESC_LOGO ? "c.".bt($CE_ESC_LOGO)." AS logo" : "NULL AS logo")."
+          FROM competidores_evento c
+          WHERE c.".bt($CE_ID)." = ? LIMIT 1";
+  if ($stF = $conexion->prepare($sqlF)) {
+    $idBase = (int)$perfil['id_base'];
+    $stF->bind_param('i', $idBase);
+    $stF->execute();
+    $rowF = $stF->get_result()->fetch_assoc();
+    $stF->close();
+    if ($rowF) {
+      if (!empty($rowF['foto'])) $perfil['foto'] = $rowF['foto'];
+      if (!empty($rowF['logo'])) $perfil['logo'] = $rowF['logo'];
+    }
+  }
+}
+
 /* etiquetas */
 $perfil['modalidad']=null; $perfil['peso']=null;
 if ($hasMod && !empty($mod_id)){ $r=$conexion->query("SELECT nombre FROM modalidades_evento WHERE id=".(int)$mod_id); if($r){ $perfil['modalidad']=$r->fetch_row()[0]??null; $r->close(); } }

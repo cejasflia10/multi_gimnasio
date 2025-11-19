@@ -12,8 +12,8 @@ if (function_exists('mysqli_report')) { mysqli_report(MYSQLI_REPORT_OFF); }
 
 /* =========================================================
    Cloudinary (Cloudy) — ACTIVADO + credenciales
-   (tal como me lo pasaste)
    ========================================================= */
+// Tal cual me lo pasaste:
 const CLOUD_ENABLED     = true;                    // ← activado
 const CLOUD_NAME        = 'ddfugds9b';
 const CLOUD_API_KEY     = '657814174747186';
@@ -26,7 +26,6 @@ function cloud_init(): void {
   if (file_exists($vendor1)) require_once $vendor1;
   elseif (file_exists($vendor2)) require_once $vendor2;
 
-  // Config SDK si no hay CLOUDINARY_URL exportada
   if (class_exists('\Cloudinary\Configuration\Configuration')
       && !getenv('CLOUDINARY_URL')
       && CLOUD_ENABLED && CLOUD_NAME && CLOUD_API_KEY && CLOUD_API_SECRET) {
@@ -39,6 +38,25 @@ function cloud_init(): void {
       'secure'=>true
     ]);
   }
+}
+
+/* Pequeño helper solo para mostrar estado en pantalla */
+function cloud_status(): array {
+  $msg = '';
+  $ok  = false;
+
+  if (!defined('CLOUD_ENABLED') || !CLOUD_ENABLED) {
+    $msg = '⛔ Cloudinary desactivado (CLOUD_ENABLED=false).';
+  } else {
+    cloud_init();
+    if (class_exists('\Cloudinary\Cloudinary') || class_exists('\Cloudinary\Uploader')) {
+      $ok  = true;
+      $msg = '✅ Cloudinary activo — las imágenes nuevas se suben y guardan como URL.';
+    } else {
+      $msg = '⚠️ Cloudinary configurado pero el SDK (vendor/autoload.php) no se encontró.';
+    }
+  }
+  return ['ok'=>$ok,'msg'=>$msg];
 }
 
 /* ================= Utilidades ================= */
@@ -273,6 +291,9 @@ if ($evento_id <= 0 && !empty($comp['evento_id_comp'])) {
   $evento_id = (int)$comp['evento_id_comp'];
 }
 
+/* Estado de Cloudinary para mostrar en la vista */
+$cloudInfo = cloud_status();
+
 /* ================= Guardar (POST) ================= */
 $msg=''; $err='';
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
@@ -297,48 +318,40 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
 
   /* ==== Logo academia ==== */
   if ($C_ESC_LOGO){
-    $logo_actual_bd = (string)($comp['escuela_logo'] ?? '');
     $logo_url_texto = trim((string)($_POST['escuela_logo']??''));
     $nuevo_logo_url = null;
 
-    // Intentar subir archivo
     $subida_logo = upload_cloudinary_from_files('escuela_logo_file', 'eventos/escuelas', $cloudErr);
     if ($subida_logo) {
       $nuevo_logo_url = $subida_logo;
     } elseif ($logo_url_texto !== '') {
-      // Sin archivo pero con URL escrita
       $nuevo_logo_url = $logo_url_texto;
     }
 
     if ($nuevo_logo_url !== null) {
-      // Solo actualizamos si hay algo nuevo
       $sets[]=bt($C_ESC_LOGO)."=?";
       $vals[]=$nuevo_logo_url; $types.='s';
+      $comp['escuela_logo'] = $nuevo_logo_url; // actualizar en memoria para mostrar
     }
-    // Si no hay nada nuevo y texto vacío, NO tocamos el logo (se queda como está)
   }
 
   /* ==== Foto competidor ==== */
   if ($C_FOTO){
-    $foto_actual_bd = (string)($comp['foto'] ?? '');
     $foto_url_texto = trim((string)($_POST['foto']??''));
     $nueva_foto_url = null;
 
-    // Intentar subir archivo
     $subida_foto = upload_cloudinary_from_files('foto_file', 'eventos/competidores', $cloudErr);
     if ($subida_foto) {
       $nueva_foto_url = $subida_foto;
     } elseif ($foto_url_texto !== '') {
-      // Sin archivo pero con URL escrita
       $nueva_foto_url = $foto_url_texto;
     }
 
     if ($nueva_foto_url !== null) {
-      // Solo actualizamos si hay algo nuevo
       $sets[]=bt($C_FOTO)."=?";
       $vals[]=$nueva_foto_url; $types.='s';
+      $comp['foto'] = $nueva_foto_url; // actualizar en memoria para mostrar
     }
-    // Si no hay nada nuevo y texto vacío, NO tocamos la foto
   }
 
   if ($C_EDAD){
@@ -346,18 +359,21 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
     $v=($raw!=='' && ctype_digit($raw))?(int)$raw:null;
     $sets[]=bt($C_EDAD)."=?";
     $vals[]=$v; $types.='i';
+    $comp['edad'] = $v;
   }
   if ($C_MODAL_ID){
     $raw=trim((string)($_POST['modalidad_id']??''));
     $v=($raw!=='' && ctype_digit($raw))?(int)$raw:null;
     $sets[]=bt($C_MODAL_ID)."=?";
     $vals[]=$v; $types.='i';
+    $comp['modalidad_id'] = $v;
   }
   if ($C_PESO_CAT){
     $raw=trim((string)($_POST['peso_cat_id']??''));
     $v=($raw!=='' && ctype_digit($raw))?(int)$raw:null;
     $sets[]=bt($C_PESO_CAT)."=?";
     $vals[]=$v; $types.='i';
+    $comp['peso_cat_id'] = $v;
   }
 
   /* 👉 SIEMPRE guardar PESO declarado (si viene algo) */
@@ -367,6 +383,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
       $pval = parse_float_or_null($pval_raw);
       $sets[] = bt($C_PESO_KG)."=?";
       $vals[]=$pval; $types.='d';
+      $comp['peso_kg'] = $pval;
     }
   }
 
@@ -380,13 +397,17 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
     if ($st=$conexion->prepare($sql)){
       $st->bind_param($types, ...$vals);
       if ($st->execute()){
-        $_SESSION['flash_ok'] = '✅ Cambios guardados.';
-        if ($evento_id > 0) {
-          header('Location: ver_competidores_evento.php?evento_id='.(int)$evento_id);
+        if ($cloudErr !== '') {
+          $err = '✅ Datos guardados, pero hubo problema con Cloudinary: '.$cloudErr;
         } else {
-          header('Location: ver_competidores_evento.php');
+          $_SESSION['flash_ok'] = '✅ Cambios guardados.';
+          if ($evento_id > 0) {
+            header('Location: ver_competidores_evento.php?evento_id='.(int)$evento_id);
+          } else {
+            header('Location: ver_competidores_evento.php');
+          }
+          exit;
         }
-        exit;
       } else {
         $err='No se pudo guardar: '.$st->error . ($cloudErr ? ' | '.$cloudErr : '');
       }
@@ -472,11 +493,12 @@ if ($nombre==='') { $nombre = '#'.$id; }
   label{display:block;margin:8px 0 4px;color:#bcd8ff}
   input,select{width:100%;padding:10px;border-radius:10px;border:1px solid #263341;background:#111a24;color:#e6eef4}
   .row{display:flex;gap:12px;flex-wrap:wrap}
-  .btn{padding:10px 14px;border-radius:10px;border:1px solid #27455c;background:#0e7ad1;color:#fff;cursor:pointer}
+  .btn{padding:10px 14px;border-radius:10px;border:1px solid #27455c;background:#0e7ad1;color:#fff;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;gap:6px}
   .ok{margin:10px 0;padding:10px;border-radius:10px;background:#0f251b;border:1px solid #164b31;color:#b6f3d1}
   .bad{margin:10px 0;padding:10px;border-radius:10px;background:#2a1414;border:1px solid #5e2626;color:#ffb4b4}
   img.pfp{width:72px;height:72px;object-fit:cover;border-radius:10px;border:1px solid #2b3c4f}
   .muted{color:#9ecbff;font-size:0.85rem}
+  code{font-size:0.8rem}
 </style>
 </head>
 <body>
@@ -485,6 +507,11 @@ if ($nombre==='') { $nombre = '#'.$id; }
 <div class="wrap">
   <div class="card">
     <h2 style="margin:0 0 8px 0">✏️ Editar competidor — <?= h($nombre) ?></h2>
+
+    <div class="muted" style="margin-bottom:6px">
+      <?= h($cloudInfo['msg']) ?>
+    </div>
+
     <?php if(!empty($_SESSION['flash_ok'])): ?>
       <div class="ok"><?= h($_SESSION['flash_ok']); unset($_SESSION['flash_ok']); ?></div>
     <?php endif; ?>
@@ -495,10 +522,16 @@ if ($nombre==='') { $nombre = '#'.$id; }
     <form method="post" enctype="multipart/form-data" novalidate>
       <input type="hidden" name="evento_id" value="<?= (int)$evento_id ?>">
 
-      <div class="row" style="align-items:center;margin-bottom:8px">
-        <img class="pfp" src="<?= h($comp['foto'] ?: $phUser) ?>" alt="foto">
-        <img class="pfp" src="<?= h($comp['escuela_logo'] ?: $phGym) ?>" alt="logo">
-        <div class="muted">ID: <?= (int)$comp['id'] ?></div>
+      <div class="row" style="align-items:flex-start;margin-bottom:8px">
+        <div>
+          <img class="pfp" src="<?= h($comp['foto'] ?: $phUser) ?>" alt="foto">
+          <div class="muted" style="margin-top:4px">Foto actual</div>
+        </div>
+        <div>
+          <img class="pfp" src="<?= h($comp['escuela_logo'] ?: $phGym) ?>" alt="logo">
+          <div class="muted" style="margin-top:4px">Logo actual</div>
+        </div>
+        <div class="muted" style="align-self:center">ID: <?= (int)$comp['id'] ?></div>
       </div>
 
       <div class="row">
@@ -525,15 +558,22 @@ if ($nombre==='') { $nombre = '#'.$id; }
 
       <div class="row">
         <div style="flex:1">
-          <label>URL Foto competidor</label>
+          <label>URL Foto competidor (se guarda esta URL)</label>
           <input name="foto" value="<?= h($comp['foto'] ?? '') ?>">
+          <small class="muted">
+            Ejemplo de URL Cloudinary:<br>
+            <code>https://res.cloudinary.com/.../image/upload/...jpg</code>
+          </small>
           <label style="margin-top:6px;">Foto competidor (subir archivo)</label>
           <input type="file" name="foto_file" accept="image/*">
           <small class="muted">Si subís un archivo o escribís una URL, se actualiza la foto. Si dejás vacío, se mantiene la actual.</small>
         </div>
         <div style="flex:1">
-          <label>URL Logo academia</label>
+          <label>URL Logo academia (se guarda esta URL)</label>
           <input name="escuela_logo" value="<?= h($comp['escuela_logo'] ?? '') ?>">
+          <small class="muted">
+            También puede ser URL de Cloudinary generada al subir el logo.
+          </small>
           <label style="margin-top:6px;">Logo academia (subir archivo)</label>
           <input type="file" name="escuela_logo_file" accept="image/*">
           <small class="muted">Si subís un archivo o escribís una URL, se actualiza el logo. Si dejás vacío, se mantiene el actual.</small>
