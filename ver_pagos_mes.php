@@ -40,13 +40,11 @@ $ultimo_dia = date('Y-m-t', strtotime($primer_dia));
    - Total pagado:
        primero total_pagado; si está en 0, usamos monto_pago; si no, total.
 
-   🔴 Muy importante:
-   En vez de filtrar por MONTH(fecha_inicio), usamos un rango de fechas del mes:
-     - fecha_inicio ENTRE primer_dia y ultimo_dia
-       O fecha_vencimiento ENTRE primer_dia y ultimo_dia
+   🔴 Para "pagos del mes":
+   Filtramos SOLO por fecha_inicio dentro del mes:
+       fecha_inicio ENTRE primer_dia y ultimo_dia
 
-   Así una renovación cuya fecha_inicio o fecha_vencimiento caiga en el mes
-   ENTRA en el listado, igual que la ves en ver_membresias.
+   Así cada renovación entra una sola vez en el mes donde se pagó.
 */
 
 $sql = "
@@ -75,10 +73,7 @@ $sql = "
     INNER JOIN clientes c ON m.cliente_id = c.id
     WHERE 
         m.gimnasio_id = ?
-        AND (
-              (m.fecha_inicio      BETWEEN ? AND ?)
-           OR (m.fecha_vencimiento BETWEEN ? AND ?)
-        )
+        AND m.fecha_inicio BETWEEN ? AND ?
     ORDER BY m.fecha_inicio DESC
 ";
 
@@ -87,10 +82,8 @@ if (!$stmt) {
     die('Error preparando consulta: '.$conexion->error);
 }
 $stmt->bind_param(
-    "issss",
+    "iss",
     $gimnasio_id,
-    $primer_dia,
-    $ultimo_dia,
     $primer_dia,
     $ultimo_dia
 );
@@ -99,12 +92,20 @@ $resultado = $stmt->get_result();
 
 /* === Igual que en ver_membresias, armamos texto de forma de pago === */
 function obtenerMetodoPago(array $f): string {
+    // Cast a float por si vienen como string / decimales
+    $pago_efectivo         = (float)($f['pago_efectivo'] ?? 0);
+    $pago_transferencia    = (float)($f['pago_transferencia'] ?? 0);
+    $pago_debito           = (float)($f['pago_debito'] ?? 0);
+    $pago_credito          = (float)($f['pago_credito'] ?? 0);
+    $pago_cuenta_corriente = (float)($f['pago_cuenta_corriente'] ?? 0);
+
     $metodos = [];
-    if ($f['pago_efectivo']          > 0) $metodos[] = 'Efectivo';
-    if ($f['pago_transferencia']     > 0) $metodos[] = 'Transferencia';
-    if ($f['pago_debito']            > 0) $metodos[] = 'Débito';
-    if ($f['pago_credito']           > 0) $metodos[] = 'Crédito';
-    if ($f['pago_cuenta_corriente']  > 0) $metodos[] = 'Cuenta Corriente';
+    if ($pago_efectivo         > 0) $metodos[] = 'Efectivo';
+    if ($pago_transferencia    > 0) $metodos[] = 'Transferencia';
+    if ($pago_debito           > 0) $metodos[] = 'Débito';
+    if ($pago_credito          > 0) $metodos[] = 'Crédito';
+    if ($pago_cuenta_corriente > 0) $metodos[] = 'Cuenta Corriente';
+
     return implode(' + ', $metodos);
 }
 
@@ -112,8 +113,13 @@ $pagos = [];
 $total_mes = 0.0;
 while ($fila = $resultado->fetch_assoc()) {
     $fila['metodo_pago'] = obtenerMetodoPago($fila);
+
+    // Total mostrado en la tabla = total (membresía) + otros_pagos
+    $total_fila = (float)$fila['total'] + (float)$fila['otros_pagos'];
+    $fila['total_mostrado'] = $total_fila;
+
     $pagos[] = $fila;
-    $total_mes += (float)$fila['total'];
+    $total_mes += $total_fila;
 }
 $stmt->close();
 ?>
@@ -224,7 +230,7 @@ $stmt->close();
                 </td>
                 <td style="text-align:right">
                   <span class="amount-strong">
-                    $<?= number_format((float)$f['total'], 0, ',', '.') ?>
+                    $<?= number_format((float)$f['total_mostrado'], 0, ',', '.') ?>
                   </span>
                 </td>
               </tr>

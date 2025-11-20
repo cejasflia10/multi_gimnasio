@@ -275,7 +275,7 @@ body.ocultar-montos #ingresos-body [class*="monto"]{
     </div>
   <?php endif; ?>
 
-  <div class="toolbar" style="display:flex; gap:10px; alignitems:center">
+  <div class="toolbar" style="display:flex; gap:10px; align-items:center">
     <button id="btn-ojo" class="btn-mini" title="Mostrar/Ocultar montos" onclick="toggleMontos()">👁️‍🗨️ Ver montos</button>
   </div>
 
@@ -475,7 +475,7 @@ function normalizeReservas(root){
 
   const EXC = _buildProfExcludes(root);
 
-  let txt = (root.textContent || '').replace(/\u00A0/g,' ').trim();
+  let txt = (root.textContent || '').replace(/\u00A0/g, ' ').trim();
   if (!txt) { cont.innerHTML = '<div class="mut">No hay reservas para este día.</div>'; return; }
 
   txt = txt
@@ -542,7 +542,7 @@ function normalizeReservas(root){
 function cargarDatos(){
   const f = document.getElementById('fecha')?.value;
 
-  // 🔹 AQUÍ EL CAMBIO: pasamos la fecha también a ajax_ingresos.php
+  // 🔹 CAMBIO: pasamos la fecha también a ajax_ingresos.php
   fetchIntoBody('ajax_ingresos.php' + (f ? '?fecha='+encodeURIComponent(f) : ''), 'ingresos-body');
 
   if (f) fetchIntoBody('ajax_reservas.php?fecha='+encodeURIComponent(f), 'reservas-body', normalizeReservas);

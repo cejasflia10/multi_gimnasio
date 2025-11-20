@@ -302,16 +302,19 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
     $v=trim((string)($_POST['apellido']??''));
     $sets[]=bt($C_APELLIDO)."=?";
     $vals[]=$v; $types.='s';
+    $comp['apellido'] = $v;
   }
   if ($C_NOMBRE){
     $v=trim((string)($_POST['nombre']??''));
     $sets[]=bt($C_NOMBRE)."=?";
     $vals[]=$v; $types.='s';
+    $comp['nombre'] = $v;
   }
   if ($C_ESC_NOM){
     $v=trim((string)($_POST['escuela']??''));
     $sets[]=bt($C_ESC_NOM)."=?";
     $vals[]=$v; $types.='s';
+    $comp['escuela'] = $v;
   }
 
   /* ==== Logo academia ==== */
@@ -395,11 +398,12 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
           $err = '✅ Datos guardados, pero hubo problema con Cloudinary: '.$cloudErr;
         } else {
           $_SESSION['flash_ok'] = '✅ Cambios guardados.';
+          // 👉 VOLVER AL RANKING DEL COMPETIDOR
+          $destino = 'ver_competidor_ranking.php?id='.$id;
           if ($evento_id > 0) {
-            header('Location: ver_competidores_evento.php?evento_id='.(int)$evento_id);
-          } else {
-            header('Location: ver_competidores_evento.php');
+            $destino .= '&evento_id='.$evento_id;
           }
+          header('Location: '.$destino);
           exit;
         }
       } else {
@@ -653,11 +657,9 @@ if ($nombre==='') { $nombre = '#'.$id; }
 
       <div class="row" style="margin-top:12px">
         <button class="btn" type="submit">💾 Guardar cambios</button>
-        <?php if ($evento_id > 0): ?>
-          <a class="btn" href="ver_competidores_evento.php?evento_id=<?= (int)$evento_id ?>" style="background:#1b2836;border-color:#2b3c4f">⬅ Volver</a>
-        <?php else: ?>
-          <a class="btn" href="ver_competidores_evento.php" style="background:#1b2836;border-color:#2b3c4f">⬅ Volver</a>
-        <?php endif; ?>
+        <a class="btn" href="ver_competidor_ranking.php?id=<?= (int)$id ?><?= $evento_id>0 ? '&evento_id='.(int)$evento_id : '' ?>" style="background:#1b2836;border-color:#2b3c4f">
+          ⬅ Volver
+        </a>
       </div>
     </form>
   </div>

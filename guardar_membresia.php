@@ -122,27 +122,53 @@ if ($pago_debito        > 0) $metodos[] = "Debito:{$pago_debito}";
 if ($pago_credito       > 0) $metodos[] = "Credito:{$pago_credito}";
 $metodo_pago = $metodos ? implode('|', $metodos) : 'Sin pagar ahora';
 
+/* Valores para columnas de formas de pago en membresias */
+$monto_efectivo      = $pago_efectivo;
+$monto_transferencia = $pago_transferencia;
+$pago_cc_col         = $pago_cc_manual; // lo que el recepcionista mandó explícitamente a CC
+
 try {
   $conexion->begin_transaction();
 
-  // 7.1) Insertar Membresía
+  // 7.1) Insertar Membresía (AHORA con formas de pago grabadas)
   $stmt = $conexion->prepare("
     INSERT INTO membresias
       (cliente_id, plan_id, fecha_inicio, fecha_vencimiento, clases_disponibles,
-       precio, otros_pagos, descuento, total_pagado, metodo_pago, saldo_cc, total, gimnasio_id)
+       precio, otros_pagos, descuento,
+       pago_efectivo, pago_transferencia, pago_debito, pago_credito, pago_cuenta_corriente,
+       monto_efectivo, monto_transferencia,
+       total_pagado, metodo_pago, saldo_cc, total, gimnasio_id)
     VALUES
-      (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   ");
   if (!$stmt) { throw new Exception("Prepare membresias: ".$conexion->error); }
 
   $tmp_saldo_cc = 0.0;
 
-  $types = "iissiddddsddi";
+  // tipos: ii ss i d d d d d d d d s d d i  (20 params)
+  $types = "iissidddddddddsddi";
   $stmt->bind_param(
     $types,
-    $cliente_id, $plan_id, $fecha_inicio, $fecha_vencimiento, $clases_plan,
-    $precio_plan, $otros_pagos, $descuento_pct, $total_abonado_hoy, $metodo_pago,
-    $tmp_saldo_cc, $total_final, $gimnasio_id
+    $cliente_id,
+    $plan_id,
+    $fecha_inicio,
+    $fecha_vencimiento,
+    $clases_plan,
+    $precio_plan,
+    $otros_pagos,
+    $descuento_pct,
+    $pago_efectivo,
+    $pago_transferencia,
+    $pago_debito,
+    $pago_credito,
+    $pago_cc_col,
+    $monto_efectivo,
+    $monto_transferencia,
+    $total_abonado_hoy,
+    $metodo_pago,
+    $tmp_saldo_cc,
+    $total_final,
+    $gimnasio_id
   );
   if (!$stmt->execute()) { throw new Exception("Exec membresias: ".$stmt->error); }
   $membresia_id = (int)$stmt->insert_id;

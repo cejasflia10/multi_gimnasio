@@ -35,6 +35,11 @@ function validarFechaYmd($s){ $d=DateTime::createFromFormat('Y-m-d',$s); return 
 function safe_fetch($res){ return ($res && $res instanceof mysqli_result) ? $res->fetch_assoc() : null; }
 function hoyYmd(){ return date('Y-m-d'); }
 
+/* DÍAS DE GRACIA tras vencimiento para conservar el turno fijo */
+if (!defined('GRACIA_VENCIMIENTO_DIAS')) {
+  define('GRACIA_VENCIMIENTO_DIAS', 10);
+}
+
 /** preparar/ejecutar con manejo de errores */
 function run_stmt(mysqli $db, string $sql, callable $binder=null, bool $returnResult=true){
   global $err, $isAdmin;
@@ -199,6 +204,13 @@ function buildOcupacionCache(mysqli $db,int $g,string $fechaRef): array{
   global $DIAS_SEM; // DÍAS FIJOS Lunes–Sábado
   $dias = $DIAS_SEM;
   $cache = [];
+
+  // Vigencia: desde<=hoy y hasta>= (hoy - GRACIA_VENCIMIENTO_DIAS)
+  $dtRef = DateTime::createFromFormat('Y-m-d', $fechaRef) ?: new DateTime($fechaRef);
+  $limiteVig = clone $dtRef;
+  $limiteVig->modify('-'.GRACIA_VENCIMIENTO_DIAS.' days');
+  $limiteVigStr = $limiteVig->format('Y-m-d');
+
   foreach($dias as $dia){
     $likeDia = '%"'.$db->real_escape_string($dia).'"%';
 
@@ -208,7 +220,9 @@ function buildOcupacionCache(mysqli $db,int $g,string $fechaRef): array{
               WHERE gp.gimnasio_id=? AND gp.desde<=? AND gp.hasta>=?
                 AND gp.profesor_id IS NOT NULL AND gp.dias_json LIKE ?
               GROUP BY gp.hora, gp.profesor_id";
-    $res1 = run_stmt($db,$sql1,function($st) use($g,$fechaRef,$likeDia){ $st->bind_param("isss",$g,$fechaRef,$fechaRef,$likeDia); });
+    $res1 = run_stmt($db,$sql1,function($st) use($g,$fechaRef,$limiteVigStr,$likeDia){
+      $st->bind_param("isss",$g,$fechaRef,$limiteVigStr,$likeDia);
+    });
 
     // Conteo total ALL (incluye NULL)
     $sql2 = "SELECT gp.hora, COUNT(*) c
@@ -216,7 +230,9 @@ function buildOcupacionCache(mysqli $db,int $g,string $fechaRef): array{
               WHERE gp.gimnasio_id=? AND gp.desde<=? AND gp.hasta>=?
                 AND gp.dias_json LIKE ?
               GROUP BY gp.hora";
-    $res2 = run_stmt($db,$sql2,function($st) use($g,$fechaRef,$likeDia){ $st->bind_param("isss",$g,$fechaRef,$fechaRef,$likeDia); });
+    $res2 = run_stmt($db,$sql2,function($st) use($g,$fechaRef,$limiteVigStr,$likeDia){
+      $st->bind_param("isss",$g,$fechaRef,$limiteVigStr,$likeDia);
+    });
 
     $cache[$dia] = $cache[$dia] ?? [];
 
@@ -243,6 +259,13 @@ function buildFijosCache(mysqli $db,int $g,string $fechaRef): array{
   global $DIAS_SEM; // DÍAS FIJOS Lunes–Sábado
   $dias = $DIAS_SEM;
   $cache = [];
+
+  // Misma lógica de vigencia con días de gracia
+  $dtRef = DateTime::createFromFormat('Y-m-d', $fechaRef) ?: new DateTime($fechaRef);
+  $limiteVig = clone $dtRef;
+  $limiteVig->modify('-'.GRACIA_VENCIMIENTO_DIAS.' days');
+  $limiteVigStr = $limiteVig->format('Y-m-d');
+
   foreach($dias as $dia){
     $likeDia = '%"'.$db->real_escape_string($dia).'"%';
     $sql = "SELECT c.id AS cliente_id, c.apellido, c.nombre, gp.dias_json, gp.hora, gp.profesor_id
@@ -251,7 +274,9 @@ function buildFijosCache(mysqli $db,int $g,string $fechaRef): array{
              WHERE gp.gimnasio_id=? AND gp.desde<=? AND gp.hasta>=?
                AND gp.dias_json LIKE ?
              ORDER BY c.apellido, c.nombre";
-    $res = run_stmt($db,$sql,function($st) use($g,$fechaRef,$likeDia){ $st->bind_param("isss",$g,$fechaRef,$fechaRef,$likeDia); });
+    $res = run_stmt($db,$sql,function($st) use($g,$fechaRef,$limiteVigStr,$likeDia){
+      $st->bind_param("isss",$g,$fechaRef,$limiteVigStr,$likeDia);
+    });
     if($res){ while($r=$res->fetch_assoc()){
       $h = substr($r['hora'],0,5);
       $pid = $r['profesor_id']===null ? 'NULL' : (string)(int)$r['profesor_id'];

@@ -176,6 +176,134 @@ function upsert_ranking_basico(mysqli $db, array $in): void {
   }
 }
 
+/* ==========================================================
+   AJAX: búsqueda rápida en competidores_evento
+   - Primero intenta por DNI exacto (solo números)
+   - Si NO hay DNI, busca por Apellido + Nombre exactos
+   - Devuelve datos: apellido, nombre, dni, edad, escuela, sexo,
+     peleas_totales (wins+losses+draws+no_contest),
+     modalidad_id, disciplina_id, division_id,
+     categoria_tecnica_id, categoria_evento_id, peso_kg (si existe)
+   ========================================================== */
+if (isset($_GET['ajax']) && $_GET['ajax'] === 'buscar_competidor') {
+  header('Content-Type: application/json; charset=utf-8');
+
+  $tabla = 'competidores_evento';
+  if (!table_exists($conexion, $tabla)) {
+    echo json_encode([], JSON_UNESCAPED_UNICODE); exit;
+  }
+
+  $dni = isset($_GET['dni']) ? preg_replace('/\D+/', '', (string)$_GET['dni']) : '';
+  $ape = trim((string)($_GET['apellido'] ?? ''));
+  $nom = trim((string)($_GET['nombre'] ?? ''));
+
+  if ($dni === '' && ($ape === '' || $nom === '')) {
+    echo json_encode([], JSON_UNESCAPED_UNICODE); exit;
+  }
+
+  // Preparamos SELECT con columnas típicas
+  $campos = [
+    'id','apellido','nombre','dni','edad','escuela_nombre',
+    'sexo','genero',
+    'peleas_previas',
+    'wins','losses','draws','no_contest',
+    'modalidad_id','disciplina_id','division_id',
+    'categoria_tecnica_id','categoria_evento_id',
+    'peso_kg','peso'
+  ];
+  $colsSel = [];
+  foreach ($campos as $c) {
+    if (has_col($conexion, $tabla, $c)) $colsSel[] = "`$c`";
+  }
+  if (!$colsSel) {
+    echo json_encode([], JSON_UNESCAPED_UNICODE); exit;
+  }
+  $colsSql = implode(',', $colsSel);
+
+  if ($dni !== '') {
+    // Buscar por DNI exacto (limpiando puntos/espacios/guiones)
+    $sql = "SELECT $colsSql FROM `$tabla`
+            WHERE REPLACE(REPLACE(REPLACE(dni,'.',''),' ',''),'-','') = ?
+            ORDER BY id DESC
+            LIMIT 20";
+    $st = $conexion->prepare($sql);
+    if (!$st) { echo json_encode([], JSON_UNESCAPED_UNICODE); exit; }
+    $st->bind_param('s', $dni);
+  } else {
+    // Buscar por Apellido + Nombre exactos (sin parecidos)
+    $sql = "SELECT $colsSql FROM `$tabla`
+            WHERE TRIM(LOWER(apellido)) = TRIM(LOWER(?))
+              AND TRIM(LOWER(nombre))   = TRIM(LOWER(?))
+            ORDER BY id DESC
+            LIMIT 20";
+    $st = $conexion->prepare($sql);
+    if (!$st) { echo json_encode([], JSON_UNESCAPED_UNICODE); exit; }
+    $st->bind_param('ss', $ape, $nom);
+  }
+
+  $out = [];
+  if ($st && $st->execute()) {
+    $res = $st->get_result();
+    while ($row = $res->fetch_assoc()) {
+      // Sexo normalizado
+      $sexoNorm = null;
+      $sexoRaw = null;
+      if (isset($row['sexo']))      $sexoRaw = $row['sexo'];
+      elseif (isset($row['genero'])) $sexoRaw = $row['genero'];
+      if ($sexoRaw !== null) {
+        $sx = strtolower(trim((string)$sexoRaw));
+        if (in_array($sx, ['m','mas','masc','masculino','hombre']))    $sexoNorm = 'masculino';
+        elseif (in_array($sx, ['f','fem','femenino','mujer']))         $sexoNorm = 'femenino';
+        elseif (in_array($sx, ['mix','mixto','x']))                    $sexoNorm = 'mixto';
+        else $sexoNorm = $sx ?: null;
+      }
+
+      // Peso (si existiera alguna columna típica)
+      $pesoKg = null;
+      if (isset($row['peso_kg']) && is_numeric($row['peso_kg'])) {
+        $pesoKg = (float)$row['peso_kg'];
+      } elseif (isset($row['peso']) && is_numeric($row['peso'])) {
+        $pesoKg = (float)$row['peso'];
+      }
+
+      // TOTAL de peleas desde wins/losses/draws/no_contest
+      $wins  = isset($row['wins'])        && $row['wins']        !== '' ? (int)$row['wins']        : 0;
+      $loss  = isset($row['losses'])      && $row['losses']      !== '' ? (int)$row['losses']      : 0;
+      $draw  = isset($row['draws'])       && $row['draws']       !== '' ? (int)$row['draws']       : 0;
+      $nc    = isset($row['no_contest'])  && $row['no_contest']  !== '' ? (int)$row['no_contest']  : 0;
+      $totPeleas = $wins + $loss + $draw + $nc;
+
+      // Si por algún motivo no hay wins/losses/draws/no_contest, usamos peleas_previas si existe
+      if ($totPeleas === 0 && isset($row['peleas_previas']) && $row['peleas_previas'] !== '') {
+        $totPeleas = (int)$row['peleas_previas'];
+      }
+
+      $out[] = [
+        'id'                 => isset($row['id']) ? (int)$row['id'] : null,
+        'apellido'           => (string)($row['apellido'] ?? ''),
+        'nombre'             => (string)($row['nombre'] ?? ''),
+        'dni'                => isset($row['dni']) ? preg_replace('/\D+/', '', (string)$row['dni']) : '',
+        'edad'               => isset($row['edad']) ? (int)$row['edad'] : null,
+        'escuela_nombre'     => (string)($row['escuela_nombre'] ?? ''),
+        'sexo'               => $sexoNorm,
+        'peleas_previas'     => $totPeleas,   // para que JS la use directamente
+        'peleas_totales'     => $totPeleas,
+        'modalidad_id'       => isset($row['modalidad_id']) ? (int)$row['modalidad_id'] : null,
+        'disciplina_id'      => isset($row['disciplina_id']) ? (int)$row['disciplina_id'] : null,
+        'division_id'        => isset($row['division_id']) ? (int)$row['division_id'] : null,
+        'categoria_tecnica_id'=> isset($row['categoria_tecnica_id']) ? (int)$row['categoria_tecnica_id'] : null,
+        'categoria_evento_id'=> isset($row['categoria_evento_id']) ? (int)$row['categoria_evento_id'] : null,
+        'peso_kg'            => $pesoKg,
+      ];
+    }
+    $res->close();
+  }
+  if ($st) $st->close();
+
+  echo json_encode($out, JSON_UNESCAPED_UNICODE);
+  exit;
+}
+
 /* ==========================
    Determinar modo y evento
    ========================== */
@@ -235,7 +363,6 @@ function detectar_tecnica_ids(mysqli $db): array {
     return null;
   };
   return [
-    // Ajustá/añadí sinónimos si tus textos son distintos
     'A' => $matchId(['CLASE A','PROFESIONAL','ELITE','ÉLITE','PRO']),
     'B' => $matchId(['CLASE B','AVANZADO','PROAM','AMATEUR AVANZADO']),
     'C' => $matchId(['CLASE C','INTERMEDIO','AMATEUR INICIAL']),
@@ -319,7 +446,10 @@ if ($_SERVER['REQUEST_METHOD']==='POST'){
   }
   if (!$seleccion){
     // Match por edad/sexo (primera que encaje)
-    usort($categorias, fn($a,$b)=> ($a['peso_min']<=>$b['peso_min']) ?: ($a['id']<=>$b['id']));
+    usort(
+      $categorias,
+      fn($a,$b) => ($a['peso_min'] <=> $b['peso_min']) ?: ($a['id'] <=> $b['id'])
+    );
     foreach ($categorias as $c) {
       $gen = strtolower($c['genero'] ?? 'mixto');
       $okGenero = ($gen==='mixto') || ($sexo_in && $gen===$sexo_in);
@@ -355,9 +485,13 @@ if ($_SERVER['REQUEST_METHOD']==='POST'){
   try{
     $id = insert_min($conexion,$data);
 
-    // eRanking: actualiza o crea si no existe
+    // eRanking: actualiza o crea si no existe (si existe tabla ranking_competidores)
     upsert_ranking_basico($conexion, [
-      'apellido'=>$apellido,'nombre'=>$nombre,'dni'=>$dni,'edad'=>$edad,'escuela_nombre'=>$escuela
+      'apellido'=>$apellido,
+      'nombre'=>$nombre,
+      'dni'=>$dni,
+      'edad'=>$edad,
+      'escuela_nombre'=>$escuela
     ]);
 
     $_SESSION['flash_ok'] =
@@ -405,7 +539,7 @@ $share_url = current_base_url().'/'.basename(__FILE__).'?t='.$token_for_share;
     /* Autocomplete (ranking, solo interno) */
     .ac-wrap{position:relative}
     .ac-list{position:absolute;z-index:50;left:0;right:0;top:100%;background:#0b1620;border:1px solid #213245;border-radius:10px;margin-top:4px;max-height:260px;overflow:auto;display:none;box-shadow:0 10px 25px rgba(0,0,0,.35)}
-    .ac-item{padding:10px 12px;cursor:pointer;display:flex;gap:8px;align-items:center}
+    .ac-item{padding:10px 12px;cursor:pointer;display:flex;flex-direction:column;gap:4px}
     .ac-item:hover{background:#132235}
     .ac-name{font-weight:700}
     .ac-sub{font-size:12px;color:#9bbad8}
@@ -444,10 +578,12 @@ $share_url = current_base_url().'/'.basename(__FILE__).'?t='.$token_for_share;
       <div class="grid grid-2">
         <?php if ($enable_ranking_ac): ?>
           <div class="ac-wrap">
-            <label>Apellido* (buscar en eRanking)</label>
-            <input name="apellido" id="apellido" required autocomplete="off" placeholder="Escribí el apellido o DNI">
+            <label>Apellido* (buscar en competidores)</label>
+            <input name="apellido" id="apellido" required autocomplete="off" placeholder="Escribí el apellido">
             <div id="ac_list" class="ac-list"></div>
-            <div class="mut" id="lock_msg" style="display:none;margin-top:6px">Datos completados desde eRanking (podés editar).</div>
+            <div class="mut" id="lock_msg" style="display:none;margin-top:6px">
+              Datos cargados desde competidores_evento (podés editar y se guardan actualizados).
+            </div>
           </div>
         <?php else: ?>
           <div>
@@ -561,9 +697,9 @@ $share_url = current_base_url().'/'.basename(__FILE__).'?t='.$token_for_share;
 </script>
 
 <script>
-  // ===== Config (endpoint ranking solo interno) =====
+  // ===== Config (endpoint búsqueda competidor solo interno) =====
   const ENABLE_RANKING = <?= $enable_ranking_ac ? 'true':'false' ?>;
-  const RANKING_ENDPOINT = 'api_ranking_buscar.php'; // cambiá si está en otra ruta
+  const COMP_ENDPOINT = '<?= basename(__FILE__) ?>?ajax=buscar_competidor';
 
   // ===== Datos de categorías (para edad+sexo) =====
   const CATEGORIAS = <?= json_encode($categorias, JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES) ?>;
@@ -572,7 +708,6 @@ $share_url = current_base_url().'/'.basename(__FILE__).'?t='.$token_for_share;
   function esc(s){ return (s??'').toString().replace(/[&<>"']/g, m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m])); }
   function fmtKg(n){ if(n==null||isNaN(n)) return '—'; const v=Number(n); return (Math.round(v*10)/10).toFixed(1).replace('.',','); }
 
-  // Campos
   const dniEl = document.getElementById('dni');
   const edadEl = document.getElementById('edad');
   const sexoEl = document.getElementById('sexo');
@@ -580,10 +715,8 @@ $share_url = current_base_url().'/'.basename(__FILE__).'?t='.$token_for_share;
   const catPreview = document.getElementById('cat_preview');
   const divisionSel = document.getElementById('division_id');
 
-  // DNI numérico
   if (dniEl) dniEl.addEventListener('input', e=> e.target.value=(e.target.value||'').replace(/\D+/g,''));
 
-  // División automática por edad
   function autoDivisionPorEdad(){
     const edad = +edadEl.value || 0;
     let d = '';
@@ -597,7 +730,6 @@ $share_url = current_base_url().'/'.basename(__FILE__).'?t='.$token_for_share;
     if (d) divisionSel.value = d;
   }
 
-  // Filtrar/auto elegir categoría por Edad + Sexo (muestra pesos reales)
   function filtrarCategorias(){
     const edad = +edadEl.value || 0;
     const sexo = (sexoEl.value||'').toLowerCase();
@@ -629,7 +761,6 @@ $share_url = current_base_url().'/'.basename(__FILE__).'?t='.$token_for_share;
   sexoEl.addEventListener('change', filtrarCategorias);
   window.addEventListener('DOMContentLoaded', ()=>{ autoDivisionPorEdad(); filtrarCategorias(); });
 
-  // ===== Auto categoría técnica por Cant. de peleas (Clase D/C/B/A) — sin depender del texto =====
   const peleasEl = document.getElementById('peleas_previas');
   const tecSel   = document.getElementById('categoria_tecnica_id');
 
@@ -649,17 +780,14 @@ $share_url = current_base_url().'/'.basename(__FILE__).'?t='.$token_for_share;
   function autoTecnicaPorPeleas(){
     const n = +(peleasEl?.value ?? 0) || 0;
 
-    // 0 → D, 1–3 → C, 4–10 → B, 11+ → A
     let prefer = null;
     if (n <= 0)              prefer = TEC_IDS?.D || null;
     else if (n <= 3)         prefer = TEC_IDS?.C || null;
     else if (n <= 10)        prefer = TEC_IDS?.B || null;
     else                     prefer = TEC_IDS?.A || null;
 
-    // Intento principal: por ID detectado
     if (setTecById(prefer)) return;
 
-    // Fallbacks: si no hay ID detectado, intentá por palabras clave
     function pickByKeywords(kws){
       const up = s => (s||'').toUpperCase();
       for (const o of Array.from(tecSel.options).filter(o=>o.value)){
@@ -677,7 +805,6 @@ $share_url = current_base_url().'/'.basename(__FILE__).'?t='.$token_for_share;
 
     if (alt && setTecById(alt)) return;
 
-    // Último recurso (sin mandar siempre a la última)
     const vals = Array.from(tecSel.options).filter(o=>o.value).map(o=>o.value);
     if (!vals.length) return;
     if (n <= 0)       tecSel.value = vals[0];
@@ -691,24 +818,39 @@ $share_url = current_base_url().'/'.basename(__FILE__).'?t='.$token_for_share;
     window.addEventListener('DOMContentLoaded', autoTecnicaPorPeleas);
   }
 
-  // ===== Autocomplete Ranking (solo interno) =====
-  if (<?= $enable_ranking_ac ? 'true':'false' ?>) (function(){
-    const apeIn  = document.getElementById('apellido');
-    const nomIn  = document.getElementById('nombre');
-    const escIn  = document.getElementById('escuela_nombre');
-    const acList = document.getElementById('ac_list');
-    const lockMsg= document.getElementById('lock_msg');
+  if (ENABLE_RANKING) (function(){
+    const apeIn   = document.getElementById('apellido');
+    const nomIn   = document.getElementById('nombre');
+    const escIn   = document.getElementById('escuela_nombre');
+    const acList  = document.getElementById('ac_list');
+    const lockMsg = document.getElementById('lock_msg');
 
-    let timer = null;
+    let timerNombre = null;
+    let timerDni    = null;
 
-    async function doLookup(q){
+    async function doLookup(params, fromDni){
       try{
-        const url = `${RANKING_ENDPOINT}?q=${encodeURIComponent(q)}`;
+        const usp = new URLSearchParams();
+        if (params.dni)      usp.append('dni', params.dni);
+        if (params.apellido) usp.append('apellido', params.apellido);
+        if (params.nombre)   usp.append('nombre', params.nombre);
+
+        const url = `${COMP_ENDPOINT}&${usp.toString()}`;
         const r = await fetch(url, {headers:{'Accept':'application/json'}});
-        if(!r.ok) return renderAC([]);
+        if(!r.ok) { renderAC([]); return; }
         const data = await r.json();
-        renderAC(Array.isArray(data)?data:[]);
-      }catch(e){ renderAC([]); }
+        const items = Array.isArray(data) ? data : [];
+
+        if (fromDni && items.length === 1) {
+          apply(items[0]);
+          acList.style.display = 'none';
+          return;
+        }
+
+        renderAC(items);
+      }catch(e){
+        renderAC([]);
+      }
     }
 
     function renderAC(items){
@@ -717,12 +859,22 @@ $share_url = current_base_url().'/'.basename(__FILE__).'?t='.$token_for_share;
         acList.style.display = 'block';
         return;
       }
-      acList.innerHTML = items.slice(0,30).map((c,i)=>(
+      acList.innerHTML = items.slice(0,30).map((c,i)=>{
+        const peleas = (c.peleas_previas!=null ? c.peleas_previas : (c.peleas_totales!=null ? c.peleas_totales : 0));
+        const sexo   = c.sexo ? ` • Sexo: ${esc(c.sexo)}` : '';
+        const peso   = (c.peso_kg!=null ? ` • Peso: ${fmtKg(c.peso_kg)} kg` : '');
+        return (
         `<div class="ac-item" data-i="${i}">
            <div class="ac-name">${esc(c.apellido)} ${esc(c.nombre)}</div>
-           <div class="ac-sub">DNI: ${esc(c.dni||'—')}${c.escuela_nombre?' • '+esc(c.escuela_nombre):''}${c.edad?' • Edad: '+esc(c.edad):''}</div>
-         </div>`
-      )).join('');
+           <div class="ac-sub">
+             DNI: ${esc(c.dni||'—')}
+             ${c.escuela_nombre ? ' • '+esc(c.escuela_nombre) : ''}
+             ${c.edad ? ' • Edad: '+esc(c.edad) : ''}
+             ${peleas ? ' • Peleas: '+peleas : ''}
+             ${sexo}${peso}
+           </div>
+         </div>`);
+      }).join('');
       acList.style.display = 'block';
       [...acList.querySelectorAll('.ac-item')].forEach((el,idx)=> el.addEventListener('click',()=> apply(items[idx])));
     }
@@ -730,34 +882,96 @@ $share_url = current_base_url().'/'.basename(__FILE__).'?t='.$token_for_share;
     function apply(c){
       if (c.apellido) apeIn.value = c.apellido;
       if (c.nombre)   nomIn.value = c.nombre;
+
       const dniInput = document.getElementById('dni');
       if (c.dni && dniInput) dniInput.value = String(c.dni).replace(/\D+/g,'');
-      if (c.escuela_nombre) escIn.value = c.escuela_nombre;
-      const edadInput = document.getElementById('edad');
-      if (c.edad!=null && c.edad!==''){ edadInput.value = +c.edad; edadInput.dispatchEvent(new Event('input', {bubbles:true})); }
 
-      // Aproximar peleas con W/L/D/NC si vienen
+      if (c.escuela_nombre && escIn) escIn.value = c.escuela_nombre;
+
+      const edadInput = document.getElementById('edad');
+      if (c.edad!=null && c.edad!==''){
+        edadInput.value = +c.edad;
+        edadInput.dispatchEvent(new Event('input', {bubbles:true}));
+      }
+
+      const sexoSel = document.getElementById('sexo');
+      if (sexoSel && c.sexo){
+        const sx = String(c.sexo).toLowerCase();
+        if (['masculino','m'].includes(sx)) sexoSel.value = 'masculino';
+        else if (['femenino','f'].includes(sx)) sexoSel.value = 'femenino';
+        else if (['mixto','mix','x'].includes(sx)) sexoSel.value = 'mixto';
+        sexoSel.dispatchEvent(new Event('change',{bubbles:true}));
+      }
+
+      const modSel = document.getElementById('modalidad_id');
+      if (modSel && c.modalidad_id != null) modSel.value = String(c.modalidad_id);
+
+      const disSel = document.getElementById('disciplina_id');
+      if (disSel && c.disciplina_id != null) disSel.value = String(c.disciplina_id);
+
+      const divSel = document.getElementById('division_id');
+      if (divSel && c.division_id != null) divSel.value = String(c.division_id);
+
+      if (tecSel && c.categoria_tecnica_id != null) {
+        tecSel.value = String(c.categoria_tecnica_id);
+      }
+
+      if (catSel && c.categoria_evento_id != null) {
+        catSel.value = String(c.categoria_evento_id);
+      }
+
       let tot = 0;
-      if (c.wins!=null)       tot += (+c.wins||0);
-      if (c.losses!=null)     tot += (+c.losses||0);
-      if (c.draws!=null)      tot += (+c.draws||0);
-      if (c.no_contest!=null) tot += (+c.no_contest||0);
+      if (c.peleas_previas != null) {
+        tot = +c.peleas_previas || 0;
+      } else if (c.peleas_totales != null) {
+        tot = +c.peleas_totales || 0;
+      }
       const peleasInput = document.getElementById('peleas_previas');
-      if (peleasInput && tot>0){ peleasInput.value = tot; peleasInput.dispatchEvent(new Event('input', {bubbles:true})); }
+      if (peleasInput && tot>0){
+        peleasInput.value = tot;
+        peleasInput.dispatchEvent(new Event('input', {bubbles:true}));
+      }
 
       lockMsg.style.display='block';
       acList.style.display='none';
     }
 
-    apeIn.addEventListener('input', (e)=>{
-      const q=(e.target.value||'').trim();
-      lockMsg.style.display='none';
-      if (timer) clearTimeout(timer);
-      if (q.length<2){ acList.style.display='none'; return; }
-      timer=setTimeout(()=> doLookup(q), 220);
-    });
+    if (dniEl) {
+      dniEl.addEventListener('input', (e)=>{
+        const v=(e.target.value||'').trim();
+        lockMsg.style.display='none';
+        if (timerDni) clearTimeout(timerDni);
+        if (v.length < 6) {
+          return;
+        }
+        timerDni = setTimeout(()=> doLookup({dni:v}, true), 220);
+      });
+    }
 
-    document.addEventListener('click', (ev)=>{ if(!acList.contains(ev.target) && ev.target!==apeIn){ acList.style.display='none'; }});
+    function triggerNombreBusqueda(){
+      const dniVal = (dniEl && dniEl.value.trim()) || '';
+      if (dniVal.length >= 6) {
+        return;
+      }
+      const apeVal = (apeIn.value||'').trim();
+      const nomVal = (nomIn.value||'').trim();
+      lockMsg.style.display='none';
+      if (timerNombre) clearTimeout(timerNombre);
+      if (apeVal.length < 2 || nomVal.length < 2){
+        acList.style.display='none';
+        return;
+      }
+      timerNombre = setTimeout(()=> doLookup({apellido:apeVal, nombre:nomVal}, false), 250);
+    }
+
+    apeIn.addEventListener('input', triggerNombreBusqueda);
+    nomIn.addEventListener('input', triggerNombreBusqueda);
+
+    document.addEventListener('click', (ev)=>{
+      if(!acList.contains(ev.target) && ev.target!==apeIn){
+        acList.style.display='none';
+      }
+    });
   })();
 </script>
 </body>

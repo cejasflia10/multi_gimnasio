@@ -730,12 +730,27 @@ $idMuay = cat_id_by_nombre($conexion,'modalidades_evento','Muay Thai') ?? 7;
         acList.style.display='block';
         return;
       }
-      acList.innerHTML = items.slice(0,30).map((c,i)=>(
-        `<div class="ac-item" data-i="${i}">
-          <div class="ac-name">${escapeHtml(c.apellido||'')} ${escapeHtml(c.nombre||'')}</div>
-          <div class="ac-sub">DNI: ${escapeHtml(c.dni||'—')} • Nac: ${escapeHtml(c.fecha_nacimiento||'—')} • ${escapeHtml(c.escuela_nombre||'')}</div>
-        </div>`
-      )).join('');
+      acList.innerHTML = items.slice(0,30).map((c,i)=>{
+        const w = Number(c.wins   ?? 0) || 0;
+        const l = Number(c.losses ?? 0) || 0;
+        const d = Number(c.draws  ?? 0) || 0;
+        const n = Number(c.no_contest ?? 0) || 0;
+        const tot = w + l + d + n;
+        const peleasTxt = tot
+          ? ` • Peleas: ${tot} (W:${w} / L:${l} / D:${d} / NC:${n})`
+          : '';
+        return (
+          `<div class="ac-item" data-i="${i}">
+            <div class="ac-name">${escapeHtml(c.apellido||'')} ${escapeHtml(c.nombre||'')}</div>
+            <div class="ac-sub">
+              DNI: ${escapeHtml(c.dni||'—')}
+              • Nac: ${escapeHtml(c.fecha_nacimiento||'—')}
+              • ${escapeHtml(c.escuela_nombre||'')}
+              ${peleasTxt}
+            </div>
+          </div>`
+        );
+      }).join('');
       acList.style.display='block';
       [...acList.querySelectorAll('.ac-item')].forEach((el,idx)=> el.addEventListener('click',()=> applyCompetidor(items[idx])));
     }
