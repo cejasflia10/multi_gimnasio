@@ -126,6 +126,29 @@ if ($rows){
 
 $fecha_filtro = $_GET['fecha'] ?? date('Y-m-d');
 if (!preg_match('/^\d{4}-\d{2}-\d{2}$/',$fecha_filtro)) $fecha_filtro=date('Y-m-d');
+
+/* ============ INGRESOS (desde membresias) ============ */
+function ingresos_membresias_rango(mysqli $db, int $gimnasio_id, string $desde, string $hasta): float {
+  $sql = "SELECT COALESCE(SUM(total_pagado),0) AS total
+          FROM membresias
+          WHERE gimnasio_id = ?
+            AND fecha_inicio BETWEEN ? AND ?";
+  $st = $db->prepare($sql);
+  if(!$st) return 0.0;
+  $st->bind_param("iss", $gimnasio_id, $desde, $hasta);
+  $st->execute();
+  $rs = $st->get_result();
+  $row = $rs ? $rs->fetch_assoc() : null;
+  $st->close();
+  return $row ? (float)$row['total'] : 0.0;
+}
+
+$hoy           = date('Y-m-d');
+$primer_dia_mes = date('Y-m-01');
+$ultimo_dia_mes = date('Y-m-t');
+
+$ingresos_dia = ingresos_membresias_rango($conexion, $gimnasio_id, $hoy, $hoy);
+$ingresos_mes = ingresos_membresias_rango($conexion, $gimnasio_id, $primer_dia_mes, $ultimo_dia_mes);
 ?>
 <!DOCTYPE html>
 <html lang="es">
@@ -221,10 +244,15 @@ body.ocultar-montos #ingresos-body [class*="monto"]{
 }
 
 /* Contenido ingresos centrado */
-#ingresos-body .box,
 #ingresos-body .ing-card{
-  display:flex; flex-direction:column; align-items:center; gap:6px;
+  display:flex; flex-direction:column; align-items:center; gap:4px;
+  font-size:0.95rem;
 }
+#ingresos-body .label{ color:#64748b; }
+#ingresos-body .monto{ font-size:1.4rem; font-weight:800; }
+
+/* Chart wrap */
+.chart-wrap{ position:relative; min-height:260px; }
 </style>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -281,13 +309,24 @@ body.ocultar-montos #ingresos-body [class*="monto"]{
 
   <div class="grid">
 
-    <!-- INGRESOS (AJAX) -->
+    <!-- INGRESOS (desde membresías) -->
     <section class="card" id="contenedor-ingresos">
       <div class="card-header">
         <h3 class="card-title">💰 Ingresos</h3>
-        <p class="card-sub">Actualiza cada 10s</p>
+        <p class="card-sub">Calculados desde membresías</p>
       </div>
-      <div id="ingresos-body"><div class="skeleton" style="min-height:120px"></div></div>
+      <div id="ingresos-body">
+        <div class="ing-card">
+          <div class="label">Ingresos del día</div>
+          <div class="monto">
+            $ <?= number_format($ingresos_dia, 2, ',', '.') ?>
+          </div>
+          <div class="label" style="margin-top:6px">Ingresos del mes</div>
+          <div class="monto">
+            $ <?= number_format($ingresos_mes, 2, ',', '.') ?>
+          </div>
+        </div>
+      </div>
     </section>
 
     <!-- CUMPLES -->
@@ -542,9 +581,7 @@ function normalizeReservas(root){
 function cargarDatos(){
   const f = document.getElementById('fecha')?.value;
 
-  // 🔹 CAMBIO: pasamos la fecha también a ajax_ingresos.php
-  fetchIntoBody('ajax_ingresos.php' + (f ? '?fecha='+encodeURIComponent(f) : ''), 'ingresos-body');
-
+  // Reservas y alumnos siguen por AJAX
   if (f) fetchIntoBody('ajax_reservas.php?fecha='+encodeURIComponent(f), 'reservas-body', normalizeReservas);
   fetchIntoBody('ajax_alumnos_hoy.php', 'alumnos-body', normalizeAlumnos);
 }

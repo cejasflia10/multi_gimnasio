@@ -37,8 +37,8 @@ function pick_fixed_table($db){
 }
 
 /* ===== 1) Entradas ===== */
-$cliente_id         = (int)($_POST['cliente_id'] ?? 0);
-$plan_id            = (int)($_POST['plan_id'] ?? 0);
+$cliente_id         = (int)$_POST['cliente_id'];
+$plan_id            = (int)$_POST['plan_id'];
 $fecha_inicio       = $_POST['fecha_inicio'] ?? date('Y-m-d');
 $fecha_venc_post    = $_POST['fecha_vencimiento'] ?? '';
 $otros_pagos        = (float)($_POST['otros_pagos'] ?? 0);
@@ -145,8 +145,8 @@ try {
 
   $tmp_saldo_cc = 0.0;
 
-  // tipos: ii ss i d d d d d d d d s d d i  (20 params)
-  $types = "iissidddddddddsddi";
+  // tipos (20): i,i,s,s,i, d,d,d,d,d,d,d,d,d,d, d,s,d,d,i
+  $types = "iissidddddddddddsddi";
   $stmt->bind_param(
     $types,
     $cliente_id,
