@@ -11,6 +11,8 @@ if (!isset($conexion) || !($conexion instanceof mysqli)) {
 }
 if (function_exists('mysqli_report')) { mysqli_report(MYSQLI_REPORT_OFF); }
 @$conexion->set_charset('utf8mb4');
+
+// Zona horaria local del gimnasio
 @date_default_timezone_set('America/Argentina/San_Luis');
 
 $gimnasio_id = (int)($_SESSION['gimnasio_id'] ?? 0);
@@ -21,7 +23,12 @@ if ($gimnasio_id <= 0) {
 
 function h($s){ return htmlspecialchars((string)$s, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'); }
 
-// === Ingresos de HOY (misma lógica de accesos_gimnasio.php) ===
+// ===== Definimos "HOY" en horario local (-03:00) =====
+$hoy_local = date('Y-m-d');                 // ej: 2025-11-21 en AR
+$desde_local = $hoy_local . ' 00:00:00';    // inicio del día local
+$hasta_local = date('Y-m-d', strtotime($hoy_local.' +1 day')) . ' 00:00:00'; // inicio de mañana
+
+// === Ingresos de HOY (ajustado a -03:00 con CONVERT_TZ) ===
 $sql = "
   SELECT a.id,
          a.fecha_ingreso,
@@ -31,8 +38,8 @@ $sql = "
     FROM accesos_gimnasio a
     JOIN clientes c ON c.id = a.cliente_id
    WHERE a.gimnasio_id = ?
-     AND a.fecha_ingreso >= CURRENT_DATE()
-     AND a.fecha_ingreso <  (CURRENT_DATE() + INTERVAL 1 DAY)
+     AND CONVERT_TZ(a.fecha_ingreso, @@session.time_zone, '-03:00') >= ?
+     AND CONVERT_TZ(a.fecha_ingreso, @@session.time_zone, '-03:00') <  ?
    ORDER BY a.fecha_ingreso ASC
 ";
 
@@ -41,7 +48,7 @@ if(!$stmt){
   http_response_code(500);
   exit('Error preparando consulta.');
 }
-$stmt->bind_param('i', $gimnasio_id);
+$stmt->bind_param('iss', $gimnasio_id, $desde_local, $hasta_local);
 $stmt->execute();
 $rs = $stmt->get_result();
 
@@ -59,7 +66,7 @@ if (!$rows) {
 
 $total = count($rows);
 
-// Primero una línea con el total: el JS busca "<n> ingresos"
+// Primera línea con el total: el JS busca "<n> ingresos"
 echo '<div><strong>' . $total . ' ingresos hoy</strong></div>';
 
 echo '<ul>';

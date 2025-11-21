@@ -127,12 +127,40 @@ if ($rows){
 $fecha_filtro = $_GET['fecha'] ?? date('Y-m-d');
 if (!preg_match('/^\d{4}-\d{2}-\d{2}$/',$fecha_filtro)) $fecha_filtro=date('Y-m-d');
 
-/* ============ INGRESOS (desde membresias) ============ */
-function ingresos_membresias_rango(mysqli $db, int $gimnasio_id, string $desde, string $hasta): float {
-  $sql = "SELECT COALESCE(SUM(total_pagado),0) AS total
+/* ================== INGRESOS DESDE MEMBRESÍAS ================== */
+function col_exists(mysqli $db, string $table, string $col): bool {
+  $t = $db->real_escape_string($table);
+  $c = $db->real_escape_string($col);
+  $rs = $db->query("SHOW COLUMNS FROM `$t` LIKE '$c'");
+  return ($rs && $rs->num_rows > 0);
+}
+
+$tabla_m = 'membresias';
+
+/* columna de fecha: se toma la PRIMERA que exista en este orden */
+$col_fecha = null;
+foreach (['fecha_pago','created_at','fecha','fecha_registro','fecha_alta','fecha_inicio'] as $c) {
+  if (col_exists($conexion, $tabla_m, $c)) { $col_fecha = $c; break; }
+}
+
+/* columna de monto */
+$col_monto = null;
+foreach (['total_pagado','monto_pagado','monto','importe','precio'] as $c) {
+  if (col_exists($conexion, $tabla_m, $c)) { $col_monto = $c; break; }
+}
+
+function ingresos_membresias_rango(
+  mysqli $db,
+  int $gimnasio_id,
+  string $desde,
+  string $hasta,
+  string $col_fecha,
+  string $col_monto
+): float {
+  $sql = "SELECT COALESCE(SUM($col_monto),0) AS total
           FROM membresias
           WHERE gimnasio_id = ?
-            AND fecha_inicio BETWEEN ? AND ?";
+            AND DATE($col_fecha) BETWEEN ? AND ?";
   $st = $db->prepare($sql);
   if(!$st) return 0.0;
   $st->bind_param("iss", $gimnasio_id, $desde, $hasta);
@@ -143,12 +171,17 @@ function ingresos_membresias_rango(mysqli $db, int $gimnasio_id, string $desde, 
   return $row ? (float)$row['total'] : 0.0;
 }
 
-$hoy           = date('Y-m-d');
+$hoy            = date('Y-m-d');
 $primer_dia_mes = date('Y-m-01');
 $ultimo_dia_mes = date('Y-m-t');
 
-$ingresos_dia = ingresos_membresias_rango($conexion, $gimnasio_id, $hoy, $hoy);
-$ingresos_mes = ingresos_membresias_rango($conexion, $gimnasio_id, $primer_dia_mes, $ultimo_dia_mes);
+if ($col_fecha && $col_monto) {
+  $ingresos_dia = ingresos_membresias_rango($conexion, $gimnasio_id, $hoy, $hoy, $col_fecha, $col_monto);
+  $ingresos_mes = ingresos_membresias_rango($conexion, $gimnasio_id, $primer_dia_mes, $ultimo_dia_mes, $col_fecha, $col_monto);
+} else {
+  $ingresos_dia = 0.0;
+  $ingresos_mes = 0.0;
+}
 ?>
 <!DOCTYPE html>
 <html lang="es">
@@ -309,11 +342,11 @@ body.ocultar-montos #ingresos-body [class*="monto"]{
 
   <div class="grid">
 
-    <!-- INGRESOS (desde membresías) -->
+    <!-- INGRESOS -->
     <section class="card" id="contenedor-ingresos">
       <div class="card-header">
         <h3 class="card-title">💰 Ingresos</h3>
-        <p class="card-sub">Calculados desde membresías</p>
+        <p class="card-sub">Siempre con la fecha de hoy</p>
       </div>
       <div id="ingresos-body">
         <div class="ing-card">
@@ -419,7 +452,7 @@ function fetchIntoBody(url, bodyId, afterLoad){
     .catch(()=>{});
 }
 
-/* helpers nombres/profes (igual que tenías) */
+/* helpers nombres/profes */
 function _cleanName(s){
   return (s||'')
     .replace(/[🕒📅⏰👤🏠🏫🏡🏢🏟️👨‍🏫🧑‍🏫]/g,' ')
@@ -581,7 +614,6 @@ function normalizeReservas(root){
 function cargarDatos(){
   const f = document.getElementById('fecha')?.value;
 
-  // Reservas y alumnos siguen por AJAX
   if (f) fetchIntoBody('ajax_reservas.php?fecha='+encodeURIComponent(f), 'reservas-body', normalizeReservas);
   fetchIntoBody('ajax_alumnos_hoy.php', 'alumnos-body', normalizeAlumnos);
 }
